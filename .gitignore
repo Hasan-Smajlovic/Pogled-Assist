@@ -1,0 +1,71 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Build, packaging, and bundled app outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+*.spec
+*.manifest
+*.pyd
+*.dll
+*.lib
+*.obj
+*.exp
+
+# Installer/download artifacts
+*.msi
+*.cab
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+# Runtime logs
+logs/
+*.log
+
+# Runtime settings and user data
+data/*.json
+data/*.tmp
+install_info.json
+
+# Generated Windows launchers and shortcut icon output
+run_gaze_mouse.bat
+run_gaze_mouse.ps1
+assets/icon.ico
+
+# IDE/editor local state
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Codex/agent runtime metadata mounted into the workspace
+.agents/
+.codex/
