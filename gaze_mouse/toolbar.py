@@ -1059,11 +1059,11 @@ class HotbarWindow(QWidget):
     def _test_current_speech_settings(self) -> None:
         try:
             if self._speech.speak(SPEECH_TEST_TEXT):
-                self._set_status("Speech test sent to eSpeak NG.")
+                self._set_status("Speech test sent.")
                 if self._settings_window is not None:
                     self._settings_window.set_status("Speech test sent.")
             else:
-                self._set_status("Speech failed: eSpeak NG was not found or could not start.")
+                self._set_status("Speech failed: selected voice engine was not found or could not start.")
                 if self._settings_window is not None:
                     self._settings_window.set_status("Speech failed.")
         except Exception as exc:

@@ -1249,12 +1249,21 @@ function Verify-PythonPackages {
 import importlib.util
 import sys
 
-required = ["PySide6", "qtawesome", "tobii_research"]
+from pathlib import Path
+
+required = ["PySide6", "qtawesome", "tobii_research", "edge_tts"]
 missing = [name for name in required if importlib.util.find_spec(name) is None]
 if missing:
     raise SystemExit("Missing packages: " + ", ".join(missing))
 
+scripts_dir = Path(sys.executable).resolve().parent
+edge_names = ["edge-playback.exe", "edge-playback"]
+edge_playback = next((scripts_dir / name for name in edge_names if (scripts_dir / name).exists()), None)
+if edge_playback is None:
+    raise SystemExit("Missing edge-playback CLI in " + str(scripts_dir))
+
 print("Python executable:", sys.executable)
+print("edge-playback executable:", edge_playback)
 print("Dependency check passed.")
 '@
 
@@ -1275,11 +1284,30 @@ print("Dependency check passed.")
     Write-Success "All required Python packages are available."
 }
 
+function Get-EdgePlaybackExecutableFromVenv {
+    param([string]$VenvPython)
+
+    $scriptsDir = Split-Path -Parent $VenvPython
+    $candidates = @(
+        (Join-Path $scriptsDir "edge-playback.exe"),
+        (Join-Path $scriptsDir "edge-playback")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "edge-playback CLI was not found in the virtual environment Scripts folder: $scriptsDir"
+}
+
 function New-LauncherScripts {
     param(
         [string]$VenvPython,
         [string]$EspeakExe,
-        [string]$X86Python
+        [string]$X86Python,
+        [string]$EdgePlaybackExe
     )
 
     Write-Step "Creating launcher scripts"
@@ -1290,6 +1318,7 @@ function New-LauncherScripts {
         "setlocal",
         "cd /d ""%~dp0""",
         "set ""ESPEAK_NG_EXE=$EspeakExe""",
+        "set ""EDGE_PLAYBACK_EXE=$EdgePlaybackExe""",
         "set ""TOBII_GAZE_MOUSE_X86_PYTHON=$X86Python""",
         """$VenvPython"" ""%~dp0run_gaze_mouse.py""",
         "set EXITCODE=%ERRORLEVEL%",
@@ -1312,6 +1341,7 @@ function New-LauncherScripts {
         '$Python = Join-Path $Root ".venv\Scripts\python.exe"',
         '$App = Join-Path $Root "run_gaze_mouse.py"',
         '$env:ESPEAK_NG_EXE = "' + $EspeakExe.Replace('"', '""') + '"',
+        '$env:EDGE_PLAYBACK_EXE = "' + $EdgePlaybackExe.Replace('"', '""') + '"',
         '$env:TOBII_GAZE_MOUSE_X86_PYTHON = "' + $X86Python.Replace('"', '""') + '"',
         '& $Python $App',
         'exit $LASTEXITCODE'
@@ -1547,7 +1577,8 @@ function Show-FinalInstructions {
     param(
         [string]$VenvPython,
         [string]$EspeakExe,
-        [string]$X86Python
+        [string]$X86Python,
+        [string]$EdgePlaybackExe
     )
 
     Write-Step "Setup complete"
@@ -1573,6 +1604,7 @@ function Show-FinalInstructions {
     Write-Host "  - Python used by venv: $VenvPython"
     Write-Host "  - 32-bit Python used by Tobii bridge: $X86Python"
     Write-Host "  - eSpeak NG used for Bosnian speech: $EspeakExe"
+    Write-Host "  - Edge playback used for human-like Bosnian speech: $EdgePlaybackExe"
 }
 
 try {
@@ -1605,10 +1637,13 @@ try {
     $venvPython = Ensure-VirtualEnvironment -PythonExe $pythonExe
     Install-PythonPackages -VenvPython $venvPython
     Verify-PythonPackages -VenvPython $venvPython
-    New-LauncherScripts -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe
+    $edgePlaybackExe = Get-EdgePlaybackExecutableFromVenv -VenvPython $venvPython
+    $env:EDGE_PLAYBACK_EXE = $edgePlaybackExe
+    Write-Success "Using Edge playback executable: $edgePlaybackExe"
+    New-LauncherScripts -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
     Show-ExternalPrerequisiteNotes
     Remove-BytecodeCaches
-    Show-FinalInstructions -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe
+    Show-FinalInstructions -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
 
     if ($Launch) {
         Write-Step "Launching Tobii Gaze Mouse"

@@ -25,6 +25,7 @@ Python hotbar for controlling the Windows mouse pointer with a Tobii Eye Tracker
 - Python 3.10 64-bit. The current `tobii-research` wheel is published for CPython 3.10.
 - Python 3.10 32-bit for the Tobii Stream Engine bridge when Tobii Eye Tracking Core Software exposes only 32-bit DLLs. The Windows setup script installs and wires this automatically.
 - eSpeak NG with the Bosnian `bs` voice. The Windows setup script installs and verifies this automatically.
+- `edge-tts`, which provides the `edge-playback` command used by the optional human-like Bosnian neural voice. The Windows setup script installs and verifies this automatically.
 - Tobii runtime/software installed so the tracker can be discovered. The app tries `tobii-research` first and then falls back to Tobii Stream Engine for consumer trackers such as the Tobii Eye Tracker 4C.
 
 ## Install
@@ -36,7 +37,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\setup_windows.ps1
 ```
 
-The setup script logs each step, writes `setup_windows.log`, installs Python 3.10 automatically when Python 3.10 is missing, installs 32-bit Python 3.10 for the Tobii Core/Stream Engine bridge, installs eSpeak NG with Bosnian voice support, creates `.venv`, installs all Python dependencies from wheels, verifies the packages, and pauses before closing whether it succeeds or fails.
+The setup script logs each step, writes `setup_windows.log`, installs Python 3.10 automatically when Python 3.10 is missing, installs 32-bit Python 3.10 for the Tobii Core/Stream Engine bridge, installs eSpeak NG with Bosnian voice support, creates `.venv`, installs all Python dependencies from wheels, verifies the packages including `edge-tts` and `edge-playback`, and pauses before closing whether it succeeds or fails.
 
 If setup is launched from a network share such as `\\192.168.0.30\Tobii`, the script automatically copies the app to a local per-user install folder before creating `.venv`. This avoids Windows `Access is denied` failures that can happen when Python tries to create a virtual environment directly on a UNC path.
 
@@ -66,6 +67,12 @@ eSpeak NG installation is attempted in this order:
 - Direct PowerShell download of `espeak-ng.msi` from the eSpeak NG GitHub release, followed by silent MSI installation
 
 After installation, setup verifies that `espeak-ng.exe --voices=bs` reports Bosnian support. The generated launchers set `ESPEAK_NG_EXE` so the Python program can find the exact verified executable.
+
+The human-like voice is installed through the Python `edge-tts` package. Setup verifies that `.venv\Scripts\edge-playback.exe` exists and generated launchers set `EDGE_PLAYBACK_EXE` so the Python program can find it without relying on the system PATH. The configured preset uses:
+
+```powershell
+edge-playback --voice bs-BA-GoranNeural --rate=-10% --pitch=-2Hz --text "Dobar dan. Ovo zvuči mnogo prirodnije."
+```
 
 The script installs the Python side of the app. The Tobii Eye Tracker 4C still needs to be connected, visible in Tobii software, and calibrated on the Windows machine.
 
@@ -151,7 +158,7 @@ O P R S Š
 T U V Z Ž
 ```
 
-Select a group to open its letters, then select a letter to append it to the input. The speech keyboard keeps all letter groups in the top grid, including the final shorter group when the configured group size does not divide the Bosnian alphabet evenly. Space and Backspace stay in the bottom utility row. Clear and Play are next to the input at the top. Play sends the input to eSpeak NG and clears the input after the speech process starts. All speech-window buttons work with normal mouse clicks and with Tobii gaze dwell selection. Speech speed and letters per group can be adjusted from Settings. The hotbar Keyboard button uses the same Bosnian letter grouping setting for its right-side typing panel.
+Select a group to open its letters, then select a letter to append it to the input. The speech keyboard keeps all letter groups in the top grid, including the final shorter group when the configured group size does not divide the Bosnian alphabet evenly. Space and Backspace stay in the bottom utility row. Clear and Play are next to the input at the top. Play sends the input to the selected voice engine and leaves the text in the input so it can be replayed or edited. All speech-window buttons work with normal mouse clicks and with Tobii gaze dwell selection. Speech speed, letters per group, and voice preset can be adjusted from Settings. The hotbar Keyboard button uses the same Bosnian letter grouping setting for its right-side typing panel.
 
 The Speech window also has a `Phrases` button to the left of the input. `Phrases` opens a list of saved common phrases sorted by most-used first. Each phrase row has the phrase button on the left and a `Delete` button on the right. Selecting a phrase appends it to the speech input followed by a space and increases that phrase's usage count. `New phrase` stays centered under the input and opens phrase-creation mode using the same Bosnian letter keyboard; `Save phrase` stores the current phrase, and `Cancel` returns to the phrase list without saving. Phrase pages show up to eight phrases. When there are more saved phrases than fit on one page, `Previous` appears on the left side of the `New phrase` row and `Next` appears on the right side. Each page button is visible only when that direction has another page. Saved phrases and usage counts are stored as UTF-8 JSON under:
 
@@ -169,6 +176,7 @@ The Settings toolbar button opens a full-screen settings window with large gaze-
 - `Gaze settings` changes stare time, stable target radius, repeat delay, pointer smoothing, whether gaze moves the mouse pointer, whether the transparent gaze bubble is visible, whether the animated action overlay is visible, and whether precision zoom is used. `Use precision zoom` controls the zoom square used for quick actions. When enabled, quick actions use zoom before the radial action menu and normal armed `Left click`, `Right click`, and `Double click` modes also open zoom before firing the click. When disabled, quick actions open the radial menu directly and normal armed click modes fire directly after dwell. Lower stare time and repeat delay make clicks fire faster; higher pointer smoothing makes cursor movement more delayed.
 - `Gaze settings` also has `Start Tobii calibration`. On Windows it hides the fullscreen Settings window, looks for the installed Tobii Start Menu shortcut or Tobii configuration executable, opens the Tobii UI, then sends Tobii's `Ctrl+Shift+F10` calibration shortcut. If the target machine needs a custom command, set `TOBII_CALIBRATION_COMMAND` before starting the app.
 - `Speech settings` changes eSpeak NG speech speed and the number of Bosnian letters shown in each speech-keyboard group.
+- `Voice settings` selects the speech voice preset. `Default` uses eSpeak NG and is selected by default. `Human like` uses `edge-playback` with the Bosnian neural voice `bs-BA-GoranNeural`, rate `-10%`, and pitch `-2Hz`. The voice dropdown works with normal mouse selection and gaze dwell; gaze dwell cycles to the next voice.
 - The `Exit` button is at the top left and closes Settings. The `Quit app` button is on the right side of the `General settings` header row and closes the whole application. Both work with normal mouse clicks and Tobii gaze dwell selection.
 
 General, gaze, and speech settings are saved immediately when changed and loaded again when the app starts. They are stored as UTF-8 JSON under:

@@ -10,7 +10,7 @@ from typing import Any
 
 from .logging_setup import get_project_root
 from .mouse_controller import GazeSettings
-from .speech_service import SpeechSettings
+from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,9 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
 def _coerce_speech_settings(value: Any) -> SpeechSettings:
     settings = _dataclass_from_mapping(SpeechSettings(), value)
     language = str(settings.language).strip() or SpeechSettings().language
+    voice_preset = str(settings.voice_preset).strip() or VOICE_PRESET_DEFAULT
+    if voice_preset not in VOICE_PRESET_LABELS:
+        voice_preset = VOICE_PRESET_DEFAULT
     return replace(
         settings,
         language=language,
@@ -98,6 +101,7 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
         pitch=_clamp_int(settings.pitch, 0, 99),
         amplitude=_clamp_int(settings.amplitude, 0, 200),
         letters_per_group=_clamp_int(settings.letters_per_group, 1, 12),
+        voice_preset=voice_preset,
     )
 
 

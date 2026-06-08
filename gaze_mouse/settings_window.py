@@ -11,6 +11,7 @@ from typing import Callable
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
 from .gaze_feedback import set_gaze_feedback
 from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
-from .speech_service import SpeechSettings
+from .speech_service import VOICE_PRESETS, VOICE_PRESET_DEFAULT, SpeechSettings
 from .windows_startup import is_windows_startup_enabled, set_windows_startup_enabled
 
 
@@ -289,6 +290,46 @@ class SettingsWindow(QWidget):
                 border: 4px solid #bbf7d0;
                 color: #ffffff;
             }
+            QComboBox {
+                background: #101010;
+                border: 1px solid #4c534e;
+                border-radius: 8px;
+                color: #ffffff;
+                font-size: 20px;
+                font-weight: 650;
+                min-height: 46px;
+                padding: 10px 14px;
+            }
+            QComboBox:hover {
+                background: #181a18;
+                border-color: #69736d;
+            }
+            QComboBox::drop-down {
+                border: 0;
+                width: 42px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1e1f1e;
+                border: 1px solid #4c534e;
+                color: #ffffff;
+                selection-background-color: #1d6f68;
+                selection-color: #ffffff;
+            }
+            QComboBox[gazeTarget="true"] {
+                background: #3a3420;
+                border: 3px solid #f0c84a;
+                color: #ffffff;
+            }
+            QComboBox[gazeTarget="true"][gazePulse="0"] {
+                background: #f0c84a;
+                border: 4px solid #ffe58a;
+                color: #14140f;
+            }
+            QComboBox[gazeTarget="true"][gazePulse="1"] {
+                background: #16a34a;
+                border: 4px solid #bbf7d0;
+                color: #ffffff;
+            }
             """
             .replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
         )
@@ -352,9 +393,17 @@ class SettingsWindow(QWidget):
             checkable=True,
             minimum_size=QSize(216, 74),
         )
+        self._voice_tab_button = self._make_button(
+            "Voice settings",
+            lambda: self._select_tab(3),
+            icon_name="fa5s.user",
+            checkable=True,
+            minimum_size=QSize(216, 74),
+        )
         nav_layout.addWidget(self._general_tab_button)
         nav_layout.addWidget(self._gaze_tab_button)
         nav_layout.addWidget(self._speech_tab_button)
+        nav_layout.addWidget(self._voice_tab_button)
         nav_layout.addStretch(1)
 
         body.addWidget(nav_panel, 0)
@@ -363,6 +412,7 @@ class SettingsWindow(QWidget):
         self._stack.addWidget(self._build_general_page())
         self._stack.addWidget(self._build_gaze_page())
         self._stack.addWidget(self._build_speech_page())
+        self._stack.addWidget(self._build_voice_page())
         body.addWidget(self._stack, 1)
 
         self._select_tab(0)
@@ -412,6 +462,63 @@ class SettingsWindow(QWidget):
         actions.addWidget(self._logging_checkbox, 1, 0)
         actions.addWidget(self._launcher_window_checkbox, 2, 0)
         actions.setColumnStretch(1, 1)
+        layout.addLayout(actions)
+        layout.addStretch(1)
+
+        return page
+
+    def _build_voice_page(self) -> QWidget:
+        page = QFrame(self)
+        page.setObjectName("settingsPanel")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(14)
+
+        title = QLabel("Voice settings", page)
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+
+        row = QFrame(page)
+        row.setObjectName("settingRow")
+        row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        row_layout = QGridLayout(row)
+        row_layout.setContentsMargins(16, 14, 16, 14)
+        row_layout.setHorizontalSpacing(16)
+        row_layout.setVerticalSpacing(6)
+        row_layout.setColumnStretch(0, 1)
+
+        title_label = QLabel("Voice", row)
+        title_label.setObjectName("settingTitle")
+        hint_label = QLabel(
+            "Default uses eSpeak NG. Human like uses Microsoft Edge neural voice bs-BA-GoranNeural.",
+            row,
+        )
+        hint_label.setObjectName("settingHint")
+        hint_label.setWordWrap(True)
+
+        self._voice_combo = QComboBox(row)
+        self._voice_combo.setMinimumSize(QSize(260, 64))
+        self._voice_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        for value, label in VOICE_PRESETS:
+            self._voice_combo.addItem(label, value)
+        self._voice_combo.currentIndexChanged.connect(self._voice_combo_changed)
+        self._register_gaze(self._voice_combo, self._cycle_voice_preset, "Voice")
+
+        row_layout.addWidget(title_label, 0, 0)
+        row_layout.addWidget(hint_label, 1, 0)
+        row_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
+        layout.addWidget(row)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(12)
+        self._test_voice_button = self._make_button(
+            "Test voice",
+            self._request_speech_test,
+            icon_name="fa5s.play",
+            minimum_size=QSize(190, 64),
+        )
+        actions.addWidget(self._test_voice_button)
+        actions.addStretch(1)
         layout.addLayout(actions)
         layout.addStretch(1)
 
@@ -718,12 +825,15 @@ class SettingsWindow(QWidget):
         self._general_tab_button.setChecked(index == 0)
         self._gaze_tab_button.setChecked(index == 1)
         self._speech_tab_button.setChecked(index == 2)
+        self._voice_tab_button.setChecked(index == 3)
         if index == 0:
             self._set_status("General settings")
         elif index == 1:
             self._set_status("Gaze settings")
         elif index == 2:
             self._set_status("Speech settings")
+        elif index == 3:
+            self._set_status("Voice settings")
 
     def _toggle_move_pointer(self) -> None:
         checked = not self._gaze_settings.move_mouse
@@ -817,6 +927,25 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, letters_per_group=value)
         self._emit_speech_settings("Letters per group updated.")
 
+    def _voice_combo_changed(self, index: int) -> None:
+        value = self._voice_combo.itemData(index)
+        if not isinstance(value, str) or not value:
+            value = VOICE_PRESET_DEFAULT
+
+        if value == self._speech_settings.voice_preset:
+            return
+
+        self._speech_settings = replace(self._speech_settings, voice_preset=value)
+        self._emit_speech_settings("Voice updated.")
+
+    def _cycle_voice_preset(self) -> None:
+        count = self._voice_combo.count()
+        if count <= 0:
+            return
+
+        next_index = (self._voice_combo.currentIndex() + 1) % count
+        self._voice_combo.setCurrentIndex(next_index)
+
     def _emit_gaze_settings(self, status: str) -> None:
         self._refresh_values()
         self.gaze_settings_changed.emit(replace(self._gaze_settings))
@@ -853,6 +982,21 @@ class SettingsWindow(QWidget):
         self._startup_checkbox.setChecked(self._gaze_settings.start_with_windows)
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(self._gaze_settings.show_launcher_window)
+        self._sync_voice_combo()
+
+    def _sync_voice_combo(self) -> None:
+        desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
+        index = self._voice_combo.findData(desired)
+        if index < 0:
+            index = self._voice_combo.findData(VOICE_PRESET_DEFAULT)
+        if index < 0 or index == self._voice_combo.currentIndex():
+            return
+
+        previous = self._voice_combo.blockSignals(True)
+        try:
+            self._voice_combo.setCurrentIndex(index)
+        finally:
+            self._voice_combo.blockSignals(previous)
 
     def _set_status(self, text: str) -> None:
         logger.info("Settings status: %s", text)

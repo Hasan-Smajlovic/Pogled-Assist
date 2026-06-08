@@ -1,4 +1,4 @@
-"""Speech synthesis through eSpeak NG."""
+"""Speech synthesis through configured command-line speech engines."""
 
 from __future__ import annotations
 
@@ -15,6 +15,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 BOSNIAN_LANGUAGE = "bs"
+VOICE_PRESET_DEFAULT = "default"
+VOICE_PRESET_HUMAN_LIKE = "human_like"
+VOICE_PRESETS: tuple[tuple[str, str], ...] = (
+    (VOICE_PRESET_DEFAULT, "Default"),
+    (VOICE_PRESET_HUMAN_LIKE, "Human like"),
+)
+VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
+EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
+EDGE_PLAYBACK_RATE = "-10%"
+EDGE_PLAYBACK_PITCH = "-2Hz"
 
 
 @dataclass
@@ -24,14 +34,16 @@ class SpeechSettings:
     pitch: int = 50
     amplitude: int = 120
     letters_per_group: int = 5
+    voice_preset: str = VOICE_PRESET_DEFAULT
 
 
 class SpeechService:
-    """Small Python wrapper around the eSpeak NG command-line tool."""
+    """Small Python wrapper around the configured speech command-line tools."""
 
     def __init__(self) -> None:
         self._process: subprocess.Popen | None = None
         self._executable = find_espeak_ng()
+        self._edge_playback_executable = find_edge_playback()
         self._settings = SpeechSettings()
 
     @property
@@ -39,8 +51,12 @@ class SpeechService:
         return self._executable
 
     @property
+    def edge_playback_executable(self) -> Path | None:
+        return self._edge_playback_executable
+
+    @property
     def available(self) -> bool:
-        return self._executable is not None
+        return self._executable is not None or self._edge_playback_executable is not None
 
     @property
     def settings(self) -> SpeechSettings:
@@ -52,6 +68,7 @@ class SpeechService:
 
     def refresh(self) -> None:
         self._executable = find_espeak_ng()
+        self._edge_playback_executable = find_edge_playback()
 
     def speak(self, text: str, settings: SpeechSettings | None = None) -> bool:
         settings = replace(settings) if settings is not None else self.settings
@@ -60,8 +77,14 @@ class SpeechService:
             logger.warning("Speech request skipped because text is empty.")
             return False
 
+        if settings.voice_preset == VOICE_PRESET_HUMAN_LIKE:
+            return self._speak_edge_playback(text)
+
+        return self._speak_espeak(text, settings)
+
+    def _speak_espeak(self, text: str, settings: SpeechSettings) -> bool:
         if self._executable is None:
-            self.refresh()
+            self._executable = find_espeak_ng()
 
         if self._executable is None:
             logger.error("Speech request failed because espeak-ng was not found.")
@@ -81,7 +104,31 @@ class SpeechService:
             str(settings.amplitude),
             text,
         ]
-        logger.info("Starting speech command: %s", command[:-1] + ["<text>"])
+        return self._start_process(command, "espeak-ng")
+
+    def _speak_edge_playback(self, text: str) -> bool:
+        if self._edge_playback_executable is None:
+            self._edge_playback_executable = find_edge_playback()
+
+        if self._edge_playback_executable is None:
+            logger.error("Speech request failed because edge-playback was not found.")
+            return False
+
+        self.stop()
+
+        command = [
+            str(self._edge_playback_executable),
+            "--voice",
+            EDGE_PLAYBACK_VOICE,
+            f"--rate={EDGE_PLAYBACK_RATE}",
+            f"--pitch={EDGE_PLAYBACK_PITCH}",
+            "--text",
+            text,
+        ]
+        return self._start_process(command, "edge-playback")
+
+    def _start_process(self, command: list[str], engine_name: str) -> bool:
+        logger.info("Starting speech command (%s): %s", engine_name, command[:-1] + ["<text>"])
 
         startupinfo = None
         creationflags = 0
@@ -103,7 +150,7 @@ class SpeechService:
                 errors="replace",
             )
         except Exception:
-            logger.exception("Failed to start espeak-ng.")
+            logger.exception("Failed to start %s.", engine_name)
             self._process = None
             return False
 
@@ -140,7 +187,7 @@ class SpeechService:
             return
 
         if stderr.strip():
-            logger.warning("espeak-ng stderr: %s", stderr.strip())
+            logger.warning("Speech process stderr: %s", stderr.strip())
 
 
 def find_espeak_ng() -> Path | None:
@@ -151,6 +198,17 @@ def find_espeak_ng() -> Path | None:
             return candidate
 
     logger.warning("espeak-ng executable was not found.")
+    return None
+
+
+def find_edge_playback() -> Path | None:
+    candidates = list(_edge_playback_candidate_paths())
+    for candidate in candidates:
+        if _is_valid_edge_playback(candidate):
+            logger.info("Found edge-playback executable: %s", candidate)
+            return candidate
+
+    logger.warning("edge-playback executable was not found.")
     return None
 
 
@@ -198,6 +256,47 @@ def _candidate_paths() -> list[Path]:
     return deduped
 
 
+def _edge_playback_candidate_paths() -> list[Path]:
+    candidates: list[Path] = []
+
+    env_path = os.environ.get("EDGE_PLAYBACK_EXE", "").strip()
+    if env_path:
+        candidates.append(Path(env_path))
+
+    for name in ("edge-playback", "edge-playback.exe"):
+        path_match = shutil.which(name)
+        if path_match:
+            candidates.append(Path(path_match))
+
+    executable_dir = Path(sys.executable).resolve().parent
+    candidates.extend(
+        [
+            executable_dir / "edge-playback.exe",
+            executable_dir / "edge-playback",
+            executable_dir / "edge-playback-script.py",
+        ]
+    )
+
+    project_root = Path(__file__).resolve().parents[1]
+    candidates.extend(
+        [
+            project_root / ".venv" / "Scripts" / "edge-playback.exe",
+            project_root / ".venv" / "Scripts" / "edge-playback",
+            project_root / ".venv" / "bin" / "edge-playback",
+        ]
+    )
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate).lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(candidate)
+
+    return deduped
+
+
 def _is_valid_espeak_ng(path: Path) -> bool:
     if not path.exists() or not path.is_file():
         return False
@@ -223,6 +322,10 @@ def _is_valid_espeak_ng(path: Path) -> bool:
 
     logger.warning("espeak-ng candidate does not report Bosnian voice support: %s", path)
     return False
+
+
+def _is_valid_edge_playback(path: Path) -> bool:
+    return path.exists() and path.is_file()
 
 
 def _has_bosnian_voice(path: Path) -> bool:

@@ -603,6 +603,32 @@ function Get-EspeakNgExecutable {
     return $null
 }
 
+function Get-EdgePlaybackExecutable {
+    param([string]$AppRoot)
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:EDGE_PLAYBACK_EXE)) {
+        $candidates += $env:EDGE_PLAYBACK_EXE
+    }
+
+    $venvScripts = Join-Path $AppRoot ".venv\Scripts"
+    $candidates += Join-Path $venvScripts "edge-playback.exe"
+    $candidates += Join-Path $venvScripts "edge-playback"
+
+    $command = Get-Command "edge-playback" -ErrorAction SilentlyContinue
+    if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+        $candidates += $command.Source
+    }
+
+    foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 function Invoke-NativeProbe {
     param(
         [string]$FilePath,
@@ -737,6 +763,14 @@ function Start-GazeMouse {
         Write-Info "Using eSpeak NG executable: $espeakExe"
     } else {
         Write-WarningLog "eSpeak NG executable was not found. Speech may not work until setup installs it."
+    }
+
+    $edgePlaybackExe = Get-EdgePlaybackExecutable -AppRoot $AppRoot
+    if ($null -ne $edgePlaybackExe) {
+        $env:EDGE_PLAYBACK_EXE = $edgePlaybackExe
+        Write-Info "Using Edge playback executable: $edgePlaybackExe"
+    } else {
+        Write-WarningLog "edge-playback was not found. The Human like voice will not work until setup installs edge-tts."
     }
 
     $x86Python = Get-Python310X86 -AppRoot $AppRoot

@@ -936,10 +936,9 @@ class SpeechWindow(QWidget):
             return
 
         if self._speech.speak(text, self._speech_settings):
-            self._input.clear()
             self._set_status("Playing speech.")
         else:
-            self._set_status("eSpeak NG is not available.")
+            self._set_status("Selected voice engine is not available.")
 
     def _set_status(self, text: str) -> None:
         if text:
