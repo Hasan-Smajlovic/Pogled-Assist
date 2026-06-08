@@ -25,7 +25,7 @@ Python hotbar for controlling the Windows mouse pointer with a Tobii Eye Tracker
 - Python 3.10 64-bit. The current `tobii-research` wheel is published for CPython 3.10.
 - Python 3.10 32-bit for the Tobii Stream Engine bridge when Tobii Eye Tracking Core Software exposes only 32-bit DLLs. The Windows setup script installs and wires this automatically.
 - eSpeak NG with the Bosnian `bs` voice. The Windows setup script installs and verifies this automatically.
-- `edge-tts`, which provides the `edge-playback` command used by the optional human-like Bosnian neural voice. The Windows setup script installs and verifies this automatically.
+- `edge-tts`, which provides the `edge-playback` command used by the optional human-like Bosnian neural voice. The Windows setup script installs and verifies this automatically. The human-like voice requires internet access to Microsoft's online TTS service during setup verification and runtime playback.
 - Tobii runtime/software installed so the tracker can be discovered. The app tries `tobii-research` first and then falls back to Tobii Stream Engine for consumer trackers such as the Tobii Eye Tracker 4C.
 
 ## Install
@@ -37,21 +37,24 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\setup_windows.ps1
 ```
 
-The setup script logs each step, writes `setup_windows.log`, installs Python 3.10 automatically when Python 3.10 is missing, installs 32-bit Python 3.10 for the Tobii Core/Stream Engine bridge, installs eSpeak NG with Bosnian voice support, creates `.venv`, installs all Python dependencies from wheels, verifies the packages including `edge-tts` and `edge-playback`, and pauses before closing whether it succeeds or fails.
+The setup script logs each step, writes `setup_windows.log`, copies the program to `C:\TobiiExec`, installs Python 3.10 automatically when Python 3.10 is missing, installs 32-bit Python 3.10 for the Tobii Core/Stream Engine bridge, installs eSpeak NG with Bosnian voice support, creates `.venv`, installs all Python dependencies from wheels, verifies the packages including `edge-tts` and `edge-playback`, verifies that `bs-BA-GoranNeural` can synthesize audio, runs a short `edge-playback` smoke test, and pauses before closing whether it succeeds or fails.
 
-If setup is launched from a network share such as `\\192.168.0.30\Tobii`, the script automatically copies the app to a local per-user install folder before creating `.venv`. This avoids Windows `Access is denied` failures that can happen when Python tries to create a virtual environment directly on a UNC path.
-
-Default local install folder:
+Setup always installs and runs the app from:
 
 ```text
-%LocalAppData%\TobiiGazeMouse
+C:\TobiiExec
 ```
+
+If setup is launched from a network share, Desktop ZIP extraction, Downloads folder, or any other location, the script copies the app to `C:\TobiiExec` before creating `.venv`. This avoids Windows `Access is denied` failures that can happen when Python tries to create a virtual environment directly on a UNC path or temporary/extracted folder.
+
+The old `-UseSourceFolder` and `-InstallRoot` arguments are ignored by design; setup always uses `C:\TobiiExec`.
 
 The setup also creates:
 
 - `run_gaze_mouse.bat`
 - `run_gaze_mouse.ps1`
 - `start_gaze_mouse.ps1`
+- `update_windows.ps1`
 - A desktop shortcut named `Tobii Gaze Mouse`, unless `-NoDesktopShortcut` is used
 
 Python installation is attempted in this order:
@@ -68,7 +71,7 @@ eSpeak NG installation is attempted in this order:
 
 After installation, setup verifies that `espeak-ng.exe --voices=bs` reports Bosnian support. The generated launchers set `ESPEAK_NG_EXE` so the Python program can find the exact verified executable.
 
-The human-like voice is installed through the Python `edge-tts` package. Setup verifies that `.venv\Scripts\edge-playback.exe` exists and generated launchers set `EDGE_PLAYBACK_EXE` so the Python program can find it without relying on the system PATH. The configured preset uses:
+The human-like voice is installed through the Python `edge-tts` package. Setup verifies that `.venv\Scripts\edge-tts.exe` and `.venv\Scripts\edge-playback.exe` exist, verifies that the Edge TTS service returns the `bs-BA-GoranNeural` voice, generates a temporary MP3 with that voice, and runs a short `edge-playback` smoke test. Generated launchers set `EDGE_PLAYBACK_EXE` and put `.venv\Scripts` first on `PATH` so the Python program can find the verified commands without relying on the system PATH. The configured preset uses:
 
 ```powershell
 edge-playback --voice bs-BA-GoranNeural --rate=-10% --pitch=-2Hz --text "Dobar dan. Ovo zvuči mnogo prirodnije."
@@ -113,20 +116,6 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\setup_windows.ps1 -SkipPythonInstall
 ```
 
-To force setup to use the current source folder instead of copying to the local install folder:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-.\setup_windows.ps1 -UseSourceFolder
-```
-
-To choose a custom local install folder:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-.\setup_windows.ps1 -InstallRoot C:\TobiiGazeMouse
-```
-
 Manual setup:
 
 ```powershell
@@ -143,7 +132,28 @@ python -m pip install --no-compile --only-binary=:all: -r requirements.txt
 .\start_gaze_mouse.ps1
 ```
 
-`start_gaze_mouse.ps1` is the normal post-install launcher. It finds the installed app under `%LocalAppData%\TobiiGazeMouse`, recreates the `Tobii Gaze Mouse` desktop shortcut if needed, sets `ESPEAK_NG_EXE` when eSpeak NG is installed, points runtime logs back to the original source folder recorded during setup, and starts the app from the local `.venv`.
+`start_gaze_mouse.ps1` is the normal post-install launcher. It finds the installed app under `C:\TobiiExec`, recreates the `Tobii Gaze Mouse` desktop shortcut if needed, sets `ESPEAK_NG_EXE` when eSpeak NG is installed, sets `EDGE_PLAYBACK_EXE` when the human-like voice command is installed, writes runtime logs under `C:\TobiiExec`, and starts the app from the local `.venv`.
+
+## Update
+
+Updates are manual. Run the updater when you want to replace the installed code with the latest content from:
+
+```text
+https://github.com/thePi314/TobiiEyeTrackerTool
+```
+
+From any folder that contains `update_windows.ps1`, or from the installed folder:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+C:\TobiiExec\update_windows.ps1
+```
+
+The updater restarts as Administrator if needed, downloads the GitHub repository content, mirrors the code into `C:\TobiiExec`, preserves `.venv`, `data`, logs, and generated launchers, then reruns `setup_windows.ps1` from `C:\TobiiExec` so dependencies, launchers, and shortcuts are refreshed. It writes:
+
+```text
+C:\TobiiExec\update_windows.log
+```
 
 The application icon is loaded from `assets\icon.png`. Setup copies this asset to the installed app folder, and the PowerShell launchers create `assets\icon.ico` from it when they build the Windows desktop shortcut.
 
@@ -175,8 +185,7 @@ The Settings toolbar button opens a full-screen settings window with large gaze-
 - `General settings` controls application startup, logging, and launcher visibility. `Start with Windows as Administrator` creates or removes a per-user Windows Scheduled Task named `Tobii Gaze Mouse`. The task starts `start_gaze_mouse.ps1` at logon with highest privileges. The launcher also self-elevates when started manually from the desktop shortcut. `Enable logging` controls whether the Python app writes runtime logs to `logs/latest.txt`; disabling it reduces file and console logging work. `Show PowerShell launcher window` controls whether future launches keep the PowerShell console visible. Checked means the launcher window stays visible and pauses on failures when appropriate; unchecked means the launcher hides its console and runs silently in the background while still writing `start_gaze_mouse.log`.
 - `Gaze settings` changes stare time, stable target radius, repeat delay, pointer smoothing, whether gaze moves the mouse pointer, whether the transparent gaze bubble is visible, whether the animated action overlay is visible, and whether precision zoom is used. `Use precision zoom` controls the zoom square used for quick actions. When enabled, quick actions use zoom before the radial action menu and normal armed `Left click`, `Right click`, and `Double click` modes also open zoom before firing the click. When disabled, quick actions open the radial menu directly and normal armed click modes fire directly after dwell. Lower stare time and repeat delay make clicks fire faster; higher pointer smoothing makes cursor movement more delayed.
 - `Gaze settings` also has `Start Tobii calibration`. On Windows it hides the fullscreen Settings window, looks for the installed Tobii Start Menu shortcut or Tobii configuration executable, opens the Tobii UI, then sends Tobii's `Ctrl+Shift+F10` calibration shortcut. If the target machine needs a custom command, set `TOBII_CALIBRATION_COMMAND` before starting the app.
-- `Speech settings` changes eSpeak NG speech speed and the number of Bosnian letters shown in each speech-keyboard group.
-- `Voice settings` selects the speech voice preset. `Default` uses eSpeak NG and is selected by default. `Human like` uses `edge-playback` with the Bosnian neural voice `bs-BA-GoranNeural`, rate `-10%`, and pitch `-2Hz`. The voice dropdown works with normal mouse selection and gaze dwell; gaze dwell cycles to the next voice.
+- `Speech settings` changes eSpeak NG speech speed, the number of Bosnian letters shown in each speech-keyboard group, and the speech voice preset. `Default` uses eSpeak NG and is selected by default. `Human like` uses `edge-playback` with the Bosnian neural voice `bs-BA-GoranNeural`, rate `-10%`, and pitch `-2Hz`. The voice dropdown works with normal mouse selection and gaze dwell; gaze dwell cycles to the next voice.
 - The `Exit` button is at the top left and closes Settings. The `Quit app` button is on the right side of the `General settings` header row and closes the whole application. Both work with normal mouse clicks and Tobii gaze dwell selection.
 
 General, gaze, and speech settings are saved immediately when changed and loaded again when the app starts. They are stored as UTF-8 JSON under:
@@ -193,13 +202,13 @@ Every program run writes runtime logs to:
 logs\latest.txt
 ```
 
-When setup was launched from a network project folder and copied the app to `%LocalAppData%\TobiiGazeMouse`, `start_gaze_mouse.ps1` reads `install_info.json` and writes runtime logs back to that original source/network folder. The launcher itself also writes:
+`start_gaze_mouse.ps1` reads `install_info.json` and writes runtime logs under `C:\TobiiExec`. The launcher itself also writes:
 
 ```text
 start_gaze_mouse.log
 ```
 
-So in the network-share workflow, check these files in the project folder on the share:
+Check these files in `C:\TobiiExec`:
 
 ```text
 start_gaze_mouse.log

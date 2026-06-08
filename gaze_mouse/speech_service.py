@@ -25,6 +25,7 @@ VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
 EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
 EDGE_PLAYBACK_RATE = "-10%"
 EDGE_PLAYBACK_PITCH = "-2Hz"
+STARTUP_ERROR_GRACE_SECONDS = 0.25
 
 
 @dataclass
@@ -154,6 +155,19 @@ class SpeechService:
             self._process = None
             return False
 
+        try:
+            exit_code = self._process.wait(timeout=STARTUP_ERROR_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            return True
+
+        if exit_code != 0:
+            logger.error("%s exited immediately with code %s.", engine_name, exit_code)
+            self._log_process_error()
+            self._process = None
+            return False
+
+        self._log_process_error()
+        self._process = None
         return True
 
     def stop(self) -> None:

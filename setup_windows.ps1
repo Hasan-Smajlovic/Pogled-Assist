@@ -19,7 +19,9 @@ Set-StrictMode -Version Latest
 $script:ExitCode = 0
 $script:TranscriptStarted = $false
 $script:CacheCleaned = $false
+$script:ElevationRequested = $false
 
+$SetupScriptPath = $MyInvocation.MyCommand.Path
 $SourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = $SourceRoot
 
@@ -35,6 +37,11 @@ $EspeakNgPackageId = "eSpeak-NG.eSpeak-NG"
 $EspeakNgInstallerFileName = "espeak-ng.msi"
 $EspeakNgInstallerUrl = "https://github.com/espeak-ng/espeak-ng/releases/download/$EspeakNgVersion/$EspeakNgInstallerFileName"
 $InstallInfoFileName = "install_info.json"
+$FixedInstallRoot = "C:\TobiiExec"
+$EdgeTtsVoice = "bs-BA-GoranNeural"
+$EdgeTtsRate = "-10%"
+$EdgeTtsPitch = "-2Hz"
+$EdgeTtsTestText = "Dobar dan."
 
 function Write-Log {
     param(
@@ -90,6 +97,22 @@ function Format-CommandLine {
     return "$FilePath $($formattedArgs -join ' ')"
 }
 
+function Format-ProcessArguments {
+    param([string[]]$Arguments)
+
+    $formattedArgs = foreach ($argument in $Arguments) {
+        if ($null -eq $argument) {
+            '""'
+        } elseif ($argument -match '[\s"]') {
+            '"' + $argument.Replace('"', '\"') + '"'
+        } else {
+            $argument
+        }
+    }
+
+    return ($formattedArgs -join " ")
+}
+
 function Invoke-NativeCommand {
     param(
         [string]$Label,
@@ -119,6 +142,63 @@ function Invoke-NativeCommand {
     }
 }
 
+function Invoke-NativeCommandWithTimeout {
+    param(
+        [string]$Label,
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 30
+    )
+
+    Write-Info $Label
+    Write-Info "Running: $(Format-CommandLine -FilePath $FilePath -Arguments $Arguments)"
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $FilePath
+    $startInfo.Arguments = Format-ProcessArguments -Arguments $Arguments
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+
+    try {
+        if (-not $process.Start()) {
+            throw "$Label failed to start."
+        }
+
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try {
+                $process.Kill()
+            } catch {
+            }
+            throw "$Label timed out after $TimeoutSeconds seconds."
+        }
+
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+
+        if (-not [string]::IsNullOrWhiteSpace($stdout)) {
+            $stdout -split "(`r`n|`n|`r)" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+                Write-Host $_
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+            $stderr -split "(`r`n|`n|`r)" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
+                Write-Host $_
+            }
+        }
+
+        if ($process.ExitCode -ne 0) {
+            throw "$Label failed with exit code $($process.ExitCode)."
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Invoke-NativeProbe {
     param(
         [string]$FilePath,
@@ -144,13 +224,109 @@ function Invoke-NativeProbe {
     }
 }
 
-function Get-DefaultLocalInstallRoot {
-    $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    if ([string]::IsNullOrWhiteSpace($localAppData)) {
-        $localAppData = Join-Path $env:USERPROFILE "AppData\Local"
+function Test-IsAdministrator {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        Write-WarningLog "Could not determine administrator status: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-SetupPowerShellExecutable {
+    $command = Get-Command "powershell.exe" -ErrorAction SilentlyContinue
+    if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+        return $command.Source
     }
 
-    return Join-Path $localAppData "TobiiGazeMouse"
+    $windowsPowerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    if (Test-Path $windowsPowerShell) {
+        return $windowsPowerShell
+    }
+
+    return "powershell.exe"
+}
+
+function Format-SetupArgument {
+    param([string]$Value)
+    return '"' + $Value.Replace('"', '\"') + '"'
+}
+
+function Get-ElevatedSetupArguments {
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        (Format-SetupArgument -Value $SetupScriptPath)
+    )
+
+    if ($InstallPython) {
+        $arguments += "-InstallPython"
+    }
+    if ($SkipPythonInstall) {
+        $arguments += "-SkipPythonInstall"
+    }
+    if ($SkipX86BridgePythonInstall) {
+        $arguments += "-SkipX86BridgePythonInstall"
+    }
+    if ($Launch) {
+        $arguments += "-Launch"
+    }
+    if ($NoPause) {
+        $arguments += "-NoPause"
+    }
+    if ($UseSourceFolder) {
+        $arguments += "-UseSourceFolder"
+    }
+    if ($NoDesktopShortcut) {
+        $arguments += "-NoDesktopShortcut"
+    }
+    if ($VenvPath -ne ".venv") {
+        $arguments += "-VenvPath"
+        $arguments += (Format-SetupArgument -Value $VenvPath)
+    }
+    if ($PythonInstallerVersion -ne "3.10.11") {
+        $arguments += "-PythonInstallerVersion"
+        $arguments += (Format-SetupArgument -Value $PythonInstallerVersion)
+    }
+    if ($EspeakNgVersion -ne "1.52.0") {
+        $arguments += "-EspeakNgVersion"
+        $arguments += (Format-SetupArgument -Value $EspeakNgVersion)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
+        $arguments += "-InstallRoot"
+        $arguments += (Format-SetupArgument -Value $InstallRoot)
+    }
+
+    return ($arguments -join " ")
+}
+
+function Ensure-SetupAdministrator {
+    if (Test-IsAdministrator) {
+        Write-Success "Setup is running as Administrator."
+        return
+    }
+
+    Write-WarningLog "Setup is not elevated. Restarting as Administrator so it can install to $FixedInstallRoot."
+    try {
+        Start-Process `
+            -FilePath (Get-SetupPowerShellExecutable) `
+            -ArgumentList (Get-ElevatedSetupArguments) `
+            -WorkingDirectory $SourceRoot `
+            -Verb "RunAs" | Out-Null
+        $script:ElevationRequested = $true
+        Write-Info "Elevated setup process requested."
+        exit 0
+    } catch {
+        throw "Could not restart setup as Administrator: $($_.Exception.Message)"
+    }
+}
+
+function Get-DefaultLocalInstallRoot {
+    return $FixedInstallRoot
 }
 
 function Test-IsNetworkPath {
@@ -209,6 +385,7 @@ function Copy-ProjectToLocalInstallRoot {
         "README.md",
         "setup_windows.ps1",
         "start_gaze_mouse.ps1",
+        "update_windows.ps1",
         "assets",
         "tools",
         "gaze_mouse",
@@ -244,34 +421,26 @@ function Initialize-WorkingRoot {
     Write-Step "Preparing setup working folder"
 
     $sourceFullPath = Get-NormalizedFullPath -Path $SourceRoot
-    $shouldUseLocalInstall = $false
+    $targetFullPath = Get-NormalizedFullPath -Path (Get-DefaultLocalInstallRoot)
 
-    if (-not $UseSourceFolder -and (Test-IsNetworkPath -Path $sourceFullPath)) {
+    if (Test-IsNetworkPath -Path $sourceFullPath) {
         Write-WarningLog "Setup is running from a network path. Python venv creation can fail there with access denied."
-        $shouldUseLocalInstall = $true
     }
 
     if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
-        $shouldUseLocalInstall = $true
+        Write-WarningLog "Ignoring -InstallRoot '$InstallRoot'. This setup always installs to $FixedInstallRoot."
     }
 
-    if ($shouldUseLocalInstall) {
-        $effectiveInstallRoot = $InstallRoot
-        if ([string]::IsNullOrWhiteSpace($effectiveInstallRoot)) {
-            $effectiveInstallRoot = Get-DefaultLocalInstallRoot
-        }
+    if ($UseSourceFolder) {
+        Write-WarningLog "Ignoring -UseSourceFolder. This setup always installs to $FixedInstallRoot."
+    }
 
-        $targetFullPath = Get-NormalizedFullPath -Path $effectiveInstallRoot
-        if ($sourceFullPath -ieq $targetFullPath) {
-            Write-Info "Source and target folders are the same; using source folder."
-            $script:RepoRoot = $sourceFullPath
-        } else {
-            Copy-ProjectToLocalInstallRoot -SourcePath $sourceFullPath -TargetPath $targetFullPath
-            $script:RepoRoot = $targetFullPath
-        }
+    if ($sourceFullPath -ieq $targetFullPath) {
+        Write-Info "Source and fixed install folder are the same; using $targetFullPath."
+        $script:RepoRoot = $targetFullPath
     } else {
-        $script:RepoRoot = $sourceFullPath
-        Write-Info "Using source folder directly: $script:RepoRoot"
+        Copy-ProjectToLocalInstallRoot -SourcePath $sourceFullPath -TargetPath $targetFullPath
+        $script:RepoRoot = $targetFullPath
     }
 
     Set-Location $script:RepoRoot
@@ -285,7 +454,8 @@ function Write-InstallInfo {
     $sourceFullPath = Get-NormalizedFullPath -Path $SourceRoot
     $repoFullPath = Get-NormalizedFullPath -Path $RepoRoot
     $installInfo = [ordered]@{
-        SourceRoot = $sourceFullPath
+        SourceRoot = $repoFullPath
+        OriginalSourceRoot = $sourceFullPath
         InstallRoot = $repoFullPath
         BridgePythonX86 = ""
         CreatedAt = (Get-Date).ToString("o")
@@ -294,7 +464,7 @@ function Write-InstallInfo {
     $installInfoJson = $installInfo | ConvertTo-Json
     Set-Content -Path $installInfoPath -Value $installInfoJson -Encoding ASCII
     Write-Success "Install metadata written: $installInfoPath"
-    Write-Info "Runtime logs will be written to source root when launched through start_gaze_mouse.ps1: $sourceFullPath"
+    Write-Info "Runtime logs will be written to install root when launched through start_gaze_mouse.ps1: $repoFullPath"
 }
 
 function Update-InstallInfoBridgePython {
@@ -333,6 +503,27 @@ function Sync-SetupLogToSource {
         Write-Info "Copied setup log back to source path: $SourceLogPath"
     } catch {
         Write-WarningLog "Could not copy setup log back to source path: $($_.Exception.Message)"
+    }
+}
+
+function Sync-SetupLogToInstallRoot {
+    $logFullPath = Get-NormalizedFullPath -Path $LogPath
+    $installLogPath = Join-Path $RepoRoot "setup_windows.log"
+    $installLogFullPath = Get-NormalizedFullPath -Path $installLogPath
+
+    if ($logFullPath -ieq $installLogFullPath) {
+        return
+    }
+
+    if (-not (Test-Path $LogPath)) {
+        return
+    }
+
+    try {
+        Copy-Item -Path $LogPath -Destination $installLogPath -Force
+        Write-Info "Copied setup log to install path: $installLogPath"
+    } catch {
+        Write-WarningLog "Could not copy setup log to install path: $($_.Exception.Message)"
     }
 }
 
@@ -422,6 +613,7 @@ function Assert-RepositoryFiles {
         "requirements.txt",
         "run_gaze_mouse.py",
         "start_gaze_mouse.ps1",
+        "update_windows.ps1",
         "assets\icon.png",
         "gaze_mouse\app_icon.py",
         "gaze_mouse\logging_setup.py",
@@ -1302,6 +1494,115 @@ function Get-EdgePlaybackExecutableFromVenv {
     throw "edge-playback CLI was not found in the virtual environment Scripts folder: $scriptsDir"
 }
 
+function Get-EdgeTtsExecutableFromVenv {
+    param([string]$VenvPython)
+
+    $scriptsDir = Split-Path -Parent $VenvPython
+    $candidates = @(
+        (Join-Path $scriptsDir "edge-tts.exe"),
+        (Join-Path $scriptsDir "edge-tts")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "edge-tts CLI was not found in the virtual environment Scripts folder: $scriptsDir"
+}
+
+function Verify-EdgeTtsVoiceSupport {
+    param(
+        [string]$VenvPython,
+        [string]$EdgeTtsExe,
+        [string]$EdgePlaybackExe
+    )
+
+    Write-Step "Verifying Edge TTS human-like Bosnian voice"
+
+    $venvScripts = Split-Path -Parent $VenvPython
+    $env:PATH = $venvScripts + [IO.Path]::PathSeparator + $env:PATH
+    $env:EDGE_PLAYBACK_EXE = $EdgePlaybackExe
+
+    Invoke-NativeCommandWithTimeout `
+        -Label "Checking edge-tts command" `
+        -FilePath $EdgeTtsExe `
+        -Arguments @("--version") `
+        -TimeoutSeconds 20
+
+    Invoke-NativeCommandWithTimeout `
+        -Label "Checking edge-playback command" `
+        -FilePath $EdgePlaybackExe `
+        -Arguments @("--help") `
+        -TimeoutSeconds 20
+
+    $verifyCode = @'
+import asyncio
+import sys
+import tempfile
+from pathlib import Path
+
+import edge_tts
+
+
+async def main() -> None:
+    voice = sys.argv[1]
+    rate = sys.argv[2]
+    pitch = sys.argv[3]
+    text = sys.argv[4]
+
+    print("edge_tts package:", getattr(edge_tts, "__version__", "unknown"))
+    voices = await asyncio.wait_for(edge_tts.list_voices(), timeout=35)
+    matches = [item for item in voices if item.get("ShortName") == voice]
+    if not matches:
+        raise SystemExit(f"Voice was not returned by Edge TTS service: {voice}")
+
+    print("Verified Edge TTS voice:", voice)
+    media_path = Path(tempfile.gettempdir()) / "tobii_edge_tts_voice_test.mp3"
+    if media_path.exists():
+        media_path.unlink()
+
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+    await asyncio.wait_for(communicate.save(str(media_path)), timeout=45)
+
+    size = media_path.stat().st_size if media_path.exists() else 0
+    if size < 512:
+        raise SystemExit(f"Edge TTS generated an invalid media file: {media_path} ({size} bytes)")
+
+    print("Generated Edge TTS voice test media bytes:", size)
+    try:
+        media_path.unlink()
+    except OSError:
+        pass
+
+
+asyncio.run(main())
+'@
+
+    $verifyScriptPath = Join-Path ([IO.Path]::GetTempPath()) ("tobii_verify_edge_tts_{0}.py" -f [Guid]::NewGuid().ToString("N"))
+    Write-Info "Writing Edge TTS verification script: $verifyScriptPath"
+    Set-Content -Path $verifyScriptPath -Value $verifyCode -Encoding ASCII
+
+    try {
+        Invoke-NativeCommandWithTimeout `
+            -Label "Verifying $EdgeTtsVoice voice can synthesize audio" `
+            -FilePath $VenvPython `
+            -Arguments @($verifyScriptPath, $EdgeTtsVoice, $EdgeTtsRate, $EdgeTtsPitch, $EdgeTtsTestText) `
+            -TimeoutSeconds 90
+    } finally {
+        Remove-Item -Path $verifyScriptPath -Force -ErrorAction SilentlyContinue
+    }
+
+    Invoke-NativeCommandWithTimeout `
+        -Label "Running edge-playback smoke test for $EdgeTtsVoice" `
+        -FilePath $EdgePlaybackExe `
+        -Arguments @("--voice", $EdgeTtsVoice, "--rate=$EdgeTtsRate", "--pitch=$EdgeTtsPitch", "--text", $EdgeTtsTestText) `
+        -TimeoutSeconds 90
+
+    Write-Success "Edge playback and $EdgeTtsVoice were verified successfully."
+}
+
 function New-LauncherScripts {
     param(
         [string]$VenvPython,
@@ -1312,11 +1613,13 @@ function New-LauncherScripts {
 
     Write-Step "Creating launcher scripts"
 
+    $venvScripts = Split-Path -Parent $VenvPython
     $batchPath = Join-Path $RepoRoot "run_gaze_mouse.bat"
     $batchLines = @(
         "@echo off",
         "setlocal",
         "cd /d ""%~dp0""",
+        "set ""PATH=$venvScripts;%PATH%""",
         "set ""ESPEAK_NG_EXE=$EspeakExe""",
         "set ""EDGE_PLAYBACK_EXE=$EdgePlaybackExe""",
         "set ""TOBII_GAZE_MOUSE_X86_PYTHON=$X86Python""",
@@ -1338,8 +1641,10 @@ function New-LauncherScripts {
         '$ErrorActionPreference = "Stop"',
         '$Root = Split-Path -Parent $MyInvocation.MyCommand.Path',
         'Set-Location $Root',
-        '$Python = Join-Path $Root ".venv\Scripts\python.exe"',
+        '$VenvScripts = Join-Path $Root ".venv\Scripts"',
+        '$Python = Join-Path $VenvScripts "python.exe"',
         '$App = Join-Path $Root "run_gaze_mouse.py"',
+        '$env:PATH = $VenvScripts + [IO.Path]::PathSeparator + $env:PATH',
         '$env:ESPEAK_NG_EXE = "' + $EspeakExe.Replace('"', '""') + '"',
         '$env:EDGE_PLAYBACK_EXE = "' + $EdgePlaybackExe.Replace('"', '""') + '"',
         '$env:TOBII_GAZE_MOUSE_X86_PYTHON = "' + $X86Python.Replace('"', '""') + '"',
@@ -1605,9 +1910,12 @@ function Show-FinalInstructions {
     Write-Host "  - 32-bit Python used by Tobii bridge: $X86Python"
     Write-Host "  - eSpeak NG used for Bosnian speech: $EspeakExe"
     Write-Host "  - Edge playback used for human-like Bosnian speech: $EdgePlaybackExe"
+    Write-Host "  - Human-like voice verified during setup: $EdgeTtsVoice"
 }
 
 try {
+    Assert-Windows
+    Ensure-SetupAdministrator
     Start-SetupTranscript
     Initialize-WorkingRoot
     Write-InstallInfo
@@ -1618,7 +1926,6 @@ try {
     Write-Info "Install root override: $InstallRoot"
     Write-Info "Bytecode generation disabled for this setup run."
 
-    Assert-Windows
     Assert-RepositoryFiles
     $pythonExe = Resolve-OrInstallPython310
     Write-Success "Using Python 3.10 executable: $pythonExe"
@@ -1638,8 +1945,11 @@ try {
     Install-PythonPackages -VenvPython $venvPython
     Verify-PythonPackages -VenvPython $venvPython
     $edgePlaybackExe = Get-EdgePlaybackExecutableFromVenv -VenvPython $venvPython
+    $edgeTtsExe = Get-EdgeTtsExecutableFromVenv -VenvPython $venvPython
     $env:EDGE_PLAYBACK_EXE = $edgePlaybackExe
+    Write-Success "Using Edge TTS executable: $edgeTtsExe"
     Write-Success "Using Edge playback executable: $edgePlaybackExe"
+    Verify-EdgeTtsVoiceSupport -VenvPython $venvPython -EdgeTtsExe $edgeTtsExe -EdgePlaybackExe $edgePlaybackExe
     New-LauncherScripts -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
     Show-ExternalPrerequisiteNotes
     Remove-BytecodeCaches
@@ -1658,6 +1968,10 @@ try {
     Write-ErrorLog "Setup failed: $($_.Exception.Message)"
     Write-Info "Review the console output above and setup log if available: $LogPath"
 } finally {
+    if ($script:ElevationRequested) {
+        exit 0
+    }
+
     if (-not $script:CacheCleaned) {
         try {
             Remove-BytecodeCaches
@@ -1673,6 +1987,7 @@ try {
     }
 
     Stop-SetupTranscript
+    Sync-SetupLogToInstallRoot
     Sync-SetupLogToSource
     Wait-BeforeExit
     exit $script:ExitCode

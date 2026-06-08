@@ -55,12 +55,7 @@ function Write-ErrorLog {
 }
 
 function Get-DefaultInstallRoot {
-    $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    if ([string]::IsNullOrWhiteSpace($localAppData)) {
-        $localAppData = Join-Path $env:USERPROFILE "AppData\Local"
-    }
-
-    return Join-Path $localAppData "TobiiGazeMouse"
+    return "C:\TobiiExec"
 }
 
 function Test-AppRoot {
@@ -126,11 +121,11 @@ function Resolve-LogRoot {
             $sourceRoot = [string]$installInfo.SourceRoot
             if (-not [string]::IsNullOrWhiteSpace($sourceRoot) -and (Test-Path $sourceRoot)) {
                 $resolvedSourceRoot = Get-NormalizedPath -Path $sourceRoot
-                Write-Success "Using source folder for logs: $resolvedSourceRoot"
+                Write-Success "Using install metadata log folder: $resolvedSourceRoot"
                 return $resolvedSourceRoot
             }
 
-            Write-WarningLog "Install metadata source folder is not available: $sourceRoot"
+            Write-WarningLog "Install metadata log folder is not available: $sourceRoot"
         } catch {
             Write-WarningLog "Could not read install metadata at $installInfoPath`: $($_.Exception.Message)"
         }
@@ -756,6 +751,10 @@ function Start-GazeMouse {
     if (-not (Test-Path $appPath)) {
         throw "Application entry point was not found: $appPath"
     }
+
+    $venvScripts = Split-Path -Parent $pythonPath
+    $env:PATH = $venvScripts + [IO.Path]::PathSeparator + $env:PATH
+    Write-Info "Virtual environment Scripts path added to PATH: $venvScripts"
 
     $espeakExe = Get-EspeakNgExecutable -AppRoot $AppRoot
     if ($null -ne $espeakExe) {
