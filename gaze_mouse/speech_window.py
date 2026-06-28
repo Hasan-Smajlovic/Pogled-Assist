@@ -205,104 +205,112 @@ class SpeechWindow(QWidget):
         self.setStyleSheet(
             """
             QWidget#speechWindow {
-                background: #eef2f5;
-                color: #111827;
+                background: #111318;
+                color: #f6f7fb;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
             }
             QLineEdit#speechInput {
-                background: #ffffff;
-                border: 2px solid #c7d2de;
+                background: #0b0d11;
+                border: 2px solid #303747;
                 border-radius: 8px;
-                color: #101820;
+                color: #ffffff;
                 font-size: 32px;
                 padding: 10px 18px;
-                selection-background-color: #0f766e;
+                placeholder-text-color: #aeb8c8;
+                selection-background-color: #245f9f;
             }
             QPushButton, QToolButton {
-                border: 1px solid #c7d2de;
+                border: 1px solid #303747;
                 border-radius: 8px;
-                background: #ffffff;
-                color: #111827;
+                background: #1c2029;
+                color: #eef2f8;
                 font-weight: 700;
                 padding: 10px;
             }
             QPushButton:hover, QToolButton:hover {
-                background: #f8fafc;
-                border-color: #708196;
+                background: #262c38;
+                border-color: #4c5970;
             }
             QPushButton:pressed, QToolButton:pressed {
-                background: #dce7ef;
+                background: #245f9f;
+                border-color: #67b7dc;
             }
             QPushButton#groupButton {
-                background: #ffffff;
+                background: #1c2029;
                 font-size: 28px;
             }
             QPushButton#letterButton {
-                background: #ffffff;
+                background: #1c2029;
                 font-size: 34px;
             }
             QPushButton#utilityButton {
-                background: #fff7ed;
-                border-color: #fed7aa;
+                background: #202631;
+                border-color: #3b4658;
                 font-size: 24px;
             }
             QToolButton#playButton {
-                background: #0f766e;
-                border-color: #0f766e;
+                background: #245f9f;
+                border-color: #67b7dc;
                 color: #ffffff;
                 font-size: 18px;
             }
             QToolButton#clearButton {
-                background: #f9fafb;
+                background: #1c2029;
                 font-size: 18px;
             }
             QToolButton#phrasesButton {
-                background: #e0f2fe;
-                border-color: #7dd3fc;
-                color: #0f172a;
+                background: #1c2029;
+                border-color: #303747;
+                color: #eef2f8;
                 font-size: 16px;
             }
             QToolButton#phrasesButton:checked {
-                background: #075985;
-                border-color: #38bdf8;
+                background: #245f9f;
+                border-color: #67b7dc;
                 color: #ffffff;
             }
             QToolButton#phraseActionButton {
-                background: #f8fafc;
-                border-color: #cbd5e1;
-                color: #0f172a;
+                background: #1c2029;
+                border-color: #303747;
+                color: #eef2f8;
                 font-size: 17px;
             }
             QToolButton#phrasePageButton {
-                background: #e0f2fe;
-                border-color: #7dd3fc;
-                color: #0f172a;
+                background: #1c2029;
+                border-color: #303747;
+                color: #eef2f8;
                 font-size: 17px;
             }
             QToolButton#phrasePageButton:disabled {
-                background: #e5e7eb;
-                border-color: #cbd5e1;
-                color: #64748b;
+                background: #151821;
+                border-color: #262c38;
+                color: #697386;
             }
             QToolButton#closeButton {
-                background: #b42318;
-                border-color: #b42318;
+                background: #4b2224;
+                border-color: #7d383e;
                 color: #ffffff;
             }
             QPushButton#phraseButton {
-                background: #ffffff;
-                border-color: #c7d2de;
+                background: #1c2029;
+                border-color: #303747;
+                color: #eef2f8;
                 font-size: 22px;
                 text-align: left;
                 padding-left: 18px;
                 min-height: 72px;
                 max-height: 72px;
             }
+            QPushButton#phraseButton:disabled {
+                background: #151821;
+                border-color: #262c38;
+                color: #697386;
+            }
             QPushButton#deletePhraseButton {
-                background: #fee2e2;
-                border-color: #fca5a5;
-                color: #991b1b;
+                background: #4b2224;
+                border-color: #7d383e;
+                color: #fecaca;
                 font-size: 18px;
                 min-height: 72px;
                 max-height: 72px;
@@ -310,8 +318,8 @@ class SpeechWindow(QWidget):
             QPushButton[gazeTarget="true"][gazePulse="0"],
             QToolButton[gazeTarget="true"][gazePulse="0"] {
                 background: #f0c84a;
-                border: 4px solid #f59e0b;
-                color: #111827;
+                border: 4px solid #ffe58a;
+                color: #111318;
             }
             QPushButton[gazeTarget="true"][gazePulse="1"],
             QToolButton[gazeTarget="true"][gazePulse="1"] {
@@ -321,8 +329,8 @@ class SpeechWindow(QWidget):
             }
             QToolButton#closeButton[gazeTarget="true"][gazePulse="0"] {
                 background: #f0c84a;
-                border-color: #f59e0b;
-                color: #111827;
+                border-color: #ffe58a;
+                color: #111318;
             }
             QToolButton#closeButton[gazeTarget="true"][gazePulse="1"] {
                 background: #dc2626;
@@ -356,7 +364,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_FileDialogListView,
             object_name="phrasesButton",
             size=84,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=122,
             checkable=True,
         )
@@ -367,7 +375,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_DialogResetButton,
             object_name="clearButton",
             size=84,
-            icon_color="#111827",
+            icon_color="#eef2f8",
         )
         self._play_button = self._make_tool_button(
             text="Play",
@@ -412,7 +420,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_ArrowBack,
             object_name="phrasePageButton",
             size=62,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=148,
             tool_button_style=Qt.ToolButtonTextBesideIcon,
         )
@@ -425,7 +433,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_FileDialogNewFolder,
             object_name="phraseActionButton",
             size=62,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=190,
             tool_button_style=Qt.ToolButtonTextBesideIcon,
         )
@@ -436,7 +444,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_DialogSaveButton,
             object_name="phraseActionButton",
             size=62,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=176,
         )
         self._cancel_phrase_button = self._make_tool_button(
@@ -446,7 +454,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_DialogCancelButton,
             object_name="phraseActionButton",
             size=62,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=144,
         )
         self._next_phrase_page_host = QWidget(self._phrase_actions_host)
@@ -461,7 +469,7 @@ class SpeechWindow(QWidget):
             fallback=QStyle.StandardPixmap.SP_ArrowForward,
             object_name="phrasePageButton",
             size=62,
-            icon_color="#0f172a",
+            icon_color="#eef2f8",
             width=148,
             tool_button_style=Qt.ToolButtonTextBesideIcon,
         )
