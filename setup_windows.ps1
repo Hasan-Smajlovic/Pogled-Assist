@@ -388,8 +388,7 @@ function Copy-ProjectToLocalInstallRoot {
         "update_windows.ps1",
         "assets",
         "tools",
-        "gaze_mouse",
-        "AgentDocs"
+        "gaze_mouse"
     )
 
     foreach ($relativePath in $itemsToCopy) {
