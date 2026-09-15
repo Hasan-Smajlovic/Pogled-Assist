@@ -134,6 +134,30 @@ python -m pip install --no-compile --only-binary=:all: -r requirements.txt
 
 `start_gaze_mouse.ps1` is the normal post-install launcher. It finds the installed app under `C:\TobiiExec`, recreates the `Tobii Gaze Mouse` desktop shortcut if needed, sets `ESPEAK_NG_EXE` when eSpeak NG is installed, sets `EDGE_PLAYBACK_EXE` when the human-like voice command is installed, writes runtime logs under `C:\TobiiExec`, and starts the app from the local `.venv`.
 
+## Tests
+
+Use Python 3.10 to create a local virtual environment, then install the app and test dependencies:
+
+```powershell
+py -3.10 -m venv .venv
+.\.venv\Scripts\python.exe -B -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt
+```
+
+If the `py` launcher is unavailable and Python 3.10 was installed for the current user, create the environment with:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe" -m venv .venv
+```
+
+Run the tests without writing Python bytecode or a pytest cache:
+
+```powershell
+$env:QT_QPA_PLATFORM = "offscreen"
+.\.venv\Scripts\python.exe -B -m pytest -p no:cacheprovider
+```
+
+The UI tests use mocked Windows input and speech services, so no eye tracker is needed.
+
 ## Update
 
 Updates are manual. Run the updater when you want to replace the installed code with the latest content from:
