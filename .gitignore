@@ -65,3 +65,7 @@ assets/icon.ico
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Codex/agent runtime metadata mounted into the workspace
+.agents/
+.codex/
