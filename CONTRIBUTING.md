@@ -105,16 +105,15 @@ squashed, but they must remain understandable and must never contain secrets.
 - Tajib reviews Hasan's pull requests.
 - New commits dismiss previous approvals. The latest diff must be approved again.
 - Every review conversation must be resolved before merge.
-- Hasan is the only person who performs the final merge into `development` or
-  `master`.
+- Hasan, Tajib, and Ali may perform the final merge into `development` or
+  `master` after all applicable quality rules are satisfied.
 - An approval means the reviewer accepts the implementation and the reported
   verification. It does not replace CI or required Windows and Tobii hardware
   checks.
 
-The `Maintainer merge control` ruleset restricts updates to `development` and
-`master` to the repository administrator role. Hasan is currently the only
-repository administrator. The independent pull request quality rulesets have no
-bypass actors, so Hasan must still satisfy their review and conversation rules.
+There is no active maintainer-only update restriction. Collaborators with write
+or administrator permission may merge, but the independent pull request quality
+rulesets apply to everyone and have no bypass actors.
 
 ## Merge strategy
 
@@ -201,12 +200,10 @@ It does not require linear history, Code Owner review, approval of the most rece
 reviewable push, signed commits, deployments, or status checks. It does not
 restrict branch creation or contain a separate update restriction.
 
-The active `Maintainer merge control` ruleset targets exactly `development` and
-`master`. It contains only `Restrict updates` and gives the repository
-administrator role an always-allow bypass for that ruleset. It contains no pull
-request, approval, conversation, force-push, deletion, or status-check rules.
-GitHub evaluates it together with the independent quality rulesets, where nobody
-has bypass permission.
+The former `Maintainer merge control` ruleset is disabled and has no effect on
+either branch. This allows collaborators with write or administrator permission
+to merge after the applicable quality rules are satisfied. The two active quality
+rulesets have no bypass actors.
 
 ## CI and required checks
 
@@ -232,10 +229,10 @@ and user-owned.
   workflows and they produce stable passing check names.
 - Push rulesets for restricting paths, extensions, or file sizes are outside issue
   #14 and must not be added as part of this workflow configuration.
-- `Maintainer merge control` uses the repository administrator role. It enforces
-  Hasan-only merging while Hasan remains the sole repository administrator. Adding
-  another administrator would also give that person the ruleset bypass and must be
-  treated as a workflow and permission change.
+- No active ruleset limits final merges to one person. GitHub allows collaborators
+  with write or administrator permission to merge after the applicable quality
+  rules are satisfied. The current eligible collaborators are Hasan, Tajib, and
+  Ali.
 
 ## Exceptions and break-glass recovery
 
