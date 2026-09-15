@@ -13,8 +13,9 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 Setup creates `.venv`, installs the application, test and packaging dependencies,
-and downloads PSScriptAnalyzer 1.25.0 into the ignored `.dev-tools` directory.
-It does not install Tobii software or change the system-wide Python environment.
+and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored
+`.dev-tools` directory. It does not install Tobii software or change the
+system-wide Python environment.
 
 ## Command reference
 
@@ -25,7 +26,7 @@ It does not install Tobii software or change the system-wide Python environment.
 | `.\dev.ps1 test` | Unit, integration, and UI workflow tests |
 | `.\dev.ps1 test-ui` | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Test suite, 60 percent floor, and `dist\coverage-html` report |
-| `.\dev.ps1 lint` | Ruff lint/format, Python compilation, PowerShell parse/analyzer checks |
+| `.\dev.ps1 lint` | Actions, Ruff, Python compilation, and PowerShell checks |
 | `.\dev.ps1 format` | Ruff safe fixes, import ordering, and source formatting |
 | `.\dev.ps1 check` | Lint plus tests and coverage, matching the required PR checks |
 | `.\dev.ps1 package` | Clean PyInstaller build and frozen executable smoke test |
@@ -113,6 +114,9 @@ On the Tobii machine, additionally verify:
 Record software-only and hardware results separately in the pull request.
 
 ## Lint and formatting
+
+actionlint checks GitHub Actions YAML syntax and workflow expressions before a
+push.
 
 Ruff is the Python equivalent of the ESLint, Prettier, and import-sorting parts of
 a JavaScript toolchain. The repository enables syntax and import checks,

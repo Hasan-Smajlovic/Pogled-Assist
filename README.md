@@ -96,10 +96,11 @@ does not include Make by default:
 | `.\dev.ps1 check` | Run the complete pre-PR verification |
 | `.\dev.ps1 package` | Build and smoke-test the Windows release ZIP |
 
-`Ruff` handles Python linting, import ordering, modernization checks, and
-formatting. `PSScriptAnalyzer` checks PowerShell for selected correctness and
-security problems. A separate Black, isort, Flake8, ESLint, or Prettier setup
-would duplicate those checks.
+`actionlint` checks GitHub Actions workflow syntax. `Ruff` handles Python
+linting, import ordering, modernization checks, and formatting.
+`PSScriptAnalyzer` checks PowerShell for selected correctness and security
+problems. A separate Black, isort, Flake8, ESLint, or Prettier setup would
+duplicate those checks.
 
 For a visual review without a tracker or speech engine:
 

@@ -61,11 +61,14 @@ function Install-DevEnvironment {
             -Force
     }
 
+    & (Join-Path $RepoRoot "scripts\check_github_actions.ps1") -Install
+
     Write-Output "Development environment is ready. Run .\dev.ps1 check."
 }
 
 function Invoke-LintChecks {
     $python = Get-DevPython
+    & (Join-Path $RepoRoot "scripts\check_github_actions.ps1")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "check", ".")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "format", "--check", ".")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @(
@@ -115,7 +118,7 @@ Tobii Gaze Mouse development commands
   .\dev.ps1 test        Run the complete hardware-independent test suite
   .\dev.ps1 test-ui     Run only end-to-end UI workflow and rendering tests
   .\dev.ps1 coverage    Run tests with the enforced coverage floor and HTML report
-  .\dev.ps1 lint        Run Ruff, formatting, compile, and PowerShell checks
+  .\dev.ps1 lint        Run Actions, Ruff, formatting, compile, and PowerShell checks
   .\dev.ps1 format      Apply Ruff import fixes and Python formatting
   .\dev.ps1 check       Run every local check expected before a pull request
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
