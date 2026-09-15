@@ -26,8 +26,10 @@ by the optional 32-bit Stream Engine bridge.
    ```
 
 The installer requests Administrator access, mirrors application files to
-`C:\TobiiExec`, preserves `data` and `logs`, smoke-tests the installed executable,
-and creates the `Tobii Gaze Mouse` desktop shortcut. Run
+`C:\TobiiExec`, preserves `data` and `logs`, and creates the `Tobii Gaze Mouse`
+desktop shortcut. Before replacing files, it rejects a running application,
+creates and smoke-tests a staging copy, and backs up the current application
+files. If the copy or installed smoke test fails, it restores the backup. Run
 `C:\TobiiExec\start_gaze_mouse.ps1` or the shortcut later.
 
 The extracted folder is also portable. Run its `start_gaze_mouse.ps1` without
@@ -59,10 +61,8 @@ disable their corresponding voice preset.
 Use Windows x64 and Python 3.10:
 
 ```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install --no-compile --only-binary=:all: -r requirements-build.txt
-.\scripts\build_windows_package.ps1 -PythonPath .\.venv\Scripts\python.exe
+.\dev.ps1 setup
+.\dev.ps1 package
 ```
 
 The build reads `VERSION`, uses the checked-in PyInstaller spec, checks required
@@ -130,8 +130,9 @@ Hardware checks on the target Tobii machine:
 ## Rollback
 
 Download an earlier immutable release, verify its checksum, extract it, and run
-its `install_windows.ps1`. The installer replaces application binaries while
-preserving `C:\TobiiExec\data` and `C:\TobiiExec\logs`. If saved settings from a
-newer version are incompatible, back up `data`, remove only the affected JSON
-file, and restart the older version. Never move or recreate an existing release
-tag during rollback.
+its `install_windows.ps1`. Close Tobii Gaze Mouse first. The installer validates
+the older package before replacing application binaries, preserves
+`C:\TobiiExec\data` and `C:\TobiiExec\logs`, and restores the previous binaries if
+installation fails. If saved settings from a newer version are incompatible,
+back up `data`, remove only the affected JSON file, and restart the older version.
+Never move or recreate an existing release tag during rollback.

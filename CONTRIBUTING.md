@@ -241,8 +241,6 @@ and user-owned.
   paid plans.
 - Organization teams and required team reviewers are unavailable in a user-owned
   repository.
-- Required status checks cannot be selected reliably until issue #16 creates the
-  workflows and they produce stable passing check names.
 - Push rulesets for restricting paths, extensions, or file sizes are outside issue
   #14 and must not be added as part of this workflow configuration.
 - No active ruleset limits final merges to one person. GitHub allows collaborators

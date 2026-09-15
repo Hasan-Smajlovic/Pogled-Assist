@@ -27,6 +27,92 @@ function Get-PowerShellExecutable {
     return Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 }
 
+function Assert-AppNotRunning {
+    $runningApps = @(Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue)
+    if ($runningApps.Count -gt 0) {
+        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ", "
+        throw "Close Tobii Gaze Mouse before installing or rolling back. Running process IDs: $processIds"
+    }
+}
+
+function Invoke-RobocopyMirror {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $arguments = @(
+        $Source,
+        $Destination,
+        "/MIR",
+        "/R:2",
+        "/W:2",
+        "/NFL",
+        "/NDL",
+        "/NP",
+        "/XD", "data", "logs",
+        "/XF", "install_info.json", "*.log"
+    )
+    & robocopy @arguments | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -gt 7) {
+        throw "Could not mirror $Source to $Destination. Robocopy exit code: $exitCode"
+    }
+
+    # Robocopy uses successful non-zero codes when files were copied or changed.
+    $global:LASTEXITCODE = 0
+}
+
+function Invoke-PackageSmokeTest {
+    param(
+        [string]$Root,
+        [string]$Label
+    )
+
+    $appExecutable = Join-Path $Root "TobiiGazeMouse.exe"
+    $tempRoot = [IO.Path]::GetTempPath()
+    $reportName = "TobiiGazeMouseSmoke_{0}.txt" -f [Guid]::NewGuid().ToString("N")
+    $reportPath = Join-Path $tempRoot $reportName
+    $previousReportPath = $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT
+    try {
+        $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $reportPath
+        $smokeProcess = Start-Process `
+            -FilePath $appExecutable `
+            -ArgumentList "--package-smoke-test" `
+            -WorkingDirectory $Root `
+            -WindowStyle Hidden `
+            -PassThru
+        if (-not $smokeProcess.WaitForExit(60000)) {
+            Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "$Label timed out after 60 seconds."
+        }
+        if ($smokeProcess.ExitCode -ne 0) {
+            $report = if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+                (Get-Content -LiteralPath $reportPath -Raw).Trim()
+            } else {
+                "No smoke-test report was written."
+            }
+            throw "$Label failed with exit code $($smokeProcess.ExitCode). $report"
+        }
+    } finally {
+        $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $previousReportPath
+        Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Remove-OperationDirectory {
+    param([string]$Path)
+
+    if (-not [string]::IsNullOrWhiteSpace($Path) -and (Test-Path -LiteralPath $Path)) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force
+        } catch {
+            Write-Warning "Could not remove temporary installer directory $Path`: $($_.Exception.Message)"
+        }
+    }
+}
+
 if (-not (Test-IsAdministrator) -and -not $NoElevation) {
     $arguments = @(
         "-NoProfile",
@@ -54,6 +140,7 @@ $requiredSourceFiles = @(
     "TobiiGazeMouse.exe",
     "_internal",
     "start_gaze_mouse.ps1",
+    "README.md",
     "VERSION"
 )
 foreach ($relativePath in $requiredSourceFiles) {
@@ -78,44 +165,55 @@ if ($sourceFullPath -ne $installFullPath) {
         throw "InstallRoot and the extracted package cannot contain one another. Source: $sourceFullPath. Target: $installFullPath"
     }
 }
+
+Assert-AppNotRunning
 if ($sourceFullPath -ne $installFullPath) {
-    New-Item -ItemType Directory -Path $installFullPath -Force | Out-Null
-    $robocopyArguments = @(
-        $sourceFullPath,
-        $installFullPath,
-        "/MIR",
-        "/R:2",
-        "/W:2",
-        "/NFL",
-        "/NDL",
-        "/NP",
-        "/XD", "data", "logs",
-        "/XF", "install_info.json", "*.log"
-    )
-    & robocopy @robocopyArguments | ForEach-Object { Write-Host $_ }
-    $robocopyExitCode = $LASTEXITCODE
-    if ($robocopyExitCode -gt 7) {
-        throw "Could not copy the package to $installFullPath. Robocopy exit code: $robocopyExitCode"
+    $installParent = Split-Path -Parent $installFullPath
+    $installName = Split-Path -Leaf $installFullPath
+    $operationId = [Guid]::NewGuid().ToString("N")
+    $stagingRoot = Join-Path $installParent ".$installName.install-$operationId"
+    $backupRoot = Join-Path $installParent ".$installName.backup-$operationId"
+    $installChanged = $false
+    $keepBackup = $false
+    $hadExistingInstallation = Test-Path -LiteralPath $installFullPath
+
+    New-Item -ItemType Directory -Path $installParent -Force | Out-Null
+    try {
+        Invoke-RobocopyMirror -Source $sourceFullPath -Destination $stagingRoot
+        Invoke-PackageSmokeTest -Root $stagingRoot -Label "Staged application verification"
+
+        New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+        if ($hadExistingInstallation) {
+            Invoke-RobocopyMirror -Source $installFullPath -Destination $backupRoot
+        }
+
+        Assert-AppNotRunning
+        $installChanged = $true
+        Invoke-RobocopyMirror -Source $stagingRoot -Destination $installFullPath
+        Invoke-PackageSmokeTest -Root $installFullPath -Label "Installed application verification"
+    } catch {
+        $installError = $_
+        if ($installChanged) {
+            try {
+                Invoke-RobocopyMirror -Source $backupRoot -Destination $installFullPath
+            } catch {
+                $keepBackup = $true
+                throw "Installation failed: $($installError.Exception.Message) Restoring the previous files also failed: $($_.Exception.Message) Backup files remain at $backupRoot."
+            }
+        }
+        throw $installError
+    } finally {
+        Remove-OperationDirectory -Path $stagingRoot
+        if (-not $keepBackup) {
+            Remove-OperationDirectory -Path $backupRoot
+        }
     }
-    # Robocopy uses successful non-zero codes when files were copied or changed.
-    $global:LASTEXITCODE = 0
+} else {
+    Invoke-PackageSmokeTest -Root $installFullPath -Label "Installed application verification"
 }
 
 $appExecutable = Join-Path $installFullPath "TobiiGazeMouse.exe"
 $launcherPath = Join-Path $installFullPath "start_gaze_mouse.ps1"
-$smokeProcess = Start-Process `
-    -FilePath $appExecutable `
-    -ArgumentList "--package-smoke-test" `
-    -WorkingDirectory $installFullPath `
-    -WindowStyle Hidden `
-    -PassThru
-if (-not $smokeProcess.WaitForExit(60000)) {
-    Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
-    throw "Installed application verification timed out after 60 seconds."
-}
-if ($smokeProcess.ExitCode -ne 0) {
-    throw "Installed application verification failed with exit code $($smokeProcess.ExitCode)."
-}
 
 if (-not $NoDesktopShortcut) {
     $desktopPath = [Environment]::GetFolderPath("Desktop")

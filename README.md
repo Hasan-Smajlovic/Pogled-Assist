@@ -75,46 +75,23 @@ preview command when you only want to inspect layout and styling.
 
 ## Local development
 
-The repository uses one PowerShell entry point instead of Make because Windows
-does not include Make by default:
+The repository uses one PowerShell entry point for setup and verification:
 
 ```powershell
-.\dev.ps1 help
+.\dev.ps1 setup
+.\dev.ps1 check
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `.\dev.ps1 setup` | Create `.venv` and install test, lint, and build tools |
-| `.\dev.ps1 run` | Run the real application from source |
-| `.\dev.ps1 ui` | Render 12 hardware-free UI screenshots and an HTML gallery |
-| `.\dev.ps1 ui -Open` | Render and open the UI gallery |
-| `.\dev.ps1 test` | Run every hardware-independent test |
-| `.\dev.ps1 test-ui` | Run UI workflow and rendering tests only |
-| `.\dev.ps1 coverage` | Run tests with the coverage floor and HTML report |
-| `.\dev.ps1 lint` | Run Python and PowerShell code checks |
-| `.\dev.ps1 format` | Apply Ruff import fixes and Python formatting |
-| `.\dev.ps1 check` | Run the complete pre-PR verification |
-| `.\dev.ps1 package` | Build and smoke-test the Windows release ZIP |
-
-`actionlint` checks GitHub Actions workflow syntax. `Ruff` handles Python
-linting, import ordering, modernization checks, and formatting.
-`PSScriptAnalyzer` checks PowerShell for selected correctness and security
-problems. A separate Black, isort, Flake8, ESLint, or Prettier setup would
-duplicate those checks.
-
-For a visual review without a tracker or speech engine:
+`check` runs code-quality checks, the hardware-independent test suite with
+coverage, and a clean Windows package build with its frozen executable smoke
+test. To inspect the UI without a tracker or speech engine, run:
 
 ```powershell
 .\dev.ps1 ui -Open
 ```
 
-The gallery is written to `dist\ui-preview\index.html`. It renders the actual Qt
-widgets with hardware and Windows input disabled. Review it at the target Windows
-scale as well, because automated screenshots cannot prove DPI, font, AppBar, or
-multi-monitor behavior on another machine.
-
-The full workflow and UI checklist are in the
-[development guide](docs/DEVELOPMENT.md).
+The complete command reference, test strategy, and manual UI checklist are in
+the [development guide](docs/DEVELOPMENT.md).
 
 ## Runtime requirements
 
@@ -154,21 +131,16 @@ their own logs in the installation directory.
 
 ## Current limitations
 
-- Windows x64 is the supported application platform.
-- The release executable is not code-signed, so Windows may show an
-  unknown-publisher warning.
-- Multi-monitor mapping assumes the Tobii-calibrated display is primary.
-- GitHub-hosted runners cannot verify a physical tracker, calibration, AppBar
-  behavior, speech playback, or real Windows input.
-- The human-like voice uses an external online service.
+Windows x64 is the supported application platform. The executable is not
+code-signed, multi-monitor mapping assumes the calibrated display is primary,
+and Tobii hardware still requires manual validation. The complete list is in the
+[Windows release guide](docs/WINDOWS_RELEASE.md#known-limits).
 
 ## CI and releases
 
-Pull requests to `development` and `master` run `code-quality`, `tests`, and
-`windows-package`. Tests run without Tobii hardware and enforce the current
-coverage floor. Every merge to `master` repeats the checks, builds the exact
-merged commit, and publishes one immutable `v<version>` release with a Windows
-ZIP and SHA-256 checksum.
+Pull requests run code-quality, hardware-independent test, and Windows packaging
+checks. Merges to `master` publish an immutable versioned release from the exact
+merged commit.
 
 Release construction, manual hardware validation, and rollback are documented in
 the [Windows release guide](docs/WINDOWS_RELEASE.md).

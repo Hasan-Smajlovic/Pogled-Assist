@@ -28,10 +28,11 @@ system-wide Python environment.
 | `.\dev.ps1 coverage` | Test suite, 60 percent floor, and `dist\coverage-html` report |
 | `.\dev.ps1 lint` | Actions, Ruff, Python compilation, and PowerShell checks |
 | `.\dev.ps1 format` | Ruff safe fixes, import ordering, and source formatting |
-| `.\dev.ps1 check` | Lint plus tests and coverage, matching the required PR checks |
+| `.\dev.ps1 check` | Lint, tests, coverage, package build, and frozen executable smoke test |
 | `.\dev.ps1 package` | Clean PyInstaller build and frozen executable smoke test |
 
-Use `.\dev.ps1 check` before pushing a pull request.
+Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
+categories enforced by the required PR checks.
 
 ## Test strategy
 
@@ -40,7 +41,8 @@ The suite uses four layers:
 1. Unit tests cover coordinate mapping, dwell state, settings validation, speech
    commands, phrase storage, and Windows helper behavior.
 2. Integration tests cover provider fallback, app startup, logging, packaging
-   paths, and the optional x86 bridge discovery logic.
+   paths, release publication recovery, and the optional x86 bridge discovery
+   logic.
 3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise
    Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
 4. Manual Tobii checks verify the device runtime, calibration, gaze quality,
@@ -56,8 +58,6 @@ High-value future test work:
 - Fake the Stream Engine C API to cover device creation, subscriptions, reconnect,
   and shutdown without loading a Tobii DLL.
 - Add failure-path tests around the x86 subprocess protocol and timeouts.
-- Test release publishing against a fake `gh` executable so draft recovery and
-  immutable-tag behavior can be exercised without changing GitHub.
 - Add dedicated tests for AppBar registration and cleanup behind a fake `user32`
   boundary.
 

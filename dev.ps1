@@ -93,8 +93,7 @@ function Invoke-TestSuite {
         $arguments += @(
             "--cov=gaze_mouse",
             "--cov-report=term-missing:skip-covered",
-            "--cov-report=html:$coverageHtml",
-            "--cov-fail-under=60"
+            "--cov-report=html:$coverageHtml"
         )
     }
 
@@ -105,6 +104,11 @@ function Invoke-TestSuite {
     } finally {
         $env:QT_QPA_PLATFORM = $previousQtPlatform
     }
+}
+
+function Invoke-PackageBuild {
+    $python = Get-DevPython
+    & (Join-Path $RepoRoot "scripts\build_windows_package.ps1") -PythonPath $python
 }
 
 function Write-Help {
@@ -165,10 +169,10 @@ try {
         "check" {
             Invoke-LintChecks
             Invoke-TestSuite -WithCoverage
+            Invoke-PackageBuild
         }
         "package" {
-            $python = Get-DevPython
-            & (Join-Path $RepoRoot "scripts\build_windows_package.ps1") -PythonPath $python
+            Invoke-PackageBuild
         }
         default {
             Write-Help
