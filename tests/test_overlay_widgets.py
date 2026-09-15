@@ -9,7 +9,9 @@ from gaze_mouse.quick_action_zoom import QuickActionZoomWindow
 
 
 def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch):
-    monkeypatch.setattr("gaze_mouse.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "gaze_mouse.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+    )
     monkeypatch.setattr(GazeBubbleWindow, "_apply_windows_click_through", lambda self: None)
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
@@ -29,7 +31,9 @@ def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch
 
 
 def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
-    monkeypatch.setattr("gaze_mouse.interaction_overlay.force_window_topmost", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "gaze_mouse.interaction_overlay.force_window_topmost", lambda *_args, **_kwargs: True
+    )
     monkeypatch.setattr(InteractionOverlayWindow, "_apply_windows_click_through", lambda self: None)
     overlay = InteractionOverlayWindow()
     qtbot.addWidget(overlay)
@@ -52,7 +56,9 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
 
 
 def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
-    monkeypatch.setattr("gaze_mouse.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "gaze_mouse.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+    )
     menu = QuickActionRadialMenu()
     qtbot.addWidget(menu)
     selected = []

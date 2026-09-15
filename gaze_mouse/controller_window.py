@@ -27,7 +27,6 @@ from .speech_service import SpeechSettings
 from .speech_window import BOSNIAN_LETTERS
 from .windows_input import WindowsInputController
 
-
 logger = logging.getLogger(__name__)
 
 CONTROLLER_WINDOW_ACTION_PREFIX = "controller_window:"
@@ -77,7 +76,7 @@ class ControllerWindow(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("controllerWindow")
-        self.setWindowTitle("Controler")
+        self.setWindowTitle("Controller")
         self.setWindowFlags(_controller_window_flags())
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.NoFocus)
@@ -816,7 +815,9 @@ class ControllerWindow(QWidget):
             return False
 
         if not self._input.is_window(self._target_window):
-            logger.warning("Controller target window is no longer valid: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Controller target window is no longer valid: hwnd=%s.", self._target_window
+            )
             self._target_window = None
             return False
 
@@ -827,7 +828,9 @@ class ControllerWindow(QWidget):
         if restored:
             time.sleep(0.01)
         else:
-            logger.warning("Could not restore controller target window: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Could not restore controller target window: hwnd=%s.", self._target_window
+            )
         return restored
 
     def _make_button(

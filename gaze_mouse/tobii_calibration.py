@@ -8,11 +8,10 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 from ctypes import wintypes
+from pathlib import Path
 
 from .windows_input import WindowsInputController
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,16 +71,14 @@ def launch_tobii_guest_calibration() -> str:
     errors: list[str] = []
 
     configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
-    if configured:
-        if _launch_configured_command(configured, errors):
-            launched_methods.append(f"{CALIBRATION_COMMAND_ENV}")
+    if configured and _launch_configured_command(configured, errors):
+        launched_methods.append(f"{CALIBRATION_COMMAND_ENV}")
 
     if not launched_methods:
         target = _best_tobii_launch_target()
-        if target is not None:
-            if _shell_execute(str(target), errors):
-                launched_methods.append(_short_display_path(target))
-                time.sleep(1.25)
+        if target is not None and _shell_execute(str(target), errors):
+            launched_methods.append(_short_display_path(target))
+            time.sleep(1.25)
 
     if not launched_methods:
         uri = _first_working_protocol(errors)
@@ -148,9 +145,7 @@ def _start_menu_shortcuts() -> list[Path]:
         if not root.exists():
             continue
         try:
-            shortcuts.extend(
-                path for path in root.rglob("*.lnk") if "tobii" in str(path).lower()
-            )
+            shortcuts.extend(path for path in root.rglob("*.lnk") if "tobii" in str(path).lower())
         except OSError:
             logger.exception("Could not scan Start Menu shortcuts under %s.", root)
 
@@ -169,9 +164,7 @@ def _installed_tobii_executables() -> list[Path]:
         if not root.exists():
             continue
         try:
-            discovered.extend(
-                path for path in root.rglob("*.exe") if "tobii" in str(path).lower()
-            )
+            discovered.extend(path for path in root.rglob("*.exe") if "tobii" in str(path).lower())
         except OSError:
             logger.exception("Could not scan Tobii executable folder: %s.", root)
 

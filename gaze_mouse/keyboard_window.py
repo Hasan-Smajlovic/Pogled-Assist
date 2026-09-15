@@ -25,7 +25,6 @@ from .speech_service import SpeechSettings
 from .speech_window import BOSNIAN_LETTERS
 from .windows_input import WindowsInputController
 
-
 logger = logging.getLogger(__name__)
 
 KEYBOARD_WINDOW_ACTION_PREFIX = "keyboard_window:"
@@ -425,7 +424,9 @@ class KeyboardWindow(QWidget):
     def _show_symbol_group(self, group_index: int) -> None:
         self._show_key_group(TAB_SYMBOLS, self._symbol_groups, group_index, "symbol")
 
-    def _show_group_buttons(self, groups: list[list[str]], action_prefix: str, columns: int) -> None:
+    def _show_group_buttons(
+        self, groups: list[list[str]], action_prefix: str, columns: int
+    ) -> None:
         self._clear_dynamic_buttons()
         self._sync_tabs()
         self._groups_button.setVisible(False)
@@ -497,15 +498,11 @@ class KeyboardWindow(QWidget):
         elif command.startswith("symbol_group:"):
             self._show_symbol_group(int(command.split(":", 1)[1]))
         elif command.startswith("numpad:"):
-            key = self._numpad_groups[self._active_group_index or 0][
-                int(command.split(":", 1)[1])
-            ]
+            key = self._numpad_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
             self._type_key_label(key)
             self._show_numpad()
         elif command.startswith("symbol:"):
-            key = self._symbol_groups[self._active_group_index or 0][
-                int(command.split(":", 1)[1])
-            ]
+            key = self._symbol_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
             self._type_text(key)
             self._show_symbols()
 
@@ -586,7 +583,9 @@ class KeyboardWindow(QWidget):
             return False
 
         if not self._input.is_window(self._target_window):
-            logger.warning("Keyboard target window is no longer valid: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Keyboard target window is no longer valid: hwnd=%s.", self._target_window
+            )
             self._target_window = None
             return False
 
@@ -597,7 +596,9 @@ class KeyboardWindow(QWidget):
         if restored:
             time.sleep(0.01)
         else:
-            logger.warning("Could not restore keyboard target window: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Could not restore keyboard target window: hwnd=%s.", self._target_window
+            )
         return restored
 
     def _make_button(

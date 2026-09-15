@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 import sys
+import traceback
+from pathlib import Path
 
 from .dpi import enable_windows_dpi_awareness
 from .logging_setup import install_qt_message_handler, setup_application_logging
+from .tobii_stream_engine import APP_ROOT_ENV
+
+PACKAGE_SMOKE_TEST_ARG = "--package-smoke-test"
+PACKAGE_SMOKE_REPORT_ENV = "TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT"
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):
+        os.environ.setdefault(APP_ROOT_ENV, str(Path(sys.executable).resolve().parent))
+
+    if PACKAGE_SMOKE_TEST_ARG in sys.argv[1:]:
+        return package_smoke_test()
+
     setup_application_logging()
     enable_windows_dpi_awareness()
 
@@ -39,6 +53,44 @@ def main() -> int:
     exit_code = app.exec()
     logger.info("Application exited with code %s.", exit_code)
     return exit_code
+
+
+def package_smoke_test() -> int:
+    """Check imports and files required by the packaged application."""
+
+    try:
+        from .app_icon import app_icon_path
+        from .settings_window import _checkbox_x_image_url
+        from .tobii_stream_engine_bridge_backend import bridge_script_path
+        from .toolbar import HotbarWindow
+        from .windows_startup import launcher_script_path
+
+        required_paths = (
+            app_icon_path(),
+            Path(_checkbox_x_image_url()),
+            bridge_script_path(),
+            launcher_script_path(),
+        )
+        imports_loaded = HotbarWindow is not None
+        path_results = [(path, bool(path and path.is_file())) for path in required_paths]
+    except Exception:
+        _write_package_smoke_report([traceback.format_exc()])
+        return 1
+
+    report_lines = [f"imports_loaded={imports_loaded}"]
+    report_lines.extend(f"{path} exists={exists}" for path, exists in path_results)
+    _write_package_smoke_report(report_lines)
+
+    return 0 if imports_loaded and all(exists for _, exists in path_results) else 1
+
+
+def _write_package_smoke_report(lines: list[str]) -> None:
+    report_path = os.environ.get(PACKAGE_SMOKE_REPORT_ENV, "").strip()
+    if not report_path:
+        return
+
+    with contextlib.suppress(OSError):
+        Path(report_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

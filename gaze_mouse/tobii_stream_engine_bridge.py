@@ -12,7 +12,6 @@ from typing import Any
 
 from gaze_mouse.tobii_stream_engine import TobiiStreamEngineBackend
 
-
 logger = logging.getLogger(__name__)
 _running = True
 
@@ -71,7 +70,7 @@ def _emit(message_type: str, **payload: Any) -> None:
 
 
 def _pointer_size() -> int:
-    return int((sys.maxsize > 2**32) and 8 or 4)
+    return int(((sys.maxsize > 2**32) and 8) or 4)
 
 
 def _install_signal_handlers() -> None:

@@ -5,6 +5,7 @@ __pycache__/
 
 # Python virtual environments
 .venv/
+.dev-tools/
 venv/
 env/
 ENV/
@@ -17,6 +18,7 @@ ENV/
 .coverage
 .coverage.*
 coverage.xml
+coverage.json
 htmlcov/
 
 # Build, packaging, and bundled app outputs
@@ -25,6 +27,7 @@ dist/
 *.egg-info/
 .eggs/
 *.spec
+!packaging/windows/TobiiGazeMouse.spec
 *.manifest
 *.pyd
 *.dll

@@ -1,0 +1,131 @@
+# User guide
+
+Tobii Gaze Mouse places a toolbar at the top of the primary Windows display. It
+can move the pointer from gaze, select its own controls by dwell, and perform a
+click after you hold your gaze on a stable target.
+
+## Before starting
+
+Connect and calibrate the Tobii Eye Tracker 4C with the matching Tobii software.
+The app tries these tracking backends in order:
+
+1. Tobii Pro SDK through `tobii-research`.
+2. A directly loadable Tobii Stream Engine DLL.
+3. The optional 32-bit Python bridge for 32-bit Stream Engine installations.
+
+The connection dot is green while tracking, yellow while waiting or retrying,
+and red after an unavailable or failed backend. The two white dots show left and
+right eye validity. Gaze control pauses when either eye becomes invalid.
+
+## Hotbar controls
+
+The left side of the hotbar contains:
+
+1. Hide
+2. Settings
+3. Quick actions
+4. Left click
+5. Right click
+6. Double click
+7. Speech
+8. Keyboard
+9. Controller
+
+Hide removes the AppBar reservation and leaves a floating Show button near the
+top-left corner. Left, Right, and Double click arm one action. Keep your gaze on
+the target until the progress overlay completes. The mode resets after the click
+to reduce accidental repeats.
+
+A gaze-driven right click arms one direct left click for selecting a context-menu
+item. That follow-up click skips precision zoom so the menu stays open.
+
+## Quick actions
+
+Quick actions is a toggle. With precision zoom enabled, holding gaze on a target
+first opens a magnified square. Choose the exact point inside the square, then use
+the radial menu:
+
+- Top: left click
+- Right: right click
+- Bottom: double click
+- Left: cancel
+
+With precision zoom disabled, the radial menu opens directly at the stable gaze
+point. Gaze does not move the real pointer while the zoom or menu is open.
+
+## Speech
+
+Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter.
+Space and Backspace stay on the bottom row. Play sends the current text to the
+selected speech engine without clearing it.
+
+Phrases stores reusable UTF-8 text. Saved phrases are ordered by usage count.
+Selecting one appends it to the input and increases its count. Phrase data is
+stored in `data\speech_phrases.json`.
+
+The Default voice uses eSpeak NG with the Bosnian `bs` voice. Human like uses
+`edge-playback` with `bs-BA-GoranNeural` and requires internet access.
+
+## Keyboard
+
+Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The
+panel sends normal Windows keyboard input to the last external foreground window.
+It reserves the right work area while the hotbar is visible and expands to the
+full screen height while the hotbar is hidden.
+
+## Controller
+
+Controller opens a right-side panel with General, Keyboard, Speech, and Settings
+tabs. General provides left, right, and double-click actions, Enter, and scrolling.
+The embedded Keyboard tab contains the same letters, numpad, and symbols controls.
+Only Keyboard or Controller can reserve the right work area at one time.
+
+## Settings
+
+General settings controls startup, logging, and whether the PowerShell launcher
+window stays visible. Start with Windows creates a per-user Scheduled Task that
+runs the launcher with administrator privileges.
+
+Gaze settings controls:
+
+- Stare time before an action fires
+- Stable target radius
+- Delay between actions
+- Pointer smoothing
+- Pointer movement from gaze
+- Gaze bubble and action overlay visibility
+- Precision zoom
+- Tobii calibration launch
+
+Speech settings controls eSpeak speed, letters per group, and the voice preset.
+Changes are saved immediately to `data\app_settings.json`.
+
+## Troubleshooting
+
+If no tracker is found, confirm that Tobii software sees the device and that it is
+calibrated. The runtime log should eventually include `Tracking with`,
+`Stream Engine backend started`, or `x86 bridge started`.
+
+If the log contains `[WinError 193] %1 is not a valid Win32 application`, the Tobii
+DLL is probably 32-bit. Rerun source setup or configure a 32-bit Python 3.10 path:
+
+```powershell
+$env:TOBII_GAZE_MOUSE_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
+```
+
+If Stream Engine is installed outside a common location:
+
+```powershell
+$env:TOBII_STREAM_ENGINE_DLL = "C:\Path\To\tobii_stream_engine.dll"
+```
+
+If calibration needs a product-specific command, set
+`TOBII_CALIBRATION_COMMAND` before launching the app.
+
+Runtime diagnostics are written to `logs\latest.txt` when logging is enabled.
+The launcher writes `start_gaze_mouse.log` even when its window is hidden.
+
+## Exit
+
+Use Quit app from General settings. `Ctrl+Q` works while the hotbar has focus, and
+`Alt+F4` closes the active application window.

@@ -132,7 +132,8 @@ released commits from appearing again.
 ## Release process
 
 1. Confirm that all intended changes have already been merged into `development`.
-2. Decide the next Semantic Versioning number.
+2. Decide the next Semantic Versioning number and write it without the `v` prefix
+   in `VERSION` as part of the release pull request.
 3. Until the project declares a stable public version, use `v0.MINOR.PATCH`,
    starting with `v0.1.0` unless Hasan selects another initial version.
 4. Open a release pull request from `development` to `master`.
@@ -140,24 +141,27 @@ released commits from appearing again.
    pull requests, list verification, and document known limitations.
 6. Obtain one approval and resolve every review conversation.
 7. Hasan merges the release pull request with a merge commit.
-8. The workflow owned by issue #16 will build the exact merged `master` commit and
-   create the immutable version tag, release artifact, release notes, and checksum.
-9. A failed future release workflow must not create a partial or duplicate release.
+8. The release workflow builds the exact merged `master` commit and creates the
+   immutable version tag, release artifact, release notes, and checksum.
+9. A failed release workflow must not create a partial or duplicate release.
+   Rerun the failed workflow for the same commit. If the version tag belongs to a
+   different commit, bump `VERSION` in a new reviewed pull request.
 
 Do not create a version tag or GitHub Release as part of issue #14.
 
 ## Hotfix process
 
 1. Create `hotfix/<issue>-<short-description>` from `master`.
-2. Open a reviewed pull request from the hotfix branch to `master`.
-3. Obtain one approval, resolve every review conversation, and let Hasan merge it
+2. Write the next unused patch version to `VERSION` in the hotfix branch.
+3. Open a reviewed pull request from the hotfix branch to `master`.
+4. Obtain one approval, resolve every review conversation, and let Hasan merge it
    with a merge commit.
-4. Publish a patch release later through the workflow owned by issue #16.
-5. Identify the actual hotfix commit inside the merged hotfix branch, not the merge
+5. The release workflow publishes the patch release from that exact merge commit.
+6. Identify the actual hotfix commit inside the merged hotfix branch, not the merge
    commit.
-6. Create `backport/<issue>-<short-description>` from the latest `development`.
-7. Cherry-pick the actual hotfix commit onto the backport branch.
-8. Open a normal reviewed pull request from the backport branch to `development`
+7. Create `backport/<issue>-<short-description>` from the latest `development`.
+8. Cherry-pick the actual hotfix commit onto the backport branch.
+9. Open a normal reviewed pull request from the backport branch to `development`
    and squash-merge it.
 
 This process prevents unfinished development work from entering an urgent release
@@ -207,14 +211,26 @@ rulesets have no bypass actors.
 
 ## CI and required checks
 
-No required status checks are configured under issue #14. Issue #16 owns the CI,
-Windows packaging, release automation, and the later selection of stable required
-check names. Required checks should not be selected until those workflows exist
-and have produced stable passing names.
+Pull requests targeting `development` or `master` run these stable checks:
 
-Future release automation should create tags and GitHub Releases from the exact
-merged `master` commit without pushing directly to `master`. It therefore does not
-need a protected-branch bypass.
+- `code-quality`: Ruff lint and format checks, Python bytecode compilation,
+  PowerShell parsing, and focused PSScriptAnalyzer rules.
+- `tests`: the hardware-independent pytest suite with the Qt offscreen backend
+  and enforced coverage floor.
+- `windows-package`: a clean Windows x64 PyInstaller build and packaged executable
+  smoke test.
+
+Both branch rulesets must require all three names after each check has completed
+successfully at least once. The release workflow repeats the checks after a merge
+to `master`; it is not a pull request check and must not be selected as a required
+status check.
+
+Release automation creates tags and GitHub Releases from the exact merged
+`master` commit without pushing directly to `master`. It therefore does not need
+a protected-branch bypass. The full packaging and recovery procedure is in
+[`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md).
+Local commands and the UI review checklist are in
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## GitHub plan limitations
 

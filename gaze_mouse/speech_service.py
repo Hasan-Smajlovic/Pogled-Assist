@@ -11,7 +11,6 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
 BOSNIAN_LANGUAGE = "bs"
@@ -129,7 +128,7 @@ class SpeechService:
         return self._start_process(command, "edge-playback")
 
     def _start_process(self, command: list[str], engine_name: str) -> bool:
-        logger.info("Starting speech command (%s): %s", engine_name, command[:-1] + ["<text>"])
+        logger.info("Starting speech command (%s): %s", engine_name, [*command[:-1], "<text>"])
 
         startupinfo = None
         creationflags = 0
@@ -348,8 +347,7 @@ def _has_bosnian_voice(path: Path) -> bool:
             result = subprocess.run(
                 [str(path), *arguments],
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 check=False,
                 timeout=5,
                 text=True,

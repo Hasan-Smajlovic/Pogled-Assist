@@ -232,16 +232,16 @@ function Find-DownloadedRepositoryRoot {
         return $DownloadRoot
     }
 
-    $matches = @(
+    $repositoryMatches = @(
         Get-ChildItem -Path $DownloadRoot -Directory -Force -ErrorAction SilentlyContinue |
             Where-Object { Test-Path (Join-Path $_.FullName "setup_windows.ps1") }
     )
 
-    if ($matches.Count -lt 1) {
+    if ($repositoryMatches.Count -lt 1) {
         throw "Downloaded repository content did not contain setup_windows.ps1."
     }
 
-    return $matches[0].FullName
+    return $repositoryMatches[0].FullName
 }
 
 function Copy-RepositoryToInstallRoot {

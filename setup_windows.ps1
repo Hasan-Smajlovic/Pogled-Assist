@@ -173,6 +173,7 @@ function Invoke-NativeCommandWithTimeout {
             try {
                 $process.Kill()
             } catch {
+                Write-Verbose "Could not stop timed-out process for $Label`: $($_.Exception.Message)"
             }
             throw "$Label timed out after $TimeoutSeconds seconds."
         }

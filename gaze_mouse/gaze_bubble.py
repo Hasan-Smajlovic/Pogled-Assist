@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QWidget
 
 from .windows_z_order import force_window_topmost
 
-
 logger = logging.getLogger(__name__)
 
 GWL_EXSTYLE = -20
@@ -111,9 +110,8 @@ class GazeBubbleWindow(QWidget):
         if self._last_moved_point is None:
             return True
 
-        distance = (
-            abs(point.x() - self._last_moved_point.x())
-            + abs(point.y() - self._last_moved_point.y())
+        distance = abs(point.x() - self._last_moved_point.x()) + abs(
+            point.y() - self._last_moved_point.y()
         )
         if distance >= MIN_MOVE_DISTANCE_PX:
             return True

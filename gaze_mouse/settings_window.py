@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Callable
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QCheckBox,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -28,9 +28,8 @@ from PySide6.QtWidgets import (
 from .gaze_feedback import set_gaze_feedback
 from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
-from .speech_service import VOICE_PRESETS, VOICE_PRESET_DEFAULT, SpeechSettings
+from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
 from .windows_startup import is_windows_startup_enabled, set_windows_startup_enabled
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +57,7 @@ class SettingsWindow(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setWindowFlags(
-            Qt.FramelessWindowHint
-            | Qt.WindowStaysOnTopHint
-            | Qt.Window
-        )
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
         self.setObjectName("settingsRoot")
 
         self._gaze_settings = replace(gaze_settings)
@@ -330,8 +325,7 @@ class SettingsWindow(QWidget):
                 border: 4px solid #bbf7d0;
                 color: #ffffff;
             }
-            """
-            .replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
+            """.replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
         )
 
         root = QVBoxLayout(self)
@@ -696,11 +690,11 @@ class SettingsWindow(QWidget):
         icon_name: str = "",
         object_name: str = "",
         checkable: bool = False,
-        minimum_size: QSize = QSize(150, 58),
+        minimum_size: QSize | None = None,
     ) -> QToolButton:
         button = QToolButton(self)
         button.setText(text)
-        button.setMinimumSize(minimum_size)
+        button.setMinimumSize(minimum_size or QSize(150, 58))
         button.setCheckable(checkable)
         button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         button.setIconSize(QSize(22, 22))
@@ -717,10 +711,10 @@ class SettingsWindow(QWidget):
         self,
         text: str,
         callback: GazeCallback,
-        minimum_size: QSize = QSize(250, 58),
+        minimum_size: QSize | None = None,
     ) -> QCheckBox:
         checkbox = QCheckBox(text, self)
-        checkbox.setMinimumSize(minimum_size)
+        checkbox.setMinimumSize(minimum_size or QSize(250, 58))
         checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         checkbox.clicked.connect(lambda _checked=False, item=callback: item())
         self._register_gaze(checkbox, callback, text)
@@ -820,9 +814,7 @@ class SettingsWindow(QWidget):
 
     def _toggle_start_with_windows(self) -> None:
         desired = not self._gaze_settings.start_with_windows
-        self._set_status(
-            "Enabling Windows startup." if desired else "Disabling Windows startup."
-        )
+        self._set_status("Enabling Windows startup." if desired else "Disabling Windows startup.")
         result = set_windows_startup_enabled(
             desired,
             show_launcher_window=self._gaze_settings.show_launcher_window,

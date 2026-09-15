@@ -102,7 +102,9 @@ def test_save_round_trips_utf8_settings_and_cleans_temp_file(monkeypatch, tmp_pa
 
 def test_save_failure_does_not_escape(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
-    monkeypatch.setattr(type(path), "write_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("full")))
+    monkeypatch.setattr(
+        type(path), "write_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("full"))
+    )
 
     save_app_settings(GazeSettings(), SpeechSettings())
 

@@ -9,7 +9,6 @@ import sys
 from ctypes import wintypes
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
 SW_SHOWNORMAL = 1
@@ -56,7 +55,7 @@ def open_windows_keyboard() -> str:
 
 def _keyboard_candidates() -> list[tuple[str, str]]:
     windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
-    program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+    program_files = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
 
     candidates = [
         ("Windows on-screen keyboard", "osk.exe"),

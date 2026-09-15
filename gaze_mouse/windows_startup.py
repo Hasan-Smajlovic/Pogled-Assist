@@ -8,7 +8,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
 TASK_NAME = "Tobii Gaze Mouse"
@@ -95,6 +94,14 @@ def set_windows_startup_enabled(
 
 
 def _launcher_script_path() -> Path:
+    return launcher_script_path()
+
+
+def launcher_script_path() -> Path:
+    """Return the launcher beside the source tree or frozen executable."""
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / LAUNCHER_SCRIPT_NAME
     return Path(__file__).resolve().parents[1] / LAUNCHER_SCRIPT_NAME
 
 
@@ -186,8 +193,6 @@ def _ps_quote(value: str) -> str:
 
 def _completed_output(completed: subprocess.CompletedProcess[str]) -> str:
     output = "\n".join(
-        part.strip()
-        for part in (completed.stdout, completed.stderr)
-        if part and part.strip()
+        part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip()
     )
     return output.strip()
