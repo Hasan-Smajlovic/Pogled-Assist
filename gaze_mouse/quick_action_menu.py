@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QStyle, QWidget
 from .mouse_controller import DOUBLE_LEFT_CLICK, LEFT_CLICK, RIGHT_CLICK
 from .windows_z_order import force_window_topmost
 
-
 logger = logging.getLogger(__name__)
 
 CANCEL_QUICK_ACTION = "cancel_quick_action"
@@ -230,7 +229,11 @@ class QuickActionRadialMenu(QWidget):
             color = QColor(sector.color)
             color.setAlpha(186 if selected else 118)
             painter.setBrush(color)
-            painter.drawPolygon(_sector_polygon(center, radius, sector.center_degrees - 45, sector.center_degrees + 45))
+            painter.drawPolygon(
+                _sector_polygon(
+                    center, radius, sector.center_degrees - 45, sector.center_degrees + 45
+                )
+            )
 
             if selected:
                 painter.setPen(QPen(QColor(255, 255, 255, 220), 4 + int(2 * pulse)))
@@ -238,7 +241,7 @@ class QuickActionRadialMenu(QWidget):
                 painter.drawArc(
                     QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2),
                     int((360 - (sector.center_degrees + 45)) * 16),
-                    int(90 * 16),
+                    90 * 16,
                 )
                 painter.setPen(Qt.NoPen)
 
@@ -319,8 +322,8 @@ class QuickActionRadialMenu(QWidget):
 
         radians = math.radians(sector.center_degrees)
         return QPoint(
-            int(round(self._center_global.x() + math.cos(radians) * self.MENU_RADIUS * 0.58)),
-            int(round(self._center_global.y() + math.sin(radians) * self.MENU_RADIUS * 0.58)),
+            round(self._center_global.x() + math.cos(radians) * self.MENU_RADIUS * 0.58),
+            round(self._center_global.y() + math.sin(radians) * self.MENU_RADIUS * 0.58),
         )
 
     def _icon(self, sector: QuickActionSector) -> QIcon:
@@ -330,18 +333,24 @@ class QuickActionRadialMenu(QWidget):
             color = "#ffffff" if sector.action != CANCEL_QUICK_ACTION else "#fff1f2"
             return qta.icon(sector.icon_name, color=color)
         except Exception:
-            logger.exception("Could not load quick action icon %s; using fallback.", sector.icon_name)
+            logger.exception(
+                "Could not load quick action icon %s; using fallback.", sector.icon_name
+            )
             return self.style().standardIcon(sector.fallback)
 
 
-def _sector_polygon(center: QPoint, radius: int, start_degrees: float, end_degrees: float) -> QPolygonF:
+def _sector_polygon(
+    center: QPoint, radius: int, start_degrees: float, end_degrees: float
+) -> QPolygonF:
     path = QPainterPath()
     path.moveTo(center)
     steps = 18
     for index in range(steps + 1):
         degrees = start_degrees + (end_degrees - start_degrees) * index / steps
         radians = math.radians(degrees)
-        path.lineTo(center.x() + math.cos(radians) * radius, center.y() + math.sin(radians) * radius)
+        path.lineTo(
+            center.x() + math.cos(radians) * radius, center.y() + math.sin(radians) * radius
+        )
     path.closeSubpath()
     return path.toFillPolygon()
 
@@ -349,8 +358,8 @@ def _sector_polygon(center: QPoint, radius: int, start_degrees: float, end_degre
 def _icon_rect(center: QPoint, degrees: float, radius: int) -> QRect:
     radians = math.radians(degrees)
     icon_center = QPoint(
-        int(round(center.x() + math.cos(radians) * radius * 0.58)),
-        int(round(center.y() + math.sin(radians) * radius * 0.58)),
+        round(center.x() + math.cos(radians) * radius * 0.58),
+        round(center.y() + math.sin(radians) * radius * 0.58),
     )
     size = 38
     return QRect(icon_center.x() - size // 2, icon_center.y() - size // 2, size, size)

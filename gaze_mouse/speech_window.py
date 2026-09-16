@@ -26,7 +26,6 @@ from .gaze_feedback import set_gaze_feedback
 from .logging_setup import get_project_root
 from .speech_service import SpeechService, SpeechSettings
 
-
 logger = logging.getLogger(__name__)
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
@@ -96,16 +95,14 @@ class SpeechWindow(QWidget):
         super().__init__(parent)
         self.setObjectName("speechWindow")
         self.setWindowTitle("Speech")
-        self.setWindowFlags(
-            Qt.Window
-            | Qt.FramelessWindowHint
-            | Qt.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
         self._speech = speech
         initial_settings = speech.settings
         if letters_per_group is not None:
-            initial_settings = replace(initial_settings, letters_per_group=max(1, letters_per_group))
+            initial_settings = replace(
+                initial_settings, letters_per_group=max(1, letters_per_group)
+            )
 
         self._speech_settings = initial_settings
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
@@ -404,7 +401,9 @@ class SpeechWindow(QWidget):
         input_row.addWidget(self._close_button)
 
         self._phrase_actions_host = QWidget(self)
-        self._phrase_actions_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._phrase_actions_host.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         phrase_actions = QHBoxLayout(self._phrase_actions_host)
         phrase_actions.setContentsMargins(0, 0, 0, 0)
         phrase_actions.setSpacing(12)
@@ -485,13 +484,17 @@ class SpeechWindow(QWidget):
         self._phrase_actions_host.hide()
 
         self._keyboard_host = QWidget(self)
-        self._keyboard_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._keyboard_host.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self._keyboard_layout = QVBoxLayout(self._keyboard_host)
         self._keyboard_layout.setContentsMargins(0, 0, 0, 0)
         self._keyboard_layout.setSpacing(16)
 
         self._key_grid_host = QWidget(self._keyboard_host)
-        self._key_grid_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._key_grid_host.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self._key_grid = QGridLayout(self._key_grid_host)
         self._key_grid.setContentsMargins(0, 0, 0, 0)
         self._key_grid.setHorizontalSpacing(14)
@@ -747,7 +750,9 @@ class SpeechWindow(QWidget):
         self._phrases_button.setChecked(phrase_mode or editor_mode)
         self._phrase_actions_host.setVisible(phrase_mode or editor_mode)
         self._new_phrase_button.setVisible(phrase_mode)
-        self._previous_phrase_page_button.setVisible(phrase_mode and self._has_previous_phrase_page())
+        self._previous_phrase_page_button.setVisible(
+            phrase_mode and self._has_previous_phrase_page()
+        )
         self._next_phrase_page_button.setVisible(phrase_mode and self._has_next_phrase_page())
         self._save_phrase_button.setVisible(editor_mode)
         self._cancel_phrase_button.setVisible(editor_mode)

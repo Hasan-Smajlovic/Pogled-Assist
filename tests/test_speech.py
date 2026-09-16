@@ -60,9 +60,13 @@ def test_speech_service_builds_espeak_command(monkeypatch, tmp_path):
     monkeypatch.setattr("gaze_mouse.speech_service.find_edge_playback", lambda: None)
     service = SpeechService()
     calls = []
-    monkeypatch.setattr(service, "_start_process", lambda command, engine: calls.append((command, engine)) or True)
+    monkeypatch.setattr(
+        service, "_start_process", lambda command, engine: calls.append((command, engine)) or True
+    )
 
-    result = service.speak("  Dobar dan  ", SpeechSettings(language="bs", speed=170, pitch=45, amplitude=130))
+    result = service.speak(
+        "  Dobar dan  ", SpeechSettings(language="bs", speed=170, pitch=45, amplitude=130)
+    )
 
     assert result is True
     assert calls == [
@@ -79,7 +83,9 @@ def test_speech_service_builds_human_voice_command(monkeypatch, tmp_path):
     monkeypatch.setattr("gaze_mouse.speech_service.find_edge_playback", lambda: executable)
     service = SpeechService()
     calls = []
-    monkeypatch.setattr(service, "_start_process", lambda command, engine: calls.append((command, engine)) or True)
+    monkeypatch.setattr(
+        service, "_start_process", lambda command, engine: calls.append((command, engine)) or True
+    )
 
     result = service.speak("Zdravo", SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE))
 

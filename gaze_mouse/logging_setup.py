@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
 import shutil
 import sys
-import json
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-
 
 LOGGER_NAME = "gaze_mouse"
 LOG_DIR_NAME = "logs"

@@ -6,12 +6,14 @@ import sys
 
 import pytest
 
+import gaze_mouse.main as main_module
 from gaze_mouse import (
     app_icon,
     dpi,
     logging_setup,
     tobii_stream_engine_bridge,
     windows_keyboard,
+    windows_startup,
 )
 
 
@@ -54,7 +56,11 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
             calls.append(("fallback", None))
 
     monkeypatch.setattr(dpi.sys, "platform", "win32")
-    monkeypatch.setattr("ctypes.windll", type("Windll", (), {"shcore": Shcore(), "user32": User32()})(), raising=False)
+    monkeypatch.setattr(
+        "ctypes.windll",
+        type("Windll", (), {"shcore": Shcore(), "user32": User32()})(),
+        raising=False,
+    )
     dpi.enable_windows_dpi_awareness()
     assert calls == [("modern", 2)]
 
@@ -64,7 +70,11 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
         def SetProcessDpiAwareness(self, _value):
             raise OSError("unsupported")
 
-    monkeypatch.setattr("ctypes.windll", type("Windll", (), {"shcore": BrokenShcore(), "user32": User32()})(), raising=False)
+    monkeypatch.setattr(
+        "ctypes.windll",
+        type("Windll", (), {"shcore": BrokenShcore(), "user32": User32()})(),
+        raising=False,
+    )
     dpi.enable_windows_dpi_awareness()
     assert calls == [("fallback", None)]
 
@@ -144,7 +154,12 @@ def test_bridge_emit_helpers_write_json(capsys):
 
     lines = capsys.readouterr().out.splitlines()
     assert json.loads(lines[0]) == {"type": "gaze", "x": 0.25, "y": 0.75, "timestamp": 10}
-    assert json.loads(lines[1]) == {"type": "eyes", "left_open": True, "right_open": False, "timestamp": 11}
+    assert json.loads(lines[1]) == {
+        "type": "eyes",
+        "left_open": True,
+        "right_open": False,
+        "timestamp": 11,
+    }
 
 
 def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
@@ -160,7 +175,6 @@ def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
 def test_main_builds_and_runs_application(monkeypatch, tmp_path):
     import PySide6.QtWidgets
 
-    from gaze_mouse import main as main_module
     from gaze_mouse import toolbar
 
     calls = []
@@ -197,9 +211,15 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path):
         def show(self):
             calls.append(("show", True))
 
-    monkeypatch.setattr(main_module, "setup_application_logging", lambda: calls.append(("logging", True)))
-    monkeypatch.setattr(main_module, "enable_windows_dpi_awareness", lambda: calls.append(("dpi", True)))
-    monkeypatch.setattr(main_module, "install_qt_message_handler", lambda: calls.append(("qt_logging", True)))
+    monkeypatch.setattr(
+        main_module, "setup_application_logging", lambda: calls.append(("logging", True))
+    )
+    monkeypatch.setattr(
+        main_module, "enable_windows_dpi_awareness", lambda: calls.append(("dpi", True))
+    )
+    monkeypatch.setattr(
+        main_module, "install_qt_message_handler", lambda: calls.append(("qt_logging", True))
+    )
     monkeypatch.setattr(PySide6.QtWidgets, "QApplication", FakeApp)
     monkeypatch.setattr(app_icon, "load_app_icon", FakeIcon)
     monkeypatch.setattr(app_icon, "app_icon_path", lambda: tmp_path / "icon.png")
@@ -209,3 +229,22 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path):
     assert ("show", True) in calls
     assert ("name", "Tobii Gaze Mouse") in calls
     assert ("org", "PieLabs") in calls
+
+
+def test_frozen_startup_launcher_is_next_to_executable(monkeypatch, tmp_path):
+    executable = tmp_path / "TobiiGazeMouse.exe"
+    monkeypatch.setattr(windows_startup.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(windows_startup.sys, "executable", str(executable))
+
+    assert windows_startup.launcher_script_path() == tmp_path / "start_gaze_mouse.ps1"
+
+
+def test_main_routes_package_smoke_test_without_starting_gui(monkeypatch):
+    monkeypatch.setattr(main_module.sys, "argv", ["TobiiGazeMouse.exe", "--package-smoke-test"])
+    monkeypatch.setattr(main_module, "package_smoke_test", lambda: 23)
+
+    assert main_module.main() == 23
+
+
+def test_source_tree_passes_package_smoke_test():
+    assert main_module.package_smoke_test() == 0

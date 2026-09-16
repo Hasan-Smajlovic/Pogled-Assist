@@ -302,6 +302,7 @@ public static class TobiiGazeMouseConsoleWindow
             [TobiiGazeMouseConsoleWindow]::ShowWindow($hwnd, $showWindowCommand) | Out-Null
         }
     } catch {
+        Write-Verbose "Could not update the launcher window state: $($_.Exception.Message)"
     }
 }
 

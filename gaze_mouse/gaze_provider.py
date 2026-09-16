@@ -11,12 +11,11 @@ from typing import Any
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 
+from .tobii_stream_engine import TobiiStreamEngineBackend, TobiiStreamEngineError
 from .tobii_stream_engine_bridge_backend import (
     TobiiStreamEngineBridgeBackend,
     TobiiStreamEngineBridgeError,
 )
-from .tobii_stream_engine import TobiiStreamEngineBackend, TobiiStreamEngineError
-
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +96,7 @@ class TobiiGazeProvider(QObject):
             import tobii_research as tr
         except ImportError:
             logger.exception("tobii-research import failed.")
-            self.status_changed.emit(
-                "Missing tobii-research. Trying Stream Engine."
-            )
+            self.status_changed.emit("Missing tobii-research. Trying Stream Engine.")
             return False
 
         try:
@@ -264,7 +261,9 @@ class TobiiGazeProvider(QObject):
         normalized_x, normalized_y = _normalize_stream_engine_point(x, y, self._screen_geometry)
         self._queue_gaze_sample("stream-engine", normalized_x, normalized_y, timestamp)
 
-    def _on_stream_engine_eye_status(self, left_open: bool, right_open: bool, _timestamp: int) -> None:
+    def _on_stream_engine_eye_status(
+        self, left_open: bool, right_open: bool, _timestamp: int
+    ) -> None:
         self._stream_eye_status_known = True
         self._stream_left_open = bool(left_open)
         self._stream_right_open = bool(right_open)

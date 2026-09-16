@@ -12,7 +12,6 @@ from PySide6.QtWidgets import QWidget
 
 from .windows_z_order import force_window_topmost
 
-
 logger = logging.getLogger(__name__)
 TOPMOST_REFRESH_INTERVAL_MS = 33
 
@@ -238,8 +237,8 @@ class QuickActionZoomWindow(QWidget):
     def _map_display_to_screen(self, local: QPoint) -> QPoint:
         x_ratio = (local.x() - self._display_rect.left()) / max(1, self._display_rect.width() - 1)
         y_ratio = (local.y() - self._display_rect.top()) / max(1, self._display_rect.height() - 1)
-        x = int(round(self._source_rect.left() + x_ratio * max(1, self._source_rect.width() - 1)))
-        y = int(round(self._source_rect.top() + y_ratio * max(1, self._source_rect.height() - 1)))
+        x = round(self._source_rect.left() + x_ratio * max(1, self._source_rect.width() - 1))
+        y = round(self._source_rect.top() + y_ratio * max(1, self._source_rect.height() - 1))
         return QPoint(
             max(self._source_rect.left(), min(self._source_rect.right(), x)),
             max(self._source_rect.top(), min(self._source_rect.bottom(), y)),

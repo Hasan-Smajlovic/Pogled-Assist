@@ -89,7 +89,9 @@ def test_click_modes_call_native_input_and_reset():
     controller.set_mode(DOUBLE_LEFT_CLICK)
     controller._fire_click(DOUBLE_LEFT_CLICK, target)
 
-    assert controller._input.clicks == [(200, 300, {"button": "left", "clicks": 2, "interval": 0.04})]
+    assert controller._input.clicks == [
+        (200, 300, {"button": "left", "clicks": 2, "interval": 0.04})
+    ]
     assert fired == [(DOUBLE_LEFT_CLICK, QPoint(200, 300))]
     assert controller.active_mode is None
 
@@ -108,7 +110,9 @@ def test_right_click_arms_direct_left_click_for_context_menu():
 
 def test_target_dwell_opens_zoom_before_click():
     controller = make_controller()
-    controller.update_settings(GazeSettings(dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True))
+    controller.update_settings(
+        GazeSettings(dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True)
+    )
     controller.set_mode(LEFT_CLICK)
     target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
     requested = []

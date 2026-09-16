@@ -139,7 +139,9 @@ def test_keyboard_sidebar_routes_letters_numbers_symbols_and_keys(qtbot):
 @pytest.mark.e2e
 def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     monkeypatch.setattr("gaze_mouse.settings_window.is_windows_startup_enabled", lambda: False)
-    monkeypatch.setattr("gaze_mouse.settings_window.set_application_logging_enabled", lambda _enabled: None)
+    monkeypatch.setattr(
+        "gaze_mouse.settings_window.set_application_logging_enabled", lambda _enabled: None
+    )
     monkeypatch.setattr(
         "gaze_mouse.settings_window.set_windows_startup_enabled",
         lambda enabled, **_options: StartupTaskResult(enabled, True, "updated"),
@@ -253,6 +255,10 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
 
     window = toolbar.HotbarWindow()
     qtbot.addWidget(window)
+
+    assert window._foreground_input is not None
+    assert window._last_external_foreground_window == 50
+    assert window._last_external_cursor_position == (600, 500)
 
     window._run_toolbar_action(LEFT_CLICK, checked=True, source="mouse")
     assert window._mouse.active_mode == LEFT_CLICK

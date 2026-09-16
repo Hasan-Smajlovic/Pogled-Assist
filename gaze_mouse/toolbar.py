@@ -47,7 +47,6 @@ from .speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .tobii_calibration import launch_tobii_guest_calibration
 from .windows_input import WindowsInputController
 
-
 logger = logging.getLogger(__name__)
 
 CLICK_BUTTONS = [
@@ -58,7 +57,7 @@ CLICK_BUTTONS = [
 SECONDARY_BUTTONS = [
     (SPEECH, "Speech", "fa5s.microphone"),
     (KEYBOARD, "Keyboard", "fa5s.keyboard"),
-    (CONTROLLER, "Controler", "fa5s.gamepad"),
+    (CONTROLLER, "Controller", "fa5s.gamepad"),
 ]
 SETTINGS_BUTTON = (SETTINGS, "Settings", "fa5s.cog")
 QUICK_ACTION_BUTTON = (QUICK_ACTIONS, "Quick actions", "fa5s.bolt")
@@ -98,7 +97,6 @@ class HotbarWindow(QWidget):
         self._foreground_timer = QTimer(self)
         self._foreground_timer.setInterval(250)
         self._foreground_timer.timeout.connect(self._update_last_external_foreground_window)
-        self._prime_foreground_tracking()
         self._quick_menu = QuickActionRadialMenu()
         self._quick_zoom = QuickActionZoomWindow()
         self._mouse = GazeMouseController(
@@ -117,6 +115,7 @@ class HotbarWindow(QWidget):
         self._build_restore_button()
         self._connect_signals()
         self._install_shortcuts()
+        self._prime_foreground_tracking()
         logger.info("Hotbar window initialized.")
 
     def showEvent(self, event) -> None:
@@ -164,7 +163,9 @@ class HotbarWindow(QWidget):
         if self._keyboard_window is not None and self._keyboard_window.contains_global_point(point):
             return self._keyboard_window.action_at_global_point(point)
 
-        if self._controller_window is not None and self._controller_window.contains_global_point(point):
+        if self._controller_window is not None and self._controller_window.contains_global_point(
+            point
+        ):
             return self._controller_window.action_at_global_point(point)
 
         if self._settings_window is not None and self._settings_window.isVisible():
@@ -194,7 +195,9 @@ class HotbarWindow(QWidget):
         if self._keyboard_window is not None and self._keyboard_window.contains_global_point(point):
             return self._keyboard_window.action_center_at_global_point(action, point)
 
-        if self._controller_window is not None and self._controller_window.contains_global_point(point):
+        if self._controller_window is not None and self._controller_window.contains_global_point(
+            point
+        ):
             return self._controller_window.action_center_at_global_point(action, point)
 
         button = self._buttons.get(action)
@@ -221,7 +224,9 @@ class HotbarWindow(QWidget):
         if self._keyboard_window is not None and self._keyboard_window.contains_global_point(point):
             return True
 
-        if self._controller_window is not None and self._controller_window.contains_global_point(point):
+        if self._controller_window is not None and self._controller_window.contains_global_point(
+            point
+        ):
             return True
 
         if self._settings_window is not None and self._settings_window.isVisible():
@@ -865,10 +870,7 @@ class HotbarWindow(QWidget):
         if source == "mouse" and checked is not None:
             enabled = checked
         else:
-            enabled = not (
-                self._keyboard_window is not None
-                and self._keyboard_window.isVisible()
-            )
+            enabled = not (self._keyboard_window is not None and self._keyboard_window.isVisible())
 
         if enabled:
             self._show_keyboard_sidebar()
@@ -910,8 +912,7 @@ class HotbarWindow(QWidget):
             enabled = checked
         else:
             enabled = not (
-                self._controller_window is not None
-                and self._controller_window.isVisible()
+                self._controller_window is not None and self._controller_window.isVisible()
             )
 
         if enabled:
@@ -1041,7 +1042,9 @@ class HotbarWindow(QWidget):
     def _update_gaze_settings(self, settings: object) -> None:
         self._mouse.update_settings(settings)
         self._gaze_bubble.set_enabled(bool(getattr(settings, "show_gaze_bubble", True)))
-        self._interaction_overlay.set_enabled(bool(getattr(settings, "show_interaction_overlay", True)))
+        self._interaction_overlay.set_enabled(
+            bool(getattr(settings, "show_interaction_overlay", True))
+        )
         if self._controller_window is not None:
             self._controller_window.update_gaze_settings(self._mouse.settings)
         save_app_settings(self._mouse.settings, self._speech.settings)
@@ -1063,7 +1066,9 @@ class HotbarWindow(QWidget):
                 if self._settings_window is not None:
                     self._settings_window.set_status("Speech test sent.")
             else:
-                self._set_status("Speech failed: selected voice engine was not found or could not start.")
+                self._set_status(
+                    "Speech failed: selected voice engine was not found or could not start."
+                )
                 if self._settings_window is not None:
                     self._settings_window.set_status("Speech failed.")
         except Exception as exc:
@@ -1122,11 +1127,7 @@ class HotbarWindow(QWidget):
         fill = "#ffffff" if open_ else "transparent"
         border = "#ffffff" if open_ else "transparent"
         dot.setStyleSheet(
-            "QLabel#eyeDot {"
-            f"background: {fill};"
-            f"border: 1px solid {border};"
-            "border-radius: 7px;"
-            "}"
+            f"QLabel#eyeDot {{background: {fill};border: 1px solid {border};border-radius: 7px;}}"
         )
         state = "open" if open_ else "closed"
         dot.setToolTip(f"{label} eye: {state}")

@@ -7,7 +7,6 @@ import logging
 import sys
 from ctypes import wintypes
 
-
 logger = logging.getLogger(__name__)
 
 HWND_TOPMOST = wintypes.HWND(-1)
@@ -44,13 +43,7 @@ def force_window_topmost(
 
     flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
     if aggressive:
-        flags = (
-            SWP_NOMOVE
-            | SWP_NOSIZE
-            | SWP_NOACTIVATE
-            | SWP_FRAMECHANGED
-            | SWP_ASYNCWINDOWPOS
-        )
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS
     if show:
         flags |= SWP_SHOWWINDOW
 
@@ -110,7 +103,7 @@ def _window_long_functions(user32):
 
 def _window_handle(window: object) -> int | None:
     try:
-        win_id = getattr(window, "winId")()
+        win_id = window.winId()
     except Exception:
         return None
 
@@ -128,10 +121,7 @@ def _load_user32():
         return _user32
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
-    if ctypes.sizeof(ctypes.c_void_p) == 8:
-        long_ptr = ctypes.c_longlong
-    else:
-        long_ptr = ctypes.c_long
+    long_ptr = ctypes.c_longlong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_long
 
     user32.SetWindowPos.argtypes = [
         wintypes.HWND,

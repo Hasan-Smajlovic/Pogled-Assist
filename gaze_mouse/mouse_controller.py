@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QGuiApplication
 
 from .windows_input import WindowsInputController
-
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +296,12 @@ class GazeMouseController(QObject):
 
         self.gaze_position_changed.emit(point.logical)
 
-        if quick_menu_was_open or self._quick_menu_open or click_zoom_was_open or self._click_zoom_open:
+        if (
+            quick_menu_was_open
+            or self._quick_menu_open
+            or click_zoom_was_open
+            or self._click_zoom_open
+        ):
             return
 
         toolbar_action = self._toolbar_action_at(point.logical)
@@ -315,7 +319,9 @@ class GazeMouseController(QObject):
         if toolbar_action is not None:
             self._reset_target_dwell()
             self._reset_quick_dwell()
-            target_center = self._toolbar_action_center(toolbar_action, point.logical) or point.logical
+            target_center = (
+                self._toolbar_action_center(toolbar_action, point.logical) or point.logical
+            )
             self._handle_toolbar_dwell(toolbar_action, target_center, now_ms)
             return
 
@@ -339,13 +345,15 @@ class GazeMouseController(QObject):
         x = _clamp(normalized_x, 0.0, 1.0)
         y = _clamp(normalized_y, 0.0, 1.0)
         logical = QPoint(
-            int(round(logical_left + x * max(1, logical_width - 1))),
-            int(round(logical_top + y * max(1, logical_height - 1))),
+            round(logical_left + x * max(1, logical_width - 1)),
+            round(logical_top + y * max(1, logical_height - 1)),
         )
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         physical = QPoint(
-            int(round(physical_left + x * max(1, physical_width - 1))),
-            int(round(physical_top + y * max(1, physical_height - 1))),
+            round(physical_left + x * max(1, physical_width - 1)),
+            round(physical_top + y * max(1, physical_height - 1)),
         )
         return GazeScreenPoint(logical=logical, physical=physical)
 
@@ -357,8 +365,8 @@ class GazeMouseController(QObject):
 
         old = self._smooth_physical_point
         smoothed = QPoint(
-            int(round(old.x() + (raw_point.x() - old.x()) * alpha)),
-            int(round(old.y() + (raw_point.y() - old.y()) * alpha)),
+            round(old.x() + (raw_point.x() - old.x()) * alpha),
+            round(old.y() + (raw_point.y() - old.y()) * alpha),
         )
         self._smooth_physical_point = smoothed
         return smoothed
@@ -421,7 +429,9 @@ class GazeMouseController(QObject):
         ):
             self._target_anchor = point.logical
             self._target_started_ms = now_ms
-            self._emit_interaction_progress("target", self._target_anchor, 0.0, _action_label(self.active_mode))
+            self._emit_interaction_progress(
+                "target", self._target_anchor, 0.0, _action_label(self.active_mode)
+            )
             return
 
         progress = _clamp(
@@ -429,20 +439,23 @@ class GazeMouseController(QObject):
             0.0,
             1.0,
         )
-        self._emit_interaction_progress("target", self._target_anchor, progress, _action_label(self.active_mode))
+        self._emit_interaction_progress(
+            "target", self._target_anchor, progress, _action_label(self.active_mode)
+        )
 
         ready = now_ms - self._target_started_ms >= self.settings.dwell_ms
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
         if ready and cooled:
             use_precision_zoom = (
-                self.settings.use_precision_zoom
-                and not self._native_menu_click_pending
+                self.settings.use_precision_zoom and not self._native_menu_click_pending
             )
             if use_precision_zoom:
                 self._pending_zoom_click_mode = self.active_mode
                 self._click_zoom_open = True
                 self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
-                self._finish_interaction("target", self._target_anchor, _action_label(self.active_mode))
+                self._finish_interaction(
+                    "target", self._target_anchor, _action_label(self.active_mode)
+                )
                 self.click_zoom_requested.emit(QPoint(self._target_anchor))
                 self._reset_target_dwell()
                 self.status_changed.emit("Click zoom opened.")
@@ -480,7 +493,11 @@ class GazeMouseController(QObject):
             else:
                 self.quick_action_menu_requested.emit(QPoint(self._quick_anchor.logical))
             self._reset_quick_dwell()
-            status = "Quick zoom opened." if self.settings.use_precision_zoom else "Quick action menu opened."
+            status = (
+                "Quick zoom opened."
+                if self.settings.use_precision_zoom
+                else "Quick action menu opened."
+            )
             self.status_changed.emit(status)
 
     def _fire_click(
@@ -511,7 +528,9 @@ class GazeMouseController(QObject):
             elif mode == RIGHT_CLICK:
                 self._input.click(point.physical.x(), point.physical.y(), button="right")
             elif mode == DOUBLE_LEFT_CLICK:
-                self._input.click(point.physical.x(), point.physical.y(), button="left", clicks=2, interval=0.04)
+                self._input.click(
+                    point.physical.x(), point.physical.y(), button="left", clicks=2, interval=0.04
+                )
         except Exception as exc:
             logger.exception("Click action failed.")
             self.status_changed.emit(f"Click failed: {exc}")
@@ -602,16 +621,20 @@ class GazeMouseController(QObject):
         logical_y = max(logical_top, min(logical_bottom, logical.y()))
         x_ratio = (logical_x - logical_left) / max(1, logical_width - 1)
         y_ratio = (logical_y - logical_top) / max(1, logical_height - 1)
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         physical = QPoint(
-            int(round(physical_left + x_ratio * max(1, physical_width - 1))),
-            int(round(physical_top + y_ratio * max(1, physical_height - 1))),
+            round(physical_left + x_ratio * max(1, physical_width - 1)),
+            round(physical_top + y_ratio * max(1, physical_height - 1)),
         )
         return GazeScreenPoint(logical=QPoint(logical_x, logical_y), physical=physical)
 
     def _log_screen_mapping(self) -> None:
         logical_left, logical_top, logical_width, logical_height = self._logical_screen_geometry()
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         logger.info(
             "Gaze screen mapping: logical=%s,%s %sx%s physical=%s,%s %sx%s.",
             logical_left,
@@ -646,7 +669,7 @@ def _action_label(action: str | None) -> str:
         DOUBLE_LEFT_CLICK: "Double click",
         SPEECH: "Speech",
         KEYBOARD: "Keyboard",
-        CONTROLLER: "Controler",
+        CONTROLLER: "Controller",
         SETTINGS: "Settings",
         HIDE_HOTBAR: "Hide",
         SHOW_HOTBAR: "Show",

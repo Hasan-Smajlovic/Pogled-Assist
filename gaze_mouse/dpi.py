@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 
 
@@ -19,7 +20,5 @@ def enable_windows_dpi_awareness() -> None:
     except Exception:
         pass
 
-    try:
+    with contextlib.suppress(Exception):
         ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass

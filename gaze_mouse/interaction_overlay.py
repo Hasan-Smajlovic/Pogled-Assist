@@ -15,7 +15,6 @@ from PySide6.QtWidgets import QWidget
 
 from .windows_z_order import force_window_topmost
 
-
 logger = logging.getLogger(__name__)
 
 GWL_EXSTYLE = -20
@@ -192,9 +191,8 @@ class InteractionOverlayWindow(QWidget):
         if self._last_progress_point is None:
             return False
 
-        distance = (
-            abs(point.x() - self._last_progress_point.x())
-            + abs(point.y() - self._last_progress_point.y())
+        distance = abs(point.x() - self._last_progress_point.x()) + abs(
+            point.y() - self._last_progress_point.y()
         )
         if distance >= MIN_PROGRESS_MOVE_DISTANCE_PX:
             return False

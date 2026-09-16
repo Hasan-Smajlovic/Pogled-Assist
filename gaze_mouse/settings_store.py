@@ -12,7 +12,6 @@ from .logging_setup import get_project_root
 from .mouse_controller import GazeSettings
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
-
 logger = logging.getLogger(__name__)
 
 SETTINGS_FILE = "app_settings.json"
