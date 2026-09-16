@@ -21,7 +21,7 @@ from gaze_mouse.mouse_controller import (
 )
 from gaze_mouse.settings_window import SettingsWindow
 from gaze_mouse.speech_service import SpeechSettings
-from gaze_mouse.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
+from gaze_mouse.speech_window import BOSNIAN_LETTERS, SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from gaze_mouse.windows_startup import StartupTaskResult
 
 
@@ -99,8 +99,8 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, monkeypatch):
     window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"].click()
     window._play_button.click()
 
-    assert window._input.text() == "Dž A"
-    assert speech.requests[0][0] == "Dž A"
+    assert window._input.text() == "DŽ A"
+    assert speech.requests[0][0] == "DŽ A"
 
     window._phrases_button.click()
     window._new_phrase_button.click()
@@ -108,11 +108,118 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, monkeypatch):
     window._save_phrase_button.click()
 
     assert saved[-1] == [("Trebam pomoć", 0)]
-    assert window._input.text() == "Dž A"
+    assert window._input.text() == "DŽ A"
 
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}phrase:select:0"].click()
-    assert window._input.text() == "Dž A Trebam pomoć "
+    phrase_button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}phrase:select:0"]
+    qtbot.waitUntil(phrase_button.isVisible)
+    phrase_button.click()
+    assert window._input.text() == "DŽ A Trebam pomoć "
     assert saved[-1] == [("Trebam pomoć", 1)]
+
+
+@pytest.mark.e2e
+def test_speech_modal_blocks_background_and_supports_gaze(qtbot, monkeypatch):
+    monkeypatch.setattr("gaze_mouse.speech_window._load_phrases", list)
+    monkeypatch.setattr("gaze_mouse.speech_window._save_phrases", lambda _phrases: None)
+    speech = FakeSpeech()
+    window = SpeechWindow(speech)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    assert len(window._letter_groups) == 6
+    assert all(len(group) == 5 for group in window._letter_groups)
+    assert [letter for group in window._letter_groups for letter in group] == BOSNIAN_LETTERS
+
+    group_action = f"{SPEECH_WINDOW_ACTION_PREFIX}group:1"
+    qtbot.mouseClick(window._action_buttons[group_action], Qt.LeftButton)
+    qtbot.waitUntil(lambda: window._active_dialog is window._letter_dialog)
+    assert window._modal_backdrop.isVisible()
+
+    qtbot.mouseClick(window._play_button, Qt.LeftButton)
+    qtbot.mouseClick(window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}space"], Qt.LeftButton)
+    assert speech.requests == []
+    assert window._input.text() == ""
+
+    letter_action = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:1:1"
+    letter = window._action_buttons[letter_action]
+    qtbot.waitUntil(letter.isVisible)
+    qtbot.mouseClick(letter, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == "DŽ"
+    assert not window._modal_backdrop.isVisible()
+
+    gaze_group_action = f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"
+    group = window._action_buttons[gaze_group_action]
+    group_center = group.mapToGlobal(group.rect().center())
+    assert window.action_at_global_point(group_center) == gaze_group_action
+    window.handle_gaze_action(gaze_group_action)
+    qtbot.waitUntil(lambda: window._active_dialog is window._letter_dialog)
+
+    space_center = window._space_button.mapToGlobal(window._space_button.rect().center())
+    assert window.action_at_global_point(space_center) is None
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}space")
+    assert window._input.text() == "DŽ"
+
+    gaze_letter_action = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"
+    gaze_letter = window._action_buttons[gaze_letter_action]
+    qtbot.waitUntil(gaze_letter.isVisible)
+    letter_center = gaze_letter.mapToGlobal(gaze_letter.rect().center())
+    assert window.action_at_global_point(letter_center) == gaze_letter_action
+    window.handle_gaze_action(gaze_letter_action)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == "DŽA"
+
+
+@pytest.mark.e2e
+def test_speech_symbols_backspace_clear_and_play(qtbot, monkeypatch):
+    monkeypatch.setattr("gaze_mouse.speech_window._load_phrases", list)
+    monkeypatch.setattr("gaze_mouse.speech_window._save_phrases", lambda _phrases: None)
+    speech = FakeSpeech()
+    window = SpeechWindow(speech)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    qtbot.mouseClick(window._keyboard_toggle_button, Qt.LeftButton)
+    assert window._symbols_mode is True
+    symbol = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}symbol:0"]
+    qtbot.waitUntil(symbol.isVisible)
+    qtbot.mouseClick(symbol, Qt.LeftButton)
+    assert window._input.text() == "1"
+
+    qtbot.mouseClick(window._keyboard_toggle_button, Qt.LeftButton)
+    assert window._symbols_mode is False
+    assert f"{SPEECH_WINDOW_ACTION_PREFIX}group:0" in window._action_buttons
+
+    for value in ("DŽ", "LJ", "NJ", "dž", "lj", "nj"):
+        window._input.setText(value)
+        qtbot.mouseClick(window._backspace_button, Qt.LeftButton)
+        assert window._input.text() == ""
+
+    window._input.setText("Trebam pomoć")
+    qtbot.mouseClick(window._play_button, Qt.LeftButton)
+    assert speech.requests[-1][0] == "Trebam pomoć"
+    assert window._input.text() == "Trebam pomoć"
+
+    qtbot.mouseClick(window._clear_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+    qtbot.mouseClick(
+        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}clear:cancel"], Qt.LeftButton
+    )
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == "Trebam pomoć"
+
+    qtbot.mouseClick(window._clear_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+    qtbot.mouseClick(
+        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}clear:confirm"], Qt.LeftButton
+    )
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == ""
+
+    qtbot.mouseClick(window._clear_button, Qt.LeftButton)
+    assert window._active_dialog is None
 
 
 @pytest.mark.e2e

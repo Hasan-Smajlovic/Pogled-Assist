@@ -75,6 +75,8 @@ class GazeMouseController(QObject):
         toolbar_action_center: Callable[[str, QPoint], QPoint | None],
         toolbar_contains: Callable[[QPoint], bool],
         parent: QObject | None = None,
+        *,
+        pointer_movement_enabled: bool = True,
     ) -> None:
         super().__init__(parent)
         self.settings = GazeSettings()
@@ -83,6 +85,7 @@ class GazeMouseController(QObject):
         self._toolbar_action_at = toolbar_action_at
         self._toolbar_action_center = toolbar_action_center
         self._toolbar_contains = toolbar_contains
+        self._pointer_movement_enabled = pointer_movement_enabled
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
         self._toolbar_gaze_target: str | None = None
@@ -215,6 +218,10 @@ class GazeMouseController(QObject):
         self._quick_menu_open = False
         self._quick_target = None
         self._reset_quick_dwell()
+
+    def cancel_toolbar_interaction(self) -> None:
+        self._reset_toolbar_dwell()
+        self._set_toolbar_gaze_target(None)
 
     def execute_zoomed_click(self, logical: QPoint) -> None:
         mode = self._pending_zoom_click_mode
@@ -372,7 +379,11 @@ class GazeMouseController(QObject):
         return smoothed
 
     def _move_cursor(self, point: QPoint) -> None:
-        if not self.settings.move_mouse or self._input is None:
+        if (
+            not self._pointer_movement_enabled
+            or not self.settings.move_mouse
+            or self._input is None
+        ):
             return
 
         if (

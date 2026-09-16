@@ -35,7 +35,7 @@ AppBar reservation during shutdown.
 | --- | --- | --- |
 | Entry points | `run_gaze_mouse.py`, `gaze_mouse/main.py` | Source and packaged startup, Qt setup, package smoke test |
 | Runtime composition | `gaze_mouse/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
-| Gaze acquisition | `gaze_mouse/gaze_provider.py`, `gaze_mouse/tobii_stream_engine*.py` | Tracker discovery, backend fallback, sample bounds, retry, x86 bridge |
+| Gaze acquisition | `gaze_mouse/gaze_provider.py`, `gaze_mouse/mouse_gaze_provider.py`, `gaze_mouse/tobii_stream_engine*.py` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge |
 | Gaze interaction | `gaze_mouse/mouse_controller.py` | Coordinate mapping, smoothing, dwell state, click and Quick action requests |
 | Windows integration | `gaze_mouse/windows_input.py`, `gaze_mouse/appbar.py`, `gaze_mouse/windows_*.py` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
 | User surfaces | `gaze_mouse/*_window.py`, `gaze_mouse/quick_action_*.py` | Settings, speech, keyboard, controller, radial menu, precision zoom |
@@ -62,6 +62,11 @@ Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
 and leaves the pointer at its last position.
+
+The source-only mouse gaze simulator bypasses tracker discovery and feeds the
+primary-screen cursor position into the same gaze interaction path with both eyes
+valid. Automatic pointer movement is disabled in that mode so the cursor can
+remain the simulation input. It is a development aid, not hardware validation.
 
 The controller keeps two coordinate spaces separate:
 

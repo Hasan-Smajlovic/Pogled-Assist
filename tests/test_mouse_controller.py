@@ -80,6 +80,26 @@ def test_eye_gate_blocks_gaze_and_clears_active_interactions():
     assert controller._both_eyes_open is False
 
 
+def test_simulation_can_disable_pointer_movement_without_blocking_gaze():
+    controller = GazeMouseController(
+        toolbar_action_at=lambda _point: None,
+        toolbar_action_center=lambda _action, _point: None,
+        toolbar_contains=lambda _point: False,
+        pointer_movement_enabled=False,
+    )
+    controller._logical_screen_rect = (10, 20, 101, 201)
+    controller._physical_screen_rect = (100, 200, 201, 401)
+    controller._input = FakeInput()
+    positions = []
+    controller.gaze_position_changed.connect(lambda point: positions.append(QPoint(point)))
+
+    controller.handle_eye_status(True, True)
+    controller.handle_gaze(0.5, 0.5, 1)
+
+    assert positions == [QPoint(60, 120)]
+    assert controller._input.moves == []
+
+
 def test_click_modes_call_native_input_and_reset():
     controller = make_controller()
     fired = []
@@ -137,6 +157,22 @@ def test_toolbar_dwell_emits_one_action_after_delay():
     controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1200)
 
     assert actions == ["settings"]
+
+
+def test_cancel_toolbar_interaction_clears_dwell_and_gaze_feedback():
+    controller = make_controller()
+    gaze_targets = []
+    controller.toolbar_gaze_target_changed.connect(gaze_targets.append)
+    controller._toolbar_candidate = "speech"
+    controller._toolbar_started_ms = 1000
+    controller._set_toolbar_gaze_target("speech")
+
+    controller.cancel_toolbar_interaction()
+
+    assert controller._toolbar_candidate is None
+    assert controller._toolbar_started_ms == 0
+    assert controller._toolbar_gaze_target is None
+    assert gaze_targets == ["speech", None]
 
 
 def test_quick_actions_and_click_modes_are_mutually_exclusive():

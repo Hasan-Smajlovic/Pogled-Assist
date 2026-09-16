@@ -172,7 +172,11 @@ def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
     }
 
 
-def test_main_builds_and_runs_application(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("arguments", "simulate_gaze"),
+    [([], False), ([main_module.MOUSE_GAZE_SIMULATION_ARG], True)],
+)
+def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simulate_gaze):
     import PySide6.QtWidgets
 
     from gaze_mouse import toolbar
@@ -205,6 +209,9 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path):
             return test_app
 
     class FakeWindow:
+        def __init__(self, *, simulate_gaze=False):
+            calls.append(("simulate_gaze", simulate_gaze))
+
         def setWindowIcon(self, _icon):
             calls.append(("window_icon", True))
 
@@ -224,11 +231,25 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path):
     monkeypatch.setattr(app_icon, "load_app_icon", FakeIcon)
     monkeypatch.setattr(app_icon, "app_icon_path", lambda: tmp_path / "icon.png")
     monkeypatch.setattr(toolbar, "HotbarWindow", FakeWindow)
+    monkeypatch.setattr(main_module.sys, "argv", ["run_gaze_mouse.py", *arguments])
 
     assert main_module.main() == 17
     assert ("show", True) in calls
     assert ("name", "Tobii Gaze Mouse") in calls
     assert ("org", "PieLabs") in calls
+    assert ("simulate_gaze", simulate_gaze) in calls
+
+
+def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):
+    monkeypatch.setattr(main_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        main_module.sys,
+        "argv",
+        ["TobiiGazeMouse.exe", main_module.MOUSE_GAZE_SIMULATION_ARG],
+    )
+
+    assert main_module.main() == 2
+    assert "only from a development checkout" in capsys.readouterr().out
 
 
 def test_frozen_startup_launcher_is_next_to_executable(monkeypatch, tmp_path):
