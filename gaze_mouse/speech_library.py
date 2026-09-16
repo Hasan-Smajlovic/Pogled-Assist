@@ -66,8 +66,7 @@ DEFAULT_CATEGORIES = (
 
 def default_categories() -> list[CategoryRecord]:
     return [
-        CategoryRecord(name=name, answers=list(answers))
-        for name, answers in DEFAULT_CATEGORIES
+        CategoryRecord(name=name, answers=list(answers)) for name, answers in DEFAULT_CATEGORIES
     ]
 
 
@@ -176,11 +175,7 @@ def _parse_categories(values: list[object]) -> list[CategoryRecord]:
 def _parse_answers(values: list[object]) -> list[str]:
     answers: list[str] = []
     for value in values:
-        text = (
-            clean_text(value.get("text"))
-            if isinstance(value, dict)
-            else clean_text(value)
-        )
+        text = clean_text(value.get("text")) if isinstance(value, dict) else clean_text(value)
         if text and not entry_exists(answers, text):
             answers.append(text)
     return answers

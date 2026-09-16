@@ -470,7 +470,10 @@ class SpeechWindow(QWidget):
             "Dodaj", "list:add", "headerActionButton", minimum_height=44
         )
         self._delete_mode_button = self._make_button(
-            "Obriši", "list:delete-mode", "headerActionButton", minimum_height=44,
+            "Obriši",
+            "list:delete-mode",
+            "headerActionButton",
+            minimum_height=44,
             checkable=True,
         )
         self._cancel_editor_button = self._make_button(
@@ -1179,9 +1182,7 @@ class SpeechWindow(QWidget):
             else:
                 destination_texts.append(item)
         if entry_exists(destination_texts, text):
-            self._set_status(
-                "Ova stavka već postoji. Unesite drugi tekst ili odaberite Odustani."
-            )
+            self._set_status("Ova stavka već postoji. Unesite drugi tekst ili odaberite Odustani.")
             return
 
         editor = self._editor
@@ -1335,10 +1336,7 @@ class SpeechWindow(QWidget):
             items: list[CategoryRecord] | list[str] | list[PhraseRecord] = candidate.categories
         elif view_mode == "phrases":
             items = candidate.phrases
-        elif (
-            category_index is not None
-            and 0 <= category_index < len(candidate.categories)
-        ):
+        elif category_index is not None and 0 <= category_index < len(candidate.categories):
             items = candidate.categories[category_index].answers
         else:
             return

@@ -48,9 +48,7 @@ class FakeSpeech:
 
 class FakeLibraryStore:
     def __init__(self, library=None):
-        self.library = copy.deepcopy(
-            library or SpeechLibrary(categories=default_categories())
-        )
+        self.library = copy.deepcopy(library or SpeechLibrary(categories=default_categories()))
         self.saved = []
         self.fail_saves = False
 
@@ -199,9 +197,7 @@ def test_speech_categories_answers_and_shared_editor_preserve_message(qtbot):
 @pytest.mark.e2e
 def test_speech_add_and_cancel_category_answer_and_phrase_editors(qtbot):
     phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
-    store = FakeLibraryStore(
-        SpeechLibrary(categories=default_categories(), phrases=phrases)
-    )
+    store = FakeLibraryStore(SpeechLibrary(categories=default_categories(), phrases=phrases))
     window = SpeechWindow(FakeSpeech(), library_store=store)
     qtbot.addWidget(window)
     window.show()
