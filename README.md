@@ -5,9 +5,6 @@ pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard
 and a compact controller panel.
 
 [Download a Windows release](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases)
-| [User guide](docs/USER_GUIDE.md)
-| [Development](docs/DEVELOPMENT.md)
-| [Contributing](CONTRIBUTING.md)
 
 ## Features
 
@@ -92,6 +89,20 @@ installer smoke tests. To inspect the UI without a tracker or speech engine, run
 
 The complete command reference, test strategy, and manual UI checklist are in
 the [development guide](docs/DEVELOPMENT.md).
+
+## Documentation
+
+| Need | Guide |
+| --- | --- |
+| Use and troubleshoot the application | [User guide](docs/USER_GUIDE.md) |
+| Understand the runtime and compatibility baseline | [Architecture](docs/ARCHITECTURE.md) |
+| Set up development and run checks | [Development guide](docs/DEVELOPMENT.md) |
+| Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |
+| Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
+
+The [speech keyboard reference](docs/design/speech-keyboard-reference.html) is a
+development-only HTML prototype for the PySide6 interface. The application does
+not load or package it.
 
 ## Runtime requirements
 

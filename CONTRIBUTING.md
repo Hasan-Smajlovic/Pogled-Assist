@@ -1,10 +1,7 @@
 # Contributing to TobiiEyeTrackerTool
 
 This document defines how changes move from an issue to a release in
-`Hasan-Smajlovic/TobiiEyeTrackerTool`. The workflow and initial repository
-protections are tracked in [issue #14](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/issues/14).
-CI checks and Windows release automation are tracked separately in
-[issue #16](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/issues/16).
+`Hasan-Smajlovic/TobiiEyeTrackerTool`.
 
 ## Long-lived branches
 
@@ -57,6 +54,39 @@ GitHub's generic compare page may still select the upstream
 observed after `development` became the fork's default branch, so the four values
 above must always be checked manually.
 
+## Writing issues for coding agents
+
+Use the closest template under `.github/ISSUE_TEMPLATE`. The issue is the handoff
+to a fresh coding agent, so it must stand on its own without chat history or old
+prompts. Include only information that changes how the work should be done:
+
+- the problem or outcome;
+- the files, prior work, decisions, and dependencies that provide context;
+- what is in and out of scope;
+- existing behavior and user data that must remain compatible;
+- acceptance criteria that can be observed or tested; and
+- the required automated, Windows, Tobii, and visible checks.
+
+Link to the owning guide instead of copying setup, architecture, workflow, or
+release instructions into the issue. Mark unresolved product decisions clearly;
+an agent must ask before choosing an answer that changes user behavior. Remove
+unused placeholders before submitting. A short, complete issue is better than a
+filled template with guesses or repeated text.
+
+If work can change behavior already used by the installed application, name the
+flows that must remain compatible. Do not combine an unrelated refactor or
+folder reorganization with a feature, fix, or documentation issue.
+
+Use the project status to show whether an agent can act on the issue:
+
+| Status | Meaning |
+| --- | --- |
+| Backlog | A decision, dependency, or missing requirement still blocks work. |
+| Ready | The issue is self-contained and has no unresolved blocking decision. |
+| In progress | An agent is actively working on the issue and its topic branch. |
+| In review | The implementation and stated checks are ready for pull request review. |
+| Done | The issue is closed after merge or an agreed non-code outcome. |
+
 ## Issue linking and pull request contents
 
 Every normal pull request must link its issue with:
@@ -68,13 +98,11 @@ Closes #<issue-number>
 Because `development` is the default branch, merging a normal pull request with
 this keyword closes the linked issue.
 
-The pull request description must include:
-
-- A summary of the outcome
-- The scoped changes
-- Verification performed
-- Known limitations
-- Manual checks still required
+The pull request describes the resulting diff, not the original plan. Use the
+repository template to record the outcome, material changes, compatibility
+impact, checks that actually ran, visible evidence when relevant, and anything
+that remains unverified. Link to the issue for scope, dependencies, and acceptance
+criteria instead of repeating them.
 
 Open incomplete work as a draft pull request. Mark it ready for review only when
 the described verification is complete.
@@ -123,7 +151,7 @@ rulesets apply to everyone and have no bypass actors.
 - Delete a merged topic branch after a successful merge.
 - Never delete `development` or `master`.
 - Do not use rebase merge.
-- Do not use auto-merge or a merge queue under the issue #14 workflow.
+- Do not use auto-merge or a merge queue.
 
 Release merges use merge commits so `development` remains an ancestor of
 `master`. This keeps later release pull requests clean and prevents already
@@ -146,8 +174,6 @@ released commits from appearing again.
 9. A failed release workflow must not create a partial or duplicate release.
    Rerun the failed workflow for the same commit. If the version tag belongs to a
    different commit, bump `VERSION` in a new reviewed pull request.
-
-Do not create a version tag or GitHub Release as part of issue #14.
 
 ## Hotfix process
 
@@ -244,8 +270,8 @@ and user-owned.
   paid plans.
 - Organization teams and required team reviewers are unavailable in a user-owned
   repository.
-- Push rulesets for restricting paths, extensions, or file sizes are outside issue
-  #14 and must not be added as part of this workflow configuration.
+- Push rulesets for restricting paths, extensions, or file sizes are not part of
+  the current workflow configuration.
 - No active ruleset limits final merges to one person. GitHub allows collaborators
   with write or administrator permission to merge after the applicable quality
   rules are satisfied. The current eligible collaborators are Hasan, Tajib, and
