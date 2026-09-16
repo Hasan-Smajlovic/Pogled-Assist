@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import json
+import copy
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QPaintEvent, QPalette, QResizeEvent
@@ -28,6 +30,15 @@ from PySide6.QtWidgets import (
 
 from .gaze_feedback import set_gaze_feedback
 from .logging_setup import get_project_root
+from .speech_library import (
+    CategoryRecord,
+    PhraseRecord,
+    SpeechLibrary,
+    SpeechLibraryStore,
+    clean_text,
+    entry_exists,
+    sorted_phrases,
+)
 from .speech_service import SpeechService, SpeechSettings
 
 logger = logging.getLogger(__name__)
@@ -72,14 +83,17 @@ GROUP_GRID_MAX_COLUMNS = 6
 KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 PHRASE_BUTTON_MIN_HEIGHT = 64
-PHRASES_PER_PAGE = 6
+ITEMS_PER_PAGE = 6
 PHRASES_FILE = "speech_phrases.json"
+EditorKind = Literal["category", "answer", "phrase"]
 
 
-@dataclass
-class PhraseRecord:
-    text: str
-    uses: int = 0
+@dataclass(frozen=True)
+class EditorContext:
+    kind: EditorKind
+    category_index: int | None
+    page: int
+    message: str
 
 
 class SpeechWindow(QWidget):
@@ -94,6 +108,7 @@ class SpeechWindow(QWidget):
         speech: SpeechService,
         parent: QWidget | None = None,
         letters_per_group: int | None = None,
+        library_store: SpeechLibraryStore | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("speechWindow")
@@ -116,9 +131,13 @@ class SpeechWindow(QWidget):
         self._dialog_actions: set[str] = set()
         self._active_dialog: QDialog | None = None
         self._gaze_target_action: str | None = None
-        self._phrases = _load_phrases()
-        self._phrase_page = 0
-        self._speech_input_text = ""
+        self._library_store = library_store or SpeechLibraryStore(_speech_library_path())
+        self._library = self._library_store.load()
+        self._list_page = 0
+        self._category_index: int | None = None
+        self._deletion_mode = False
+        self._editor: EditorContext | None = None
+        self._confirm_action: Callable[[], None] | None = None
         self._view_mode = "keyboard"
         self._symbols_mode = False
 
@@ -132,8 +151,12 @@ class SpeechWindow(QWidget):
         if screen is not None:
             self.setGeometry(screen.geometry())
 
-        self._restore_input_if_editing_phrase()
+        self._restore_message_if_editing()
+        self._editor = None
         self._view_mode = "keyboard"
+        self._category_index = None
+        self._list_page = 0
+        self._deletion_mode = False
         self._symbols_mode = False
         self._show_group_level()
         self.showFullScreen()
@@ -149,10 +172,8 @@ class SpeechWindow(QWidget):
         if self._letters_per_group != old_letters_per_group:
             self._close_dialog()
             self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
-            if self._view_mode == "phrases":
-                self._show_phrase_level()
-            elif self._view_mode == "categories":
-                self._show_category_level()
+            if self._is_list_mode():
+                self._show_list_level()
             elif self._symbols_mode:
                 self._show_symbols_level()
             else:
@@ -162,7 +183,7 @@ class SpeechWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Speech window close event received.")
-        self._restore_input_if_editing_phrase()
+        self._restore_message_if_editing()
         if self._active_dialog is not None:
             self._active_dialog.done(0)
         self._set_gaze_target_action(None)
@@ -277,6 +298,11 @@ class SpeechWindow(QWidget):
                 color: #ffffff;
                 font-size: 23px;
             }
+            QPushButton#primaryButton:disabled {
+                background: #171a22;
+                border-color: #2a303d;
+                color: #667184;
+            }
             QPushButton#predictionButton {
                 background: #173447;
                 border-color: #366c8d;
@@ -311,11 +337,11 @@ class SpeechWindow(QWidget):
             QPushButton#phraseButton {
                 font-size: 19px;
             }
-            QPushButton#deletePhraseButton {
+            QPushButton#deleteItemButton {
                 background: #4b2224;
                 border-color: #7d383e;
                 color: #fecaca;
-                font-size: 16px;
+                font-size: 19px;
             }
             QPushButton#headerActionButton { font-size: 15px; }
             QPushButton#closeSpeechButton {
@@ -437,30 +463,28 @@ class SpeechWindow(QWidget):
         view_header.setSpacing(8)
         self._view_title = QLabel("Odaberite grupu slova", main_panel)
         self._view_title.setObjectName("sectionLabel")
-        self._page_label = QLabel("", main_panel)
-        self._page_label.setObjectName("sectionLabel")
-        self._previous_phrase_button = self._make_button(
-            "Prethodna", "phrase:page:previous", "headerActionButton", minimum_height=44
+        self._back_button = self._make_button(
+            "Nazad", "list:back", "headerActionButton", minimum_height=44
         )
-        self._new_phrase_button = self._make_button(
-            "Dodaj frazu", "phrase:new", "headerActionButton", minimum_height=44
+        self._add_item_button = self._make_button(
+            "Dodaj", "list:add", "headerActionButton", minimum_height=44
         )
-        self._save_phrase_button = self._make_button(
-            "Sačuvaj", "phrase:save", "primaryButton", minimum_height=44
+        self._delete_mode_button = self._make_button(
+            "Obriši", "list:delete-mode", "headerActionButton", minimum_height=44,
+            checkable=True,
         )
-        self._cancel_phrase_button = self._make_button(
-            "Odustani", "phrase:cancel", "headerActionButton", minimum_height=44
+        self._cancel_editor_button = self._make_button(
+            "Odustani", "editor:cancel", "headerActionButton", minimum_height=44
         )
-        self._next_phrase_button = self._make_button(
-            "Sljedeća", "phrase:page:next", "headerActionButton", minimum_height=44
+        self._save_item_button = self._make_button(
+            "Sačuvaj", "editor:save", "primaryButton", minimum_height=44
         )
         view_header.addWidget(self._view_title, 1)
-        view_header.addWidget(self._previous_phrase_button)
-        view_header.addWidget(self._page_label)
-        view_header.addWidget(self._new_phrase_button)
-        view_header.addWidget(self._save_phrase_button)
-        view_header.addWidget(self._cancel_phrase_button)
-        view_header.addWidget(self._next_phrase_button)
+        view_header.addWidget(self._back_button)
+        view_header.addWidget(self._add_item_button)
+        view_header.addWidget(self._delete_mode_button)
+        view_header.addWidget(self._cancel_editor_button)
+        view_header.addWidget(self._save_item_button)
 
         self._key_grid_host = QWidget(main_panel)
         self._key_grid_host.setSizePolicy(
@@ -470,8 +494,27 @@ class SpeechWindow(QWidget):
         self._key_grid.setContentsMargins(0, 0, 0, 0)
         self._key_grid.setHorizontalSpacing(10)
         self._key_grid.setVerticalSpacing(10)
+
+        paging = QHBoxLayout()
+        paging.setContentsMargins(0, 0, 0, 0)
+        paging.setSpacing(8)
+        self._previous_page_button = self._make_button(
+            "Prethodna", "list:page:previous", "headerActionButton", minimum_height=44
+        )
+        self._page_label = QLabel("", main_panel)
+        self._page_label.setObjectName("sectionLabel")
+        self._page_label.setAlignment(Qt.AlignCenter)
+        self._next_page_button = self._make_button(
+            "Sljedeća", "list:page:next", "headerActionButton", minimum_height=44
+        )
+        paging.addStretch(1)
+        paging.addWidget(self._previous_page_button)
+        paging.addWidget(self._page_label)
+        paging.addWidget(self._next_page_button)
+        paging.addStretch(1)
         main_layout.addLayout(view_header)
         main_layout.addWidget(self._key_grid_host, 1)
+        main_layout.addLayout(paging)
 
         system_panel = QWidget(self)
         system_layout = QVBoxLayout(system_panel)
@@ -555,8 +598,8 @@ class SpeechWindow(QWidget):
         confirm_layout = QVBoxLayout(self._confirm_dialog)
         confirm_layout.setContentsMargins(24, 22, 24, 24)
         confirm_layout.setSpacing(18)
-        confirm_title = QLabel("Obrisati sav tekst?", self._confirm_dialog)
-        confirm_title.setObjectName("dialogTitle")
+        self._confirm_title = QLabel("Potvrda", self._confirm_dialog)
+        self._confirm_title.setObjectName("dialogTitle")
         self._confirm_copy = QLabel("Cijela poruka bit će obrisana.", self._confirm_dialog)
         self._confirm_copy.setObjectName("dialogCopy")
         self._confirm_copy.setWordWrap(True)
@@ -565,21 +608,21 @@ class SpeechWindow(QWidget):
         confirm_actions.setSpacing(18)
         cancel = self._make_button(
             "Odustani",
-            "clear:cancel",
+            "confirm:cancel",
             "dialogCancelButton",
             parent=self._confirm_dialog,
             minimum_height=92,
         )
-        confirm = self._make_button(
-            "Obriši tekst",
-            "clear:confirm",
+        self._confirm_button = self._make_button(
+            "Potvrdi",
+            "confirm:accept",
             "dialogConfirmButton",
             parent=self._confirm_dialog,
             minimum_height=92,
         )
         confirm_actions.addWidget(cancel, 1)
-        confirm_actions.addWidget(confirm, 1)
-        confirm_layout.addWidget(confirm_title)
+        confirm_actions.addWidget(self._confirm_button, 1)
+        confirm_layout.addWidget(self._confirm_title)
         confirm_layout.addWidget(self._confirm_copy)
         confirm_layout.addStretch(1)
         confirm_layout.addLayout(confirm_actions)
@@ -597,10 +640,12 @@ class SpeechWindow(QWidget):
 
     def _show_group_level(self) -> None:
         self._symbols_mode = False
-        if self._view_mode != "phrase_editor":
+        if self._editor is None:
             self._view_mode = "keyboard"
         self._clear_main_grid()
-        self._view_title.setText("Odaberite grupu slova")
+        self._view_title.setText(
+            self._editor_title() if self._editor is not None else "Odaberite grupu slova"
+        )
 
         group_count = len(self._letter_groups)
         columns = self._group_column_count(group_count)
@@ -615,11 +660,13 @@ class SpeechWindow(QWidget):
         self._context_changed()
 
     def _show_symbols_level(self) -> None:
-        if self._view_mode != "phrase_editor":
+        if self._editor is None:
             self._view_mode = "keyboard"
         self._symbols_mode = True
         self._clear_main_grid()
-        self._view_title.setText("Brojevi i znakovi")
+        self._view_title.setText(
+            self._editor_title() if self._editor is not None else "Brojevi i znakovi"
+        )
         self._set_grid_stretch(len(SYMBOLS), 4)
         for index, symbol in enumerate(SYMBOLS):
             action = self._action(f"symbol:{index}")
@@ -630,63 +677,73 @@ class SpeechWindow(QWidget):
         self._set_status("Odaberite broj ili znak.")
         self._context_changed()
 
-    def _show_category_level(self) -> None:
-        self._view_mode = "categories"
+    def _show_list_level(self) -> None:
         self._symbols_mode = False
+        self._clamp_list_page()
         self._clear_main_grid()
-        self._view_title.setText("Kategorije")
-        self._set_grid_stretch(1, 1)
-        empty = QPushButton("Nema dostupnih kategorija.", self._key_grid_host)
-        empty.setObjectName("phraseButton")
-        empty.setEnabled(False)
-        empty.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._key_grid.addWidget(empty, 0, 0)
-        self._update_view_controls()
-        self._set_status("Nema dostupnih kategorija.")
-        self._context_changed()
+        self._view_title.setText(self._list_title())
 
-    def _show_phrase_level(self) -> None:
-        self._view_mode = "phrases"
-        self._symbols_mode = False
-        self._clamp_phrase_page()
-        self._clear_main_grid()
-        self._view_title.setText("Moje fraze")
-
-        visible_phrases = self._visible_phrases()
-        self._set_grid_stretch(PHRASES_PER_PAGE, 2)
-
-        if not self._phrases:
-            empty = QPushButton("Nema sačuvanih fraza.", self._key_grid_host)
+        items = self._list_items()
+        self._set_grid_stretch(ITEMS_PER_PAGE, 2)
+        if not items:
+            empty = QPushButton(
+                "Lista je prazna. Odaberite Dodaj za novi unos.",
+                self._key_grid_host,
+            )
             empty.setObjectName("phraseButton")
             empty.setEnabled(False)
             self._key_grid.addWidget(empty, 0, 0, 3, 2)
-            self._set_status("Nema sačuvanih fraza.")
+            self._set_status("Lista je prazna. Odaberite Dodaj za novi unos.")
         else:
-            page_start = self._phrase_page * PHRASES_PER_PAGE
-            for position, record in enumerate(visible_phrases):
+            page_start = self._list_page * ITEMS_PER_PAGE
+            visible_items = items[page_start : page_start + ITEMS_PER_PAGE]
+            for position, item in enumerate(visible_items):
                 index = page_start + position
-                card = QWidget(self._key_grid_host)
-                card_layout = QVBoxLayout(card)
-                card_layout.setContentsMargins(0, 0, 0, 0)
-                card_layout.setSpacing(4)
-                phrase_button = self._make_dynamic_button(
-                    record.text, self._action(f"phrase:select:{index}"), "phraseButton"
+                button = self._make_dynamic_button(
+                    self._list_item_text(item),
+                    self._action(f"list:select:{index}"),
+                    "deleteItemButton" if self._deletion_mode else "phraseButton",
                 )
-                delete_button = self._make_dynamic_button(
-                    "Obriši", self._action(f"phrase:delete:{index}"), "deletePhraseButton"
-                )
-                phrase_button.setMinimumHeight(PHRASE_BUTTON_MIN_HEIGHT)
-                delete_button.setMinimumHeight(40)
-                delete_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-                card_layout.addWidget(phrase_button, 1)
-                card_layout.addWidget(delete_button)
-                self._key_grid.addWidget(card, position // 2, position % 2)
+                button.setMinimumHeight(PHRASE_BUTTON_MIN_HEIGHT)
+                self._key_grid.addWidget(button, position // 2, position % 2)
             self._set_status(
-                f"Fraze, stranica {self._phrase_page + 1} od {self._phrase_page_count()}."
+                "Odaberite stavku za brisanje."
+                if self._deletion_mode
+                else "Odaberite stavku ili dodajte novu."
             )
 
         self._update_view_controls()
         self._context_changed()
+
+    def _list_items(self) -> list[CategoryRecord] | list[str] | list[PhraseRecord]:
+        if self._view_mode == "categories":
+            return self._library.categories
+        if self._view_mode == "answers":
+            category = self._active_category()
+            return category.answers if category is not None else []
+        if self._view_mode == "phrases":
+            return self._library.phrases
+        return []
+
+    def _list_title(self) -> str:
+        if self._view_mode == "phrases":
+            return "Moje fraze"
+        category = self._active_category()
+        return category.name if self._view_mode == "answers" and category else "Kategorije"
+
+    def _list_item_text(self, item: CategoryRecord | PhraseRecord | str) -> str:
+        if isinstance(item, CategoryRecord):
+            suffix = "Obriši" if self._deletion_mode else f"Odgovori: {len(item.answers)}"
+            return f"{item.name}\n{suffix}"
+        text = item.text if isinstance(item, PhraseRecord) else item
+        return f"{text}\nObriši" if self._deletion_mode else text
+
+    def _active_category(self) -> CategoryRecord | None:
+        if self._category_index is None:
+            return None
+        if self._category_index < 0 or self._category_index >= len(self._library.categories):
+            return None
+        return self._library.categories[self._category_index]
 
     def _populate_letter_dialog(self, group_index: int) -> None:
         self._clear_letter_dialog()
@@ -736,16 +793,51 @@ class SpeechWindow(QWidget):
 
     def _open_clear_dialog(self) -> None:
         if not self._input.text():
-            self._set_status("Poruka je već prazna.")
+            self._set_status("Tekst je već prazan.")
             return
-        if self._view_mode == "phrase_editor":
-            self._confirm_copy.setText(
-                "Obrisat će se samo nova fraza. Vaša poruka za razgovor ostaje sačuvana."
-            )
-        else:
-            self._confirm_copy.setText("Cijela poruka bit će obrisana.")
-        self._dialog_actions = {self._action("clear:cancel"), self._action("clear:confirm")}
+        copy_text = (
+            "Obrisat će se samo novi unos. Vaša poruka za razgovor ostaje sačuvana."
+            if self._editor is not None
+            else "Cijela poruka bit će obrisana."
+        )
+        self._open_confirmation(
+            "Obrisati sav tekst?",
+            copy_text,
+            "Obriši tekst",
+            self._clear_input,
+        )
+
+    def _open_confirmation(
+        self,
+        title: str,
+        copy_text: str,
+        confirm_label: str,
+        action: Callable[[], None],
+    ) -> None:
+        self._confirm_title.setText(title)
+        self._confirm_copy.setText(copy_text)
+        self._confirm_button.setText(confirm_label)
+        self._confirm_action = action
+        self._dialog_actions = {
+            self._action("confirm:cancel"),
+            self._action("confirm:accept"),
+        }
         self._open_dialog(self._confirm_dialog, 330)
+
+    def _cancel_confirmation(self) -> None:
+        self._confirm_action = None
+        self._close_dialog()
+
+    def _accept_confirmation(self) -> None:
+        action = self._confirm_action
+        self._confirm_action = None
+        self._close_dialog()
+        if action is not None:
+            action()
+
+    def _clear_input(self) -> None:
+        self._input.clear()
+        self._set_status("Tekst je obrisan.")
 
     def _open_dialog(self, dialog: QDialog, height: int) -> None:
         self._context_changed()
@@ -772,6 +864,8 @@ class SpeechWindow(QWidget):
         if dialog is not self._active_dialog:
             return
         self._active_dialog = None
+        if dialog is self._confirm_dialog:
+            self._confirm_action = None
         self._dialog_actions.clear()
         self._modal_backdrop.hide()
         self._context_changed()
@@ -838,7 +932,9 @@ class SpeechWindow(QWidget):
         checkable: bool = False,
     ) -> QPushButton:
         button_type = (
-            _WrappedButton if object_name in ("groupButton", "phraseButton") else QPushButton
+            _WrappedButton
+            if object_name in ("groupButton", "phraseButton", "deleteItemButton")
+            else QPushButton
         )
         button = button_type(text, self if parent is None else parent)
         button.setObjectName(object_name)
@@ -881,34 +977,61 @@ class SpeechWindow(QWidget):
         self.interaction_context_changed.emit()
 
     def _update_view_controls(self) -> None:
+        editor_mode = self._editor is not None
+        list_mode = self._is_list_mode()
+        category_mode = self._view_mode in ("categories", "answers")
         phrase_mode = self._view_mode == "phrases"
-        editor_mode = self._view_mode == "phrase_editor"
-        category_mode = self._view_mode == "categories"
         self._categories_button.setChecked(category_mode)
         self._categories_button.setText("Tastatura" if category_mode else "Kategorije")
-        self._phrases_button.setChecked(phrase_mode or editor_mode)
-        self._phrases_button.setText("Tastatura" if phrase_mode or editor_mode else "Fraze")
+        self._phrases_button.setChecked(phrase_mode)
+        self._phrases_button.setText("Tastatura" if phrase_mode else "Fraze")
         self._categories_button.setEnabled(not editor_mode)
+        self._phrases_button.setEnabled(not editor_mode)
         self._play_button.setEnabled(not editor_mode)
-        self._previous_phrase_button.setVisible(phrase_mode and self._has_previous_phrase_page())
-        self._next_phrase_button.setVisible(phrase_mode and self._has_next_phrase_page())
-        self._page_label.setVisible(phrase_mode)
+        self._back_button.setVisible(self._view_mode == "answers" and not editor_mode)
+        self._add_item_button.setVisible(list_mode)
+        if self._view_mode == "phrases":
+            self._add_item_button.setText("Dodaj frazu")
+        elif self._view_mode == "answers":
+            self._add_item_button.setText("Dodaj odgovor")
+        else:
+            self._add_item_button.setText("Dodaj kategoriju")
+        self._delete_mode_button.setVisible(list_mode)
+        self._delete_mode_button.setChecked(self._deletion_mode)
+        self._delete_mode_button.setText("Gotovo" if self._deletion_mode else "Obriši")
+        self._delete_mode_button.setEnabled(bool(self._list_items()) or self._deletion_mode)
+        self._save_item_button.setVisible(editor_mode)
+        self._cancel_editor_button.setVisible(editor_mode)
+        self._previous_page_button.setVisible(list_mode)
+        self._previous_page_button.setEnabled(self._list_page > 0)
+        self._next_page_button.setVisible(list_mode)
+        self._next_page_button.setEnabled(self._list_page < self._list_page_count() - 1)
+        self._page_label.setVisible(list_mode)
         self._page_label.setText(
-            f"{self._phrase_page + 1}/{self._phrase_page_count()}" if phrase_mode else ""
+            f"{self._list_page + 1} / {self._list_page_count()}" if list_mode else ""
         )
-        self._new_phrase_button.setVisible(phrase_mode)
-        self._save_phrase_button.setVisible(editor_mode)
-        self._cancel_phrase_button.setVisible(editor_mode)
-        self._message_label.setText("Nova fraza" if editor_mode else "Vaša poruka")
+        self._message_label.setText(self._editor_title() if editor_mode else "Vaša poruka")
         self._input.setPlaceholderText(
             "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
         )
-        if self._view_mode in ("categories", "phrases"):
+        if list_mode:
             self._keyboard_toggle_button.setText("Tastatura")
         elif self._symbols_mode:
             self._keyboard_toggle_button.setText("Grupe slova")
         else:
             self._keyboard_toggle_button.setText("Brojevi i znakovi")
+
+    def _is_list_mode(self) -> bool:
+        return self._view_mode in ("categories", "answers", "phrases")
+
+    def _editor_title(self) -> str:
+        if self._editor is None:
+            return "Vaša poruka"
+        return {
+            "category": "Nova kategorija",
+            "answer": "Novi odgovor",
+            "phrase": "Nova fraza",
+        }[self._editor.kind]
 
     def _trigger_action(self, action: str) -> None:
         if self._active_dialog is not None and action not in self._dialog_actions:
@@ -922,12 +1045,10 @@ class SpeechWindow(QWidget):
             self.close()
         elif command == "clear":
             self._open_clear_dialog()
-        elif command == "clear:cancel":
-            self._close_dialog()
-        elif command == "clear:confirm":
-            self._input.clear()
-            self._close_dialog()
-            self._set_status("Tekst je obrisan.")
+        elif command == "confirm:cancel":
+            self._cancel_confirmation()
+        elif command == "confirm:accept":
+            self._accept_confirmation()
         elif command == "play":
             self._play()
         elif command == "categories":
@@ -952,139 +1073,297 @@ class SpeechWindow(QWidget):
             self._close_dialog()
         elif command.startswith("symbol:"):
             self._append_text(SYMBOLS[int(command.split(":", 1)[1])])
-        elif command == "phrase:new":
-            self._start_phrase_editor()
-        elif command == "phrase:save":
-            self._save_phrase_from_editor()
-        elif command == "phrase:cancel":
-            self._cancel_phrase_editor()
-        elif command == "phrase:page:previous":
-            self._change_phrase_page(-1)
-        elif command == "phrase:page:next":
-            self._change_phrase_page(1)
-        elif command.startswith("phrase:select:"):
-            self._select_phrase(int(command.rsplit(":", 1)[1]))
-        elif command.startswith("phrase:delete:"):
-            self._delete_phrase(int(command.rsplit(":", 1)[1]))
+        elif command == "list:add":
+            self._start_editor()
+        elif command == "editor:save":
+            self._save_editor()
+        elif command == "editor:cancel":
+            self._cancel_editor()
+        elif command == "list:back":
+            self._show_categories_from_answers()
+        elif command == "list:delete-mode":
+            self._toggle_deletion_mode()
+        elif command == "list:page:previous":
+            self._change_list_page(-1)
+        elif command == "list:page:next":
+            self._change_list_page(1)
+        elif command.startswith("list:select:"):
+            self._select_list_item(int(command.rsplit(":", 1)[1]))
 
     def _toggle_categories(self) -> None:
-        if self._view_mode == "categories":
-            self._show_group_level()
+        if self._view_mode in ("categories", "answers"):
+            self._show_keyboard_from_list()
         else:
-            self._restore_input_if_editing_phrase()
-            self._show_category_level()
+            self._view_mode = "categories"
+            self._category_index = None
+            self._list_page = 0
+            self._deletion_mode = False
+            self._show_list_level()
 
     def _toggle_phrases(self) -> None:
         if self._view_mode == "phrases":
-            self._show_group_level()
-        elif self._view_mode == "phrase_editor":
-            self._restore_input_if_editing_phrase()
-            self._view_mode = "keyboard"
-            self._show_group_level()
+            self._show_keyboard_from_list()
         else:
-            self._show_phrase_level()
+            self._view_mode = "phrases"
+            self._category_index = None
+            self._list_page = 0
+            self._deletion_mode = False
+            self._show_list_level()
 
     def _toggle_keyboard_view(self) -> None:
-        if self._view_mode in ("categories", "phrases") or self._symbols_mode:
+        if self._is_list_mode():
+            self._show_keyboard_from_list()
+        elif self._symbols_mode:
             self._show_group_level()
         else:
             self._show_symbols_level()
 
-    def _start_phrase_editor(self) -> None:
-        self._speech_input_text = self._input.text()
+    def _show_keyboard_from_list(self) -> None:
+        self._view_mode = "keyboard"
+        self._category_index = None
+        self._list_page = 0
+        self._deletion_mode = False
+        self._show_group_level()
+
+    def _show_categories_from_answers(self) -> None:
+        if self._view_mode != "answers":
+            return
+        self._view_mode = "categories"
+        self._category_index = None
+        self._list_page = 0
+        self._deletion_mode = False
+        self._show_list_level()
+
+    def _start_editor(self) -> None:
+        if not self._is_list_mode():
+            return
+        kind: EditorKind
+        if self._view_mode == "phrases":
+            kind = "phrase"
+        elif self._view_mode == "answers":
+            kind = "answer"
+        else:
+            kind = "category"
+        self._editor = EditorContext(
+            kind=kind,
+            category_index=self._category_index,
+            page=self._list_page,
+            message=self._input.text(),
+        )
         self._input.clear()
-        self._view_mode = "phrase_editor"
+        self._view_mode = "editor"
+        self._deletion_mode = False
         self._symbols_mode = False
         self._show_group_level()
-        self._view_title.setText("Dodaj novu frazu")
+        self._view_title.setText(self._editor_title())
         self._update_view_controls()
-        self._set_status("Sastavite novu frazu i odaberite Sačuvaj.")
+        self._set_status("Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.")
 
-    def _save_phrase_from_editor(self) -> None:
-        phrase = " ".join(self._input.text().split())
-        self._input.setText(self._speech_input_text)
-        self._view_mode = "phrases"
-
-        if not phrase:
-            self._show_phrase_level()
-            self._set_status("Fraza je prazna.")
+    def _save_editor(self) -> None:
+        if self._editor is None:
             return
-        if not self._phrase_exists(phrase):
-            self._phrases.append(PhraseRecord(text=phrase))
-            self._sort_phrases_by_usage()
-            self._phrase_page = self._page_for_phrase(phrase)
-            _save_phrases(self._phrases)
-            status = "Fraza je sačuvana."
+        text = clean_text(self._input.text())
+        if not text:
+            self._set_status("Prvo unesite tekst.")
+            return
+        destination = self._editor_destination(self._library)
+        if destination is None:
+            self._set_status("Odredišna lista više nije dostupna.")
+            return
+        destination_texts = []
+        for item in destination:
+            if isinstance(item, PhraseRecord):
+                destination_texts.append(item.text)
+            elif isinstance(item, CategoryRecord):
+                destination_texts.append(item.name)
+            else:
+                destination_texts.append(item)
+        if entry_exists(destination_texts, text):
+            self._set_status(
+                "Ova stavka već postoji. Unesite drugi tekst ili odaberite Odustani."
+            )
+            return
+
+        editor = self._editor
+        candidate = copy.deepcopy(self._library)
+        candidate_destination = self._editor_destination(candidate)
+        if candidate_destination is None:
+            self._set_status("Odredišna lista više nije dostupna.")
+            return
+        if editor.kind == "category":
+            candidate_destination.append(CategoryRecord(name=text))
+        elif editor.kind == "phrase":
+            candidate_destination.append(PhraseRecord(text=text))
+            candidate.phrases = sorted_phrases(candidate.phrases)
         else:
-            status = "Fraza već postoji."
-        self._show_phrase_level()
-        self._set_status(status)
+            candidate_destination.append(text)
 
-    def _cancel_phrase_editor(self) -> None:
-        self._restore_input_if_editing_phrase()
-        self._view_mode = "phrases"
-        self._show_phrase_level()
-        self._set_status("Dodavanje fraze je otkazano.")
-
-    def _restore_input_if_editing_phrase(self) -> None:
-        if self._view_mode == "phrase_editor":
-            self._input.setText(self._speech_input_text)
-
-    def _select_phrase(self, index: int) -> None:
-        if index < 0 or index >= len(self._phrases):
+        if not self._library_store.save(candidate):
+            self._set_status("Spremanje nije uspjelo. Novi unos nije sačuvan.")
             return
-        record = self._phrases[index]
-        self._append_phrase_to_input(record.text)
-        record.uses += 1
-        self._sort_phrases_by_usage()
-        self._phrase_page = self._page_for_phrase(record.text)
-        _save_phrases(self._phrases)
-        self._show_phrase_level()
+
+        self._library = candidate
+        self._input.setText(editor.message)
+        self._view_mode = _list_mode(editor.kind)
+        self._category_index = editor.category_index
+        self._editor = None
+        self._list_page = self._page_for_saved_item(editor.kind, text)
+        self._show_list_level()
+        self._set_status("Sačuvano. Vaša poruka je vraćena.")
+
+    def _cancel_editor(self) -> None:
+        if self._editor is None:
+            return
+        editor = self._editor
+        self._input.setText(editor.message)
+        self._view_mode = _list_mode(editor.kind)
+        self._category_index = editor.category_index
+        self._list_page = editor.page
+        self._editor = None
+        self._show_list_level()
+        self._set_status("Dodavanje je otkazano. Vaša poruka je vraćena.")
+
+    def _restore_message_if_editing(self) -> None:
+        if self._editor is not None:
+            self._input.setText(self._editor.message)
+
+    def _editor_destination(
+        self, library: SpeechLibrary
+    ) -> list[CategoryRecord] | list[str] | list[PhraseRecord] | None:
+        if self._editor is None:
+            return None
+        if self._editor.kind == "category":
+            return library.categories
+        if self._editor.kind == "phrase":
+            return library.phrases
+        category_index = self._editor.category_index
+        if (
+            category_index is None
+            or category_index < 0
+            or category_index >= len(library.categories)
+        ):
+            return None
+        return library.categories[category_index].answers
+
+    def _page_for_saved_item(self, kind: str, text: str) -> int:
+        if kind == "category":
+            values = [category.name for category in self._library.categories]
+        elif kind == "phrase":
+            values = [phrase.text for phrase in self._library.phrases]
+        else:
+            category = self._active_category()
+            values = category.answers if category is not None else []
+        normalized = text.casefold()
+        for index, value in enumerate(values):
+            if value.casefold() == normalized:
+                return index // ITEMS_PER_PAGE
+        return 0
+
+    def _select_list_item(self, index: int) -> None:
+        items = self._list_items()
+        if index < 0 or index >= len(items):
+            return
+        if self._deletion_mode:
+            self._confirm_item_deletion(index)
+            return
+        item = items[index]
+        if self._view_mode == "categories" and isinstance(item, CategoryRecord):
+            self._category_index = index
+            self._view_mode = "answers"
+            self._list_page = 0
+            self._show_list_level()
+            return
+        if self._view_mode == "answers" and isinstance(item, str):
+            self._append_phrase_to_input(item)
+            self._set_status("Dodano u poruku. Odaberite Izgovori za čitanje.")
+            return
+        if self._view_mode == "phrases" and isinstance(item, PhraseRecord):
+            self._select_phrase(item)
+
+    def _select_phrase(self, phrase: PhraseRecord) -> None:
+        self._append_phrase_to_input(phrase.text)
+        candidate = copy.deepcopy(self._library)
+        selected = next(
+            (item for item in candidate.phrases if item.text.casefold() == phrase.text.casefold()),
+            None,
+        )
+        if selected is None:
+            return
+        selected.uses += 1
+        candidate.phrases = sorted_phrases(candidate.phrases)
+        if not self._library_store.save(candidate):
+            self._set_status("Dodano u poruku, ali broj korištenja nije sačuvan.")
+            return
+        self._library = candidate
+        self._list_page = self._page_for_saved_item("phrase", phrase.text)
+        self._show_list_level()
         self._set_status("Fraza je dodana u poruku.")
 
-    def _delete_phrase(self, index: int) -> None:
-        if index < 0 or index >= len(self._phrases):
+    def _toggle_deletion_mode(self) -> None:
+        if not self._is_list_mode():
             return
-        removed = self._phrases.pop(index)
-        _save_phrases(self._phrases)
-        self._clamp_phrase_page()
-        logger.info("Deleted speech phrase: %s", removed.text)
-        self._show_phrase_level()
-        self._set_status("Fraza je obrisana.")
+        self._deletion_mode = not self._deletion_mode
+        self._show_list_level()
 
-    def _change_phrase_page(self, delta: int) -> None:
-        old_page = self._phrase_page
-        self._phrase_page = max(0, min(self._phrase_page_count() - 1, self._phrase_page + delta))
-        if self._phrase_page != old_page:
-            self._show_phrase_level()
+    def _confirm_item_deletion(self, index: int) -> None:
+        items = self._list_items()
+        if index < 0 or index >= len(items):
+            return
+        item = items[index]
+        if isinstance(item, CategoryRecord):
+            copy_text = f'Kategorija "{item.name}" i svi njeni odgovori bit će obrisani.'
+        else:
+            text = item.text if isinstance(item, PhraseRecord) else item
+            copy_text = f'"{text}" će biti obrisano iz liste.'
+        view_mode = self._view_mode
+        category_index = self._category_index
+        self._open_confirmation(
+            "Obrisati ovu stavku?",
+            copy_text,
+            "Obriši",
+            lambda: self._delete_list_item(view_mode, category_index, index),
+        )
 
-    def _visible_phrases(self) -> list[PhraseRecord]:
-        start = self._phrase_page * PHRASES_PER_PAGE
-        return self._phrases[start : start + PHRASES_PER_PAGE]
+    def _delete_list_item(
+        self,
+        view_mode: str,
+        category_index: int | None,
+        index: int,
+    ) -> None:
+        candidate = copy.deepcopy(self._library)
+        if view_mode == "categories":
+            items: list[CategoryRecord] | list[str] | list[PhraseRecord] = candidate.categories
+        elif view_mode == "phrases":
+            items = candidate.phrases
+        elif (
+            category_index is not None
+            and 0 <= category_index < len(candidate.categories)
+        ):
+            items = candidate.categories[category_index].answers
+        else:
+            return
+        if index < 0 or index >= len(items):
+            return
+        del items[index]
+        if not self._library_store.save(candidate):
+            self._set_status("Brisanje nije sačuvano. Stavka nije obrisana.")
+            return
+        self._library = candidate
+        self._clamp_list_page()
+        self._show_list_level()
+        self._set_status("Stavka je obrisana.")
 
-    def _phrase_page_count(self) -> int:
-        return max(1, math.ceil(len(self._phrases) / PHRASES_PER_PAGE))
+    def _change_list_page(self, delta: int) -> None:
+        old_page = self._list_page
+        self._list_page = max(0, min(self._list_page_count() - 1, self._list_page + delta))
+        if self._list_page != old_page:
+            self._show_list_level()
 
-    def _clamp_phrase_page(self) -> None:
-        self._phrase_page = max(0, min(self._phrase_page, self._phrase_page_count() - 1))
+    def _list_page_count(self) -> int:
+        return max(1, math.ceil(len(self._list_items()) / ITEMS_PER_PAGE))
 
-    def _has_previous_phrase_page(self) -> bool:
-        return self._phrase_page > 0
-
-    def _has_next_phrase_page(self) -> bool:
-        return self._phrase_page < self._phrase_page_count() - 1
-
-    def _phrase_exists(self, phrase: str) -> bool:
-        return any(record.text == phrase for record in self._phrases)
-
-    def _sort_phrases_by_usage(self) -> None:
-        self._phrases.sort(key=lambda record: (-record.uses, record.text.casefold()))
-
-    def _page_for_phrase(self, phrase: str) -> int:
-        for index, record in enumerate(self._phrases):
-            if record.text == phrase:
-                return index // PHRASES_PER_PAGE
-        return 0
+    def _clamp_list_page(self) -> None:
+        self._list_page = max(0, min(self._list_page, self._list_page_count() - 1))
 
     def _append_text(self, value: str) -> None:
         self._input.setText(f"{self._input.text()}{value}")
@@ -1109,8 +1388,7 @@ class SpeechWindow(QWidget):
         self._input.setText(text[:-1])
 
     def _play(self) -> None:
-        # Return in the input field can invoke this even when Izgovori is disabled.
-        if self._view_mode == "phrase_editor" or self._active_dialog is not None:
+        if self._editor is not None or self._active_dialog is not None:
             return
         text = self._input.text().strip()
         if not text:
@@ -1158,75 +1436,13 @@ def _group_letters(letters: list[str], letters_per_group: int) -> list[list[str]
     ]
 
 
-def _phrases_path() -> Path:
+def _list_mode(kind: EditorKind) -> str:
+    return {
+        "category": "categories",
+        "answer": "answers",
+        "phrase": "phrases",
+    }[kind]
+
+
+def _speech_library_path() -> Path:
     return get_project_root() / "data" / PHRASES_FILE
-
-
-def _load_phrases() -> list[PhraseRecord]:
-    path = _phrases_path()
-    if not path.exists():
-        return []
-
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.exception("Could not load speech phrases from %s.", path)
-        return []
-
-    if not isinstance(data, list):
-        logger.warning("Speech phrases file did not contain a list: %s", path)
-        return []
-
-    phrases_by_text: dict[str, PhraseRecord] = {}
-    for item in data:
-        phrase, uses = _parse_phrase_record(item)
-        if not phrase:
-            continue
-        existing = phrases_by_text.get(phrase)
-        if existing is None:
-            phrases_by_text[phrase] = PhraseRecord(text=phrase, uses=uses)
-        else:
-            existing.uses = max(existing.uses, uses)
-    return _sorted_phrase_records(list(phrases_by_text.values()))
-
-
-def _save_phrases(phrases: list[PhraseRecord]) -> None:
-    path = _phrases_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(
-            json.dumps(
-                [
-                    {"text": record.text, "uses": max(0, int(record.uses))}
-                    for record in _sorted_phrase_records(phrases)
-                ],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        logger.info("Saved %s speech phrases to %s.", len(phrases), path)
-    except Exception:
-        logger.exception("Could not save speech phrases to %s.", path)
-
-
-def _parse_phrase_record(item: object) -> tuple[str, int]:
-    if isinstance(item, dict):
-        text = item.get("text", item.get("phrase", ""))
-        uses = _safe_int(item.get("uses", item.get("count", 0)))
-    else:
-        text = item
-        uses = 0
-    phrase = " ".join(str(text).split())
-    return phrase, max(0, uses)
-
-
-def _safe_int(value: object) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _sorted_phrase_records(phrases: list[PhraseRecord]) -> list[PhraseRecord]:
-    return sorted(phrases, key=lambda record: (-record.uses, record.text.casefold()))

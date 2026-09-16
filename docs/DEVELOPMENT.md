@@ -108,7 +108,7 @@ The command renders:
 
 - Hotbar
 - General, gaze, and speech Settings tabs
-- Speech keyboard and saved phrases
+- Speech keyboard, categories, answers, saved phrases, and shared editor
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
 
