@@ -70,6 +70,17 @@ Development checkout:
 The real application starts Tobii discovery and enables Windows input. Use the UI
 preview command when you only want to inspect layout and styling.
 
+To exercise gaze feedback and dwell interactions without Tobii hardware, use the
+development-only mouse simulator:
+
+```powershell
+.\dev.ps1 simulate
+```
+
+Moving the mouse supplies gaze coordinates and simulates both eyes as valid. The
+simulator does not move the pointer automatically because the pointer is its gaze
+source, but armed dwell click actions still use the normal Windows input path.
+
 ## Local development
 
 The repository uses one PowerShell entry point for setup and verification:

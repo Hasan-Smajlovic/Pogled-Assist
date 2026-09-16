@@ -26,6 +26,7 @@ components.
 | Command | Tobii hardware | What it verifies |
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
+| `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
 | `.\dev.ps1 ui` | Not required | Rendering of 12 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -76,6 +77,24 @@ Pixel baselines are intentionally not enforced in CI. Qt rendering changes with
 Windows fonts, scaling, and GPU backends, which would make strict image diffs
 noisy. CI confirms that every surface renders. A human reviews the generated
 gallery for clipping, overlap, spacing, contrast, and consistency.
+
+## Mouse gaze simulation
+
+Run the interactive simulator when Tobii hardware is unavailable:
+
+```powershell
+.\dev.ps1 simulate
+```
+
+The primary-screen mouse position is emitted through the same normalized gaze
+signal used by the Tobii providers. Both eyes remain valid, so holding the cursor
+over a gaze-selectable control shows the gaze bubble and dwell progress before
+activating it. Pointer movement is disabled in this mode because the mouse is the
+gaze source. If a click mode is armed, completed dwell actions still perform the
+real Windows click.
+
+This mode does not validate Tobii discovery, calibration, eye-loss behavior,
+sample quality, latency, or hardware accuracy. Report those checks as not run.
 
 ## UI review
 

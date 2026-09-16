@@ -80,6 +80,26 @@ def test_eye_gate_blocks_gaze_and_clears_active_interactions():
     assert controller._both_eyes_open is False
 
 
+def test_simulation_can_disable_pointer_movement_without_blocking_gaze():
+    controller = GazeMouseController(
+        toolbar_action_at=lambda _point: None,
+        toolbar_action_center=lambda _action, _point: None,
+        toolbar_contains=lambda _point: False,
+        pointer_movement_enabled=False,
+    )
+    controller._logical_screen_rect = (10, 20, 101, 201)
+    controller._physical_screen_rect = (100, 200, 201, 401)
+    controller._input = FakeInput()
+    positions = []
+    controller.gaze_position_changed.connect(lambda point: positions.append(QPoint(point)))
+
+    controller.handle_eye_status(True, True)
+    controller.handle_gaze(0.5, 0.5, 1)
+
+    assert positions == [QPoint(60, 120)]
+    assert controller._input.moves == []
+
+
 def test_click_modes_call_native_input_and_reset():
     controller = make_controller()
     fired = []

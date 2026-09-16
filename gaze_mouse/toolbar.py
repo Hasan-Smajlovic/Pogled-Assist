@@ -38,6 +38,7 @@ from .mouse_controller import (
     SPEECH,
     GazeMouseController,
 )
+from .mouse_gaze_provider import MouseGazeProvider
 from .quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .quick_action_zoom import QuickActionZoomWindow
 from .settings_store import load_app_settings, save_app_settings
@@ -69,7 +70,7 @@ class HotbarWindow(QWidget):
 
     BAR_HEIGHT = 76
 
-    def __init__(self) -> None:
+    def __init__(self, *, simulate_gaze: bool = False) -> None:
         super().__init__()
         logger.info("Creating hotbar window.")
         self.setWindowTitle("Tobii Gaze Mouse")
@@ -81,7 +82,7 @@ class HotbarWindow(QWidget):
         self._started = False
         self._buttons: dict[str, QToolButton] = {}
         self._appbar = WindowsAppBar()
-        self._gaze = TobiiGazeProvider(self)
+        self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
         self._speech = SpeechService()
         self._speech.update_settings(self._initial_speech_settings)
@@ -104,6 +105,7 @@ class HotbarWindow(QWidget):
             self.action_center_at_global_point,
             self.contains_global_point,
             self,
+            pointer_movement_enabled=not simulate_gaze,
         )
         self._mouse.update_settings(self._initial_gaze_settings)
         self._gaze_bubble = GazeBubbleWindow()

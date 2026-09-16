@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("help", "setup", "run", "ui", "test", "test-ui", "coverage", "lint", "format", "check", "package")]
+    [ValidateSet("help", "setup", "run", "simulate", "ui", "test", "test-ui", "coverage", "lint", "format", "check", "package")]
     [string]$Action = "help",
     [switch]$Open
 )
@@ -117,6 +117,7 @@ Tobii Gaze Mouse development commands
 
   .\dev.ps1 setup       Create .venv and install development/build tools
   .\dev.ps1 run         Start the real application from source
+  .\dev.ps1 simulate    Start with mouse-driven gaze and no Tobii discovery
   .\dev.ps1 ui          Render deterministic UI screenshots under dist\ui-preview
   .\dev.ps1 ui -Open    Render UI screenshots and open the HTML gallery
   .\dev.ps1 test        Run the complete hardware-independent test suite
@@ -138,6 +139,12 @@ try {
         "run" {
             $python = Get-DevPython
             Invoke-ExternalCommand -FilePath $python -ArgumentList @("-B", "run_gaze_mouse.py")
+        }
+        "simulate" {
+            $python = Get-DevPython
+            Invoke-ExternalCommand -FilePath $python -ArgumentList @(
+                "-B", "run_gaze_mouse.py", "--simulate-gaze"
+            )
         }
         "ui" {
             $python = Get-DevPython

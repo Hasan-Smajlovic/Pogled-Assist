@@ -14,14 +14,21 @@ from .tobii_stream_engine import APP_ROOT_ENV
 
 PACKAGE_SMOKE_TEST_ARG = "--package-smoke-test"
 PACKAGE_SMOKE_REPORT_ENV = "TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT"
+MOUSE_GAZE_SIMULATION_ARG = "--simulate-gaze"
 
 
 def main() -> int:
-    if getattr(sys, "frozen", False):
+    frozen = bool(getattr(sys, "frozen", False))
+    if frozen:
         os.environ.setdefault(APP_ROOT_ENV, str(Path(sys.executable).resolve().parent))
 
     if PACKAGE_SMOKE_TEST_ARG in sys.argv[1:]:
         return package_smoke_test()
+
+    simulate_gaze = MOUSE_GAZE_SIMULATION_ARG in sys.argv[1:]
+    if simulate_gaze and frozen:
+        print("Mouse gaze simulation is available only from a development checkout.")
+        return 2
 
     setup_application_logging()
     enable_windows_dpi_awareness()
@@ -35,7 +42,10 @@ def main() -> int:
 
     logger = logging.getLogger(__name__)
 
-    app = QApplication(sys.argv)
+    application_arguments = [
+        argument for argument in sys.argv if argument != MOUSE_GAZE_SIMULATION_ARG
+    ]
+    app = QApplication(application_arguments)
     app.setApplicationName("Tobii Gaze Mouse")
     app.setOrganizationName("PieLabs")
     icon = load_app_icon()
@@ -45,7 +55,7 @@ def main() -> int:
     logger.info("Qt application created.")
     logger.info("Application icon: %s", app_icon_path() or "missing")
 
-    window = HotbarWindow()
+    window = HotbarWindow(simulate_gaze=simulate_gaze)
     if not icon.isNull():
         window.setWindowIcon(icon)
     window.show()
