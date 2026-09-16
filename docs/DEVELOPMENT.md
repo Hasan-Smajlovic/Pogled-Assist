@@ -1,7 +1,6 @@
 # Development guide
 
-This project runs on Windows and Python 3.10. Automated development checks do not
-need a Tobii tracker, eSpeak NG, or the online speech service.
+This project runs on Windows and Python 3.10.
 
 ## First setup
 
@@ -19,24 +18,34 @@ system-wide Python environment.
 
 ## Command reference
 
-| Command | What it verifies |
-| --- | --- |
-| `.\dev.ps1 run` | The real source application, tracker discovery, and Windows input |
-| `.\dev.ps1 ui` | Rendering of 12 main UI surfaces without external services |
-| `.\dev.ps1 test` | Unit, integration, and UI workflow tests |
-| `.\dev.ps1 test-ui` | UI workflow and rendering tests selected by the `e2e` marker |
-| `.\dev.ps1 coverage` | Test suite, 60 percent floor, and `dist\coverage-html` report |
-| `.\dev.ps1 lint` | Actions, Ruff, Python compilation, and PowerShell checks |
-| `.\dev.ps1 format` | Ruff safe fixes, import ordering, and source formatting |
-| `.\dev.ps1 check` | Lint, tests, coverage, package build, and frozen executable smoke test |
-| `.\dev.ps1 package` | Clean PyInstaller build and frozen executable smoke test |
+Run these commands in Windows PowerShell. The automated checks do not require a
+Tobii tracker, calibrated display, eSpeak NG, or the online speech service.
+Only the real gaze and external speech checks listed below require those
+components.
+
+| Command | Tobii hardware | What it verifies |
+| --- | --- | --- |
+| `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
+| `.\dev.ps1 ui` | Not required | Rendering of 12 main UI surfaces without external services |
+| `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
+| `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
+| `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
+| `.\dev.ps1 lint` | Not required | Actions, Ruff, Python compilation, and PowerShell checks |
+| `.\dev.ps1 format` | Not required | Ruff safe fixes, import ordering, and source formatting |
+| `.\dev.ps1 check` | Not required | Lint, tests, coverage, package build, and frozen executable smoke test |
+| `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
 
 Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
 categories enforced by the required PR checks.
 
+Documentation-only work still runs `check` to confirm the runtime baseline. Its
+links and commands also need a manual documentation review. If a required device
+check cannot run, record it as not run. Never infer a hardware result from a
+mocked test or a package smoke test.
+
 ## Test strategy
 
-The suite uses four layers:
+The suite uses five layers:
 
 1. Unit tests cover coordinate mapping, dwell state, settings validation, speech
    commands, phrase storage, and Windows helper behavior.
@@ -45,7 +54,9 @@ The suite uses four layers:
    logic.
 3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise
    Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
-4. Manual Tobii checks verify the device runtime, calibration, gaze quality,
+4. Repository tests check required guides and templates, local documentation
+   links, and the minimum sections agents need for issues and pull requests.
+5. Manual Tobii checks verify the device runtime, calibration, gaze quality,
    AppBar behavior, clicks, and speech on the target machine.
 
 Coverage is a regression floor, not a quality score. The initial floor is 60

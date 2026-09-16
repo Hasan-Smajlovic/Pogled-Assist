@@ -1,0 +1,144 @@
+# Architecture
+
+Tobii Gaze Mouse is one Windows desktop process built with Python and PySide6.
+It turns Tobii gaze samples into pointer movement, dwell actions, speech, and
+on-screen controls while keeping all settings and phrases on the local machine.
+
+## Runtime flow
+
+```text
+run_gaze_mouse.py
+  -> gaze_mouse.main
+  -> QApplication
+  -> HotbarWindow
+       -> TobiiGazeProvider
+            -> tobii-research
+            -> direct Tobii Stream Engine fallback
+            -> 32-bit Stream Engine bridge fallback
+       -> GazeMouseController
+            -> WindowsInputController
+       -> SpeechService
+       -> Settings, Speech, Keyboard, and Controller windows
+       -> gaze bubble, interaction overlay, precision zoom, and Quick actions
+       -> WindowsAppBar
+```
+
+`gaze_mouse/main.py` enables Windows DPI awareness, configures logging, creates
+the Qt application, and shows `HotbarWindow`. The hotbar is the composition root:
+it creates the runtime services, connects their Qt signals, starts them after the
+window appears, and stops child windows, Tobii backends, speech, overlays, and the
+AppBar reservation during shutdown.
+
+## Component map
+
+| Area | Main files | Responsibility |
+| --- | --- | --- |
+| Entry points | `run_gaze_mouse.py`, `gaze_mouse/main.py` | Source and packaged startup, Qt setup, package smoke test |
+| Runtime composition | `gaze_mouse/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
+| Gaze acquisition | `gaze_mouse/gaze_provider.py`, `gaze_mouse/tobii_stream_engine*.py` | Tracker discovery, backend fallback, sample bounds, retry, x86 bridge |
+| Gaze interaction | `gaze_mouse/mouse_controller.py` | Coordinate mapping, smoothing, dwell state, click and Quick action requests |
+| Windows integration | `gaze_mouse/windows_input.py`, `gaze_mouse/appbar.py`, `gaze_mouse/windows_*.py` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
+| User surfaces | `gaze_mouse/*_window.py`, `gaze_mouse/quick_action_*.py` | Settings, speech, keyboard, controller, radial menu, precision zoom |
+| Feedback | `gaze_mouse/gaze_bubble.py`, `gaze_mouse/interaction_overlay.py`, `gaze_mouse/gaze_feedback.py` | Gaze position and dwell progress shown without taking focus |
+| Speech | `gaze_mouse/speech_service.py`, `gaze_mouse/speech_window.py` | eSpeak NG and Edge playback, text entry, saved phrases |
+| Persistent data | `gaze_mouse/settings_store.py`, `gaze_mouse/logging_setup.py` | Settings, phrase data root, logs, safe defaults |
+| Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, legacy update, package build, install, release |
+| Verification | `dev.ps1`, `tests/`, `.github/workflows/` | Local checks, simulated hardware inputs, UI flows, CI, release checks |
+
+## Gaze and input path
+
+`TobiiGazeProvider` tries the available backends in this order:
+
+1. `tobii-research`
+2. direct Tobii Stream Engine
+3. Tobii Stream Engine through a 32-bit Python bridge
+
+If none starts, the provider reports a retry state and scans again every three
+seconds. Raw samples may arrive faster than the UI can safely process them, so
+the provider keeps the newest sample and emits at a bounded interval. This keeps
+the Qt event loop responsive instead of replaying stale gaze positions.
+
+Each backend also reports left and right eye validity. Gaze movement and dwell
+actions continue only while both eyes are valid. Losing either eye clears pending
+gaze work, cancels active dwell interactions, closes active Quick action layers,
+and leaves the pointer at its last position.
+
+The controller keeps two coordinate spaces separate:
+
+- Qt logical coordinates are used for hit testing buttons and windows.
+- Windows physical coordinates are used for pointer movement and real clicks.
+
+Smoothing affects visible pointer movement. Click targeting uses the current gaze
+target so smoothing does not move the requested click away from the selected
+point.
+
+## UI and service ownership
+
+`HotbarWindow` owns all long-lived services and top-level UI surfaces. It opens
+the full-screen Speech and Settings windows, the right-side Keyboard and
+Controller panels, the radial Quick actions menu, and precision zoom. Keyboard
+and Controller panels are mutually exclusive. Feedback windows remain topmost
+without taking focus from the application the user is controlling.
+
+Settings changes update the live mouse and speech services and are saved
+immediately. Closing the hotbar closes every child surface, stops speech and gaze
+workers, and unregisters the AppBar so Windows restores the full work area.
+
+## Persistent data and logs
+
+The runtime root is the executable directory for a packaged build and the
+repository root during source development. `TOBII_GAZE_MOUSE_LOG_ROOT` can
+override it for controlled launch and test scenarios.
+
+```text
+data/app_settings.json   gaze, interaction, startup, logging, and speech settings
+data/speech_phrases.json saved phrases and their use counts
+logs/latest.txt          current application log when logging is enabled
+```
+
+Missing or malformed settings fall back safely to defaults, with supported
+values clamped to the same ranges as the Settings UI. Installation, update, and
+rollback work must preserve `data/` and `logs/`.
+
+## Packaging and installation
+
+`dev.ps1` is the developer entry point. The PyInstaller specification under
+`packaging/windows/` builds the frozen application and includes the icons and
+bridge files needed at runtime. The release package contains its own installer
+and launcher and installs under `C:\TobiiExec`.
+
+`update_windows.ps1` is the older source-based updater. It still downloads the
+original upstream repository and is not the stable release channel. Its
+replacement with a verified GitHub Release updater is tracked in
+[issue #21](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/issues/21).
+
+## Design reference
+
+[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
+is a self-contained visual and interaction reference used while developing the
+PySide6 speech keyboard. It is not loaded by the application, included by the
+PyInstaller build, or required to install or run Tobii Gaze Mouse.
+
+## Compatibility contract
+
+The current `development` behavior is the baseline for a user who already relies
+on the application. Unless a linked issue explicitly changes a behavior, a
+review-ready change must preserve:
+
+- launch from the installed `C:\TobiiExec` location and from the development
+  entry point;
+- hotbar placement, AppBar work-area reservation, hide and restore behavior;
+- tracker fallback, retry, x86 bridge, both-eye gate, and responsive gaze flow;
+- pointer mapping and left, right, and double-click actions;
+- dwell timing, precision zoom, Quick actions, gaze bubble, and action feedback;
+- Speech, Keyboard, Controller, Settings, calibration, and quit flows;
+- saved settings, saved phrases, logs, and user data during upgrades and
+  rollbacks;
+- clean shutdown of tracker subscriptions, bridge workers, speech processes,
+  overlays, child windows, and AppBar state.
+
+Automated tests use fake gaze, Windows input, speech, and external processes to
+protect these flows without physical hardware. They do not prove real Tobii
+tracking, calibration, Windows work-area behavior, gaze accuracy, or speech
+playback. Record those checks separately and never report them as passed unless
+they ran on the target Windows and Tobii setup.
