@@ -65,7 +65,7 @@ def launch_tobii_guest_calibration() -> str:
     """Open Tobii Core/Experience calibration through the installed Tobii UI."""
 
     if sys.platform != "win32":
-        raise RuntimeError("Tobii calibration launch is only available on Windows.")
+        raise RuntimeError("Tobii kalibracija se može pokrenuti samo na Windowsu.")
 
     launched_methods: list[str] = []
     errors: list[str] = []
@@ -92,11 +92,11 @@ def launch_tobii_guest_calibration() -> str:
 
     if launched_methods:
         logger.info("Tobii calibration launch requested through: %s", launched_methods)
-        return "Tobii calibration launch requested."
+        return "Pokretanje Tobii kalibracije je zatraženo."
 
     raise RuntimeError(
-        "Could not launch Tobii calibration. Tried Tobii UI shortcuts/executables, "
-        f"protocols, and Ctrl+Shift+F10. Details: {'; '.join(errors) or 'no launch target found'}"
+        "Tobii kalibracija se nije mogla pokrenuti. Pokušani su Tobii programi, veze i "
+        "prečica Ctrl+Shift+F10."
     )
 
 

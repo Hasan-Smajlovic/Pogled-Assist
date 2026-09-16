@@ -26,7 +26,11 @@ from PySide6.QtWidgets import (
 )
 
 from .gaze_feedback import set_gaze_feedback
-from .gaze_selection import GazeSelectionTimer
+from .gaze_selection import (
+    MAX_SELECTION_PAUSE_MS,
+    MIN_SELECTION_PAUSE_MS,
+    GazeSelectionTimer,
+)
 from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
@@ -57,7 +61,7 @@ class SettingsWindow(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Postavke")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
         self.setObjectName("settingsRoot")
 
@@ -112,7 +116,8 @@ class SettingsWindow(QWidget):
         update = self._gaze_selection.update(
             widget,
             now_ms,
-            self._gaze_settings.dwell_ms,
+            pause_ms=self._gaze_settings.selection_pause_ms,
+            dwell_ms=self._gaze_settings.dwell_ms,
         )
         if update.progress is None:
             self._set_gaze_target(None)
@@ -121,12 +126,12 @@ class SettingsWindow(QWidget):
 
         if widget is not self._gaze_target:
             self._set_gaze_target(widget)
-            self._set_status(f"Target: {self._gaze_names.get(widget, 'control')}")
+            self._set_status(f"Cilj: {self._gaze_names.get(widget, 'kontrola')}")
         self._emit_interaction_progress(widget, update.progress)
 
         cooled = now_ms - self._last_gaze_action_ms >= self._gaze_settings.click_cooldown_ms
         if update.ready and cooled:
-            name = self._gaze_names.get(widget, "control")
+            name = self._gaze_names.get(widget, "kontrola")
             logger.info("Settings gaze action fired: %s", name)
             self._last_gaze_action_ms = now_ms
             self._gaze_selection.complete()
@@ -335,7 +340,7 @@ class SettingsWindow(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(14)
         self._exit_button = self._make_button(
-            "Exit",
+            "Zatvori",
             self.close,
             icon_name="fa5s.times",
             object_name="dangerButton",
@@ -343,12 +348,12 @@ class SettingsWindow(QWidget):
         )
         top_bar.addWidget(self._exit_button, 0, Qt.AlignLeft)
 
-        title = QLabel("Settings", self)
+        title = QLabel("Postavke", self)
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         top_bar.addWidget(title, 1)
 
-        self._status_label = QLabel("Ready", self)
+        self._status_label = QLabel("Spremno", self)
         self._status_label.setObjectName("statusLabel")
         self._status_label.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
         self._status_label.setMinimumWidth(360)
@@ -367,21 +372,21 @@ class SettingsWindow(QWidget):
         nav_layout.setSpacing(10)
 
         self._general_tab_button = self._make_button(
-            "General settings",
+            "Opće postavke",
             lambda: self._select_tab(0),
             icon_name="fa5s.sliders-h",
             checkable=True,
             minimum_size=QSize(216, 74),
         )
         self._gaze_tab_button = self._make_button(
-            "Gaze settings",
+            "Postavke pogleda",
             lambda: self._select_tab(1),
             icon_name="fa5s.eye",
             checkable=True,
             minimum_size=QSize(216, 74),
         )
         self._speech_tab_button = self._make_button(
-            "Speech settings",
+            "Postavke govora",
             lambda: self._select_tab(2),
             icon_name="fa5s.volume-up",
             checkable=True,
@@ -412,11 +417,11 @@ class SettingsWindow(QWidget):
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(12)
-        title = QLabel("General settings", page)
+        title = QLabel("Opće postavke", page)
         title.setObjectName("sectionTitle")
         header.addWidget(title, 1, Qt.AlignVCenter | Qt.AlignLeft)
         self._quit_button = self._make_button(
-            "Quit app",
+            "Isključi aplikaciju",
             self._request_quit,
             icon_name="fa5s.power-off",
             object_name="dangerButton",
@@ -429,17 +434,17 @@ class SettingsWindow(QWidget):
         actions.setHorizontalSpacing(12)
         actions.setVerticalSpacing(12)
         self._startup_checkbox = self._make_checkbox(
-            "Start with Windows as Administrator",
+            "Pokreni uz Windows kao administrator",
             self._toggle_start_with_windows,
             minimum_size=QSize(520, 66),
         )
         self._logging_checkbox = self._make_checkbox(
-            "Enable logging",
+            "Uključi zapisivanje",
             self._toggle_logging_enabled,
             minimum_size=QSize(520, 66),
         )
         self._launcher_window_checkbox = self._make_checkbox(
-            "Show PowerShell launcher window",
+            "Prikaži PowerShell prozor pri pokretanju",
             self._toggle_show_launcher_window,
             minimum_size=QSize(520, 66),
         )
@@ -459,15 +464,26 @@ class SettingsWindow(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        title = QLabel("Gaze settings", page)
+        title = QLabel("Postavke pogleda", page)
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
+
+        self._selection_pause_value = self._make_value_label(page)
+        layout.addWidget(
+            self._make_adjust_row(
+                "Pauza prije odabira",
+                "Vrijeme čekanja prije nego što se krug napretka počne puniti.",
+                self._selection_pause_value,
+                lambda: self._adjust_selection_pause(-50),
+                lambda: self._adjust_selection_pause(50),
+            )
+        )
 
         self._dwell_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Stare time",
-                "Progress-ring fill time after the fixed 500 ms gaze pause.",
+                "Vrijeme zadržavanja pogleda",
+                "Vrijeme punjenja kruga napretka nakon početne pauze.",
                 self._dwell_value,
                 lambda: self._adjust_dwell_ms(-50),
                 lambda: self._adjust_dwell_ms(50),
@@ -477,8 +493,8 @@ class SettingsWindow(QWidget):
         self._radius_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Stable target radius",
-                "How still the gaze point must stay before a target action fires.",
+                "Radijus stabilnog pogleda",
+                "Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.",
                 self._radius_value,
                 lambda: self._adjust_dwell_radius(-2),
                 lambda: self._adjust_dwell_radius(2),
@@ -488,8 +504,8 @@ class SettingsWindow(QWidget):
         self._cooldown_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Repeat delay",
-                "Delay after one gaze action before another can fire.",
+                "Pauza između radnji",
+                "Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.",
                 self._cooldown_value,
                 lambda: self._adjust_click_cooldown(-50),
                 lambda: self._adjust_click_cooldown(50),
@@ -499,8 +515,8 @@ class SettingsWindow(QWidget):
         self._smoothing_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Pointer smoothing",
-                "Lower values feel steadier. Higher values follow gaze faster.",
+                "Uglađivanje pokazivača",
+                "Niže vrijednosti su mirnije, a više brže prate pogled.",
                 self._smoothing_value,
                 lambda: self._adjust_smoothing(-0.05),
                 lambda: self._adjust_smoothing(0.05),
@@ -511,33 +527,33 @@ class SettingsWindow(QWidget):
         actions.setHorizontalSpacing(12)
         actions.setVerticalSpacing(12)
         self._move_pointer_button = self._make_button(
-            "Move pointer from gaze",
+            "Pomjeraj pokazivač pogledom",
             self._toggle_move_pointer,
             icon_name="fa5s.mouse-pointer",
             checkable=True,
             minimum_size=QSize(230, 64),
         )
         self._gaze_bubble_button = self._make_button(
-            "Show gaze bubble",
+            "Prikaži oznaku pogleda",
             self._toggle_gaze_bubble,
             icon_name="fa5s.bullseye",
             checkable=True,
             minimum_size=QSize(220, 64),
         )
         self._interaction_overlay_button = self._make_button(
-            "Show action overlay",
+            "Prikaži napredak radnje",
             self._toggle_interaction_overlay,
             icon_name="fa5s.circle-notch",
             checkable=True,
             minimum_size=QSize(220, 64),
         )
         self._precision_zoom_checkbox = self._make_checkbox(
-            "Use precision zoom",
+            "Koristi precizno uvećanje",
             self._toggle_precision_zoom,
             minimum_size=QSize(230, 64),
         )
         self._calibration_button = self._make_button(
-            "Start Tobii calibration",
+            "Pokreni Tobii kalibraciju",
             self._request_calibration,
             icon_name="fa5s.crosshairs",
             minimum_size=QSize(230, 64),
@@ -560,15 +576,15 @@ class SettingsWindow(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        title = QLabel("Speech settings", page)
+        title = QLabel("Postavke govora", page)
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
         self._speed_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Speech speed",
-                "Words per minute used by eSpeak NG.",
+                "Brzina govora",
+                "Broj riječi u minuti koji koristi eSpeak NG.",
                 self._speed_value,
                 lambda: self._adjust_speech_speed(-5),
                 lambda: self._adjust_speech_speed(5),
@@ -578,8 +594,8 @@ class SettingsWindow(QWidget):
         self._letters_group_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
-                "Letters per group",
-                "Letter chunk size for speech and keyboard grouping.",
+                "Broj slova u grupi",
+                "Broj slova u svakoj grupi na ekranima za govor i tastaturu.",
                 self._letters_group_value,
                 lambda: self._adjust_letters_per_group(-1),
                 lambda: self._adjust_letters_per_group(1),
@@ -595,10 +611,11 @@ class SettingsWindow(QWidget):
         voice_layout.setVerticalSpacing(6)
         voice_layout.setColumnStretch(0, 1)
 
-        voice_title = QLabel("Voice", voice_row)
+        voice_title = QLabel("Glas", voice_row)
         voice_title.setObjectName("settingTitle")
         voice_hint = QLabel(
-            "Default uses eSpeak NG. Human like uses Microsoft Edge neural voice bs-BA-GoranNeural.",
+            "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge "
+            "bs-BA-GoranNeural.",
             voice_row,
         )
         voice_hint.setObjectName("settingHint")
@@ -610,7 +627,7 @@ class SettingsWindow(QWidget):
         for value, label in VOICE_PRESETS:
             self._voice_combo.addItem(label, value)
         self._voice_combo.currentIndexChanged.connect(self._voice_combo_changed)
-        self._register_gaze(self._voice_combo, self._cycle_voice_preset, "Voice")
+        self._register_gaze(self._voice_combo, self._cycle_voice_preset, "Glas")
 
         voice_layout.addWidget(voice_title, 0, 0)
         voice_layout.addWidget(voice_hint, 1, 0)
@@ -620,7 +637,7 @@ class SettingsWindow(QWidget):
         actions = QHBoxLayout()
         actions.setSpacing(12)
         self._test_speech_button = self._make_button(
-            "Test speech",
+            "Isprobaj govor",
             self._request_speech_test,
             icon_name="fa5s.play",
             minimum_size=QSize(190, 64),
@@ -656,13 +673,13 @@ class SettingsWindow(QWidget):
         hint_label.setWordWrap(True)
 
         minus_button = self._make_button(
-            "Less",
+            "Manje",
             decrease,
             icon_name="fa5s.minus",
             minimum_size=QSize(112, 58),
         )
         plus_button = self._make_button(
-            "More",
+            "Više",
             increase,
             icon_name="fa5s.plus",
             minimum_size=QSize(112, 58),
@@ -760,14 +777,14 @@ class SettingsWindow(QWidget):
         self.interaction_progress_changed.emit(
             self._widget_global_center(widget),
             progress,
-            self._gaze_names.get(widget, "Select"),
+            self._gaze_names.get(widget, "Odaberi"),
         )
 
     def _finish_interaction(self, widget: QWidget) -> None:
         self._interaction_active = False
         self.interaction_finished.emit(
             self._widget_global_center(widget),
-            self._gaze_names.get(widget, "Select"),
+            self._gaze_names.get(widget, "Odaberi"),
         )
 
     def _cancel_interaction(self) -> None:
@@ -788,36 +805,40 @@ class SettingsWindow(QWidget):
         self._gaze_tab_button.setChecked(index == 1)
         self._speech_tab_button.setChecked(index == 2)
         if index == 0:
-            self._set_status("General settings")
+            self._set_status("Opće postavke")
         elif index == 1:
-            self._set_status("Gaze settings")
+            self._set_status("Postavke pogleda")
         elif index == 2:
-            self._set_status("Speech settings")
+            self._set_status("Postavke govora")
 
     def _toggle_move_pointer(self) -> None:
         checked = not self._gaze_settings.move_mouse
         self._gaze_settings = replace(self._gaze_settings, move_mouse=checked)
-        self._emit_gaze_settings("Pointer movement updated.")
+        self._emit_gaze_settings("Pomjeranje pokazivača je ažurirano.")
 
     def _toggle_gaze_bubble(self) -> None:
         checked = not self._gaze_settings.show_gaze_bubble
         self._gaze_settings = replace(self._gaze_settings, show_gaze_bubble=checked)
-        self._emit_gaze_settings("Gaze bubble updated.")
+        self._emit_gaze_settings("Oznaka pogleda je ažurirana.")
 
     def _toggle_interaction_overlay(self) -> None:
         checked = not self._gaze_settings.show_interaction_overlay
         self._gaze_settings = replace(self._gaze_settings, show_interaction_overlay=checked)
-        self._emit_gaze_settings("Action overlay updated.")
+        self._emit_gaze_settings("Prikaz napretka radnje je ažuriran.")
 
     def _toggle_precision_zoom(self) -> None:
         checked = not self._gaze_settings.use_precision_zoom
         self._gaze_settings = replace(self._gaze_settings, use_precision_zoom=checked)
-        status = "Precision zoom enabled." if checked else "Precision zoom disabled."
+        status = (
+            "Precizno uvećanje je uključeno." if checked else "Precizno uvećanje je isključeno."
+        )
         self._emit_gaze_settings(status)
 
     def _toggle_start_with_windows(self) -> None:
         desired = not self._gaze_settings.start_with_windows
-        self._set_status("Enabling Windows startup." if desired else "Disabling Windows startup.")
+        self._set_status(
+            "Uključujem pokretanje uz Windows." if desired else "Isključujem pokretanje uz Windows."
+        )
         result = set_windows_startup_enabled(
             desired,
             show_launcher_window=self._gaze_settings.show_launcher_window,
@@ -827,22 +848,22 @@ class SettingsWindow(QWidget):
 
     def _toggle_logging_enabled(self) -> None:
         desired = not self._gaze_settings.logging_enabled
-        status = "Logging enabled." if desired else "Logging disabled."
+        status = "Zapisivanje je uključeno." if desired else "Zapisivanje je isključeno."
         try:
             self._gaze_settings = replace(self._gaze_settings, logging_enabled=desired)
             set_application_logging_enabled(desired)
-        except Exception as exc:
+        except Exception:
             logger.exception("Could not update application logging state.")
             self._gaze_settings = replace(self._gaze_settings, logging_enabled=not desired)
-            status = f"Logging update failed: {exc}"
+            status = "Ažuriranje zapisivanja nije uspjelo."
         self._emit_gaze_settings(status)
 
     def _toggle_show_launcher_window(self) -> None:
         desired = not self._gaze_settings.show_launcher_window
         status = (
-            "PowerShell launcher window will be shown."
+            "PowerShell prozor će biti prikazan pri pokretanju."
             if desired
-            else "PowerShell launcher will run silently in background."
+            else "PowerShell pokretač će raditi tiho u pozadini."
         )
         self._gaze_settings = replace(self._gaze_settings, show_launcher_window=desired)
 
@@ -857,32 +878,41 @@ class SettingsWindow(QWidget):
     def _adjust_dwell_ms(self, delta: int) -> None:
         value = _clamp_int(self._gaze_settings.dwell_ms + delta, 150, 5000)
         self._gaze_settings = replace(self._gaze_settings, dwell_ms=value)
-        self._emit_gaze_settings("Stare time updated.")
+        self._emit_gaze_settings("Vrijeme zadržavanja pogleda je ažurirano.")
+
+    def _adjust_selection_pause(self, delta: int) -> None:
+        value = _clamp_int(
+            self._gaze_settings.selection_pause_ms + delta,
+            MIN_SELECTION_PAUSE_MS,
+            MAX_SELECTION_PAUSE_MS,
+        )
+        self._gaze_settings = replace(self._gaze_settings, selection_pause_ms=value)
+        self._emit_gaze_settings("Pauza prije odabira je ažurirana.")
 
     def _adjust_dwell_radius(self, delta: int) -> None:
         value = _clamp_int(self._gaze_settings.dwell_radius_px + delta, 10, 160)
         self._gaze_settings = replace(self._gaze_settings, dwell_radius_px=value)
-        self._emit_gaze_settings("Stable target radius updated.")
+        self._emit_gaze_settings("Radijus stabilnog pogleda je ažuriran.")
 
     def _adjust_click_cooldown(self, delta: int) -> None:
         value = _clamp_int(self._gaze_settings.click_cooldown_ms + delta, 100, 5000)
         self._gaze_settings = replace(self._gaze_settings, click_cooldown_ms=value)
-        self._emit_gaze_settings("Repeat delay updated.")
+        self._emit_gaze_settings("Pauza između radnji je ažurirana.")
 
     def _adjust_smoothing(self, delta: float) -> None:
         value = round(_clamp_float(self._gaze_settings.smoothing + delta, 0.05, 1.0), 2)
         self._gaze_settings = replace(self._gaze_settings, smoothing=value)
-        self._emit_gaze_settings("Pointer smoothing updated.")
+        self._emit_gaze_settings("Uglađivanje pokazivača je ažurirano.")
 
     def _adjust_speech_speed(self, delta: int) -> None:
         value = _clamp_int(self._speech_settings.speed + delta, 80, 320)
         self._speech_settings = replace(self._speech_settings, speed=value)
-        self._emit_speech_settings("Speech speed updated.")
+        self._emit_speech_settings("Brzina govora je ažurirana.")
 
     def _adjust_letters_per_group(self, delta: int) -> None:
         value = _clamp_int(self._speech_settings.letters_per_group + delta, 1, 12)
         self._speech_settings = replace(self._speech_settings, letters_per_group=value)
-        self._emit_speech_settings("Letters per group updated.")
+        self._emit_speech_settings("Broj slova u grupi je ažuriran.")
 
     def _voice_combo_changed(self, index: int) -> None:
         value = self._voice_combo.itemData(index)
@@ -893,7 +923,7 @@ class SettingsWindow(QWidget):
             return
 
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
-        self._emit_speech_settings("Voice updated.")
+        self._emit_speech_settings("Glas je ažuriran.")
 
     def _cycle_voice_preset(self) -> None:
         count = self._voice_combo.count()
@@ -914,23 +944,24 @@ class SettingsWindow(QWidget):
         self._set_status(status)
 
     def _request_calibration(self) -> None:
-        self._set_status("Starting Tobii calibration.")
+        self._set_status("Pokrećem Tobii kalibraciju.")
         self.calibration_requested.emit()
 
     def _request_speech_test(self) -> None:
-        self._set_status("Testing speech.")
+        self._set_status("Isprobavam govor.")
         self.speech_test_requested.emit()
 
     def _request_quit(self) -> None:
-        self._set_status("Quitting application.")
+        self._set_status("Isključujem aplikaciju.")
         self.quit_requested.emit()
 
     def _refresh_values(self) -> None:
+        self._selection_pause_value.setText(f"{self._gaze_settings.selection_pause_ms} ms")
         self._dwell_value.setText(f"{self._gaze_settings.dwell_ms} ms")
         self._radius_value.setText(f"{self._gaze_settings.dwell_radius_px} px")
         self._cooldown_value.setText(f"{self._gaze_settings.click_cooldown_ms} ms")
         self._smoothing_value.setText(f"{self._gaze_settings.smoothing:.2f}")
-        self._speed_value.setText(f"{self._speech_settings.speed} wpm")
+        self._speed_value.setText(f"{self._speech_settings.speed} riječi/min")
         self._letters_group_value.setText(str(self._speech_settings.letters_per_group))
         self._move_pointer_button.setChecked(self._gaze_settings.move_mouse)
         self._gaze_bubble_button.setChecked(self._gaze_settings.show_gaze_bubble)

@@ -11,7 +11,12 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QStyle, QWidget
 
-from .gaze_selection import GazeSelectionTimer
+from .gaze_selection import (
+    DEFAULT_SELECTION_PAUSE_MS,
+    MAX_SELECTION_PAUSE_MS,
+    MIN_SELECTION_PAUSE_MS,
+    GazeSelectionTimer,
+)
 from .mouse_controller import DOUBLE_LEFT_CLICK, LEFT_CLICK, RIGHT_CLICK
 from .windows_z_order import force_window_topmost
 
@@ -81,6 +86,7 @@ class QuickActionRadialMenu(QWidget):
         self._selected_action: str | None = None
         self._candidate_progress = 0.0
         self._selection_timer = GazeSelectionTimer()
+        self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
         self._selection_emitted = False
@@ -88,7 +94,7 @@ class QuickActionRadialMenu(QWidget):
         self._last_topmost_ms = 0.0
         self._icons = {sector.action: self._icon(sector) for sector in SECTORS}
 
-        self.setWindowTitle("Quick Actions")
+        self.setWindowTitle("Brze radnje")
         self.setWindowFlags(_overlay_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
@@ -102,7 +108,11 @@ class QuickActionRadialMenu(QWidget):
     def set_selection_dwell_ms(self, dwell_ms: int) -> None:
         self._selection_dwell_ms = max(150, min(5000, int(dwell_ms)))
 
-    def set_selection_settings(self, *, dwell_ms: int, radius_px: int) -> None:
+    def set_selection_settings(self, *, pause_ms: int, dwell_ms: int, radius_px: int) -> None:
+        self._selection_pause_ms = max(
+            MIN_SELECTION_PAUSE_MS,
+            min(MAX_SELECTION_PAUSE_MS, int(pause_ms)),
+        )
         self.set_selection_dwell_ms(dwell_ms)
         self._selection_radius_px = max(16, min(160, int(radius_px)))
 
@@ -164,7 +174,8 @@ class QuickActionRadialMenu(QWidget):
             self._selection_timer.update(
                 action,
                 now_ms,
-                self._selection_dwell_ms,
+                pause_ms=self._selection_pause_ms,
+                dwell_ms=self._selection_dwell_ms,
                 restart=True,
             )
             self.update()
@@ -173,7 +184,8 @@ class QuickActionRadialMenu(QWidget):
         update = self._selection_timer.update(
             action,
             now_ms,
-            self._selection_dwell_ms,
+            pause_ms=self._selection_pause_ms,
+            dwell_ms=self._selection_dwell_ms,
         )
         if update.progress is None:
             self._selected_action = None
@@ -377,12 +389,12 @@ def _distance(first: QPoint, second: QPoint) -> float:
 
 def _action_label(action: str) -> str:
     labels = {
-        LEFT_CLICK: "Left click",
-        RIGHT_CLICK: "Right click",
-        DOUBLE_LEFT_CLICK: "Double click",
-        CANCEL_QUICK_ACTION: "Cancel",
+        LEFT_CLICK: "Lijevi klik",
+        RIGHT_CLICK: "Desni klik",
+        DOUBLE_LEFT_CLICK: "Dvostruki klik",
+        CANCEL_QUICK_ACTION: "Odustani",
     }
-    return labels.get(action, "Quick")
+    return labels.get(action, "Brza radnja")
 
 
 def _overlay_window_flags() -> Qt.WindowFlags:

@@ -10,7 +10,12 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
-from .gaze_selection import GazeSelectionTimer
+from .gaze_selection import (
+    DEFAULT_SELECTION_PAUSE_MS,
+    MAX_SELECTION_PAUSE_MS,
+    MIN_SELECTION_PAUSE_MS,
+    GazeSelectionTimer,
+)
 from .windows_z_order import force_window_topmost
 
 logger = logging.getLogger(__name__)
@@ -38,13 +43,14 @@ class QuickActionZoomWindow(QWidget):
         self._candidate_progress = 0.0
         self._candidate_local: QPoint | None = None
         self._selection_timer = GazeSelectionTimer()
+        self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
         self._selection_emitted = False
         self._phase = 0.0
         self._last_topmost_ms = 0.0
 
-        self.setWindowTitle("Quick Action Zoom")
+        self.setWindowTitle("Precizno uvećanje")
         self.setWindowFlags(_overlay_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
@@ -55,7 +61,11 @@ class QuickActionZoomWindow(QWidget):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._tick)
 
-    def set_selection_settings(self, *, dwell_ms: int, radius_px: int) -> None:
+    def set_selection_settings(self, *, pause_ms: int, dwell_ms: int, radius_px: int) -> None:
+        self._selection_pause_ms = max(
+            MIN_SELECTION_PAUSE_MS,
+            min(MAX_SELECTION_PAUSE_MS, int(pause_ms)),
+        )
         self._selection_dwell_ms = max(150, min(5000, int(dwell_ms)))
         self._selection_radius_px = max(16, min(160, int(radius_px)))
 
@@ -131,7 +141,8 @@ class QuickActionZoomWindow(QWidget):
             self._selection_timer.update(
                 "zoom-target",
                 now_ms,
-                self._selection_dwell_ms,
+                pause_ms=self._selection_pause_ms,
+                dwell_ms=self._selection_dwell_ms,
                 restart=True,
             )
             self.update()
@@ -141,7 +152,8 @@ class QuickActionZoomWindow(QWidget):
         update = self._selection_timer.update(
             "zoom-target",
             now_ms,
-            self._selection_dwell_ms,
+            pause_ms=self._selection_pause_ms,
+            dwell_ms=self._selection_dwell_ms,
         )
         if update.progress is None:
             self._candidate_progress = 0.0
@@ -149,7 +161,9 @@ class QuickActionZoomWindow(QWidget):
             return
 
         self._candidate_progress = update.progress
-        self.selection_progress_changed.emit(QPoint(point), self._candidate_progress, "Zoom target")
+        self.selection_progress_changed.emit(
+            QPoint(point), self._candidate_progress, "Cilj uvećanja"
+        )
 
         if update.ready:
             selected = self._map_display_to_screen(local)

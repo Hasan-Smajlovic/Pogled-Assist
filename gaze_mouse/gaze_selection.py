@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
-GAZE_SELECTION_PAUSE_MS = 500
+DEFAULT_SELECTION_PAUSE_MS = 500
+MIN_SELECTION_PAUSE_MS = 100
+MAX_SELECTION_PAUSE_MS = 2000
 
 
 @dataclass(frozen=True)
@@ -28,8 +29,9 @@ class GazeSelectionTimer:
         self,
         target: object | None,
         now_ms: float,
-        dwell_ms: int,
         *,
+        pause_ms: int,
+        dwell_ms: int,
         restart: bool = False,
     ) -> GazeSelectionUpdate:
         if target is None:
@@ -51,12 +53,13 @@ class GazeSelectionTimer:
             return GazeSelectionUpdate()
 
         elapsed_ms = max(0.0, now_ms - self._started_ms)
-        if elapsed_ms < GAZE_SELECTION_PAUSE_MS:
+        pause_ms = max(0, int(pause_ms))
+        if elapsed_ms < pause_ms:
             return GazeSelectionUpdate()
 
         progress = min(
             1.0,
-            (elapsed_ms - GAZE_SELECTION_PAUSE_MS) / max(1, int(dwell_ms)),
+            (elapsed_ms - pause_ms) / max(1, int(dwell_ms)),
         )
         return GazeSelectionUpdate(progress=progress, ready=progress >= 1.0)
 

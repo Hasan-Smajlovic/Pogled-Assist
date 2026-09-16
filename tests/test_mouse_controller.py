@@ -151,7 +151,9 @@ def test_target_dwell_opens_zoom_before_click():
 
 def test_toolbar_dwell_waits_before_feedback_and_requires_leaving_to_repeat():
     controller = make_controller()
-    controller.update_settings(GazeSettings(dwell_ms=200, click_cooldown_ms=100))
+    controller.update_settings(
+        GazeSettings(selection_pause_ms=250, dwell_ms=200, click_cooldown_ms=100)
+    )
     actions = []
     progress = []
     controller.toolbar_action_requested.connect(actions.append)
@@ -160,14 +162,14 @@ def test_toolbar_dwell_waits_before_feedback_and_requires_leaving_to_repeat():
     )
 
     controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1000)
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1499)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1249)
 
     assert actions == []
     assert progress == []
 
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1500)
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1699)
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1700)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1250)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1449)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 1450)
     controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3000)
 
     assert actions == ["settings"]
@@ -175,8 +177,8 @@ def test_toolbar_dwell_waits_before_feedback_and_requires_leaving_to_repeat():
 
     controller._reset_toolbar_dwell()
     controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3100)
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3600)
-    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3800)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3350)
+    controller._handle_toolbar_dwell("settings", QPoint(10, 10), 3550)
 
     assert actions == ["settings", "settings"]
 

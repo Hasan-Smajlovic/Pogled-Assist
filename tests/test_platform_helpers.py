@@ -108,11 +108,11 @@ def test_radial_menu_maps_each_direction_to_an_action(qapp):
 @pytest.mark.parametrize(
     ("label", "expected"),
     [
-        ("Double click", "Double click"),
-        ("Double left click", "Double left c"),
-        ("Quick action", "Quick action"),
-        ("Zoom target", "Zoom target"),
-        ("Settings", "Settings"),
+        ("Dvostruki klik", "Dvostruki"),
+        ("Dvostruki lijevi klik", "Dvostruki"),
+        ("Brza radnja", "Brza radnja"),
+        ("Cilj uvećanja", "Cilj uvećanja"),
+        ("Postavke", "Postavke"),
     ],
 )
 def test_interaction_labels_are_compact(label, expected):
@@ -228,9 +228,9 @@ def test_bridge_python_discovery_reports_missing_runtime(monkeypatch):
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        ("Tracking with Tobii Eye Tracker 4C.", "green"),
-        ("Trying Stream Engine.", "yellow"),
-        ("Tracker not found", "red"),
+        ("Praćenje je aktivno putem uređaja Tobii Eye Tracker 4C.", "green"),
+        ("Pokušavam Stream Engine.", "yellow"),
+        ("Uređaj nije pronađen", "red"),
         ("idle", "yellow"),
     ],
 )

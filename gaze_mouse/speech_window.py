@@ -482,7 +482,7 @@ class SpeechWindow(QWidget):
         system_layout.addWidget(controls_label)
         for title, subtitle, object_name in (
             ("Alarm", "Pozovi pomoć", "systemAlarm"),
-            ("Sleep", "Odmori oči", "systemSleep"),
+            ("Odmor", "Odmori oči", "systemSleep"),
             ("Izlaz", "Zatvori aplikaciju", "systemExit"),
         ):
             button = QPushButton(f"{title}\n{subtitle}", system_panel)

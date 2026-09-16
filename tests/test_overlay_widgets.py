@@ -38,15 +38,15 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     overlay = InteractionOverlayWindow()
     qtbot.addWidget(overlay)
 
-    overlay.show_progress(QPoint(400, 300), 1.5, "Double left click")
+    overlay.show_progress(QPoint(400, 300), 1.5, "Dvostruki lijevi klik")
     assert overlay.isVisible()
     assert overlay._mode == "progress"
     assert overlay._progress == 1.0
-    assert overlay._label == "Double left c"
+    assert overlay._label == "Dvostruki"
 
     overlay.clear()
     assert overlay.isHidden()
-    overlay.show_fired(QPoint(200, 100), "Left click")
+    overlay.show_fired(QPoint(200, 100), "Lijevi klik")
     assert overlay._mode == "fired"
     assert overlay._progress == 1.0
     overlay._fired_started_ms = 0
@@ -63,9 +63,9 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     qtbot.addWidget(menu)
     selected = []
     menu.action_selected.connect(selected.append)
-    menu.set_selection_settings(dwell_ms=150, radius_px=48)
+    menu.set_selection_settings(pause_ms=250, dwell_ms=150, radius_px=48)
     menu.show_at(QPoint(400, 300))
-    times = iter((1.0, 1.499, 1.5, 1.65))
+    times = iter((1.0, 1.249, 1.25, 1.4))
     monkeypatch.setattr("gaze_mouse.quick_action_menu.time.monotonic", lambda: next(times))
 
     menu.handle_gaze(QPoint(400, 200))
@@ -80,14 +80,14 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
 def test_quick_action_zoom_maps_and_selects_stable_gaze_target(qtbot, monkeypatch):
     zoom = QuickActionZoomWindow()
     qtbot.addWidget(zoom)
-    zoom.set_selection_settings(dwell_ms=150, radius_px=48)
+    zoom.set_selection_settings(pause_ms=250, dwell_ms=150, radius_px=48)
     zoom._screen_geometry = QRect(0, 0, 1000, 800)
     zoom._source_rect = QRect(100, 200, 180, 180)
     zoom._display_rect = QRect(230, 130, 540, 540)
     zoom.show()
     selected = []
     zoom.target_selected.connect(lambda point: selected.append(QPoint(point)))
-    times = iter((1.0, 1.499, 1.5, 1.65))
+    times = iter((1.0, 1.249, 1.25, 1.4))
     monkeypatch.setattr("gaze_mouse.quick_action_zoom.time.monotonic", lambda: next(times))
 
     zoom.handle_gaze(QPoint(500, 400))
