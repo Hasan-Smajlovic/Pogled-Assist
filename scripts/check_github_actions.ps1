@@ -9,6 +9,30 @@ $Version = "1.7.12"
 $ToolRoot = Join-Path $RepoRoot ".dev-tools\actionlint\$Version"
 $ToolPath = Join-Path $ToolRoot "actionlint.exe"
 
+function Save-RemoteFile {
+    param(
+        [string]$Uri,
+        [string]$Destination,
+        [int]$MaximumAttempts = 4
+    )
+
+    for ($attempt = 1; $attempt -le $MaximumAttempts; $attempt++) {
+        Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $Destination -UseBasicParsing
+            return
+        } catch {
+            if ($attempt -eq $MaximumAttempts) {
+                throw "Could not download $Uri after $MaximumAttempts attempts: $($_.Exception.Message)"
+            }
+
+            $delaySeconds = [Math]::Pow(2, $attempt)
+            Write-Warning "Download attempt $attempt of $MaximumAttempts failed. Retrying in $delaySeconds seconds."
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+}
+
 function Install-Actionlint {
     $assetName = "actionlint_${Version}_windows_amd64.zip"
     $checksumName = "actionlint_${Version}_checksums.txt"
@@ -20,8 +44,8 @@ function Install-Actionlint {
         New-Item -ItemType Directory -Path $tempRoot | Out-Null
         $archivePath = Join-Path $tempRoot $assetName
         $checksumPath = Join-Path $tempRoot $checksumName
-        Invoke-WebRequest -Uri "$releaseRoot/$assetName" -OutFile $archivePath -UseBasicParsing
-        Invoke-WebRequest -Uri "$releaseRoot/$checksumName" -OutFile $checksumPath -UseBasicParsing
+        Save-RemoteFile -Uri "$releaseRoot/$assetName" -Destination $archivePath
+        Save-RemoteFile -Uri "$releaseRoot/$checksumName" -Destination $checksumPath
 
         $escapedAssetName = [Regex]::Escape($assetName)
         $checksumLine = Get-Content -LiteralPath $checksumPath |

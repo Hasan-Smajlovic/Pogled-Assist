@@ -164,7 +164,7 @@ function Start-UpdateTranscript {
     $script:OperationRoot = Join-Path `
         ([IO.Path]::GetTempPath()) `
         ("TobiiGazeMouseUpdate_{0}" -f [Guid]::NewGuid().ToString("N"))
-    New-Item -LiteralPath $script:OperationRoot -ItemType Directory -Force | Out-Null
+    [IO.Directory]::CreateDirectory($script:OperationRoot) | Out-Null
     $script:UpdateLogPath = Join-Path $script:OperationRoot "update_windows.log"
 
     try {

@@ -154,7 +154,7 @@ function Invoke-RobocopyMirror {
         [string]$Destination
     )
 
-    New-Item -LiteralPath $Destination -ItemType Directory -Force | Out-Null
+    [IO.Directory]::CreateDirectory($Destination) | Out-Null
     $arguments = @(
         $Source,
         $Destination,
@@ -392,7 +392,7 @@ function Invoke-TransactionalInstall {
         return
     }
 
-    New-Item -LiteralPath $Paths.Parent -ItemType Directory -Force | Out-Null
+    [IO.Directory]::CreateDirectory($Paths.Parent) | Out-Null
     $transactionPath = Join-Path $Paths.Parent ".$($Paths.Name).install-transaction.json"
     Recover-InterruptedInstallation `
         -TransactionPath $transactionPath `
