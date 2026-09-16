@@ -125,9 +125,16 @@ class SpeechService:
             "--text",
             text,
         ]
-        return self._start_process(command, "edge-playback")
+        environment = _environment_with_executable_directory(self._edge_playback_executable)
+        return self._start_process(command, "edge-playback", environment=environment)
 
-    def _start_process(self, command: list[str], engine_name: str) -> bool:
+    def _start_process(
+        self,
+        command: list[str],
+        engine_name: str,
+        *,
+        environment: dict[str, str] | None = None,
+    ) -> bool:
         logger.info("Starting speech command (%s): %s", engine_name, [*command[:-1], "<text>"])
 
         startupinfo = None
@@ -148,6 +155,7 @@ class SpeechService:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=environment,
             )
         except Exception:
             logger.exception("Failed to start %s.", engine_name)
@@ -201,6 +209,16 @@ class SpeechService:
 
         if stderr.strip():
             logger.warning("Speech process stderr: %s", stderr.strip())
+
+
+def _environment_with_executable_directory(executable: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    path_key = next((key for key in environment if key.casefold() == "path"), "PATH")
+    current_path = environment.get(path_key, "")
+    environment[path_key] = os.pathsep.join(
+        part for part in (str(executable.parent), current_path) if part
+    )
+    return environment
 
 
 def find_espeak_ng() -> Path | None:

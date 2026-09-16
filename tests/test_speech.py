@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -80,31 +81,36 @@ def test_speech_service_builds_espeak_command(monkeypatch, tmp_path):
 
 def test_speech_service_builds_human_voice_command(monkeypatch, tmp_path):
     executable = tmp_path / "edge-playback.exe"
+    existing_path = str(tmp_path / "existing-bin")
+    monkeypatch.setenv("PATH", existing_path)
     monkeypatch.setattr("gaze_mouse.speech_service.find_espeak_ng", lambda: None)
     monkeypatch.setattr("gaze_mouse.speech_service.find_edge_playback", lambda: executable)
     service = SpeechService()
     calls = []
     monkeypatch.setattr(
-        service, "_start_process", lambda command, engine: calls.append((command, engine)) or True
+        service,
+        "_start_process",
+        lambda command, engine, **kwargs: calls.append((command, engine, kwargs)) or True,
     )
 
     result = service.speak("Zdravo", SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE))
 
     assert result is True
-    assert calls == [
-        (
-            [
-                str(executable),
-                "--voice",
-                EDGE_PLAYBACK_VOICE,
-                f"--rate={EDGE_PLAYBACK_RATE}",
-                f"--pitch={EDGE_PLAYBACK_PITCH}",
-                "--text",
-                "Zdravo",
-            ],
-            "edge-playback",
-        )
+    assert len(calls) == 1
+    command, engine, kwargs = calls[0]
+    assert command == [
+        str(executable),
+        "--voice",
+        EDGE_PLAYBACK_VOICE,
+        f"--rate={EDGE_PLAYBACK_RATE}",
+        f"--pitch={EDGE_PLAYBACK_PITCH}",
+        "--text",
+        "Zdravo",
     ]
+    assert engine == "edge-playback"
+    environment = kwargs["environment"]
+    path_key = next(key for key in environment if key.casefold() == "path")
+    assert environment[path_key] == os.pathsep.join((str(executable.parent), existing_path))
 
 
 def test_speech_service_rejects_empty_or_missing_engine(monkeypatch):
