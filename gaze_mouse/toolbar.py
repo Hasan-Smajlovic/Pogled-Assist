@@ -1021,6 +1021,7 @@ class HotbarWindow(QWidget):
             self._speech_window.mouse_action_started.connect(
                 self._mouse.cancel_gaze_interactions_for_mouse
             )
+            self._speech_window.quit_requested.connect(self._quit_application)
         self._speech_window.update_settings(self._speech.settings)
 
         self._speech_window.show_full_screen()
@@ -1078,7 +1079,7 @@ class HotbarWindow(QWidget):
         self._set_status("Postavke su zatvorene.")
 
     def _quit_application(self) -> None:
-        logger.info("Quit application requested from Settings.")
+        logger.info("Quit application requested.")
         self._set_toolbar_gaze_target(None)
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()

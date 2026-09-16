@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 import pytest
 
+from gaze_mouse.alarm_sound import (
+    ALARM_FREQUENCY_HZ,
+    ALARM_TONE_DURATION_MS,
+    ALARM_UNAVAILABLE_MESSAGE,
+    AlarmSound,
+)
 from gaze_mouse.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -26,6 +33,44 @@ from gaze_mouse.speech_service import (
     _voice_output_mentions_bosnian,
 )
 from gaze_mouse.speech_window import _group_letters
+
+
+def test_alarm_sound_repeats_in_background_until_stopped(qtbot):
+    first_tone = threading.Event()
+    calls = []
+
+    def beep(frequency, duration):
+        calls.append((frequency, duration))
+        first_tone.set()
+
+    alarm = AlarmSound(beep=beep)
+
+    assert alarm.start() is True
+    assert first_tone.wait(timeout=1)
+    qtbot.waitUntil(lambda: alarm.is_playing)
+    alarm.stop()
+
+    assert calls[0] == (ALARM_FREQUENCY_HZ, ALARM_TONE_DURATION_MS)
+    assert alarm.is_playing is False
+    assert alarm.last_error is None
+
+
+def test_alarm_sound_reports_playback_failure(qtbot):
+    attempted = threading.Event()
+
+    def failing_beep(_frequency, _duration):
+        attempted.set()
+        raise RuntimeError("audio device unavailable")
+
+    alarm = AlarmSound(beep=failing_beep)
+
+    assert alarm.start() is True
+    assert attempted.wait(timeout=1)
+    qtbot.waitUntil(lambda: alarm.last_error is not None)
+    alarm.stop()
+
+    assert alarm.is_playing is False
+    assert alarm.last_error == ALARM_UNAVAILABLE_MESSAGE
 
 
 @pytest.mark.parametrize(
