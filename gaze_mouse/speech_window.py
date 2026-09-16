@@ -87,6 +87,7 @@ class SpeechWindow(QWidget):
 
     closed = Signal()
     interaction_context_changed = Signal()
+    mouse_action_started = Signal()
 
     def __init__(
         self,
@@ -185,10 +186,8 @@ class SpeechWindow(QWidget):
                 continue
             top_left = button.mapToGlobal(QPoint(0, 0))
             if QRect(top_left, button.size()).contains(point):
-                self._set_gaze_target_action(action)
                 return action
 
-        self._set_gaze_target_action(None)
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
@@ -219,6 +218,9 @@ class SpeechWindow(QWidget):
 
     def cancel_gaze_interaction(self) -> None:
         self._set_gaze_target_action(None)
+
+    def set_gaze_target_action(self, action: str | None) -> None:
+        self._set_gaze_target_action(action)
 
     def _build_ui(self) -> None:
         self.setStyleSheet(
@@ -480,7 +482,7 @@ class SpeechWindow(QWidget):
         system_layout.addWidget(controls_label)
         for title, subtitle, object_name in (
             ("Alarm", "Pozovi pomoć", "systemAlarm"),
-            ("Sleep", "Odmori oči", "systemSleep"),
+            ("Odmor", "Odmori oči", "systemSleep"),
             ("Izlaz", "Zatvori aplikaciju", "systemExit"),
         ):
             button = QPushButton(f"{title}\n{subtitle}", system_panel)
@@ -858,6 +860,7 @@ class SpeechWindow(QWidget):
         self._action_buttons[action] = button
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
+        button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(lambda _checked=False, item=action: self._trigger_action(item))
 
     def _set_gaze_target_action(self, action: str | None) -> None:

@@ -89,27 +89,29 @@ class TobiiGazeProvider(QObject):
         if self._start_with_stream_engine():
             return
 
-        self._schedule_retry("No Tobii eye tracker found. Retrying.")
+        self._schedule_retry("Tobii uređaj nije pronađen. Pokušavam ponovo.")
 
     def _start_with_tobii_research(self) -> bool:
         try:
             import tobii_research as tr
         except ImportError:
             logger.exception("tobii-research import failed.")
-            self.status_changed.emit("Missing tobii-research. Trying Stream Engine.")
+            self.status_changed.emit("Nedostaje tobii-research. Pokušavam Stream Engine.")
             return False
 
         try:
             logger.info("Scanning for Tobii eye trackers with tobii-research.")
             trackers = tr.find_all_eyetrackers()
-        except Exception as exc:
+        except Exception:
             logger.exception("Tobii eye tracker scan failed.")
-            self.status_changed.emit(f"Tobii Pro SDK scan failed: {exc}")
+            self.status_changed.emit("Pretraga Tobii uređaja putem Pro SDK-a nije uspjela.")
             return False
 
         if not trackers:
             logger.warning("No Tobii eye trackers were found through tobii-research.")
-            self.status_changed.emit("No Tobii Pro SDK tracker found; trying Stream Engine.")
+            self.status_changed.emit(
+                "Tobii uređaj nije pronađen putem Pro SDK-a. Pokušavam Stream Engine."
+            )
             return False
 
         self._tr = tr
@@ -123,9 +125,9 @@ class TobiiGazeProvider(QObject):
                 self._on_gaze_data,
                 as_dictionary=True,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Tobii gaze subscription failed.")
-            self.status_changed.emit(f"Tobii subscription failed: {exc}")
+            self.status_changed.emit("Povezivanje s Tobii uređajem nije uspjelo.")
             self._tracker = None
             self._tr = None
             return False
@@ -134,7 +136,7 @@ class TobiiGazeProvider(QObject):
         self._backend_name = "tobii-research"
         label = _tracker_label(self._tracker)
         self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Tracking with {label}.")
+        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
         return True
 
     def _start_with_stream_engine(self) -> bool:
@@ -147,11 +149,11 @@ class TobiiGazeProvider(QObject):
             backend.start()
         except TobiiStreamEngineError as exc:
             logger.warning("Tobii Stream Engine fallback did not start: %s", exc)
-            self.status_changed.emit(f"Stream Engine unavailable: {exc}")
+            self.status_changed.emit("Stream Engine nije dostupan. Pokušavam drugi način.")
             return self._start_with_stream_engine_bridge(exc)
         except Exception as exc:
             logger.exception("Tobii Stream Engine fallback failed.")
-            self.status_changed.emit(f"Stream Engine failed: {exc}")
+            self.status_changed.emit("Stream Engine nije uspio. Pokušavam drugi način.")
             return self._start_with_stream_engine_bridge(exc)
 
         self._stream_engine = backend
@@ -159,7 +161,7 @@ class TobiiGazeProvider(QObject):
         self._backend_name = "stream-engine"
         label = backend.label
         self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Tracking with {label}.")
+        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
         return True
 
     def _start_with_stream_engine_bridge(self, direct_error: Exception) -> bool:
@@ -167,7 +169,7 @@ class TobiiGazeProvider(QObject):
             "Trying Tobii Stream Engine x86 bridge after direct backend failure: %s",
             direct_error,
         )
-        self.status_changed.emit("Trying Tobii x86 bridge for 32-bit Core Software.")
+        self.status_changed.emit("Pokušavam Tobii x86 most za 32-bitni Core Software.")
         try:
             backend = TobiiStreamEngineBridgeBackend(
                 self._on_stream_engine_gaze,
@@ -176,11 +178,11 @@ class TobiiGazeProvider(QObject):
             backend.start()
         except TobiiStreamEngineBridgeError as exc:
             logger.warning("Tobii Stream Engine x86 bridge did not start: %s", exc)
-            self.status_changed.emit(f"Tobii x86 bridge unavailable: {exc}")
+            self.status_changed.emit("Tobii x86 most nije dostupan.")
             return False
-        except Exception as exc:
+        except Exception:
             logger.exception("Tobii Stream Engine x86 bridge failed.")
-            self.status_changed.emit(f"Tobii x86 bridge failed: {exc}")
+            self.status_changed.emit("Tobii x86 most nije uspio.")
             return False
 
         self._stream_engine = backend
@@ -188,7 +190,7 @@ class TobiiGazeProvider(QObject):
         self._backend_name = "stream-engine-x86-bridge"
         label = backend.label
         self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Tracking with {label}.")
+        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
         return True
 
     def _schedule_retry(self, message: str) -> None:
@@ -225,9 +227,9 @@ class TobiiGazeProvider(QObject):
                 self._tr.EYETRACKER_GAZE_DATA,
                 self._on_gaze_data,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Tobii gaze unsubscribe failed.")
-            self.status_changed.emit(f"Tobii unsubscribe failed: {exc}")
+            self.status_changed.emit("Prekid veze s Tobii uređajem nije uspio.")
         finally:
             self._running = False
             self._backend_name = ""
@@ -366,7 +368,7 @@ def _tracker_label(tracker: Any) -> str:
         getattr(tracker, "serial_number", ""),
     ]
     label = " ".join(str(part) for part in parts if part)
-    return label or "Tobii eye tracker"
+    return label or "Tobii uređaj za praćenje pogleda"
 
 
 ScreenGeometry = tuple[int, int, int, int]

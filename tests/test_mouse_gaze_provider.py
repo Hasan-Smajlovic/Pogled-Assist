@@ -33,8 +33,8 @@ def test_mouse_provider_emits_active_eyes_and_cursor_gaze(qapp, monkeypatch):
     assert gaze[0][:2] == (0.25, 0.5)
     assert isinstance(gaze[0][2], int)
     assert eyes == [(True, True)]
-    assert statuses == ["Tracking with mouse gaze simulator."]
-    assert trackers == ["Mouse gaze simulator"]
+    assert statuses == ["Praćenje simulacijom miša je aktivno."]
+    assert trackers == ["Simulator pogleda mišem"]
 
     provider.stop()
 
@@ -54,4 +54,4 @@ def test_mouse_provider_reports_missing_primary_screen(qapp, monkeypatch):
     provider.start()
 
     assert not provider._timer.isActive()
-    assert statuses == ["Mouse gaze simulation unavailable: no primary screen."]
+    assert statuses == ["Simulacija pogleda nije dostupna jer nema glavnog ekrana."]

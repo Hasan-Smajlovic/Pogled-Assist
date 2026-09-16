@@ -56,7 +56,7 @@ def set_windows_startup_enabled(
         return StartupTaskResult(
             enabled=False,
             success=False,
-            message="Windows startup can only be changed on Windows.",
+            message="Pokretanje uz Windows može se mijenjati samo na Windowsu.",
         )
 
     script = (
@@ -71,16 +71,19 @@ def set_windows_startup_enabled(
         return StartupTaskResult(
             enabled=is_windows_startup_enabled(),
             success=False,
-            message=f"Windows startup update failed: {exc}",
+            message="Ažuriranje pokretanja uz Windows nije uspjelo.",
         )
 
     actual_enabled = is_windows_startup_enabled()
 
     if completed.returncode == 0:
         if enabled:
-            message = "Windows startup enabled. The app will run as Administrator after logon."
+            message = (
+                "Pokretanje uz Windows je uključeno. Aplikacija će se nakon prijave "
+                "pokrenuti kao administrator."
+            )
         else:
-            message = "Windows startup disabled. Start the app manually when needed."
+            message = "Pokretanje uz Windows je isključeno. Po potrebi ručno pokrenite aplikaciju."
         logger.info(message)
         return StartupTaskResult(enabled=actual_enabled, success=True, message=message)
 
@@ -89,7 +92,7 @@ def set_windows_startup_enabled(
     return StartupTaskResult(
         enabled=actual_enabled,
         success=False,
-        message=f"Windows startup update failed: {message}",
+        message="Ažuriranje pokretanja uz Windows nije uspjelo.",
     )
 
 

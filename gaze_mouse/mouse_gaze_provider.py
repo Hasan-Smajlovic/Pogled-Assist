@@ -42,13 +42,13 @@ class MouseGazeProvider(QObject):
 
         self._screen_geometry = _primary_screen_geometry()
         if self._screen_geometry is None:
-            self.status_changed.emit("Mouse gaze simulation unavailable: no primary screen.")
+            self.status_changed.emit("Simulacija pogleda nije dostupna jer nema glavnog ekrana.")
             return
 
         self._running = True
-        self.tracker_changed.emit("Mouse gaze simulator")
+        self.tracker_changed.emit("Simulator pogleda mišem")
         self.eye_status_changed.emit(True, True)
-        self.status_changed.emit("Tracking with mouse gaze simulator.")
+        self.status_changed.emit("Praćenje simulacijom miša je aktivno.")
         self._emit_cursor_sample()
         self._timer.start()
         logger.info("Mouse gaze simulator started.")

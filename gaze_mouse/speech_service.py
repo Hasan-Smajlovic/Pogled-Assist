@@ -17,8 +17,8 @@ BOSNIAN_LANGUAGE = "bs"
 VOICE_PRESET_DEFAULT = "default"
 VOICE_PRESET_HUMAN_LIKE = "human_like"
 VOICE_PRESETS: tuple[tuple[str, str], ...] = (
-    (VOICE_PRESET_DEFAULT, "Default"),
-    (VOICE_PRESET_HUMAN_LIKE, "Human like"),
+    (VOICE_PRESET_DEFAULT, "Standardni"),
+    (VOICE_PRESET_HUMAN_LIKE, "Prirodni"),
 )
 VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
 EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
