@@ -121,6 +121,7 @@ def _serve_release(archive: bytes, checksum: str | None = None):
 def _release_archive(tmp_path: Path, *, installer: str = FAKE_INSTALLER) -> bytes:
     package = tmp_path / "package" / "TobiiGazeMouse"
     (package / "_internal").mkdir(parents=True)
+    (package / "_internal" / "runtime.dat").write_bytes(b"fake runtime")
     (package / "TobiiGazeMouse.exe").write_bytes(b"fake executable")
     (package / "install_windows.ps1").write_text(installer, encoding="utf-8")
     (package / "start_gaze_mouse.ps1").write_text("# fake launcher\n", encoding="utf-8")
