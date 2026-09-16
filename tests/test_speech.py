@@ -4,6 +4,15 @@ import json
 
 import pytest
 
+from gaze_mouse.speech_library import (
+    CategoryRecord,
+    PhraseRecord,
+    SpeechLibrary,
+    SpeechLibraryStore,
+    default_categories,
+    parse_phrase_record,
+    sorted_phrases,
+)
 from gaze_mouse.speech_service import (
     EDGE_PLAYBACK_PITCH,
     EDGE_PLAYBACK_RATE,
@@ -15,14 +24,7 @@ from gaze_mouse.speech_service import (
     _edge_playback_candidate_paths,
     _voice_output_mentions_bosnian,
 )
-from gaze_mouse.speech_window import (
-    PhraseRecord,
-    _group_letters,
-    _load_phrases,
-    _parse_phrase_record,
-    _save_phrases,
-    _sorted_phrase_records,
-)
+from gaze_mouse.speech_window import _group_letters
 
 
 @pytest.mark.parametrize(
@@ -119,18 +121,37 @@ def test_grouping_letters_splits_and_keeps_remainder():
     assert _group_letters(["A", "B", "C", "D", "E"], 2) == [["A", "B"], ["C", "D"], ["E"]]
 
 
+def test_default_speech_categories_match_the_design_reference():
+    categories = default_categories()
+
+    assert [category.name for category in categories] == [
+        "Trebam",
+        "Brzi odgovor",
+        "Kako se osjećam",
+        "Ljudi",
+    ]
+    assert categories[0].answers == [
+        "Trebam vode",
+        "Namjesti mi jastuk",
+        "Trebam lijek",
+        "Pomozi mi da se okrenem",
+        "Hladno mi je",
+        "Trebam u toalet",
+    ]
+    assert all(len(category.answers) == 6 for category in categories)
+
+
 def test_phrase_parsing_and_sorting_are_stable():
-    assert _parse_phrase_record({"phrase": "  Dobar   dan ", "count": "3"}) == ("Dobar dan", 3)
-    assert _parse_phrase_record({"text": "Test", "uses": -2}) == ("Test", 0)
-    assert _parse_phrase_record(None) == ("None", 0)
+    assert parse_phrase_record({"phrase": "  Dobar   dan ", "count": "3"}) == ("Dobar dan", 3)
+    assert parse_phrase_record({"text": "Test", "uses": -2}) == ("Test", 0)
+    assert parse_phrase_record(None) == ("", 0)
 
     records = [PhraseRecord("Zdravo", 1), PhraseRecord("abc", 3), PhraseRecord("ABC", 2)]
-    assert _sorted_phrase_records(records) == [records[1], records[2], records[0]]
+    assert sorted_phrases(records) == [records[1], records[2], records[0]]
 
 
-def test_phrase_storage_deduplicates_and_round_trips_utf8(monkeypatch, tmp_path):
+def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
     path = tmp_path / "speech_phrases.json"
-    monkeypatch.setattr("gaze_mouse.speech_window._phrases_path", lambda: path)
     path.write_text(
         json.dumps(
             [
@@ -142,22 +163,65 @@ def test_phrase_storage_deduplicates_and_round_trips_utf8(monkeypatch, tmp_path)
         ),
         encoding="utf-8",
     )
+    store = SpeechLibraryStore(path)
 
-    loaded = _load_phrases()
+    loaded = store.load()
 
-    assert loaded == [PhraseRecord("Dobar dan", 4), PhraseRecord("Želim pomoć", 0)]
-    _save_phrases(loaded)
+    assert loaded.categories == default_categories()
+    assert loaded.phrases == [PhraseRecord("Dobar dan", 4), PhraseRecord("Želim pomoć", 0)]
+    assert store.save(loaded) is True
     saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved == [
+    assert saved["version"] == 2
+    assert saved["categories"][0] == {
+        "name": "Trebam",
+        "answers": [
+            "Trebam vode",
+            "Namjesti mi jastuk",
+            "Trebam lijek",
+            "Pomozi mi da se okrenem",
+            "Hladno mi je",
+            "Trebam u toalet",
+        ],
+    }
+    assert saved["phrases"] == [
         {"text": "Dobar dan", "uses": 4},
         {"text": "Želim pomoć", "uses": 0},
     ]
 
 
-def test_phrase_load_handles_wrong_shape_and_bad_json(monkeypatch, tmp_path):
+def test_speech_library_preserves_saved_empty_categories_and_new_items(tmp_path):
     path = tmp_path / "speech_phrases.json"
-    monkeypatch.setattr("gaze_mouse.speech_window._phrases_path", lambda: path)
-    path.write_text("{}", encoding="utf-8")
-    assert _load_phrases() == []
+    path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "categories": [
+                    {"name": "Moje", "answers": ["Prvi odgovor", "prvi  odgovor", "Drugi"]},
+                ],
+                "phrases": [{"text": "Hvala", "uses": 2}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SpeechLibraryStore(path)
+
+    assert store.load() == SpeechLibrary(
+        categories=[CategoryRecord("Moje", ["Prvi odgovor", "Drugi"])],
+        phrases=[PhraseRecord("Hvala", 2)],
+    )
+
+    path.write_text(
+        json.dumps({"version": 2, "categories": [], "phrases": []}),
+        encoding="utf-8",
+    )
+    assert store.load() == SpeechLibrary()
+
+
+def test_speech_library_load_recovers_from_bad_data_and_save_reports_failure(tmp_path):
+    path = tmp_path / "speech_phrases.json"
     path.write_text("{", encoding="utf-8")
-    assert _load_phrases() == []
+    assert SpeechLibraryStore(path).load() == SpeechLibrary(categories=default_categories())
+
+    blocked_parent = tmp_path / "blocked"
+    blocked_parent.write_text("not a directory", encoding="utf-8")
+    assert SpeechLibraryStore(blocked_parent / "speech_phrases.json").save(SpeechLibrary()) is False
