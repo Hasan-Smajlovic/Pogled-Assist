@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 
 from gaze_mouse.controller_window import (
     CONTROLLER_WINDOW_ACTION_PREFIX,
@@ -226,6 +226,12 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, monkeypatch):
 def test_keyboard_sidebar_routes_letters_numbers_symbols_and_keys(qtbot):
     window = KeyboardWindow(SpeechSettings(letters_per_group=5))
     qtbot.addWidget(window)
+    assert window.windowTitle() == "Tastatura"
+    assert [button.text() for button in window._tab_buttons.values()] == [
+        "Slova",
+        "Brojevi",
+        "Znakovi",
+    ]
     fake_input = FakeKeyboardInput()
     window._input = fake_input
 
@@ -255,6 +261,10 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     )
     window = SettingsWindow(GazeSettings(), SpeechSettings())
     qtbot.addWidget(window)
+    assert window.windowTitle() == "Postavke"
+    assert window._general_tab_button.text() == "Opće postavke"
+    assert window._gaze_tab_button.text() == "Postavke pogleda"
+    assert window._speech_tab_button.text() == "Postavke govora"
     gaze_updates = []
     speech_updates = []
     window.gaze_settings_changed.connect(gaze_updates.append)
@@ -265,6 +275,7 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     qtbot.mouseClick(window._move_pointer_button, Qt.LeftButton)
     qtbot.mouseClick(window._precision_zoom_checkbox, Qt.LeftButton)
     for _ in range(100):
+        window._adjust_selection_pause(-100)
         window._adjust_dwell_ms(-100)
         window._adjust_smoothing(-0.1)
     qtbot.mouseClick(window._speech_tab_button, Qt.LeftButton)
@@ -276,6 +287,7 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     assert window._stack.currentIndex() == 2
     assert gaze_updates[-1].move_mouse is False
     assert gaze_updates[-1].use_precision_zoom is False
+    assert gaze_updates[-1].selection_pause_ms == 100
     assert gaze_updates[-1].dwell_ms == 150
     assert gaze_updates[-1].smoothing == 0.05
     assert speech_updates[-1].speed == 320
@@ -284,9 +296,48 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
 
 
 @pytest.mark.e2e
+def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, monkeypatch):
+    monkeypatch.setattr("gaze_mouse.settings_window.is_windows_startup_enabled", lambda: False)
+    window = SettingsWindow(GazeSettings(selection_pause_ms=250, dwell_ms=200), SpeechSettings())
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    progress = []
+    window.interaction_progress_changed.connect(
+        lambda _point, value, _label: progress.append(value)
+    )
+    center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
+    times = iter((1.0, 1.249, 1.25, 1.45, 3.0))
+    monkeypatch.setattr("gaze_mouse.settings_window.time.monotonic", lambda: next(times))
+
+    window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == []
+    assert window._stack.currentIndex() == 0
+
+    window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
+    assert window._stack.currentIndex() == 1
+
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
+
+
+@pytest.mark.e2e
 def test_controller_routes_shortcuts_keyboard_and_quick_settings(qtbot, monkeypatch):
     window = ControllerWindow(GazeSettings(), SpeechSettings())
     qtbot.addWidget(window)
+    assert window.windowTitle() == "Upravljač"
+    assert [button.text() for button in window._tab_buttons.values()] == [
+        "Opće",
+        "Tastatura",
+        "Govor",
+        "Postavke",
+    ]
     fake_input = FakeControllerInput()
     window._input = fake_input
     window.set_target_cursor_position((300, 400))
@@ -363,6 +414,9 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     window = toolbar.HotbarWindow()
     qtbot.addWidget(window)
 
+    assert window._hide_button.text() == "Sakrij"
+    assert window._settings_button.text() == "Postavke"
+    assert window._quick_actions_button.text() == "Brze radnje"
     assert window._foreground_input is not None
     assert window._last_external_foreground_window == 50
     assert window._last_external_cursor_position == (600, 500)

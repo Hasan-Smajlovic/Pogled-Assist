@@ -48,7 +48,7 @@ class InteractionOverlayWindow(QWidget):
         self._last_topmost_ms = 0.0
         self._windows_click_through_applied = False
 
-        self.setWindowTitle("Gaze Interaction Overlay")
+        self.setWindowTitle("Prikaz radnje pogledom")
         self.setWindowFlags(_overlay_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
@@ -293,12 +293,8 @@ def _compact_label(label: str) -> str:
     normalized = " ".join(label.split())
     if len(normalized) <= 13:
         return normalized
-    if normalized == "Double click":
-        return "Double"
-    if normalized == "Left click":
-        return "Left"
-    if normalized == "Right click":
-        return "Right"
+    if normalized in {"Dvostruki klik", "Dvostruki lijevi klik"}:
+        return "Dvostruki"
     return normalized[:13]
 
 

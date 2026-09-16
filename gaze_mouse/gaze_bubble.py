@@ -42,7 +42,7 @@ class GazeBubbleWindow(QWidget):
         self._topmost_timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
         self._topmost_timer.timeout.connect(self._refresh_windows_topmost)
 
-        self.setWindowTitle("Gaze Bubble")
+        self.setWindowTitle("Oznaka pogleda")
         self.setWindowFlags(_bubble_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)

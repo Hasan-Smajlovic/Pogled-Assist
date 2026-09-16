@@ -35,7 +35,7 @@ def test_tracker_choice_prefers_4c_and_builds_readable_labels():
 
     assert _choose_tracker((generic, tracker_4c)) is tracker_4c
     assert _tracker_label(tracker_4c) == "Eye Tracker 4C ABC"
-    assert _tracker_label(SimpleNamespace()) == "Tobii eye tracker"
+    assert _tracker_label(SimpleNamespace()) == "Tobii uređaj za praćenje pogleda"
 
 
 @pytest.mark.parametrize(
@@ -135,7 +135,7 @@ def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkey
     provider._attempt_start()
 
     assert provider._retry_timer.isActive()
-    assert statuses[-1] == "No Tobii eye tracker found. Retrying."
+    assert statuses[-1] == "Tobii uređaj nije pronađen. Pokušavam ponovo."
     provider.stop()
 
 
