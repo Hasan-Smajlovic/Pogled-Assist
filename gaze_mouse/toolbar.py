@@ -967,6 +967,9 @@ class HotbarWindow(QWidget):
         if self._speech_window is None:
             self._speech_window = SpeechWindow(self._speech, self)
             self._speech_window.closed.connect(lambda: self._set_status("Speech window closed."))
+            self._speech_window.interaction_context_changed.connect(
+                self._mouse.cancel_toolbar_interaction
+            )
         self._speech_window.update_settings(self._speech.settings)
 
         self._speech_window.show_full_screen()

@@ -17,7 +17,6 @@ from gaze_mouse.speech_service import (
 )
 from gaze_mouse.speech_window import (
     PhraseRecord,
-    _grid_column_count,
     _group_letters,
     _load_phrases,
     _parse_phrase_record,
@@ -116,11 +115,8 @@ def test_speech_service_rejects_empty_or_missing_engine(monkeypatch):
     assert service.speak("Zdravo", SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE)) is False
 
 
-def test_grouping_and_grid_columns_cover_short_and_long_layouts():
+def test_grouping_letters_splits_and_keeps_remainder():
     assert _group_letters(["A", "B", "C", "D", "E"], 2) == [["A", "B"], ["C", "D"], ["E"]]
-    assert _grid_column_count(0, max_columns=6, preferred_min_columns=3, max_rows=8) == 1
-    assert _grid_column_count(4, max_columns=6, preferred_min_columns=3, max_rows=8) == 3
-    assert _grid_column_count(30, max_columns=6, preferred_min_columns=3, max_rows=8) == 4
 
 
 def test_phrase_parsing_and_sorting_are_stable():

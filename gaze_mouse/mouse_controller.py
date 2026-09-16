@@ -216,6 +216,10 @@ class GazeMouseController(QObject):
         self._quick_target = None
         self._reset_quick_dwell()
 
+    def cancel_toolbar_interaction(self) -> None:
+        self._reset_toolbar_dwell()
+        self._set_toolbar_gaze_target(None)
+
     def execute_zoomed_click(self, logical: QPoint) -> None:
         mode = self._pending_zoom_click_mode
         if mode not in CLICK_ACTIONS:

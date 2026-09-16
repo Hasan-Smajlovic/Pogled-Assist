@@ -139,6 +139,22 @@ def test_toolbar_dwell_emits_one_action_after_delay():
     assert actions == ["settings"]
 
 
+def test_cancel_toolbar_interaction_clears_dwell_and_gaze_feedback():
+    controller = make_controller()
+    gaze_targets = []
+    controller.toolbar_gaze_target_changed.connect(gaze_targets.append)
+    controller._toolbar_candidate = "speech"
+    controller._toolbar_started_ms = 1000
+    controller._set_toolbar_gaze_target("speech")
+
+    controller.cancel_toolbar_interaction()
+
+    assert controller._toolbar_candidate is None
+    assert controller._toolbar_started_ms == 0
+    assert controller._toolbar_gaze_target is None
+    assert gaze_targets == ["speech", None]
+
+
 def test_quick_actions_and_click_modes_are_mutually_exclusive():
     controller = make_controller()
 
