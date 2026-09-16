@@ -36,6 +36,12 @@ top-left corner. Left, Right, and Double click arm one action. Keep your gaze on
 the target until the progress overlay completes. The mode resets after the click
 to reduce accidental repeats.
 
+Every gaze selection starts with a fixed 500 ms pause without a progress ring.
+The ring then fills for the configured stare time, so the default 500 ms setting
+takes one second in total. After a control activates, look away from it before
+returning to select it again. A mouse click remains immediate and cancels any
+pending gaze selection.
+
 A gaze-driven right click arms one direct left click for selecting a context-menu
 item. That follow-up click skips precision zoom so the menu stays open.
 
@@ -88,7 +94,7 @@ runs the launcher with administrator privileges.
 
 Gaze settings controls:
 
-- Stare time before an action fires
+- Progress-ring fill time after the fixed 500 ms gaze pause
 - Stable target radius
 - Delay between actions
 - Pointer smoothing

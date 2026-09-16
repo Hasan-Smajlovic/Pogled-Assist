@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QGuiApplication
 
+from .gaze_selection import GazeSelectionTimer
 from .windows_input import WindowsInputController
 
 logger = logging.getLogger(__name__)
@@ -89,12 +90,11 @@ class GazeMouseController(QObject):
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
         self._toolbar_gaze_target: str | None = None
-        self._toolbar_candidate: str | None = None
-        self._toolbar_started_ms = 0.0
+        self._toolbar_selection = GazeSelectionTimer()
         self._target_anchor: QPoint | None = None
-        self._target_started_ms = 0.0
+        self._target_selection = GazeSelectionTimer()
         self._quick_anchor: GazeScreenPoint | None = None
-        self._quick_started_ms = 0.0
+        self._quick_selection = GazeSelectionTimer()
         self._quick_target: GazeScreenPoint | None = None
         self._quick_menu_open = False
         self._click_zoom_open = False
@@ -219,9 +219,17 @@ class GazeMouseController(QObject):
         self._quick_target = None
         self._reset_quick_dwell()
 
-    def cancel_toolbar_interaction(self) -> None:
-        self._reset_toolbar_dwell()
+    def cancel_toolbar_interaction(self, *, require_leave: bool = False) -> None:
+        self._toolbar_selection.cancel(require_leave=require_leave)
+        self._cancel_interaction("toolbar")
         self._set_toolbar_gaze_target(None)
+
+    def cancel_gaze_interactions_for_mouse(self) -> None:
+        self.cancel_toolbar_interaction(require_leave=True)
+        self._target_selection.cancel(require_leave=True)
+        self._quick_selection.cancel(require_leave=True)
+        self._cancel_interaction("target")
+        self._cancel_interaction("quick")
 
     def execute_zoomed_click(self, logical: QPoint) -> None:
         mode = self._pending_zoom_click_mode
@@ -312,7 +320,6 @@ class GazeMouseController(QObject):
             return
 
         toolbar_action = self._toolbar_action_at(point.logical)
-        self._set_toolbar_gaze_target(toolbar_action)
         pointer_over_app_ui = toolbar_action is not None or self._toolbar_contains(point.logical)
 
         if not pointer_over_app_ui:
@@ -321,6 +328,9 @@ class GazeMouseController(QObject):
         if now_ms < self._pause_until_ms:
             if toolbar_action is None:
                 self._reset_toolbar_dwell()
+            else:
+                self._cancel_interaction("toolbar")
+                self._set_toolbar_gaze_target(None)
             return
 
         if toolbar_action is not None:
@@ -406,26 +416,24 @@ class GazeMouseController(QObject):
                 logger.debug("Mouse move failed during rate-limit window: %s", exc)
 
     def _handle_toolbar_dwell(self, action: str, center: QPoint, now_ms: float) -> None:
-        if action != self._toolbar_candidate:
-            self._toolbar_candidate = action
-            self._toolbar_started_ms = now_ms
-            self._emit_interaction_progress("toolbar", center, 0.0, _action_label(action))
+        update = self._toolbar_selection.update(action, now_ms, self.settings.dwell_ms)
+        if update.progress is None:
+            self._cancel_interaction("toolbar")
+            self._set_toolbar_gaze_target(None)
             return
 
-        progress = _clamp(
-            (now_ms - self._toolbar_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
+        self._set_toolbar_gaze_target(action)
+        self._emit_interaction_progress(
+            "toolbar", center, update.progress, _action_label(action)
         )
-        self._emit_interaction_progress("toolbar", center, progress, _action_label(action))
 
-        ready = now_ms - self._toolbar_started_ms >= self.settings.dwell_ms
         cooled = now_ms - self._last_toolbar_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
             self._last_toolbar_ms = now_ms
             self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
+            self._toolbar_selection.complete()
             self._finish_interaction("toolbar", center, _action_label(action))
-            self._reset_toolbar_dwell()
+            self._set_toolbar_gaze_target(None)
             logger.info("Toolbar dwell action fired: %s", action)
             self.toolbar_action_requested.emit(action)
 
@@ -439,24 +447,29 @@ class GazeMouseController(QObject):
             or _distance(self._target_anchor, point.logical) > self.settings.dwell_radius_px
         ):
             self._target_anchor = point.logical
-            self._target_started_ms = now_ms
-            self._emit_interaction_progress(
-                "target", self._target_anchor, 0.0, _action_label(self.active_mode)
+            self._target_selection.update(
+                "desktop-target",
+                now_ms,
+                self.settings.dwell_ms,
+                restart=True,
             )
+            self._cancel_interaction("target")
             return
 
-        progress = _clamp(
-            (now_ms - self._target_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
+        update = self._target_selection.update(
+            "desktop-target", now_ms, self.settings.dwell_ms
         )
+        if update.progress is None:
+            self._cancel_interaction("target")
+            return
+
         self._emit_interaction_progress(
-            "target", self._target_anchor, progress, _action_label(self.active_mode)
+            "target", self._target_anchor, update.progress, _action_label(self.active_mode)
         )
 
-        ready = now_ms - self._target_started_ms >= self.settings.dwell_ms
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
+            self._target_selection.complete()
             use_precision_zoom = (
                 self.settings.use_precision_zoom and not self._native_menu_click_pending
             )
@@ -482,20 +495,29 @@ class GazeMouseController(QObject):
             or _distance(self._quick_anchor.logical, point.logical) > self.settings.dwell_radius_px
         ):
             self._quick_anchor = point
-            self._quick_started_ms = now_ms
-            self._emit_interaction_progress("quick", point.logical, 0.0, "Quick")
+            self._quick_selection.update(
+                "quick-target",
+                now_ms,
+                self.settings.dwell_ms,
+                restart=True,
+            )
+            self._cancel_interaction("quick")
             return
 
-        progress = _clamp(
-            (now_ms - self._quick_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
+        update = self._quick_selection.update(
+            "quick-target", now_ms, self.settings.dwell_ms
         )
-        self._emit_interaction_progress("quick", self._quick_anchor.logical, progress, "Quick")
+        if update.progress is None:
+            self._cancel_interaction("quick")
+            return
 
-        ready = now_ms - self._quick_started_ms >= self.settings.dwell_ms
+        self._emit_interaction_progress(
+            "quick", self._quick_anchor.logical, update.progress, "Quick"
+        )
+
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
+            self._quick_selection.complete()
             self._quick_target = self._quick_anchor
             self._quick_menu_open = True
             self._finish_interaction("quick", self._quick_anchor.logical, "Quick")
@@ -563,9 +585,9 @@ class GazeMouseController(QObject):
             self.set_mode(None)
 
     def _reset_toolbar_dwell(self) -> None:
+        self._toolbar_selection.cancel()
         self._cancel_interaction("toolbar")
-        self._toolbar_candidate = None
-        self._toolbar_started_ms = 0.0
+        self._set_toolbar_gaze_target(None)
 
     def _set_toolbar_gaze_target(self, action: str | None) -> None:
         if action == self._toolbar_gaze_target:
@@ -575,14 +597,14 @@ class GazeMouseController(QObject):
         self.toolbar_gaze_target_changed.emit(action)
 
     def _reset_target_dwell(self) -> None:
+        self._target_selection.cancel()
         self._cancel_interaction("target")
         self._target_anchor = None
-        self._target_started_ms = 0.0
 
     def _reset_quick_dwell(self) -> None:
+        self._quick_selection.cancel()
         self._cancel_interaction("quick")
         self._quick_anchor = None
-        self._quick_started_ms = 0.0
 
     def _cancel_zoomed_click_state(self) -> None:
         self._click_zoom_open = False

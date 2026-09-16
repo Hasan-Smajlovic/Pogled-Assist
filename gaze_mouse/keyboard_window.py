@@ -101,6 +101,8 @@ class KeyboardWindow(QWidget):
 
     closed = Signal()
     status_changed = Signal(str)
+    interaction_context_changed = Signal()
+    mouse_action_started = Signal()
 
     def __init__(
         self,
@@ -209,10 +211,8 @@ class KeyboardWindow(QWidget):
             top_left = button.mapToGlobal(QPoint(0, 0))
             rect = QRect(top_left, button.size())
             if rect.contains(point):
-                self._set_gaze_target_action(action)
                 return action
 
-        self._set_gaze_target_action(None)
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
@@ -243,6 +243,9 @@ class KeyboardWindow(QWidget):
 
     def cancel_gaze_interaction(self) -> None:
         self._set_gaze_target_action(None)
+
+    def set_gaze_target_action(self, action: str | None) -> None:
+        self._set_gaze_target_action(action)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Keyboard sidebar close event received.")
@@ -620,6 +623,7 @@ class KeyboardWindow(QWidget):
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
+        button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(lambda _checked=False, item=action: self._trigger_action(item))
         self._action_buttons[action] = button
         if dynamic:
@@ -628,6 +632,7 @@ class KeyboardWindow(QWidget):
 
     def _clear_dynamic_buttons(self) -> None:
         self._set_gaze_target_action(None)
+        self.interaction_context_changed.emit()
         for action in self._dynamic_actions:
             self._action_buttons.pop(action, None)
         self._dynamic_actions.clear()

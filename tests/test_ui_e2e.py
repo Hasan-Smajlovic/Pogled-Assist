@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 
 from gaze_mouse.controller_window import (
     CONTROLLER_WINDOW_ACTION_PREFIX,
@@ -281,6 +281,38 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     assert speech_updates[-1].speed == 320
     assert speech_updates[-1].letters_per_group == 12
     assert speech_updates[-1].voice_preset == "human_like"
+
+
+@pytest.mark.e2e
+def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, monkeypatch):
+    monkeypatch.setattr("gaze_mouse.settings_window.is_windows_startup_enabled", lambda: False)
+    window = SettingsWindow(GazeSettings(dwell_ms=200), SpeechSettings())
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    progress = []
+    window.interaction_progress_changed.connect(
+        lambda _point, value, _label: progress.append(value)
+    )
+    center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
+    times = iter((1.0, 1.499, 1.5, 1.7, 3.0))
+    monkeypatch.setattr("gaze_mouse.settings_window.time.monotonic", lambda: next(times))
+
+    window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == []
+    assert window._stack.currentIndex() == 0
+
+    window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
+    assert window._stack.currentIndex() == 1
+
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
 
 
 @pytest.mark.e2e

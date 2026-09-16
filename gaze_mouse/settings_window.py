@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from .gaze_feedback import set_gaze_feedback
+from .gaze_selection import GazeSelectionTimer
 from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
@@ -65,7 +66,7 @@ class SettingsWindow(QWidget):
         self._gaze_actions: dict[QWidget, GazeCallback] = {}
         self._gaze_names: dict[QWidget, str] = {}
         self._gaze_target: QWidget | None = None
-        self._gaze_started_ms = 0.0
+        self._gaze_selection = GazeSelectionTimer()
         self._last_gaze_action_ms = 0.0
         self._interaction_active = False
 
@@ -92,50 +93,49 @@ class SettingsWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Settings window closed.")
-        self._set_gaze_target(None)
-        self._cancel_interaction()
+        self.cancel_gaze_interaction()
         self.closed.emit()
         super().closeEvent(event)
 
     def handle_gaze(self, point: QPoint) -> None:
         if not self.isVisible():
-            self._set_gaze_target(None)
-            self._cancel_interaction()
+            self.cancel_gaze_interaction()
             return
 
         target = self._gaze_action_at(point)
         now_ms = time.monotonic() * 1000
         if target is None:
+            self.cancel_gaze_interaction()
+            return
+
+        widget, action = target
+        update = self._gaze_selection.update(
+            widget,
+            now_ms,
+            self._gaze_settings.dwell_ms,
+        )
+        if update.progress is None:
             self._set_gaze_target(None)
             self._cancel_interaction()
             return
 
-        widget, action = target
         if widget is not self._gaze_target:
             self._set_gaze_target(widget)
-            self._gaze_started_ms = now_ms
             self._set_status(f"Target: {self._gaze_names.get(widget, 'control')}")
-            self._emit_interaction_progress(widget, 0.0)
-            return
+        self._emit_interaction_progress(widget, update.progress)
 
-        progress = _clamp_float(
-            (now_ms - self._gaze_started_ms) / max(1, self._gaze_settings.dwell_ms),
-            0.0,
-            1.0,
-        )
-        self._emit_interaction_progress(widget, progress)
-
-        ready = now_ms - self._gaze_started_ms >= self._gaze_settings.dwell_ms
         cooled = now_ms - self._last_gaze_action_ms >= self._gaze_settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
             name = self._gaze_names.get(widget, "control")
             logger.info("Settings gaze action fired: %s", name)
             self._last_gaze_action_ms = now_ms
+            self._gaze_selection.complete()
             self._finish_interaction(widget)
             self._set_gaze_target(None)
             action()
 
-    def cancel_gaze_interaction(self) -> None:
+    def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
+        self._gaze_selection.cancel(require_leave=require_leave)
         self._set_gaze_target(None)
         self._cancel_interaction()
 
@@ -467,7 +467,7 @@ class SettingsWindow(QWidget):
         layout.addWidget(
             self._make_adjust_row(
                 "Stare time",
-                "Time needed to activate toolbar buttons, settings controls, and armed clicks.",
+                "Progress-ring fill time after the fixed 500 ms gaze pause.",
                 self._dwell_value,
                 lambda: self._adjust_dwell_ms(-50),
                 lambda: self._adjust_dwell_ms(50),
@@ -703,6 +703,7 @@ class SettingsWindow(QWidget):
             button.setObjectName(object_name)
         if icon_name:
             button.setIcon(self._icon(icon_name))
+        button.pressed.connect(lambda: self.cancel_gaze_interaction(require_leave=True))
         button.clicked.connect(lambda _checked=False, item=callback: item())
         self._register_gaze(button, callback, text)
         return button
@@ -716,6 +717,7 @@ class SettingsWindow(QWidget):
         checkbox = QCheckBox(text, self)
         checkbox.setMinimumSize(minimum_size or QSize(250, 58))
         checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+        checkbox.pressed.connect(lambda: self.cancel_gaze_interaction(require_leave=True))
         checkbox.clicked.connect(lambda _checked=False, item=callback: item())
         self._register_gaze(checkbox, callback, text)
         return checkbox
@@ -780,6 +782,7 @@ class SettingsWindow(QWidget):
         return QRect(top_left, widget.size()).center()
 
     def _select_tab(self, index: int) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
         self._stack.setCurrentIndex(index)
         self._general_tab_button.setChecked(index == 0)
         self._gaze_tab_button.setChecked(index == 1)

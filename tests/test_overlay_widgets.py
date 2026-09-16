@@ -65,10 +65,11 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     menu.action_selected.connect(selected.append)
     menu.set_selection_settings(dwell_ms=150, radius_px=48)
     menu.show_at(QPoint(400, 300))
-    menu._opened_ms = 0
-    times = iter((1.0, 1.2))
+    times = iter((1.0, 1.499, 1.5, 1.65))
     monkeypatch.setattr("gaze_mouse.quick_action_menu.time.monotonic", lambda: next(times))
 
+    menu.handle_gaze(QPoint(400, 200))
+    menu.handle_gaze(QPoint(400, 200))
     menu.handle_gaze(QPoint(400, 200))
     menu.handle_gaze(QPoint(400, 200))
 
@@ -83,13 +84,14 @@ def test_quick_action_zoom_maps_and_selects_stable_gaze_target(qtbot, monkeypatc
     zoom._screen_geometry = QRect(0, 0, 1000, 800)
     zoom._source_rect = QRect(100, 200, 180, 180)
     zoom._display_rect = QRect(230, 130, 540, 540)
-    zoom._opened_ms = 0
     zoom.show()
     selected = []
     zoom.target_selected.connect(lambda point: selected.append(QPoint(point)))
-    times = iter((1.0, 1.2))
+    times = iter((1.0, 1.499, 1.5, 1.65))
     monkeypatch.setattr("gaze_mouse.quick_action_zoom.time.monotonic", lambda: next(times))
 
+    zoom.handle_gaze(QPoint(500, 400))
+    zoom.handle_gaze(QPoint(500, 400))
     zoom.handle_gaze(QPoint(500, 400))
     zoom.handle_gaze(QPoint(500, 400))
 

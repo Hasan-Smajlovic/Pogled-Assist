@@ -322,6 +322,7 @@ class HotbarWindow(QWidget):
         self._hide_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hide_button.setProperty("gazeTarget", False)
         self._hide_button.setProperty("gazePulse", "")
+        self._hide_button.pressed.connect(self._mouse.cancel_gaze_interactions_for_mouse)
         self._hide_button.clicked.connect(
             lambda checked=False: self._run_toolbar_action(
                 HIDE_HOTBAR,
@@ -341,6 +342,7 @@ class HotbarWindow(QWidget):
         self._settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._settings_button.setProperty("gazeTarget", False)
         self._settings_button.setProperty("gazePulse", "")
+        self._settings_button.pressed.connect(self._mouse.cancel_gaze_interactions_for_mouse)
         self._settings_button.clicked.connect(
             lambda checked=False: self._run_toolbar_action(
                 SETTINGS,
@@ -361,6 +363,9 @@ class HotbarWindow(QWidget):
         self._quick_actions_button.setCheckable(True)
         self._quick_actions_button.setProperty("gazeTarget", False)
         self._quick_actions_button.setProperty("gazePulse", "")
+        self._quick_actions_button.pressed.connect(
+            self._mouse.cancel_gaze_interactions_for_mouse
+        )
         self._quick_actions_button.clicked.connect(
             lambda checked=False: self._run_toolbar_action(
                 QUICK_ACTIONS,
@@ -393,6 +398,7 @@ class HotbarWindow(QWidget):
             button.setCheckable(action in CLICK_ACTIONS)
             button.setProperty("gazeTarget", False)
             button.setProperty("gazePulse", "")
+            button.pressed.connect(self._mouse.cancel_gaze_interactions_for_mouse)
             button.clicked.connect(
                 lambda checked=False, item=action: self._run_toolbar_action(
                     item,
@@ -416,6 +422,7 @@ class HotbarWindow(QWidget):
             button.setCheckable(action in {KEYBOARD, CONTROLLER})
             button.setProperty("gazeTarget", False)
             button.setProperty("gazePulse", "")
+            button.pressed.connect(self._mouse.cancel_gaze_interactions_for_mouse)
             button.clicked.connect(
                 lambda checked=False, item=action: self._run_toolbar_action(
                     item,
@@ -471,6 +478,7 @@ class HotbarWindow(QWidget):
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
+        button.pressed.connect(self._mouse.cancel_gaze_interactions_for_mouse)
         button.setStyleSheet(
             """
             QToolButton#restoreHotbarButton {
@@ -582,6 +590,8 @@ class HotbarWindow(QWidget):
         source: str = "unknown",
     ) -> None:
         logger.info("Toolbar action requested by %s: %s", source, action)
+        if source == "mouse":
+            self._mouse.cancel_gaze_interactions_for_mouse()
         if action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX):
             if self._keyboard_window is not None:
                 self._keyboard_window.handle_gaze_action(action)
@@ -650,6 +660,27 @@ class HotbarWindow(QWidget):
     def _set_toolbar_gaze_target(self, action: object) -> None:
         for button_action, button in self._buttons.items():
             set_gaze_feedback(button, button_action == action)
+        if self._speech_window is not None:
+            speech_action = (
+                action
+                if isinstance(action, str) and action.startswith(SPEECH_WINDOW_ACTION_PREFIX)
+                else None
+            )
+            self._speech_window.set_gaze_target_action(speech_action)
+        if self._keyboard_window is not None:
+            keyboard_action = (
+                action
+                if isinstance(action, str) and action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX)
+                else None
+            )
+            self._keyboard_window.set_gaze_target_action(keyboard_action)
+        if self._controller_window is not None:
+            controller_action = (
+                action
+                if isinstance(action, str) and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
+                else None
+            )
+            self._controller_window.set_gaze_target_action(controller_action)
 
     def _show_action_fired(self, action: str, point: QPoint) -> None:
         names = {
@@ -885,6 +916,12 @@ class HotbarWindow(QWidget):
             self._keyboard_window = KeyboardWindow(self._speech.settings, self)
             self._keyboard_window.closed.connect(self._keyboard_window_closed)
             self._keyboard_window.status_changed.connect(self._set_status)
+            self._keyboard_window.interaction_context_changed.connect(
+                lambda: self._mouse.cancel_toolbar_interaction(require_leave=True)
+            )
+            self._keyboard_window.mouse_action_started.connect(
+                self._mouse.cancel_gaze_interactions_for_mouse
+            )
 
         self._update_last_external_foreground_window()
         self._keyboard_window.set_target_window(self._last_external_foreground_window)
@@ -934,6 +971,12 @@ class HotbarWindow(QWidget):
             self._controller_window.status_changed.connect(self._set_status)
             self._controller_window.speech_requested.connect(self._open_speech_from_controller)
             self._controller_window.gaze_settings_changed.connect(self._update_gaze_settings)
+            self._controller_window.interaction_context_changed.connect(
+                lambda: self._mouse.cancel_toolbar_interaction(require_leave=True)
+            )
+            self._controller_window.mouse_action_started.connect(
+                self._mouse.cancel_gaze_interactions_for_mouse
+            )
 
         self._update_last_external_foreground_window()
         self._controller_window.set_target_window(self._last_external_foreground_window)
@@ -970,7 +1013,10 @@ class HotbarWindow(QWidget):
             self._speech_window = SpeechWindow(self._speech, self)
             self._speech_window.closed.connect(lambda: self._set_status("Speech window closed."))
             self._speech_window.interaction_context_changed.connect(
-                self._mouse.cancel_toolbar_interaction
+                lambda: self._mouse.cancel_toolbar_interaction(require_leave=True)
+            )
+            self._speech_window.mouse_action_started.connect(
+                self._mouse.cancel_gaze_interactions_for_mouse
             )
         self._speech_window.update_settings(self._speech.settings)
 
