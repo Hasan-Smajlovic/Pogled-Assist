@@ -48,13 +48,18 @@ jobs:
         shell: powershell
         run: .\scripts\check_github_actions.ps1 -Install
 
-      - name: Run code checks
+      - name: Check Python source
+        run: python -m ruff check .
+
+      - name: Check Python formatting
+        run: python -m ruff format --check .
+
+      - name: Compile Python source
+        run: python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
+
+      - name: Check PowerShell source
         shell: powershell
-        run: |
-          python -m ruff check .
-          python -m ruff format --check .
-          python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
-          .\scripts\check_powershell.ps1 -RequireAnalyzer
+        run: .\scripts\check_powershell.ps1 -RequireAnalyzer
 
       - name: Run automated tests without Tobii hardware
         shell: powershell

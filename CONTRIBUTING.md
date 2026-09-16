@@ -179,13 +179,15 @@ bypass actors. It enforces:
 - One approving review
 - Dismissal of stale approvals when new commits are pushed
 - Resolution of all review conversations
+- Successful `code-quality`, `tests`, and `windows-package` checks on an
+  up-to-date branch
 - Squash as the only allowed merge method
 - GitHub's secure default requiring an extra human approval for unattributed
   Copilot changes
 
 It does not require Code Owner review, approval of the most recent reviewable push,
-signed commits, deployments, or status checks. It does not restrict branch
-creation or contain a separate update restriction.
+signed commits, or deployments. It does not restrict branch creation or contain a
+separate update restriction.
 
 The active `Protect master releases` ruleset targets only `master` and has no
 bypass actors. It enforces:
@@ -196,13 +198,15 @@ bypass actors. It enforces:
 - One approving review
 - Dismissal of stale approvals when new commits are pushed
 - Resolution of all review conversations
+- Successful `code-quality`, `tests`, and `windows-package` checks on an
+  up-to-date branch
 - Merge commit as the only allowed merge method
 - GitHub's secure default requiring an extra human approval for unattributed
   Copilot changes
 
 It does not require linear history, Code Owner review, approval of the most recent
-reviewable push, signed commits, deployments, or status checks. It does not
-restrict branch creation or contain a separate update restriction.
+reviewable push, signed commits, or deployments. It does not restrict branch
+creation or contain a separate update restriction.
 
 The former `Maintainer merge control` ruleset is disabled and has no effect on
 either branch. This allows collaborators with write or administrator permission
@@ -218,12 +222,11 @@ Pull requests targeting `development` or `master` run these stable checks:
 - `tests`: the hardware-independent pytest suite with the Qt offscreen backend
   and enforced coverage floor.
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable
-  smoke test.
+  and isolated installer smoke tests.
 
-Both branch rulesets must require all three names after each check has completed
-successfully at least once. The release workflow repeats the checks after a merge
-to `master`; it is not a pull request check and must not be selected as a required
-status check.
+Both branch rulesets require all three names. The release workflow repeats the
+checks after a merge to `master`; it is not a pull request check and must not be
+selected as a required status check.
 
 Release automation creates tags and GitHub Releases from the exact merged
 `master` commit without pushing directly to `master`. It therefore does not need

@@ -46,10 +46,13 @@ jobs:
         run: .\scripts\check_github_actions.ps1 -Install
 
       - name: Check Python source
-        run: |
-          python -m ruff check .
-          python -m ruff format --check .
-          python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
+        run: python -m ruff check .
+
+      - name: Check Python formatting
+        run: python -m ruff format --check .
+
+      - name: Compile Python source
+        run: python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
 
       - name: Check PowerShell source
         shell: powershell

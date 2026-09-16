@@ -139,8 +139,8 @@ Build the same Windows ZIP checked by CI:
 ```
 
 The command uses the checked-in PyInstaller spec, verifies required assets,
-runs `--package-smoke-test` from the frozen executable, and writes the versioned
-ZIP under `dist`.
+runs `--package-smoke-test` from the frozen executable, installs an extracted copy
+in an isolated directory, and writes the versioned ZIP under `dist`.
 
 The build does not prove that a physical Tobii device or external speech engine
 works. Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before

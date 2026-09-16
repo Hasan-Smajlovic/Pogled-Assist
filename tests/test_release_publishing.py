@@ -105,12 +105,13 @@ def _run_publish(tmp_path: Path, initial_state: dict[str, object]):
     for command in ("git", "gh"):
         command_path = tmp_path / f"{command}.cmd"
         command_path.write_text(
-            f'@echo off\n"{python_path}" "%~dp0fake_cli.py" {command} %*\n'
-            "exit /b %errorlevel%\n",
+            f'@echo off\n"{python_path}" "%~dp0fake_cli.py" {command} %*\nexit /b %errorlevel%\n',
             encoding="utf-8",
         )
 
     environment = os.environ.copy()
+    # Let Windows PowerShell build its module path instead of inheriting PowerShell 7 modules.
+    environment.pop("PSMODULEPATH", None)
     environment["FAKE_CLI_STATE"] = str(state_path)
     environment["PATH"] = str(tmp_path) + os.pathsep + environment["PATH"]
     completed = subprocess.run(

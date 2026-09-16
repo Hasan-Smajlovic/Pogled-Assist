@@ -136,6 +136,25 @@ if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf)) {
     throw "Windows package was not created: $ArtifactPath"
 }
 
+$InstallerSmokeRoot = Join-Path $OutputRoot (".installer-smoke-{0}" -f [Guid]::NewGuid().ToString("N"))
+try {
+    $ExtractRoot = Join-Path $InstallerSmokeRoot "extracted"
+    $InstallRoot = Join-Path $InstallerSmokeRoot "installed"
+    New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null
+    Expand-Archive -LiteralPath $ArtifactPath -DestinationPath $ExtractRoot
+
+    $InstallerPath = Join-Path $ExtractRoot "TobiiGazeMouse\install_windows.ps1"
+    & $InstallerPath `
+        -InstallRoot $InstallRoot `
+        -NoDesktopShortcut `
+        -NoElevation
+    Write-Host "Isolated installer smoke test passed."
+} finally {
+    if (Test-Path -LiteralPath $InstallerSmokeRoot) {
+        Remove-Item -LiteralPath $InstallerSmokeRoot -Recurse -Force
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_OUTPUT)) {
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "version=$Version"
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "artifact_name=$ArtifactName"

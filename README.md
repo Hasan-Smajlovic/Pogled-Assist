@@ -83,8 +83,8 @@ The repository uses one PowerShell entry point for setup and verification:
 ```
 
 `check` runs code-quality checks, the hardware-independent test suite with
-coverage, and a clean Windows package build with its frozen executable smoke
-test. To inspect the UI without a tracker or speech engine, run:
+coverage, and a clean Windows package build with frozen executable and isolated
+installer smoke tests. To inspect the UI without a tracker or speech engine, run:
 
 ```powershell
 .\dev.ps1 ui -Open

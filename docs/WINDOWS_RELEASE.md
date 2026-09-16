@@ -66,7 +66,8 @@ Use Windows x64 and Python 3.10:
 ```
 
 The build reads `VERSION`, uses the checked-in PyInstaller spec, checks required
-assets, executes the packaged `--package-smoke-test`, and creates:
+assets, executes the packaged `--package-smoke-test`, installs an extracted copy
+in an isolated directory, and creates:
 
 ```text
 dist\TobiiGazeMouse-v<version>-windows-x64.zip
