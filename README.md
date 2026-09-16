@@ -32,9 +32,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 The installer copies the app to `C:\TobiiExec`, verifies that the packaged
-executable starts, and creates a desktop shortcut. The release includes Python
-and the application dependencies. Tobii software, tracker calibration, speech
-engines, and the optional 32-bit bridge runtime remain separate.
+executable starts, and creates a desktop shortcut. Future updates are installed
+from verified stable GitHub Release artifacts by the packaged
+`update_windows.ps1`. The release includes Python and the application
+dependencies. Tobii software, tracker calibration, speech engines, and the
+optional 32-bit bridge runtime remain separate.
 
 See the [Windows release guide](docs/WINDOWS_RELEASE.md) for checksum verification,
 external components, rollback, and clean-machine checks.
@@ -50,7 +52,9 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 Source installations live under `C:\TobiiExec`. Add `-Launch` to start the app
-after setup or `-NoPause` when running from an existing terminal.
+after setup or `-NoPause` when running from an existing terminal. Running the
+installed `update_windows.ps1` migrates an existing source installation to the
+stable packaged release channel.
 
 ## Run
 
@@ -148,8 +152,8 @@ data\speech_phrases.json
 logs\latest.txt
 ```
 
-The launcher also writes `start_gaze_mouse.log`. Source setup and updates write
-their own logs in the installation directory.
+The launcher also writes `start_gaze_mouse.log`. Source setup and release updates
+write their own logs in the installation directory.
 
 ## Current limitations
 

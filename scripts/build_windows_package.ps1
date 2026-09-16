@@ -69,6 +69,7 @@ try {
 $packageFiles = @{
     (Join-Path $RepoRoot "packaging\windows\install_windows.ps1") = "install_windows.ps1"
     (Join-Path $RepoRoot "packaging\windows\start_gaze_mouse.ps1") = "start_gaze_mouse.ps1"
+    (Join-Path $RepoRoot "update_windows.ps1") = "update_windows.ps1"
     (Join-Path $RepoRoot "docs\WINDOWS_RELEASE.md") = "README.md"
     $VersionFile = "VERSION"
 }
@@ -80,6 +81,7 @@ $requiredFiles = @(
     "TobiiGazeMouse.exe",
     "install_windows.ps1",
     "start_gaze_mouse.ps1",
+    "update_windows.ps1",
     "README.md",
     "VERSION",
     "_internal\assets\icon.png",

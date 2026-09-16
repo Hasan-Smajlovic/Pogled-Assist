@@ -1,7 +1,8 @@
 # Windows release installation and validation
 
 The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder
-application, an installer, a launcher, this guide, and the release `VERSION`.
+application, an installer, a launcher, a release updater, this guide, and the
+release `VERSION`.
 The package includes Python, PySide6, QtAwesome resources, the app icon, the
 Settings checkbox asset, the Tobii Pro SDK Python package, and the source needed
 by the optional 32-bit Stream Engine bridge.
@@ -25,15 +26,69 @@ by the optional 32-bit Stream Engine bridge.
    .\install_windows.ps1 -Launch
    ```
 
-The installer requests Administrator access, mirrors application files to
-`C:\TobiiExec`, preserves `data` and `logs`, and creates the `Tobii Gaze Mouse`
-desktop shortcut. Before replacing files, it rejects a running application,
-creates and smoke-tests a staging copy, and backs up the current application
-files. If the copy or installed smoke test fails, it restores the backup. Run
+The installer requests Administrator access, preserves `data`, `logs`, root log
+files, and `install_info.json`, and creates the `Tobii Gaze Mouse` desktop
+shortcut. Before replacing files, it rejects a running application, creates and
+smoke-tests a sibling staging directory, copies persistent content into it, and
+renames the existing installation to a backup. The backup remains until the new
+installed application passes its smoke test. If installation or verification
+fails, the installer restores the previous directory. Run
 `C:\TobiiExec\start_gaze_mouse.ps1` or the shortcut later.
 
 The extracted folder is also portable. Run its `start_gaze_mouse.ps1` without
 installing if a portable copy is preferred.
+
+## Update an installed release
+
+Close Tobii Gaze Mouse, open PowerShell in `C:\TobiiExec`, and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\update_windows.ps1
+```
+
+The updater reads the installed `VERSION` and calls GitHub's latest stable
+release endpoint for `Hasan-Smajlovic/TobiiEyeTrackerTool`. It accepts only a
+stable `v<major>.<minor>.<patch>` tag and the exact
+`TobiiGazeMouse-v<version>-windows-x64.zip` and matching `.sha256` assets from
+that repository. It verifies the checksum and package `VERSION` before invoking
+the package installer. A checksum, metadata, network, archive, or staging error
+does not change application files. The updater refuses an automatic downgrade
+when the installed version is newer than the latest stable release.
+
+Only one updater and one installer can run at a time. Neither process stops a
+running application automatically. Close the application and retry when the
+updater reports a running process. Add `-Launch` to start the verified version
+after a successful update. Update details are appended to
+`C:\TobiiExec\update_windows.log`.
+
+## Migrate a source installation
+
+The previous source updater has been removed rather than retained as a
+development update tool. `update_windows.ps1` always installs an immutable stable
+release and never downloads a Git branch or repository source archive.
+
+An existing source installation under `C:\TobiiExec` may not contain a
+`VERSION`. The new updater recognizes the source layout, reports it as a legacy
+source installation, and performs the same verified release update. Its `.venv`
+and source runtime files are replaced by the packaged application only after the
+staged package passes its smoke test. `data`, `logs`, `install_info.json`, and
+root log files remain in the installed release. Separately installed Tobii,
+speech, and optional 32-bit bridge runtimes are not removed.
+
+## Interrupted update recovery
+
+The installer writes a transaction marker beside `C:\TobiiExec` immediately
+before the directory swap. If the process or machine stops during that swap,
+rerun `update_windows.ps1` or the verified package's `install_windows.ps1`. The
+installer examines the current, staging, and backup directories under the
+installer lock. It keeps a current version that passes the package smoke test or
+restores the backup when the current version is missing or fails verification.
+
+Do not manually delete hidden `.TobiiExec.install-*` or
+`.TobiiExec.backup-*` paths while recovery is pending. If automatic rollback
+also fails, the error identifies the retained transaction marker and backup for
+manual recovery.
 
 ## Components installed separately
 
@@ -65,9 +120,10 @@ Use Windows x64 and Python 3.10:
 .\dev.ps1 package
 ```
 
-The build reads `VERSION`, uses the checked-in PyInstaller spec, checks required
-assets, executes the packaged `--package-smoke-test`, installs an extracted copy
-in an isolated directory, and creates:
+The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the
+release updater, checks required assets, executes the packaged
+`--package-smoke-test`, installs an extracted copy in an isolated directory, and
+creates:
 
 ```text
 dist\TobiiGazeMouse-v<version>-windows-x64.zip
@@ -105,6 +161,13 @@ Software-only checks on a clean Windows x64 environment:
 
 - Verify the SHA-256 file before extraction.
 - Run `install_windows.ps1` and confirm installation under `C:\TobiiExec`.
+- Install an older release, run `update_windows.ps1`, and confirm `VERSION`
+  matches the latest stable release.
+- Confirm a deliberately invalid checksum leaves the older version unchanged.
+- Confirm an installed smoke-test failure restores the older version.
+- Confirm `data`, `logs`, `install_info.json`, and existing root logs other than
+  the appended `update_windows.log` are byte-for-byte unchanged after update and
+  rollback tests.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
 - Close and reopen the app and confirm settings persist under `data`.

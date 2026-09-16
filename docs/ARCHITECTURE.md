@@ -42,7 +42,7 @@ AppBar reservation during shutdown.
 | Feedback | `gaze_mouse/gaze_bubble.py`, `gaze_mouse/interaction_overlay.py`, `gaze_mouse/gaze_feedback.py` | Gaze position and dwell progress shown without taking focus |
 | Speech | `gaze_mouse/speech_service.py`, `gaze_mouse/speech_window.py` | eSpeak NG and Edge playback, text entry, saved phrases |
 | Persistent data | `gaze_mouse/settings_store.py`, `gaze_mouse/logging_setup.py` | Settings, phrase data root, logs, safe defaults |
-| Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, legacy update, package build, install, release |
+| Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, verified release update, package build, install, release |
 | Verification | `dev.ps1`, `tests/`, `.github/workflows/` | Local checks, simulated hardware inputs, UI flows, CI, release checks |
 
 ## Gaze and input path
@@ -112,10 +112,14 @@ rollback work must preserve `data/` and `logs/`.
 bridge files needed at runtime. The release package contains its own installer
 and launcher and installs under `C:\TobiiExec`.
 
-`update_windows.ps1` is the older source-based updater. It still downloads the
-original upstream repository and is not the stable release channel. Its
-replacement with a verified GitHub Release updater is tracked in
-[issue #21](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/issues/21).
+`update_windows.ps1` reads the installed version, resolves the latest stable
+release from `Hasan-Smajlovic/TobiiEyeTrackerTool`, downloads the exact Windows
+ZIP and checksum assets, and verifies them before invoking the package installer.
+It also migrates the older source installation layout to the packaged release
+channel. The installer stages and smoke-tests the new package, carries persistent
+data into it, swaps sibling directories, and retains the previous directory until
+the installed smoke test passes. A transaction marker lets the next installer
+run restore or finish an update interrupted during the directory swap.
 
 ## Design reference
 

@@ -51,8 +51,9 @@ The suite uses five layers:
 1. Unit tests cover coordinate mapping, dwell state, settings validation, speech
    commands, phrase storage, and Windows helper behavior.
 2. Integration tests cover provider fallback, app startup, logging, packaging
-   paths, release publication recovery, and the optional x86 bridge discovery
-   logic.
+   paths, release publication recovery, release download and checksum failures,
+   transactional installation and rollback, and the optional x86 bridge
+   discovery logic.
 3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise
    Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
 4. Repository tests check required guides and templates, local documentation
