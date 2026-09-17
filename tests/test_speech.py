@@ -285,9 +285,7 @@ def test_speech_library_migrates_current_v2_file_without_losing_categories(tmp_p
     assert json.loads(path.read_text(encoding="utf-8"))["categories"] == [
         {"name": "Moje", "answers": ["Jedan", "Dva"]}
     ]
-    assert json.loads(legacy_path.read_text(encoding="utf-8")) == [
-        {"text": "Hvala", "uses": 3}
-    ]
+    assert json.loads(legacy_path.read_text(encoding="utf-8")) == [{"text": "Hvala", "uses": 3}]
 
 
 def test_speech_library_imports_phrase_changes_made_during_rollback(tmp_path):
