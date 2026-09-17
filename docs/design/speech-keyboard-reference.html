@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <title>Tobii Speech - završni dizajn</title>
+  <title>Pogled Assist - referenca interfejsa</title>
   <style>
     :root {
       color-scheme: dark;
@@ -53,6 +53,24 @@
     .danger { background: #4b2224; border-color: #a1535b; color: #ffd6d6; }
     .danger:hover { background: #663034; }
     .muted { color: #bac5d4; }
+    .reference-switcher {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 90;
+      display: flex;
+      gap: 8px;
+      padding: 7px;
+      border: 1px solid #465268;
+      border-radius: 10px;
+      background: #0b0d11ee;
+      box-shadow: 0 8px 28px #0009;
+    }
+    .reference-switcher button {
+      min-height: 42px;
+      padding: 7px 12px;
+      font-size: 14px;
+    }
     .speech-screen {
       display: grid;
       grid-template-rows: 96px auto minmax(300px, 1fr) 88px;
@@ -140,12 +158,85 @@
     #closed-screen button { width: min(420px, 80vw); }
     #gaze-ring { position: fixed; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; pointer-events: none; z-index: 100; background: conic-gradient(#f7d85a var(--progress, 0deg), #f7d85a33 0); mask: radial-gradient(transparent 52%, #000 56%); }
     button.gaze-target { border-color: #f7d85a; box-shadow: inset 0 0 0 2px #f7d85a; }
+    .settings-screen {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 680px;
+      height: calc(100vh - 24px);
+      height: calc(100dvh - 24px);
+      max-width: 2200px;
+      margin: 0 auto;
+      padding: 18px 22px 22px;
+      background: #151515;
+      color: #f4f1ea;
+    }
+    .settings-screen button {
+      min-height: 58px;
+      padding: 10px 14px;
+      border-color: #494f4b;
+      background: #2b2d2b;
+      color: #f5f3ef;
+      font-size: 15px;
+    }
+    .settings-screen button:hover { background: #363936; border-color: #69736d; }
+    .settings-screen button[aria-pressed="true"], .settings-screen .settings-primary {
+      border-color: #74d3c6;
+      background: #1d6f68;
+      color: #fff;
+    }
+    .settings-topbar { display: flex; align-items: center; gap: 14px; }
+    .settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
+    .settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
+    .settings-danger { background: #4b2224 !important; border-color: #7d383e !important; }
+    .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; }
+    .settings-panel { border: 1px solid #343a36; border-radius: 8px; background: #1e1f1e; }
+    .settings-nav { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+    .settings-nav button { min-height: 74px; }
+    .settings-page { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+    .settings-page-header { display: flex; align-items: center; gap: 12px; }
+    .settings-page-header h2 { flex: 1; margin: 0; color: #fff; font-size: 22px; font-weight: 650; }
+    .settings-options { display: grid; gap: 12px; }
+    .settings-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 66px;
+      width: min(520px, 100%);
+      padding: 14px 18px;
+      border: 1px solid #3a403c;
+      border-radius: 8px;
+      background: #242624;
+      color: #f5f3ef;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .settings-checkbox input { width: 28px; height: 28px; accent-color: #1d6f68; }
+    .update-card {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid #3a403c;
+      border-radius: 8px;
+      background: #242624;
+    }
+    .update-copy h3 { margin: 0 0 6px; color: #fff; font-size: 17px; font-weight: 600; }
+    .update-copy p { margin: 0; color: #d8d3c8; font-size: 15px; }
+    .update-card button { min-height: 64px; }
+    .update-card [data-settings-action="check-update"] { min-width: 210px; }
+    .update-card [data-settings-action="install-update"] { min-width: 250px; }
     @media (max-height: 760px) and (min-width: 901px) {
       body { padding: 8px; }
       .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 80px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
       button { min-height: 72px; }
       .word { min-height: 68px; }
       .key-grid, .item-grid { grid-template-rows: repeat(3, minmax(64px, 1fr)); }
+      .settings-screen { height: calc(100dvh - 16px); min-height: 620px; padding: 14px 18px 18px; }
+      .settings-nav button { min-height: 66px; }
+      .settings-checkbox { min-height: 58px; padding: 10px 14px; }
+      .update-card button { min-height: 58px; }
     }
     @media (max-width: 900px) {
       body { padding: 8px; }
@@ -156,6 +247,12 @@
       .view-header { flex-wrap: wrap; }
       .view-header h1 { flex-basis: 100%; }
       .view-header button { flex: 1; }
+      .settings-screen { height: auto; min-height: calc(100dvh - 16px); padding: 14px; }
+      .settings-status { min-width: 0; }
+      .settings-body { grid-template-columns: 210px minmax(0, 1fr); }
+      .settings-nav { padding: 10px; }
+      .update-card { grid-template-columns: 1fr; }
+      .update-card button { width: 100%; }
     }
     @media (max-width: 560px) {
       :root { --gap: 8px; }
@@ -176,11 +273,23 @@
       .letter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .letter-grid button { min-height: 110px; }
       .confirm-actions { grid-template-columns: 1fr; gap: 24px; }
+      .reference-switcher { right: 8px; bottom: 8px; }
+      .settings-topbar { flex-wrap: wrap; }
+      .settings-topbar h1 { order: -1; flex-basis: 100%; }
+      .settings-status { flex: 1; text-align: left; }
+      .settings-body { display: flex; flex-direction: column; }
+      .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .settings-nav button { min-height: 62px; padding: 8px; font-size: 13px; }
+      .settings-page { padding: 14px; }
     }
   </style>
 </head>
 <body>
-  <main class="speech-screen" aria-label="Tobii govorna tastatura">
+  <nav class="reference-switcher" aria-label="Referentni prikaz">
+    <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
+    <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
+  </nav>
+  <main id="speech-screen" class="speech-screen" aria-label="Pogled Assist govorna tastatura">
     <header class="topbar">
       <button class="warning" type="button" data-action="clear">Obriši</button>
       <button id="categories-toggle" type="button" data-action="categories" aria-pressed="false">Kategorije</button>
@@ -228,11 +337,44 @@
       <button id="keyboard-toggle" type="button" data-action="keyboard-toggle">Brojevi i znakovi</button>
     </div>
   </main>
+  <main id="settings-screen" class="settings-screen" aria-label="Pogled Assist postavke" hidden>
+    <header class="settings-topbar">
+      <button class="settings-danger" type="button">✕&nbsp;&nbsp;Zatvori</button>
+      <h1>Postavke</h1>
+      <p id="settings-status" class="settings-status" role="status" aria-live="polite">Spremno</p>
+    </header>
+    <div class="settings-body">
+      <nav class="settings-nav settings-panel" aria-label="Grupe postavki">
+        <button type="button" aria-pressed="true">Opće postavke</button>
+        <button type="button" aria-pressed="false">Postavke pogleda</button>
+        <button type="button" aria-pressed="false">Postavke govora</button>
+      </nav>
+      <section class="settings-page settings-panel" aria-labelledby="general-settings-title">
+        <header class="settings-page-header">
+          <h2 id="general-settings-title">Opće postavke</h2>
+          <button class="settings-danger" type="button">Isključi aplikaciju</button>
+        </header>
+        <div class="settings-options">
+          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows kao administrator</label>
+          <label class="settings-checkbox"><input type="checkbox">Uključi zapisivanje</label>
+          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell prozor pri pokretanju</label>
+        </div>
+        <section class="update-card" aria-labelledby="update-title">
+          <div class="update-copy">
+            <h3 id="update-title">Ažuriranja</h3>
+            <p id="update-status">Provjeravam posljednje stabilno izdanje...</p>
+          </div>
+          <button type="button" data-settings-action="check-update">↻&nbsp;&nbsp;Provjeri ažuriranja</button>
+          <button class="settings-primary" type="button" data-settings-action="install-update" hidden>↓&nbsp;&nbsp;Ažuriraj na v0.2.0</button>
+        </section>
+      </section>
+    </div>
+  </main>
   <details class="reference" hidden>
     <summary>O ovoj referenci</summary>
     <div class="reference-body">
-      <h2>Završni dizajn: grupna tastatura</h2>
-      <p>Interaktivna HTML referenca za buduće izmjene Python aplikacije. Tekst i raspored su na bosanskom jeziku.</p>
+      <h2>Referenca interfejsa Pogled Assist</h2>
+      <p>Interaktivna HTML referenca za buduće izmjene Python aplikacije. Tekst i raspored su na bosanskom jeziku. Prebacivač prikazuje govor i opće postavke.</p>
       <ul>
         <li>Šest grupa ostaje na početnom ekranu. Grupa otvara prozor sa pet slova. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
@@ -244,6 +386,7 @@
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
         <li>Sleep zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
         <li>Izlaz traži potvrdu i prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
+        <li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li>
         <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno spremanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li>
       </ul>
       <label><input id="gaze-demo" type="checkbox" checked> Pokazivač miša simulira pogled</label>
@@ -288,7 +431,7 @@
       ];
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
       const WORDS = ['jutro', 'sam', 'hvala', 'molim', 'te', 'trebam', 'vode', 'dobro', 'donesi', 'mi', 'jastuk', 'telefon', 'sada', 'kasnije', 'želim', 'hladno', 'toplo'];
-      const STORE_KEY = 'tobii-final-design-v1';
+      const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
       const GAZE_FILL_MS = 500;
       const PAGE_SIZE = 6;
@@ -315,6 +458,13 @@
       let lastGazeClick = { target: null, time: 0 };
 
       render();
+
+      for (const button of document.querySelectorAll('[data-reference-view]')) {
+        button.addEventListener('click', () => showReferenceView(button.dataset.referenceView));
+      }
+      for (const button of document.querySelectorAll('[data-settings-action]')) {
+        button.addEventListener('click', () => handleSettingsAction(button.dataset.settingsAction));
+      }
 
       document.addEventListener('click', event => {
         const button = event.target.closest('button[data-action]');
@@ -356,6 +506,33 @@
         });
       }
       window.addEventListener('pagehide', () => { stopAlarm(); window.speechSynthesis?.cancel(); });
+
+      function showReferenceView(nextView) {
+        const settingsVisible = nextView === 'settings';
+        $('speech-screen').hidden = settingsVisible;
+        $('settings-screen').hidden = !settingsVisible;
+        for (const button of document.querySelectorAll('[data-reference-view]')) {
+          button.setAttribute('aria-pressed', String(button.dataset.referenceView === nextView));
+        }
+        resetGaze();
+      }
+
+      function handleSettingsAction(action) {
+        const status = $('update-status');
+        const pageStatus = $('settings-status');
+        const checkButton = document.querySelector('[data-settings-action="check-update"]');
+        const installButton = document.querySelector('[data-settings-action="install-update"]');
+        if (action === 'check-update') {
+          status.textContent = 'Dostupna je verzija v0.2.0. Trenutno koristite v0.1.0.';
+          pageStatus.textContent = 'Dostupno je ažuriranje na v0.2.0.';
+          installButton.hidden = false;
+        } else if (action === 'install-update') {
+          checkButton.disabled = true;
+          installButton.disabled = true;
+          status.textContent = 'Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije.';
+          pageStatus.textContent = 'Pokrećem ažuriranje.';
+        }
+      }
 
       function render() {
         resetGaze();

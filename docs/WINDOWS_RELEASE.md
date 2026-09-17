@@ -1,40 +1,99 @@
 # Windows release installation and validation
 
 The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder
-application, an installer, a launcher, this guide, and the release `VERSION`.
+application, an installer, a launcher, a release updater, this guide, and the
+release `VERSION`.
 The package includes Python, PySide6, QtAwesome resources, the app icon, the
 Settings checkbox asset, the Tobii Pro SDK Python package, and the source needed
 by the optional 32-bit Stream Engine bridge.
 
 ## Install a release
 
-1. Download `TobiiGazeMouse-v<version>-windows-x64.zip` and its matching
+1. Download `PogledAssist-v<version>-windows-x64.zip` and its matching
    `.sha256` file from the same GitHub Release.
 2. Verify the checksum:
 
    ```powershell
-   $expected = (Get-Content .\TobiiGazeMouse-v0.1.0-windows-x64.zip.sha256).Split()[0]
-   $actual = (Get-FileHash .\TobiiGazeMouse-v0.1.0-windows-x64.zip -Algorithm SHA256).Hash
+   $expected = (Get-Content .\PogledAssist-v0.1.0-windows-x64.zip.sha256).Split()[0]
+   $actual = (Get-FileHash .\PogledAssist-v0.1.0-windows-x64.zip -Algorithm SHA256).Hash
    if ($actual -ne $expected) { throw "Checksum mismatch" }
    ```
 
-3. Extract the ZIP, open the `TobiiGazeMouse` folder, and run:
+3. Extract the ZIP, open the `PogledAssist` folder, and run:
 
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass -Force
    .\install_windows.ps1 -Launch
    ```
 
-The installer requests Administrator access, mirrors application files to
-`C:\TobiiExec`, preserves `data`, `logs`, local `.venv` speech tools, and local
-`tools` components, and creates the `Tobii Gaze Mouse` desktop shortcut. Before
+The installer requests Administrator access, preserves `data`, `logs`, root log
+files, `install_info.json`, local `.venv` speech tools, and local `tools`
+components, and creates the `Pogled Assist` desktop shortcut. Before
 replacing files, it rejects both packaged and source-based running applications,
-creates and smoke-tests a staging copy, and backs up the current application
-files. If the copy or installed smoke test fails, it restores the backup. Run
-`C:\TobiiExec\start_gaze_mouse.ps1` or the shortcut later.
+creates and smoke-tests a sibling staging directory, and renames the existing
+installation to a backup. The backup remains until the new installed application
+passes its smoke test. If installation or verification fails, it restores the
+previous directory. Run
+`C:\PogledAssist\start_gaze_mouse.ps1` or the shortcut later.
+
+The previous application under `C:\TobiiExec` remains independent. The Pogled
+Assist installer and updater reject that legacy path even when it is supplied
+explicitly, and use their own executable name, desktop shortcut, startup task,
+process checks, locks, environment variables, data, and logs.
 
 The extracted folder is also portable. Run its `start_gaze_mouse.ps1` without
 installing if a portable copy is preferred.
+
+## Update an installed release
+
+Close Pogled Assist, open PowerShell in `C:\PogledAssist`, and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\update_windows.ps1
+```
+
+The updater reads the installed `VERSION` and calls GitHub's latest stable
+release endpoint for `Hasan-Smajlovic/TobiiEyeTrackerTool`. It accepts only a
+stable `v<major>.<minor>.<patch>` tag and the exact
+`PogledAssist-v<version>-windows-x64.zip` and matching `.sha256` assets from
+that repository. It verifies the checksum and package `VERSION` before invoking
+the package installer. A checksum, metadata, network, archive, or staging error
+does not change application files. The updater refuses an automatic downgrade
+when the installed version is newer than the latest stable release.
+
+Only one updater and one installer can run at a time. Neither process stops a
+running application automatically. Close the application and retry when the
+updater reports a running process. Add `-Launch` to start the verified version
+after a successful update. Update details are appended to
+`C:\PogledAssist\update_windows.log`.
+
+## Upgrade a Pogled Assist source installation
+
+An existing Pogled Assist source installation uses its older updater, so it
+cannot download this replacement updater by itself. Download the first stable
+release manually, verify its checksum, and run that package's
+`install_windows.ps1`. The installer recognizes the source layout under
+`C:\PogledAssist` and upgrades it only after staging succeeds.
+
+The migration preserves `data`, `logs`, `install_info.json`, root log files,
+local `.venv` speech tools, and local `tools` components. The packaged
+`update_windows.ps1` then installs only immutable stable releases and never
+downloads a Git branch or repository source archive.
+
+## Interrupted update recovery
+
+The installer writes a transaction marker beside `C:\PogledAssist` immediately
+before the directory swap. If the process or machine stops during that swap,
+rerun `update_windows.ps1` or the verified package's `install_windows.ps1`. The
+installer examines the current, staging, and backup directories under the
+installer lock. It keeps a current version that passes the package smoke test or
+restores the backup when the current version is missing or fails verification.
+
+Do not manually delete hidden `.PogledAssist.install-*` or
+`.PogledAssist.backup-*` paths while recovery is pending. If automatic rollback
+also fails, the error identifies the retained transaction marker and backup for
+manual recovery.
 
 ## Components installed separately
 
@@ -45,7 +104,7 @@ installing if a portable copy is preferred.
   `tobii_stream_engine.dll` from Tobii Core or Game Hub. The app searches common
   install locations. Set `TOBII_STREAM_ENGINE_DLL` when the DLL is elsewhere.
 - 32-bit bridge: a 32-bit Tobii DLL cannot load in the packaged 64-bit process.
-  Install 32-bit Python 3.10 and set `TOBII_GAZE_MOUSE_X86_PYTHON` to its
+  Install 32-bit Python 3.10 and set `POGLED_ASSIST_X86_PYTHON` to its
   `python.exe`. The package already contains the bridge source.
 - Default speech: install eSpeak NG 1.52 with the Bosnian `bs` voice. Set
   `ESPEAK_NG_EXE` if `espeak-ng.exe` is outside the standard install folders.
@@ -66,12 +125,13 @@ Use Windows x64 and Python 3.10:
 .\dev.ps1 package
 ```
 
-The build reads `VERSION`, uses the checked-in PyInstaller spec, checks required
-assets, executes the packaged `--package-smoke-test`, installs an extracted copy
-in an isolated directory, and creates:
+The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the
+release updater, checks required assets, executes the packaged
+`--package-smoke-test`, installs an extracted copy in an isolated directory, and
+creates:
 
 ```text
-dist\TobiiGazeMouse-v<version>-windows-x64.zip
+dist\PogledAssist-v<version>-windows-x64.zip
 ```
 
 No physical tracker, Tobii runtime, eSpeak NG, or network speech service is used
@@ -105,7 +165,18 @@ Report software-only and Tobii hardware checks separately.
 Software-only checks on a clean Windows x64 environment:
 
 - Verify the SHA-256 file before extraction.
-- Run `install_windows.ps1` and confirm installation under `C:\TobiiExec`.
+- Run `install_windows.ps1` and confirm installation under `C:\PogledAssist`.
+- Put a sentinel file under a test `C:\TobiiExec` installation and confirm the
+  installer and updater reject that path without changing the sentinel.
+- Install an older release, run `update_windows.ps1`, and confirm `VERSION`
+  matches the latest stable release.
+- Confirm a deliberately invalid checksum leaves the older version unchanged.
+- Confirm an installed smoke-test failure restores the older version.
+- Confirm `data`, `logs`, `install_info.json`, and existing root logs other than
+  the appended `update_windows.log` are byte-for-byte unchanged after update and
+  rollback tests.
+- Confirm any local `.venv` speech tools and `tools` bridge components remain
+  available after source-install migration and release updates.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
 - Close and reopen the app and confirm settings persist under `data`.
@@ -132,9 +203,9 @@ Hardware checks on the target Tobii machine:
 ## Rollback
 
 Download an earlier immutable release, verify its checksum, extract it, and run
-its `install_windows.ps1`. Close Tobii Gaze Mouse first. The installer validates
+its `install_windows.ps1`. Close Pogled Assist first. The installer validates
 the older package before replacing application binaries, preserves
-`C:\TobiiExec\data` and `C:\TobiiExec\logs`, and restores the previous binaries if
+`C:\PogledAssist\data` and `C:\PogledAssist\logs`, and restores the previous binaries if
 installation fails.
 
 Current releases keep the full Speech library in `data\speech_library.json` and

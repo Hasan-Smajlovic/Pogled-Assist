@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_SCRIPT = REPO_ROOT / "scripts" / "publish_github_release.ps1"
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-ARTIFACT_NAME = f"TobiiGazeMouse-v{VERSION}-windows-x64.zip"
+ARTIFACT_NAME = f"PogledAssist-v{VERSION}-windows-x64.zip"
 COMMIT_SHA = "a" * 40
 OTHER_COMMIT_SHA = "b" * 40
 

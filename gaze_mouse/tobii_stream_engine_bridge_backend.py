@@ -14,7 +14,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-X86_PYTHON_ENV = "TOBII_GAZE_MOUSE_X86_PYTHON"
+X86_PYTHON_ENV = "POGLED_ASSIST_X86_PYTHON"
 START_TIMEOUT_SECONDS = 12.0
 
 GazeCallback = Callable[[float, float, int], None]

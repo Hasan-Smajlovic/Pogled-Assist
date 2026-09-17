@@ -10,7 +10,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-TASK_NAME = "Tobii Gaze Mouse"
+TASK_NAME = "Pogled Assist"
 LAUNCHER_SCRIPT_NAME = "start_gaze_mouse.ps1"
 
 
@@ -149,7 +149,7 @@ def _enable_script(launcher_path: Path, *, show_launcher_window: bool) -> str:
     launcher = _ps_quote(str(launcher_path))
     window_style = "" if show_launcher_window else "-WindowStyle Hidden "
     description = _ps_quote(
-        "Starts Tobii Gaze Mouse at Windows logon with highest available privileges."
+        "Starts Pogled Assist at Windows logon with highest available privileges."
     )
     return f"""
 $ErrorActionPreference = 'Stop'

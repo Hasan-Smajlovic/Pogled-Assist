@@ -33,6 +33,7 @@ from .gaze_selection import (
 )
 from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
+from .release_update import ReleaseCheckResult, ReleaseUpdateManager
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
 from .windows_startup import is_windows_startup_enabled, set_windows_startup_enabled
 
@@ -49,6 +50,7 @@ class SettingsWindow(QWidget):
     speech_settings_changed = Signal(object)
     calibration_requested = Signal()
     speech_test_requested = Signal()
+    update_requested = Signal()
     quit_requested = Signal()
     interaction_progress_changed = Signal(QPoint, float, str)
     interaction_finished = Signal(QPoint, str)
@@ -59,6 +61,8 @@ class SettingsWindow(QWidget):
         gaze_settings: GazeSettings,
         speech_settings: SpeechSettings,
         parent: QWidget | None = None,
+        *,
+        update_manager: ReleaseUpdateManager | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Postavke")
@@ -67,6 +71,7 @@ class SettingsWindow(QWidget):
 
         self._gaze_settings = replace(gaze_settings)
         self._speech_settings = replace(speech_settings)
+        self._update_manager = update_manager
         self._gaze_actions: dict[QWidget, GazeCallback] = {}
         self._gaze_names: dict[QWidget, str] = {}
         self._gaze_target: QWidget | None = None
@@ -78,6 +83,7 @@ class SettingsWindow(QWidget):
         self._build_ui()
         self._install_shortcuts()
         self._refresh_values()
+        self._initialize_release_update()
         logger.info("Settings window initialized.")
 
     def show_fullscreen_on_primary(self) -> None:
@@ -183,6 +189,10 @@ class SettingsWindow(QWidget):
             QLabel#settingHint {
                 color: #b9b2a5;
                 font-size: 13px;
+            }
+            QLabel#updateStatusLabel {
+                color: #d8d3c8;
+                font-size: 15px;
             }
             QLabel#valueLabel {
                 background: #101010;
@@ -458,6 +468,39 @@ class SettingsWindow(QWidget):
         actions.addWidget(self._launcher_window_checkbox, 2, 0)
         actions.setColumnStretch(1, 1)
         layout.addLayout(actions)
+
+        update_row = QFrame(page)
+        update_row.setObjectName("settingRow")
+        update_layout = QGridLayout(update_row)
+        update_layout.setContentsMargins(16, 14, 16, 14)
+        update_layout.setHorizontalSpacing(12)
+        update_layout.setVerticalSpacing(6)
+        update_layout.setColumnStretch(0, 1)
+
+        update_title = QLabel("Ažuriranja", update_row)
+        update_title.setObjectName("settingTitle")
+        self._update_status_label = QLabel("Pripremam provjeru ažuriranja.", update_row)
+        self._update_status_label.setObjectName("updateStatusLabel")
+        self._update_status_label.setWordWrap(True)
+        self._check_update_button = self._make_button(
+            "Provjeri ažuriranja",
+            self._check_for_updates,
+            icon_name="fa5s.sync-alt",
+            minimum_size=QSize(210, 64),
+        )
+        self._update_button = self._make_button(
+            "Ažuriraj i ponovo pokreni",
+            self._request_update,
+            icon_name="fa5s.download",
+            minimum_size=QSize(250, 64),
+        )
+        self._update_button.hide()
+
+        update_layout.addWidget(update_title, 0, 0)
+        update_layout.addWidget(self._update_status_label, 1, 0)
+        update_layout.addWidget(self._check_update_button, 0, 1, 2, 1)
+        update_layout.addWidget(self._update_button, 0, 2, 2, 1)
+        layout.addWidget(update_row)
         layout.addStretch(1)
 
         return page
@@ -955,6 +998,81 @@ class SettingsWindow(QWidget):
     def _request_speech_test(self) -> None:
         self._set_status("Isprobavam govor.")
         self.speech_test_requested.emit()
+
+    def _initialize_release_update(self) -> None:
+        if self._update_manager is None or not self._update_manager.supported:
+            self._check_update_button.setEnabled(False)
+            self._update_status_label.setText(
+                "Provjera ažuriranja dostupna je u instaliranoj Windows verziji."
+            )
+            return
+
+        self._update_manager.check_started.connect(self._release_check_started)
+        self._update_manager.check_completed.connect(self._release_check_completed)
+        self._update_manager.check_failed.connect(self._release_check_failed)
+        self._check_for_updates()
+
+    def _check_for_updates(self) -> None:
+        if self._update_manager is None:
+            return
+        self._release_check_started()
+        self._update_manager.check()
+
+    def _release_check_started(self) -> None:
+        self._check_update_button.setEnabled(False)
+        self._update_button.setEnabled(False)
+        self._update_button.hide()
+        self._update_status_label.setText("Provjeravam posljednje stabilno izdanje...")
+        self._set_status("Provjeravam ažuriranja.")
+
+    def _release_check_completed(self, result: object) -> None:
+        if not isinstance(result, ReleaseCheckResult):
+            self._release_check_failed("GitHub nije vratio ispravne podatke o izdanju.")
+            return
+
+        installed = str(result.installed_version)
+        latest = str(result.latest_version)
+        self._check_update_button.setEnabled(True)
+        if result.update_available:
+            self._update_status_label.setText(
+                f"Dostupna je verzija v{latest}. Trenutno koristite v{installed}."
+            )
+            self._update_button.setText(f"Ažuriraj na v{latest}")
+            self._update_button.setEnabled(True)
+            self._update_button.show()
+            self._set_status(f"Dostupno je ažuriranje na v{latest}.")
+            return
+
+        self._update_button.hide()
+        if result.latest_version == result.installed_version:
+            message = f"Koristite najnoviju verziju v{installed}."
+        else:
+            message = f"Instalirana verzija v{installed} novija je od stabilne v{latest}."
+        self._update_status_label.setText(message)
+        self._set_status(message)
+
+    def _release_check_failed(self, message: str) -> None:
+        self._check_update_button.setEnabled(True)
+        self._update_button.setEnabled(False)
+        self._update_button.hide()
+        self._update_status_label.setText(message)
+        self._set_status("Provjera ažuriranja nije uspjela.")
+
+    def _request_update(self) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
+        self._check_update_button.setEnabled(False)
+        self._update_button.setEnabled(False)
+        self._update_status_label.setText(
+            "Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije."
+        )
+        self._set_status("Pokrećem ažuriranje.")
+        self.update_requested.emit()
+
+    def show_update_error(self, message: str) -> None:
+        self._check_update_button.setEnabled(True)
+        self._update_button.setEnabled(True)
+        self._update_status_label.setText(message)
+        self._set_status("Pokretanje ažuriranja nije uspjelo.")
 
     def _request_quit(self) -> None:
         self._set_status("Isključujem aplikaciju.")

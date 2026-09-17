@@ -1,6 +1,6 @@
 # User guide
 
-Tobii Gaze Mouse places a toolbar at the top of the primary Windows display. It
+Pogled Assist places a toolbar at the top of the primary Windows display. It
 can move the pointer from gaze, select its own controls by dwell, and perform a
 click after you hold your gaze on a stable target.
 
@@ -121,6 +121,28 @@ Gaze settings controls:
 Speech settings controls eSpeak speed, letters per group, and the voice preset.
 Changes are saved immediately to `data\app_settings.json`.
 
+## Update
+
+Close Pogled Assist, open PowerShell in `C:\PogledAssist`, and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\update_windows.ps1
+```
+
+The updater requests Administrator access, compares the installed `VERSION` with
+the latest stable GitHub Release, verifies the downloaded ZIP against its
+published SHA-256 file, and tests the new application before replacing the old
+one. Settings, saved phrases, logs, and installation metadata are preserved. If
+the download, checksum, staging, or installed smoke test fails, the previous
+installation remains available. Rerun the same command after an interrupted
+update so the installer can recover the saved transaction.
+
+An older source installation has the previous updater, so download and install
+the first stable release manually to migrate it to the packaged channel. Its
+installer keeps user data and local runtime components. Later updates never
+install a repository branch, draft, or prerelease.
+
 ## Troubleshooting
 
 If no tracker is found, confirm that Tobii software sees the device and that it is
@@ -131,7 +153,7 @@ If the log contains `[WinError 193] %1 is not a valid Win32 application`, the To
 DLL is probably 32-bit. Rerun source setup or configure a 32-bit Python 3.10 path:
 
 ```powershell
-$env:TOBII_GAZE_MOUSE_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
+$env:POGLED_ASSIST_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
 ```
 
 If Stream Engine is installed outside a common location:
@@ -145,6 +167,8 @@ If calibration needs a product-specific command, set
 
 Runtime diagnostics are written to `logs\latest.txt` when logging is enabled.
 The launcher writes `start_gaze_mouse.log` even when its window is hidden.
+Updater diagnostics are appended to `update_windows.log` in the installation
+folder.
 
 ## Exit
 

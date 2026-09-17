@@ -13,7 +13,7 @@ from .logging_setup import install_qt_message_handler, setup_application_logging
 from .tobii_stream_engine import APP_ROOT_ENV
 
 PACKAGE_SMOKE_TEST_ARG = "--package-smoke-test"
-PACKAGE_SMOKE_REPORT_ENV = "TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT"
+PACKAGE_SMOKE_REPORT_ENV = "POGLED_ASSIST_PACKAGE_SMOKE_REPORT"
 MOUSE_GAZE_SIMULATION_ARG = "--simulate-gaze"
 
 
@@ -46,8 +46,8 @@ def main() -> int:
         argument for argument in sys.argv if argument != MOUSE_GAZE_SIMULATION_ARG
     ]
     app = QApplication(application_arguments)
-    app.setApplicationName("Tobii Gaze Mouse")
-    app.setOrganizationName("PieLabs")
+    app.setApplicationName("Pogled Assist")
+    app.setOrganizationName("Pogled Assist")
     icon = load_app_icon()
     if not icon.isNull():
         app.setWindowIcon(icon)

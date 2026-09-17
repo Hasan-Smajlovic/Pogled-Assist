@@ -1,4 +1,4 @@
-"""Launch the Tobii gaze mouse hotbar."""
+"""Launch Pogled Assist."""
 
 import os
 import sys

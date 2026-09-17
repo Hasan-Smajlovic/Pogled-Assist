@@ -1,23 +1,27 @@
 [CmdletBinding()]
 param(
-    [switch]$NoSetup,
-    [switch]$NoPause
+    [string]$InstallRoot = "C:\PogledAssist",
+    [switch]$Launch,
+    [switch]$NoDesktopShortcut,
+    [switch]$NoPause,
+    [switch]$NoElevation,
+    [int]$WaitForProcessId = 0,
+    [string]$ReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$RepositoryUrl = "https://github.com/thePi314/TobiiEyeTrackerTool.git"
-$ArchiveUrls = @(
-    "https://github.com/thePi314/TobiiEyeTrackerTool/archive/refs/heads/main.zip",
-    "https://github.com/thePi314/TobiiEyeTrackerTool/archive/refs/heads/master.zip"
-)
-$InstallRoot = "C:\TobiiExec"
-$UpdateScriptPath = $MyInvocation.MyCommand.Path
+$OfficialReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
+$OfficialReleaseAssetRoot = "https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/download"
+$UpdaterPath = $PSCommandPath
 $script:ExitCode = 0
-$script:TranscriptStarted = $false
 $script:ElevationRequested = $false
-$script:UpdateLogPath = Join-Path $InstallRoot "update_windows.log"
+$script:TranscriptStarted = $false
+$script:UpdateLogPath = $null
+$script:OperationRoot = $null
+$script:UpdateMutex = $null
+$script:UpdateMutexAcquired = $false
 
 function Write-Log {
     param(
@@ -62,7 +66,6 @@ function Test-IsAdministrator {
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } catch {
-        Write-WarningLog "Could not determine administrator status: $($_.Exception.Message)"
         return $false
     }
 }
@@ -74,61 +77,114 @@ function Get-PowerShellExecutable {
     }
 
     $windowsPowerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-    if (Test-Path $windowsPowerShell) {
+    if (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf) {
         return $windowsPowerShell
     }
 
     return "powershell.exe"
 }
 
-function Format-ShortcutArgument {
+function Quote-Argument {
     param([string]$Value)
     return '"' + $Value.Replace('"', '\"') + '"'
 }
 
+function Assert-DedicatedInstallRoot {
+    $requestedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd("\")
+    $legacyRoot = [IO.Path]::GetFullPath("C:\TobiiExec").TrimEnd("\")
+    if ($requestedRoot.Equals($legacyRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "C:\TobiiExec belongs to the previous application and will not be changed. Install Pogled Assist to C:\PogledAssist or another separate folder."
+    }
+}
+
 function Ensure-Administrator {
-    if (Test-IsAdministrator) {
-        Write-Success "Updater is running as Administrator."
+    if ($NoElevation -or (Test-IsAdministrator)) {
         return
     }
 
-    Write-WarningLog "Updater is not elevated; restarting as Administrator so it can update $InstallRoot."
+    Write-Info "Requesting Administrator access to update $InstallRoot."
     $arguments = @(
         "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        (Format-ShortcutArgument -Value $UpdateScriptPath)
+        "-ExecutionPolicy", "Bypass",
+        "-File", (Quote-Argument -Value $UpdaterPath),
+        "-InstallRoot", (Quote-Argument -Value $InstallRoot)
     )
-    if ($NoSetup) {
-        $arguments += "-NoSetup"
+    if ($Launch) {
+        $arguments += "-Launch"
+    }
+    if ($NoDesktopShortcut) {
+        $arguments += "-NoDesktopShortcut"
     }
     if ($NoPause) {
         $arguments += "-NoPause"
     }
+    if ($WaitForProcessId -gt 0) {
+        $arguments += "-WaitForProcessId"
+        $arguments += $WaitForProcessId
+    }
+
+    Start-Process `
+        -FilePath (Get-PowerShellExecutable) `
+        -ArgumentList ($arguments -join " ") `
+        -WorkingDirectory (Split-Path -Parent $UpdaterPath) `
+        -Verb RunAs | Out-Null
+    $script:ElevationRequested = $true
+    exit 0
+}
+
+function Enter-UpdateLock {
+    $mutexName = "Global\PogledAssist.Update"
+    try {
+        $createdNew = $false
+        $script:UpdateMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
+    } catch [System.UnauthorizedAccessException] {
+        $mutexName = "Local\PogledAssist.Update"
+        $createdNew = $false
+        $script:UpdateMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
+    }
 
     try {
-        Start-Process `
-            -FilePath (Get-PowerShellExecutable) `
-            -ArgumentList ($arguments -join " ") `
-            -WorkingDirectory (Split-Path -Parent $UpdateScriptPath) `
-            -Verb "RunAs" | Out-Null
-        $script:ElevationRequested = $true
-        Write-Info "Elevated updater process requested."
-        exit 0
-    } catch {
-        throw "Could not restart updater as Administrator: $($_.Exception.Message)"
+        $script:UpdateMutexAcquired = $script:UpdateMutex.WaitOne(0, $false)
+    } catch [System.Threading.AbandonedMutexException] {
+        $script:UpdateMutexAcquired = $true
+    }
+
+    if (-not $script:UpdateMutexAcquired) {
+        $script:UpdateMutex.Dispose()
+        $script:UpdateMutex = $null
+        throw "Another Pogled Assist update is already in progress. Wait for it to finish before trying again."
     }
 }
 
+function Exit-UpdateLock {
+    if ($null -eq $script:UpdateMutex) {
+        return
+    }
+
+    if ($script:UpdateMutexAcquired) {
+        try {
+            $script:UpdateMutex.ReleaseMutex()
+        } catch {
+            Write-WarningLog "Could not release the updater lock cleanly: $($_.Exception.Message)"
+        }
+    }
+    $script:UpdateMutex.Dispose()
+    $script:UpdateMutex = $null
+    $script:UpdateMutexAcquired = $false
+}
+
 function Start-UpdateTranscript {
-    New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
+    $script:OperationRoot = Join-Path `
+        ([IO.Path]::GetTempPath()) `
+        ("PogledAssistUpdate_{0}" -f [Guid]::NewGuid().ToString("N"))
+    [IO.Directory]::CreateDirectory($script:OperationRoot) | Out-Null
+    $script:UpdateLogPath = Join-Path $script:OperationRoot "update_windows.log"
+
     try {
-        Start-Transcript -Path $script:UpdateLogPath -Append | Out-Null
+        Start-Transcript -LiteralPath $script:UpdateLogPath | Out-Null
         $script:TranscriptStarted = $true
-        Write-Info "Writing update log to $script:UpdateLogPath"
     } catch {
-        Write-WarningLog "Could not start update transcript: $($_.Exception.Message)"
+        Write-WarningLog "Could not start the update log: $($_.Exception.Message)"
     }
 }
 
@@ -140,7 +196,43 @@ function Stop-UpdateTranscript {
     try {
         Stop-Transcript | Out-Null
     } catch {
-        Write-WarningLog "Could not stop update transcript cleanly: $($_.Exception.Message)"
+        Write-WarningLog "Could not stop the update log cleanly: $($_.Exception.Message)"
+    }
+    $script:TranscriptStarted = $false
+}
+
+function Save-UpdateLog {
+    if (
+        [string]::IsNullOrWhiteSpace($script:UpdateLogPath) -or
+        -not (Test-Path -LiteralPath $script:UpdateLogPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $InstallRoot -PathType Container)
+    ) {
+        return
+    }
+
+    $destination = Join-Path $InstallRoot "update_windows.log"
+    try {
+        if (Test-Path -LiteralPath $destination -PathType Leaf) {
+            Add-Content -LiteralPath $destination -Value "" -Encoding UTF8
+            Get-Content -LiteralPath $script:UpdateLogPath | Add-Content -LiteralPath $destination -Encoding UTF8
+        } else {
+            Copy-Item -LiteralPath $script:UpdateLogPath -Destination $destination -Force
+        }
+    } catch {
+        Write-WarningLog "Could not save the update log to $destination`: $($_.Exception.Message)"
+    }
+}
+
+function Remove-OperationRoot {
+    if (
+        -not [string]::IsNullOrWhiteSpace($script:OperationRoot) -and
+        (Test-Path -LiteralPath $script:OperationRoot)
+    ) {
+        try {
+            Remove-Item -LiteralPath $script:OperationRoot -Recurse -Force
+        } catch {
+            Write-WarningLog "Could not remove temporary update files: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -150,217 +242,385 @@ function Wait-BeforeExit {
     }
 
     Write-Host ""
-    Write-Host "Press Enter to close this update window..." -ForegroundColor Cyan
-    Read-Host | Out-Null
+    Read-Host "Press Enter to close this update window" | Out-Null
 }
 
-function Invoke-NativeCommand {
+function ConvertTo-StableVersion {
+    param(
+        [string]$Value,
+        [string]$Label
+    )
+
+    if ($Value -notmatch "^(?:v)?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$") {
+        throw "$Label must be a stable Semantic Version such as 0.2.0. Found: $Value"
+    }
+    return [version]::new(
+        [int]$Matches[1],
+        [int]$Matches[2],
+        [int]$Matches[3]
+    )
+}
+
+function Get-InstalledRelease {
+    if (-not (Test-Path -LiteralPath $InstallRoot -PathType Container)) {
+        throw "No Pogled Assist installation was found at $InstallRoot. Install a release before using the updater."
+    }
+
+    $sourceMarkers = @(
+        (Join-Path $InstallRoot "setup_windows.ps1"),
+        (Join-Path $InstallRoot "run_gaze_mouse.py"),
+        (Join-Path $InstallRoot "gaze_mouse")
+    )
+    $isSourceInstallation = @(
+        $sourceMarkers | Where-Object { Test-Path -LiteralPath $_ }
+    ).Count -eq $sourceMarkers.Count
+
+    $versionPath = Join-Path $InstallRoot "VERSION"
+    if (-not (Test-Path -LiteralPath $versionPath -PathType Leaf)) {
+        if ($isSourceInstallation) {
+            return [PSCustomObject]@{
+                Version = $null
+                DisplayVersion = "legacy source installation"
+                IsSourceInstallation = $true
+            }
+        }
+        throw "The installed VERSION file is missing. The installation is unsupported and was not changed."
+    }
+
+    $versionText = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+    $version = ConvertTo-StableVersion -Value $versionText -Label "Installed VERSION"
+    return [PSCustomObject]@{
+        Version = $version
+        DisplayVersion = $version.ToString(3)
+        IsSourceInstallation = $isSourceInstallation
+    }
+}
+
+function Assert-AppNotRunning {
+    $runningApps = @(Get-Process -Name "PogledAssist" -ErrorAction SilentlyContinue)
+    if ($runningApps.Count -gt 0) {
+        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ", "
+        throw "Close Pogled Assist before updating. Running process IDs: $processIds"
+    }
+
+    try {
+        $installPrefix = [IO.Path]::GetFullPath($InstallRoot).TrimEnd("\") + "\"
+        $sourceProcesses = @(
+            Get-CimInstance Win32_Process -ErrorAction Stop |
+                Where-Object {
+                    $_.Name -in @("python.exe", "pythonw.exe") -and
+                    (
+                        (-not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+                            $_.ExecutablePath.StartsWith($installPrefix, [StringComparison]::OrdinalIgnoreCase)) -or
+                        (-not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+                            $_.CommandLine.IndexOf($installPrefix, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+                    )
+                }
+        )
+        if ($sourceProcesses.Count -gt 0) {
+            $processIds = ($sourceProcesses | ForEach-Object { $_.ProcessId }) -join ", "
+            throw "Close the source-installed Pogled Assist before updating. Running process IDs: $processIds"
+        }
+    } catch {
+        if ($_.Exception.Message -like "Close the source-installed*") {
+            throw
+        }
+        Write-Info "Source-process detection was unavailable. The package installer will perform the final running-app check."
+    }
+}
+
+function Wait-ForRequestingApplication {
+    if ($WaitForProcessId -le 0) {
+        return
+    }
+
+    $requestingProcess = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $requestingProcess) {
+        return
+    }
+
+    Write-Info "Waiting for Pogled Assist process $WaitForProcessId to close."
+    try {
+        if (-not $requestingProcess.WaitForExit(60000)) {
+            throw "Pogled Assist did not close within 60 seconds. The update was not started."
+        }
+    } catch {
+        $stillRunning = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+        if ($null -ne $stillRunning) {
+            throw
+        }
+    }
+}
+
+function Get-LatestStableRelease {
+    if (
+        $ReleaseApiUrl -ne $OfficialReleaseApiUrl -and
+        $env:POGLED_ASSIST_TESTING -ne "1"
+    ) {
+        throw "A custom release source is allowed only by the automated test suite."
+    }
+
+    [Net.ServicePointManager]::SecurityProtocol = (
+        [Net.ServicePointManager]::SecurityProtocol -bor
+        [Net.SecurityProtocolType]::Tls12
+    )
+    Write-Step "Checking the latest stable release"
+    try {
+        $response = Invoke-WebRequest `
+            -Uri $ReleaseApiUrl `
+            -Headers @{
+                "Accept" = "application/vnd.github+json"
+                "User-Agent" = "PogledAssistUpdater"
+            } `
+            -UseBasicParsing
+        $metadata = $response.Content | ConvertFrom-Json
+    } catch {
+        throw "Could not query the latest stable release: $($_.Exception.Message)"
+    }
+
+    $requiredProperties = @("tag_name", "draft", "prerelease", "assets")
+    foreach ($property in $requiredProperties) {
+        if ($metadata.PSObject.Properties.Name -notcontains $property) {
+            throw "Latest release metadata is missing '$property'. The installation was not changed."
+        }
+    }
+    if ([bool]$metadata.draft -or [bool]$metadata.prerelease) {
+        throw "GitHub returned a draft or prerelease instead of a stable release. The installation was not changed."
+    }
+
+    $tag = [string]$metadata.tag_name
+    $version = ConvertTo-StableVersion -Value $tag -Label "Latest release tag"
+    $normalizedTag = "v$($version.ToString(3))"
+    if ($tag -ne $normalizedTag) {
+        throw "Latest release tag must be exactly $normalizedTag. Found: $tag"
+    }
+
+    $artifactName = "PogledAssist-$normalizedTag-windows-x64.zip"
+    $checksumName = "$artifactName.sha256"
+    $artifactMatches = @($metadata.assets | Where-Object { $_.name -eq $artifactName })
+    $checksumMatches = @($metadata.assets | Where-Object { $_.name -eq $checksumName })
+    if ($artifactMatches.Count -ne 1 -or $checksumMatches.Count -ne 1) {
+        throw "Stable release $normalizedTag must contain exactly one $artifactName and one $checksumName asset."
+    }
+
+    foreach ($asset in @($artifactMatches[0], $checksumMatches[0])) {
+        if (
+            $asset.PSObject.Properties.Name -notcontains "browser_download_url" -or
+            [string]::IsNullOrWhiteSpace([string]$asset.browser_download_url)
+        ) {
+            throw "Stable release $normalizedTag contains an asset without a download URL."
+        }
+    }
+    $artifactUrl = [string]$artifactMatches[0].browser_download_url
+    $checksumUrl = [string]$checksumMatches[0].browser_download_url
+    if ($ReleaseApiUrl -eq $OfficialReleaseApiUrl) {
+        $expectedArtifactUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$artifactName"
+        $expectedChecksumUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$checksumName"
+        if ($artifactUrl -ne $expectedArtifactUrl -or $checksumUrl -ne $expectedChecksumUrl) {
+            throw "Stable release assets did not point to the official Hasan-Smajlovic/TobiiEyeTrackerTool release."
+        }
+    }
+
+    return [PSCustomObject]@{
+        Version = $version
+        Tag = $normalizedTag
+        ArtifactName = $artifactName
+        ArtifactUrl = $artifactUrl
+        ChecksumName = $checksumName
+        ChecksumUrl = $checksumUrl
+    }
+}
+
+function Save-ReleaseAsset {
     param(
         [string]$Label,
-        [string]$FilePath,
-        [string[]]$Arguments
+        [string]$Url,
+        [string]$Destination
     )
 
-    Write-Info $Label
-    Write-Info "Running: $FilePath $($Arguments -join ' ')"
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    $exitCode = 1
     try {
-        & $FilePath @Arguments 2>&1 | ForEach-Object {
-            Write-Host $_
-        }
-        $exitCode = $LASTEXITCODE
+        Invoke-WebRequest `
+            -Uri $Url `
+            -OutFile $Destination `
+            -Headers @{ "User-Agent" = "PogledAssistUpdater" } `
+            -UseBasicParsing
     } catch {
-        throw "$Label failed to start: $($_.Exception.Message)"
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    if ($exitCode -ne 0) {
-        throw "$Label failed with exit code $exitCode."
+        throw "Could not download $Label from $Url`: $($_.Exception.Message)"
     }
 }
 
-function Download-RepositoryWithGit {
-    param([string]$DestinationPath)
-
-    $git = Get-Command "git" -ErrorAction SilentlyContinue
-    if ($null -eq $git) {
-        Write-Info "Git was not found. Falling back to GitHub ZIP download."
-        return $false
-    }
-
-    Write-Step "Downloading repository with Git"
-    try {
-        Invoke-NativeCommand `
-            -Label "Cloning $RepositoryUrl" `
-            -FilePath $git.Source `
-            -Arguments @("clone", "--depth", "1", $RepositoryUrl, $DestinationPath)
-        return $true
-    } catch {
-        Write-WarningLog "Git clone failed: $($_.Exception.Message)"
-        return $false
-    }
-}
-
-function Download-RepositoryWithZip {
-    param([string]$DownloadRoot)
-
-    Write-Step "Downloading repository ZIP"
-    foreach ($url in $ArchiveUrls) {
-        $zipPath = Join-Path $DownloadRoot "repository.zip"
-        try {
-            Write-Info "Downloading: $url"
-            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
-            Expand-Archive -Path $zipPath -DestinationPath $DownloadRoot -Force
-            return $true
-        } catch {
-            Write-WarningLog "ZIP download failed for $url`: $($_.Exception.Message)"
-            Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    return $false
-}
-
-function Find-DownloadedRepositoryRoot {
-    param([string]$DownloadRoot)
-
-    if (Test-Path (Join-Path $DownloadRoot "setup_windows.ps1")) {
-        return $DownloadRoot
-    }
-
-    $repositoryMatches = @(
-        Get-ChildItem -Path $DownloadRoot -Directory -Force -ErrorAction SilentlyContinue |
-            Where-Object { Test-Path (Join-Path $_.FullName "setup_windows.ps1") }
+function Assert-ReleaseChecksum {
+    param(
+        [string]$ArtifactPath,
+        [string]$ChecksumPath,
+        [string]$ArtifactName
     )
 
-    if ($repositoryMatches.Count -lt 1) {
-        throw "Downloaded repository content did not contain setup_windows.ps1."
+    $checksumText = (Get-Content -LiteralPath $ChecksumPath -Raw).Trim()
+    $escapedName = [regex]::Escape($ArtifactName)
+    if ($checksumText -notmatch "^(?<Hash>[0-9a-fA-F]{64})\s{2}$escapedName$") {
+        throw "The checksum file for $ArtifactName has an invalid format or filename."
     }
 
-    return $repositoryMatches[0].FullName
+    $expectedHash = $Matches["Hash"].ToLowerInvariant()
+    $actualHash = (Get-FileHash -LiteralPath $ArtifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $expectedHash) {
+        throw "Checksum mismatch for $ArtifactName. Expected $expectedHash but downloaded $actualHash. No application files were changed."
+    }
 }
 
-function Copy-RepositoryToInstallRoot {
-    param([string]$RepositoryRoot)
+function Expand-VerifiedRelease {
+    param(
+        [string]$ArtifactPath,
+        [version]$ExpectedVersion
+    )
 
-    Write-Step "Updating installed files"
-    New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
+    $extractRoot = Join-Path $script:OperationRoot "extracted"
+    try {
+        Expand-Archive -LiteralPath $ArtifactPath -DestinationPath $extractRoot
+    } catch {
+        throw "The verified release archive could not be extracted: $($_.Exception.Message)"
+    }
 
+    $packageRoot = Join-Path $extractRoot "PogledAssist"
+    $requiredPaths = @(
+        "PogledAssist.exe",
+        "_internal",
+        "install_windows.ps1",
+        "start_gaze_mouse.ps1",
+        "update_windows.ps1",
+        "README.md",
+        "VERSION"
+    )
+    foreach ($relativePath in $requiredPaths) {
+        if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $relativePath))) {
+            throw "The verified release archive is incomplete. Missing: $relativePath"
+        }
+    }
+
+    $packageVersionText = (Get-Content -LiteralPath (Join-Path $packageRoot "VERSION") -Raw).Trim()
+    $packageVersion = ConvertTo-StableVersion -Value $packageVersionText -Label "Downloaded package VERSION"
+    if ($packageVersion -ne $ExpectedVersion) {
+        throw "Downloaded package VERSION $packageVersion does not match release $ExpectedVersion."
+    }
+
+    return $packageRoot
+}
+
+function Invoke-ReleaseInstaller {
+    param(
+        [string]$PackageRoot,
+        [version]$ExpectedVersion
+    )
+
+    $installerPath = Join-Path $PackageRoot "install_windows.ps1"
     $arguments = @(
-        $RepositoryRoot,
-        $InstallRoot,
-        "/MIR",
-        "/R:2",
-        "/W:2",
-        "/NFL",
-        "/NDL",
-        "/NP",
-        "/XD",
-        ".git",
-        ".github",
-        ".venv",
-        "data",
-        "logs",
-        "__pycache__",
-        "/XF",
-        "install_info.json",
-        "setup_windows.log",
-        "start_gaze_mouse.log",
-        "update_windows.log",
-        "run_gaze_mouse.bat",
-        "run_gaze_mouse.ps1",
-        "icon.ico"
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $installerPath,
+        "-InstallRoot", $InstallRoot,
+        "-ExpectedVersion", $ExpectedVersion.ToString(3),
+        "-NoElevation"
     )
-
-    Write-Info "Running: robocopy $($arguments -join ' ')"
-    & robocopy @arguments | ForEach-Object {
-        Write-Host $_
+    if ($NoDesktopShortcut) {
+        $arguments += "-NoDesktopShortcut"
     }
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -gt 7) {
-        throw "robocopy failed with exit code $exitCode."
+    if ($Launch) {
+        $arguments += "-Launch"
     }
 
-    Write-Success "Repository content copied to $InstallRoot."
-}
-
-function Run-SetupAfterUpdate {
-    if ($NoSetup) {
-        Write-WarningLog "Skipping setup because -NoSetup was used."
-        return
-    }
-
-    $setupPath = Join-Path $InstallRoot "setup_windows.ps1"
-    if (-not (Test-Path $setupPath)) {
-        throw "Updated setup script was not found: $setupPath"
-    }
-
-    Write-Step "Running setup after update"
-    Invoke-NativeCommand `
-        -Label "Running setup from $InstallRoot" `
-        -FilePath (Get-PowerShellExecutable) `
-        -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $setupPath, "-NoPause")
-}
-
-function Remove-TemporaryFolder {
-    param([string]$Path)
-
-    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
-        return
-    }
-
+    Write-Step "Installing verified release v$($ExpectedVersion.ToString(3))"
+    Push-Location $script:OperationRoot
     try {
-        Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
-    } catch {
-        Write-WarningLog "Could not remove temporary folder $Path`: $($_.Exception.Message)"
+        & (Get-PowerShellExecutable) @arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "The release installer failed with exit code $LASTEXITCODE."
+        }
+    } finally {
+        Pop-Location
     }
+}
+
+function Invoke-ReleaseUpdate {
+    Assert-AppNotRunning
+    $installed = Get-InstalledRelease
+    Write-Info "Installed version: $($installed.DisplayVersion)"
+
+    $release = Get-LatestStableRelease
+    Write-Info "Latest stable release: $($release.Tag)"
+
+    if (
+        -not $installed.IsSourceInstallation -and
+        $null -ne $installed.Version -and
+        $installed.Version -eq $release.Version
+    ) {
+        Write-Success "Pogled Assist v$($installed.Version.ToString(3)) is already up to date."
+        return
+    }
+    if (
+        $null -ne $installed.Version -and
+        $installed.Version -gt $release.Version
+    ) {
+        throw "Installed VERSION $($installed.Version.ToString(3)) is newer than latest stable release $($release.Version.ToString(3)). Automatic downgrade is not supported."
+    }
+    if ($installed.IsSourceInstallation) {
+        Write-Info "Migrating the existing source installation to the stable release channel."
+    }
+
+    Write-Step "Downloading release assets"
+    $artifactPath = Join-Path $script:OperationRoot $release.ArtifactName
+    $checksumPath = Join-Path $script:OperationRoot $release.ChecksumName
+    Save-ReleaseAsset -Label $release.ArtifactName -Url $release.ArtifactUrl -Destination $artifactPath
+    Save-ReleaseAsset -Label $release.ChecksumName -Url $release.ChecksumUrl -Destination $checksumPath
+
+    Write-Step "Verifying release checksum"
+    Assert-ReleaseChecksum `
+        -ArtifactPath $artifactPath `
+        -ChecksumPath $checksumPath `
+        -ArtifactName $release.ArtifactName
+    Write-Success "Release checksum is valid."
+
+    Write-Step "Inspecting verified release"
+    $packageRoot = Expand-VerifiedRelease `
+        -ArtifactPath $artifactPath `
+        -ExpectedVersion $release.Version
+    Invoke-ReleaseInstaller -PackageRoot $packageRoot -ExpectedVersion $release.Version
+
+    $installedVersionText = (Get-Content -LiteralPath (Join-Path $InstallRoot "VERSION") -Raw).Trim()
+    $installedVersion = ConvertTo-StableVersion -Value $installedVersionText -Label "Updated VERSION"
+    if ($installedVersion -ne $release.Version) {
+        throw "Update verification failed. Installed VERSION $installedVersion does not match $($release.Version)."
+    }
+
+    Write-Success "Pogled Assist was updated to v$($release.Version.ToString(3))."
 }
 
 try {
+    if ($env:OS -ne "Windows_NT") {
+        throw "The Pogled Assist updater can run only on Windows."
+    }
+
+    Assert-DedicatedInstallRoot
     Ensure-Administrator
+    Enter-UpdateLock
     Start-UpdateTranscript
-
-    Write-Step "Starting manual Tobii Gaze Mouse update"
-    Write-Info "Repository: $RepositoryUrl"
+    Write-Step "Starting Pogled Assist release update"
     Write-Info "Install folder: $InstallRoot"
-
-    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("TobiiGazeMouseUpdate_{0}" -f [Guid]::NewGuid().ToString("N"))
-    New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
-    $gitRoot = Join-Path $tempRoot "repo"
-
-    $downloaded = Download-RepositoryWithGit -DestinationPath $gitRoot
-    if (-not $downloaded) {
-        $downloaded = Download-RepositoryWithZip -DownloadRoot $tempRoot
-    }
-    if (-not $downloaded) {
-        throw "Could not download repository from GitHub."
-    }
-
-    $repositoryRoot = Find-DownloadedRepositoryRoot -DownloadRoot $tempRoot
-    Write-Success "Downloaded repository content: $repositoryRoot"
-    Copy-RepositoryToInstallRoot -RepositoryRoot $repositoryRoot
-    Run-SetupAfterUpdate
-
-    Write-Success "Manual update completed successfully."
+    Wait-ForRequestingApplication
+    Invoke-ReleaseUpdate
 } catch {
     $script:ExitCode = 1
     Write-Host ""
     Write-ErrorLog "Update failed: $($_.Exception.Message)"
-    Write-Info "Review update log if available: $script:UpdateLogPath"
 } finally {
     if ($script:ElevationRequested) {
         exit 0
     }
 
-    if ($null -ne (Get-Variable -Name tempRoot -Scope Local -ErrorAction SilentlyContinue)) {
-        Remove-TemporaryFolder -Path $tempRoot
-    }
-
     Stop-UpdateTranscript
+    Save-UpdateLog
+    Remove-OperationRoot
+    Exit-UpdateLock
     Wait-BeforeExit
     exit $script:ExitCode
 }

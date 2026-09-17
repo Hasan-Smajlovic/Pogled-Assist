@@ -113,7 +113,7 @@ function Invoke-PackageBuild {
 
 function Write-Help {
     Write-Output @"
-Tobii Gaze Mouse development commands
+Pogled Assist development commands
 
   .\dev.ps1 setup       Create .venv and install development/build tools
   .\dev.ps1 run         Start the real application from source

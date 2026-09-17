@@ -1,4 +1,4 @@
-# Contributing to TobiiEyeTrackerTool
+# Contributing to Pogled Assist
 
 This document defines how changes move from an issue to a release in
 `Hasan-Smajlovic/TobiiEyeTrackerTool`.

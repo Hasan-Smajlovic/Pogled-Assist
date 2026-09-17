@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $VersionFile = Join-Path $RepoRoot "VERSION"
-$SpecFile = Join-Path $RepoRoot "packaging\windows\TobiiGazeMouse.spec"
+$SpecFile = Join-Path $RepoRoot "packaging\windows\PogledAssist.spec"
 $PythonExecutable = if (Test-Path -LiteralPath $PythonPath -PathType Leaf) {
     (Resolve-Path -LiteralPath $PythonPath).Path
 } else {
@@ -20,6 +20,7 @@ $BuildPath = @(
     (Join-Path $env:SystemRoot "System32"),
     $env:SystemRoot
 ) -join ";"
+$PowerShellExecutable = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 $OutputRoot = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -36,9 +37,46 @@ if ($Version -notmatch "^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$") {
     throw "VERSION must contain a stable Semantic Version such as 0.1.0. Found: $Version"
 }
 
-$PackageRoot = Join-Path $OutputRoot "TobiiGazeMouse"
+function Invoke-IsolatedInstaller {
+    param(
+        [string]$InstallerPath,
+        [string]$InstallRoot
+    )
+
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $InstallerPath,
+        "-InstallRoot", $InstallRoot,
+        "-NoDesktopShortcut",
+        "-NoElevation"
+    )
+    $stderrPath = [IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $PowerShellExecutable @arguments 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+        # Keep the child status in the result without leaking it into the build step.
+        $global:LASTEXITCODE = 0
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
+            $output += Get-Content -LiteralPath $stderrPath
+        }
+        $output | ForEach-Object { Write-Host $_ }
+        return [PSCustomObject]@{
+            ExitCode = $exitCode
+            Output = $output -join [Environment]::NewLine
+            NormalizedOutput = (($output -join " ") -replace "\s+", " ").Trim()
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$PackageRoot = Join-Path $OutputRoot "PogledAssist"
 $WorkRoot = Join-Path $OutputRoot ".pyinstaller-build"
-$ArtifactName = "TobiiGazeMouse-v$Version-windows-x64.zip"
+$ArtifactName = "PogledAssist-v$Version-windows-x64.zip"
 $ArtifactPath = Join-Path $OutputRoot $ArtifactName
 
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
@@ -69,6 +107,7 @@ try {
 $packageFiles = @{
     (Join-Path $RepoRoot "packaging\windows\install_windows.ps1") = "install_windows.ps1"
     (Join-Path $RepoRoot "packaging\windows\start_gaze_mouse.ps1") = "start_gaze_mouse.ps1"
+    (Join-Path $RepoRoot "update_windows.ps1") = "update_windows.ps1"
     (Join-Path $RepoRoot "docs\WINDOWS_RELEASE.md") = "README.md"
     $VersionFile = "VERSION"
 }
@@ -77,9 +116,10 @@ foreach ($sourcePath in $packageFiles.Keys) {
 }
 
 $requiredFiles = @(
-    "TobiiGazeMouse.exe",
+    "PogledAssist.exe",
     "install_windows.ps1",
     "start_gaze_mouse.ps1",
+    "update_windows.ps1",
     "README.md",
     "VERSION",
     "_internal\assets\icon.png",
@@ -96,16 +136,16 @@ foreach ($relativePath in $requiredFiles) {
 }
 
 $previousQtPlatform = $env:QT_QPA_PLATFORM
-$previousSmokeReport = $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT
+$previousSmokeReport = $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT
 $previousPath = $env:PATH
 $smokeReportPath = Join-Path $OutputRoot "package-smoke-test.txt"
 try {
     $env:QT_QPA_PLATFORM = "offscreen"
-    $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $smokeReportPath
+    $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $smokeReportPath
     $env:PATH = (Join-Path $env:SystemRoot "System32") + ";" + $env:SystemRoot
     Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
     $smokeProcess = Start-Process `
-        -FilePath (Join-Path $PackageRoot "TobiiGazeMouse.exe") `
+        -FilePath (Join-Path $PackageRoot "PogledAssist.exe") `
         -ArgumentList "--package-smoke-test" `
         -WorkingDirectory $PackageRoot `
         -WindowStyle Hidden `
@@ -124,7 +164,7 @@ try {
     }
 } finally {
     $env:QT_QPA_PLATFORM = $previousQtPlatform
-    $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $previousSmokeReport
+    $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $previousSmokeReport
     $env:PATH = $previousPath
 }
 
@@ -143,11 +183,11 @@ try {
     New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null
     Expand-Archive -LiteralPath $ArtifactPath -DestinationPath $ExtractRoot
 
-    $InstallerPath = Join-Path $ExtractRoot "TobiiGazeMouse\install_windows.ps1"
-    & $InstallerPath `
-        -InstallRoot $InstallRoot `
-        -NoDesktopShortcut `
-        -NoElevation
+    $InstallerPath = Join-Path $ExtractRoot "PogledAssist\install_windows.ps1"
+    $installResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+    if ($installResult.ExitCode -ne 0) {
+        throw "Isolated installer failed with exit code $($installResult.ExitCode)."
+    }
 
     $preservedFiles = @{
         ".venv\Scripts\edge-playback.exe" = "preserved edge playback"
@@ -159,10 +199,10 @@ try {
         Set-Content -LiteralPath $fullPath -Value $preservedFiles[$relativePath] -Encoding ASCII
     }
 
-    & $InstallerPath `
-        -InstallRoot $InstallRoot `
-        -NoDesktopShortcut `
-        -NoElevation
+    $upgradeResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+    if ($upgradeResult.ExitCode -ne 0) {
+        throw "Isolated installer upgrade failed with exit code $($upgradeResult.ExitCode)."
+    }
     foreach ($relativePath in $preservedFiles.Keys) {
         $fullPath = Join-Path $InstallRoot $relativePath
         $actual = (Get-Content -LiteralPath $fullPath -Raw).Trim()
@@ -183,21 +223,12 @@ try {
         -PassThru
     try {
         Start-Sleep -Milliseconds 500
-        $runningSourceWasBlocked = $false
-        try {
-            & $InstallerPath `
-                -InstallRoot $InstallRoot `
-                -NoDesktopShortcut `
-                -NoElevation
-        } catch {
-            if ($_.Exception.Message -like "Close Tobii Gaze Mouse before installing*") {
-                $runningSourceWasBlocked = $true
-            } else {
-                throw
-            }
-        }
-        if (-not $runningSourceWasBlocked) {
+        $runningSourceResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+        if ($runningSourceResult.ExitCode -eq 0) {
             throw "Installer did not reject a running source application."
+        }
+        if ($runningSourceResult.NormalizedOutput -notlike "*Close Pogled Assist before installing*") {
+            throw "Installer failed for an unexpected reason while the source application was running."
         }
     } finally {
         if (-not $sourceProcess.HasExited) {

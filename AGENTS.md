@@ -1,6 +1,6 @@
 # Agent guide
 
-Tobii Gaze Mouse is a Windows desktop application used through a Tobii Eye
+Pogled Assist is a Windows desktop application used through a Tobii Eye
 Tracker 4C. A person relies on the current installed behavior, so preserving
 working gaze, input, speech, settings, and installation flows is the first
 constraint for every change.
@@ -35,9 +35,10 @@ constraint for every change.
 - Keep each fact in the document that owns it, then link to that document. Do not
   copy architecture, setup, workflow, or release instructions into new files.
 - Reuse the pytest suite and its fake inputs. Do not add another test framework.
-- Follow the Speech design reference workflow in
-  [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before changing the Speech window's
-  visible layout, copy, control sizes, or interaction flow.
+- Follow the application design reference workflow in
+  [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before changing any visible UI
+  layout, copy, control size, state, or interaction flow. Every UI change must
+  update `docs/design/speech-keyboard-reference.html` in the same pull request.
 - Do not claim Tobii, AppBar, calibration, or speech hardware validation unless
   it ran on the target Windows machine. Report software-only and hardware results
   separately.

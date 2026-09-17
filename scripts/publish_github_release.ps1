@@ -38,7 +38,7 @@ if ($Version -notmatch "^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$") {
 $Tag = "v$Version"
 $ResolvedArtifactPath = (Resolve-Path -LiteralPath $ArtifactPath).Path
 $Artifact = Get-Item -LiteralPath $ResolvedArtifactPath
-$ExpectedArtifactName = "TobiiGazeMouse-$Tag-windows-x64.zip"
+$ExpectedArtifactName = "PogledAssist-$Tag-windows-x64.zip"
 if ($Artifact.Name -ne $ExpectedArtifactName) {
     throw "Artifact name must be $ExpectedArtifactName. Found: $($Artifact.Name)"
 }
@@ -112,7 +112,7 @@ if ($releaseExists) {
         "release", "create", $Tag,
         $ResolvedArtifactPath, $ChecksumPath,
         "--repo", $Repository,
-        "--title", "Tobii Gaze Mouse $Tag",
+        "--title", "Pogled Assist $Tag",
         "--generate-notes",
         "--draft"
     )
