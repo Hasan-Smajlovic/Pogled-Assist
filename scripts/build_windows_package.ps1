@@ -20,6 +20,7 @@ $BuildPath = @(
     (Join-Path $env:SystemRoot "System32"),
     $env:SystemRoot
 ) -join ";"
+$PowerShellExecutable = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 $OutputRoot = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -34,6 +35,40 @@ if (-not ($OutputRoot + "\").StartsWith($RepoPrefix, [StringComparison]::Ordinal
 $Version = (Get-Content -LiteralPath $VersionFile -Raw).Trim()
 if ($Version -notmatch "^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$") {
     throw "VERSION must contain a stable Semantic Version such as 0.1.0. Found: $Version"
+}
+
+function Invoke-IsolatedInstaller {
+    param(
+        [string]$InstallerPath,
+        [string]$InstallRoot
+    )
+
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $InstallerPath,
+        "-InstallRoot", $InstallRoot,
+        "-NoDesktopShortcut",
+        "-NoElevation"
+    )
+    $stderrPath = [IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $PowerShellExecutable @arguments 2> $stderrPath)
+        $exitCode = $LASTEXITCODE
+        if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
+            $output += Get-Content -LiteralPath $stderrPath
+        }
+        $output | ForEach-Object { Write-Host $_ }
+        return [PSCustomObject]@{
+            ExitCode = $exitCode
+            Output = $output -join [Environment]::NewLine
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $PackageRoot = Join-Path $OutputRoot "TobiiGazeMouse"
@@ -146,11 +181,60 @@ try {
     Expand-Archive -LiteralPath $ArtifactPath -DestinationPath $ExtractRoot
 
     $InstallerPath = Join-Path $ExtractRoot "TobiiGazeMouse\install_windows.ps1"
-    & $InstallerPath `
-        -InstallRoot $InstallRoot `
-        -NoDesktopShortcut `
-        -NoElevation
-    Write-Host "Isolated installer smoke test passed."
+    $installResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+    if ($installResult.ExitCode -ne 0) {
+        throw "Isolated installer failed with exit code $($installResult.ExitCode)."
+    }
+
+    $preservedFiles = @{
+        ".venv\Scripts\edge-playback.exe" = "preserved edge playback"
+        "tools\tobii\tobii_stream_engine.dll" = "preserved Tobii DLL"
+    }
+    foreach ($relativePath in $preservedFiles.Keys) {
+        $fullPath = Join-Path $InstallRoot $relativePath
+        New-Item -ItemType Directory -Path (Split-Path -Parent $fullPath) -Force | Out-Null
+        Set-Content -LiteralPath $fullPath -Value $preservedFiles[$relativePath] -Encoding ASCII
+    }
+
+    $upgradeResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+    if ($upgradeResult.ExitCode -ne 0) {
+        throw "Isolated installer upgrade failed with exit code $($upgradeResult.ExitCode)."
+    }
+    foreach ($relativePath in $preservedFiles.Keys) {
+        $fullPath = Join-Path $InstallRoot $relativePath
+        $actual = (Get-Content -LiteralPath $fullPath -Raw).Trim()
+        if ($actual -ne $preservedFiles[$relativePath]) {
+            throw "Installer did not preserve external component: $relativePath"
+        }
+    }
+
+    $sourceScript = Join-Path $InstallRoot "run_gaze_mouse.py"
+    Set-Content `
+        -LiteralPath $sourceScript `
+        -Value "import time; time.sleep(60)" `
+        -Encoding ASCII
+    $sourceProcess = Start-Process `
+        -FilePath $PythonExecutable `
+        -ArgumentList @("-B", ('"' + $sourceScript + '"')) `
+        -WorkingDirectory $InstallRoot `
+        -PassThru
+    try {
+        Start-Sleep -Milliseconds 500
+        $runningSourceResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
+        if ($runningSourceResult.ExitCode -eq 0) {
+            throw "Installer did not reject a running source application."
+        }
+        if ($runningSourceResult.Output -notlike "*Close Tobii Gaze Mouse before installing*") {
+            throw "Installer failed for an unexpected reason while the source application was running."
+        }
+    } finally {
+        if (-not $sourceProcess.HasExited) {
+            Stop-Process -Id $sourceProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        $sourceProcess.Dispose()
+    }
+
+    Write-Host "Isolated install, upgrade preservation, and running-app checks passed."
 } finally {
     if (Test-Path -LiteralPath $InstallerSmokeRoot) {
         Remove-Item -LiteralPath $InstallerSmokeRoot -Recurse -Force

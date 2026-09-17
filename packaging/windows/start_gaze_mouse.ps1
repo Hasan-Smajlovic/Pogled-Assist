@@ -37,6 +37,24 @@ function Find-FirstFile {
     return $null
 }
 
+function Find-FirstRecursiveFile {
+    param(
+        [string]$Root,
+        [string]$Name
+    )
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        return $null
+    }
+
+    return Get-ChildItem `
+        -LiteralPath $Root `
+        -Filter $Name `
+        -File `
+        -Recurse `
+        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+}
+
 if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf)) {
     throw "Application executable was not found: $AppExecutable"
 }
@@ -63,9 +81,11 @@ if (-not (Test-IsAdministrator) -and -not $NoElevation) {
 }
 
 $env:TOBII_GAZE_MOUSE_LOG_ROOT = $AppRoot
+$env:TOBII_GAZE_MOUSE_APP_ROOT = $AppRoot
 
 if ([string]::IsNullOrWhiteSpace($env:ESPEAK_NG_EXE) -or -not (Test-Path -LiteralPath $env:ESPEAK_NG_EXE)) {
     $env:ESPEAK_NG_EXE = Find-FirstFile -Candidates @(
+        (Find-FirstRecursiveFile -Root (Join-Path $AppRoot "tools\espeak-ng") -Name "espeak-ng.exe"),
         (Join-Path $env:ProgramFiles "eSpeak NG\espeak-ng.exe"),
         (Join-Path $env:ProgramFiles "eSpeak NG\command_line\espeak-ng.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "eSpeak NG\espeak-ng.exe"),
@@ -84,9 +104,11 @@ if ([string]::IsNullOrWhiteSpace($env:TOBII_GAZE_MOUSE_X86_PYTHON) -or -not (Tes
 
 if ([string]::IsNullOrWhiteSpace($env:EDGE_PLAYBACK_EXE) -or -not (Test-Path -LiteralPath $env:EDGE_PLAYBACK_EXE)) {
     $edgePlayback = Get-Command "edge-playback.exe" -ErrorAction SilentlyContinue
-    if ($null -ne $edgePlayback) {
-        $env:EDGE_PLAYBACK_EXE = $edgePlayback.Source
-    }
+    $edgePlaybackFromPath = if ($null -ne $edgePlayback) { $edgePlayback.Source } else { $null }
+    $env:EDGE_PLAYBACK_EXE = Find-FirstFile -Candidates @(
+        (Join-Path $AppRoot ".venv\Scripts\edge-playback.exe"),
+        $edgePlaybackFromPath
+    )
 }
 
 try {

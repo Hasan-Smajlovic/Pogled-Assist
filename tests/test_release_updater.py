@@ -222,7 +222,7 @@ def test_updater_installs_verified_release_and_preserves_user_files(tmp_path):
     ]
 
 
-def test_updater_migrates_legacy_source_install_without_version(tmp_path):
+def test_current_updater_migrates_source_layout_without_version(tmp_path):
     install_root = _installed_app(tmp_path, version=None)
     (install_root / "setup_windows.ps1").write_text("# legacy setup\n", encoding="utf-8")
     (install_root / "run_gaze_mouse.py").write_text("# legacy app\n", encoding="utf-8")

@@ -59,3 +59,22 @@ def test_target_change_and_mouse_cancellation_start_a_full_pause():
     assert timer.update("second", 3000, pause_ms=500, dwell_ms=200).progress is None
     assert timer.update("third", 3100, pause_ms=500, dwell_ms=200).progress is None
     assert timer.update("third", 3600, pause_ms=500, dwell_ms=200).progress == 0.0
+
+
+def test_invalid_gaze_pause_preserves_only_an_existing_repeat_lock():
+    timer = GazeSelectionTimer()
+    timer.update("button", 1000, pause_ms=500, dwell_ms=200)
+    assert timer.update("button", 1700, pause_ms=500, dwell_ms=200).ready is True
+    timer.complete()
+
+    timer.pause()
+
+    assert timer.update("button", 3000, pause_ms=500, dwell_ms=200).progress is None
+    timer.update(None, 3001, pause_ms=500, dwell_ms=200)
+    assert timer.update("button", 4000, pause_ms=500, dwell_ms=200).progress is None
+
+    pending = GazeSelectionTimer()
+    pending.update("button", 1000, pause_ms=500, dwell_ms=200)
+    pending.pause()
+    assert pending.update("button", 2000, pause_ms=500, dwell_ms=200).progress is None
+    assert pending.update("button", 2500, pause_ms=500, dwell_ms=200).progress == 0.0

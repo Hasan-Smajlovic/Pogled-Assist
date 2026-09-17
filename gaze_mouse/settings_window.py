@@ -144,6 +144,11 @@ class SettingsWindow(QWidget):
         self._set_gaze_target(None)
         self._cancel_interaction()
 
+    def pause_gaze_interaction(self) -> None:
+        self._gaze_selection.pause()
+        self._set_gaze_target(None)
+        self._cancel_interaction()
+
     def set_status(self, text: str) -> None:
         self._set_status(text)
 

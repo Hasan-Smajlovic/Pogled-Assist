@@ -35,6 +35,9 @@ constraint for every change.
 - Keep each fact in the document that owns it, then link to that document. Do not
   copy architecture, setup, workflow, or release instructions into new files.
 - Reuse the pytest suite and its fake inputs. Do not add another test framework.
+- Follow the Speech design reference workflow in
+  [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before changing the Speech window's
+  visible layout, copy, control sizes, or interaction flow.
 - Do not claim Tobii, AppBar, calibration, or speech hardware validation unless
   it ran on the target Windows machine. Report software-only and hardware results
   separately.

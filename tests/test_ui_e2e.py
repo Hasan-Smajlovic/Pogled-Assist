@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
 
 from gaze_mouse.controller_window import (
     CONTROLLER_WINDOW_ACTION_PREFIX,
@@ -20,6 +21,12 @@ from gaze_mouse.mouse_controller import (
     GazeSettings,
 )
 from gaze_mouse.settings_window import SettingsWindow
+from gaze_mouse.speech_library import (
+    CategoryRecord,
+    PhraseRecord,
+    SpeechLibrary,
+    default_categories,
+)
 from gaze_mouse.speech_service import SpeechSettings
 from gaze_mouse.speech_window import BOSNIAN_LETTERS, SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from gaze_mouse.windows_startup import StartupTaskResult
@@ -29,6 +36,7 @@ class FakeSpeech:
     def __init__(self):
         self._settings = SpeechSettings()
         self.requests = []
+        self.stop_calls = 0
 
     @property
     def settings(self):
@@ -37,6 +45,50 @@ class FakeSpeech:
     def speak(self, text, settings=None):
         self.requests.append((text, replace(settings) if settings is not None else self.settings))
         return True
+
+    def stop(self):
+        self.stop_calls += 1
+
+
+class FakeAlarmSound(QObject):
+    failed = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.start_calls = 0
+        self.stop_calls = 0
+        self.start_result = True
+        self.last_error = None
+
+    def start(self):
+        self.start_calls += 1
+        return self.start_result
+
+    def stop(self):
+        self.stop_calls += 1
+
+
+class FakeLibraryStore:
+    def __init__(self, library=None):
+        self.library = copy.deepcopy(library or SpeechLibrary(categories=default_categories()))
+        self.saved = []
+        self.fail_saves = False
+
+    def load(self):
+        return copy.deepcopy(self.library)
+
+    def save(self, library):
+        if self.fail_saves:
+            return False
+        self.library = copy.deepcopy(library)
+        self.saved.append(copy.deepcopy(library))
+        return True
+
+
+def click_speech_action(qtbot, window, command):
+    button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
+    qtbot.waitUntil(button.isVisible)
+    button.click()
 
 
 class FakeKeyboardInput:
@@ -80,15 +132,10 @@ class FakeControllerInput(FakeKeyboardInput):
 
 
 @pytest.mark.e2e
-def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, monkeypatch):
-    saved = []
-    monkeypatch.setattr("gaze_mouse.speech_window._load_phrases", list)
-    monkeypatch.setattr(
-        "gaze_mouse.speech_window._save_phrases",
-        lambda phrases: saved.append([(record.text, record.uses) for record in phrases]),
-    )
+def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot):
+    store = FakeLibraryStore()
     speech = FakeSpeech()
-    window = SpeechWindow(speech)
+    window = SpeechWindow(speech, library_store=store)
     qtbot.addWidget(window)
     window.show()
 
@@ -103,26 +150,250 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, monkeypatch):
     assert speech.requests[0][0] == "DŽ A"
 
     window._phrases_button.click()
-    window._new_phrase_button.click()
+    window._add_item_button.click()
     window._input.setText("  Trebam   pomoć ")
-    window._save_phrase_button.click()
+    window._save_item_button.click()
 
-    assert saved[-1] == [("Trebam pomoć", 0)]
+    assert store.saved[-1].phrases == [PhraseRecord("Trebam pomoć", 0)]
     assert window._input.text() == "DŽ A"
 
-    phrase_button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}phrase:select:0"]
+    phrase_button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}list:select:0"]
     qtbot.waitUntil(phrase_button.isVisible)
     phrase_button.click()
     assert window._input.text() == "DŽ A Trebam pomoć "
-    assert saved[-1] == [("Trebam pomoć", 1)]
+    assert store.saved[-1].phrases == [PhraseRecord("Trebam pomoć", 1)]
 
 
 @pytest.mark.e2e
-def test_speech_modal_blocks_background_and_supports_gaze(qtbot, monkeypatch):
-    monkeypatch.setattr("gaze_mouse.speech_window._load_phrases", list)
-    monkeypatch.setattr("gaze_mouse.speech_window._save_phrases", lambda _phrases: None)
+def test_speech_message_does_not_silently_truncate_long_saved_phrases(qtbot):
+    long_phrase = "Vrlo duga poruka " * 30
+    store = FakeLibraryStore(
+        SpeechLibrary(categories=default_categories(), phrases=[PhraseRecord(long_phrase)])
+    )
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("Početak")
+
+    window._append_phrase_to_input(long_phrase)
+
+    assert window._input.text() == f"Početak {long_phrase.strip()} "
+
+
+@pytest.mark.e2e
+def test_speech_categories_answers_and_shared_editor_preserve_message(qtbot):
+    store = FakeLibraryStore()
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("Moja poruka")
+
+    window._categories_button.click()
+    assert window._view_mode == "categories"
+    assert window._categories_button.text() == "Tastatura"
+    assert window._page_label.text() == "1 / 1"
+    click_speech_action(qtbot, window, "list:select:0")
+    assert window._view_mode == "answers"
+    assert window._view_title.text() == "Trebam"
+    assert window._back_button.isVisible()
+
+    click_speech_action(qtbot, window, "list:select:0")
+    assert window._input.text() == "Moja poruka Trebam vode "
+
+    window._add_item_button.click()
+    assert window._editor.kind == "answer"
+    assert window._input.text() == ""
+    assert not window._categories_button.isEnabled()
+    assert not window._phrases_button.isEnabled()
+    window._input.setText("Sedmi odgovor")
+    window._save_item_button.click()
+
+    assert window._view_mode == "answers"
+    assert window._list_page == 1
+    assert window._page_label.text() == "2 / 2"
+    assert window._input.text() == "Moja poruka Trebam vode "
+    assert store.library.categories[0].answers[-1] == "Sedmi odgovor"
+
+    window._add_item_button.click()
+    window._input.setText("   ")
+    window._save_item_button.click()
+    assert window._editor is not None
+    assert window._input.text() == "   "
+    assert window._status_label.text() == "Prvo unesite tekst."
+
+    window._input.setText("sedmi   odgovor")
+    window._save_item_button.click()
+    assert window._editor is not None
+    assert window._input.text() == "sedmi   odgovor"
+    assert "već postoji" in window._status_label.text()
+    window._cancel_editor_button.click()
+    assert window._view_mode == "answers"
+    assert window._list_page == 1
+    assert window._input.text() == "Moja poruka Trebam vode "
+
+
+@pytest.mark.e2e
+def test_speech_list_and_dialog_controls_are_large_gaze_targets(qtbot):
+    window = SpeechWindow(FakeSpeech(), library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.resize(1440, 900)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    window._categories_button.click()
+    qtbot.waitUntil(window._add_item_button.isVisible)
+
+    list_controls = (
+        window._add_item_button,
+        window._delete_mode_button,
+        window._previous_page_button,
+        window._next_page_button,
+    )
+    assert all(button.width() >= 160 for button in list_controls)
+    assert all(button.height() >= 80 for button in list_controls)
+    alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
+    assert window._key_grid_host.width() >= alarm.width() * 2
+    assert f"{SPEECH_WINDOW_ACTION_PREFIX}close" not in window._action_buttons
+
+    window._input.setText("Poruka")
+    window._clear_button.click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+
+    cancel = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"]
+    confirm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"]
+    assert window._confirm_dialog.width() >= 900
+    assert window._confirm_dialog.height() >= 440
+    assert cancel.height() >= 128
+    assert confirm.height() >= 128
+
+
+@pytest.mark.e2e
+def test_speech_add_and_cancel_category_answer_and_phrase_editors(qtbot):
+    phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
+    store = FakeLibraryStore(SpeechLibrary(categories=default_categories(), phrases=phrases))
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("Razgovor")
+
+    window._categories_button.click()
+    window._add_item_button.click()
+    window._input.setText("Nova kategorija")
+    window._save_item_button.click()
+    assert store.library.categories[-1] == CategoryRecord("Nova kategorija")
+    assert window._input.text() == "Razgovor"
+
+    window._add_item_button.click()
+    window._input.setText("Odbačena kategorija")
+    window._cancel_editor_button.click()
+    assert all(item.name != "Odbačena kategorija" for item in store.library.categories)
+    assert window._input.text() == "Razgovor"
+
+    click_speech_action(qtbot, window, "list:select:0")
+    window._add_item_button.click()
+    window._input.setText("Odbačeni odgovor")
+    window._cancel_editor_button.click()
+    assert "Odbačeni odgovor" not in store.library.categories[0].answers
+    assert window._view_mode == "answers"
+    assert window._input.text() == "Razgovor"
+
+    window._phrases_button.click()
+    window._next_page_button.click()
+    assert window._list_page == 1
+    window._add_item_button.click()
+    window._input.setText("ZZZ nova fraza")
+    window._save_item_button.click()
+    assert any(item.text == "ZZZ nova fraza" for item in store.library.phrases)
+    assert window._list_page == 1
+    assert window._input.text() == "Razgovor"
+
+    window._add_item_button.click()
+    window._input.setText("Odbačena fraza")
+    window._cancel_editor_button.click()
+    assert all(item.text != "Odbačena fraza" for item in store.library.phrases)
+    assert window._view_mode == "phrases"
+    assert window._list_page == 1
+    assert window._input.text() == "Razgovor"
+
+
+@pytest.mark.e2e
+def test_speech_deletion_confirmation_clear_and_save_failures(qtbot):
+    store = FakeLibraryStore(
+        SpeechLibrary(
+            categories=default_categories(),
+            phrases=[PhraseRecord("Sačuvana fraza", 3)],
+        )
+    )
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("Poruka ostaje")
+
+    window._categories_button.click()
+    window._delete_mode_button.click()
+    click_speech_action(qtbot, window, "list:select:0")
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+    assert "svi njeni odgovori" in window._confirm_copy.text()
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"].click()
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert len(store.library.categories) == 4
+
+    click_speech_action(qtbot, window, "list:select:0")
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"].click()
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert [category.name for category in store.library.categories] == [
+        "Brzi odgovor",
+        "Kako se osjećam",
+        "Ljudi",
+    ]
+    assert window._deletion_mode is True
+
+    window._delete_mode_button.click()
+    click_speech_action(qtbot, window, "list:select:0")
+    window._delete_mode_button.click()
+    click_speech_action(qtbot, window, "list:select:0")
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"].click()
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert store.library.categories[0].answers == [
+        "Ne",
+        "Možda",
+        "Hvala",
+        "Molim te",
+        "Nisam razumio",
+    ]
+
+    window._phrases_button.click()
+    window._add_item_button.click()
+    window._input.setText("Privremeni unos")
+    window._clear_button.click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+    assert "samo novi unos" in window._confirm_copy.text()
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"].click()
+    assert window._input.text() == ""
+    window._cancel_editor_button.click()
+    assert window._input.text() == "Poruka ostaje"
+
+    window._delete_mode_button.click()
+    click_speech_action(qtbot, window, "list:select:0")
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"].click()
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert store.library.phrases == []
+    window._delete_mode_button.click()
+
+    store.fail_saves = True
+    window._add_item_button.click()
+    window._input.setText("Neuspjela fraza")
+    window._save_item_button.click()
+    assert window._editor is not None
+    assert window._input.text() == "Neuspjela fraza"
+    assert window._status_label.text() == "Spremanje nije uspjelo. Novi unos nije sačuvan."
+    assert all(item.text != "Neuspjela fraza" for item in store.library.phrases)
+
+
+@pytest.mark.e2e
+def test_speech_modal_blocks_background_and_supports_gaze(qtbot):
     speech = FakeSpeech()
-    window = SpeechWindow(speech)
+    window = SpeechWindow(speech, library_store=FakeLibraryStore())
     qtbot.addWidget(window)
     window.show()
     qtbot.waitUntil(window.isVisible)
@@ -172,11 +443,9 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot, monkeypatch):
 
 
 @pytest.mark.e2e
-def test_speech_symbols_backspace_clear_and_play(qtbot, monkeypatch):
-    monkeypatch.setattr("gaze_mouse.speech_window._load_phrases", list)
-    monkeypatch.setattr("gaze_mouse.speech_window._save_phrases", lambda _phrases: None)
+def test_speech_symbols_backspace_clear_and_play(qtbot):
     speech = FakeSpeech()
-    window = SpeechWindow(speech)
+    window = SpeechWindow(speech, library_store=FakeLibraryStore())
     qtbot.addWidget(window)
     window.show()
     qtbot.waitUntil(window.isVisible)
@@ -205,7 +474,7 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, monkeypatch):
     qtbot.mouseClick(window._clear_button, Qt.LeftButton)
     qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
     qtbot.mouseClick(
-        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}clear:cancel"], Qt.LeftButton
+        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"], Qt.LeftButton
     )
     qtbot.waitUntil(lambda: window._active_dialog is None)
     assert window._input.text() == "Trebam pomoć"
@@ -213,13 +482,162 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, monkeypatch):
     qtbot.mouseClick(window._clear_button, Qt.LeftButton)
     qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
     qtbot.mouseClick(
-        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}clear:confirm"], Qt.LeftButton
+        window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"], Qt.LeftButton
     )
     qtbot.waitUntil(lambda: window._active_dialog is None)
     assert window._input.text() == ""
 
     qtbot.mouseClick(window._clear_button, Qt.LeftButton)
     assert window._active_dialog is None
+
+
+@pytest.mark.e2e
+def test_speech_alarm_stops_speech_blocks_background_and_reports_failure(qtbot):
+    speech = FakeSpeech()
+    alarm = FakeAlarmSound()
+    window = SpeechWindow(speech, library_store=FakeLibraryStore(), alarm_sound=alarm)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("Poruka ostaje")
+
+    alarm_action = f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"
+    stop_action = f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:stop"
+    window._action_buttons[alarm_action].click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._alarm_dialog)
+
+    assert speech.stop_calls == 1
+    assert alarm.start_calls == 1
+    assert window._alarm_copy.text() == "Zvučni signal se ponavlja dok ga ne zaustavite."
+    space_center = window._space_button.mapToGlobal(window._space_button.rect().center())
+    assert window.action_at_global_point(space_center) is None
+    assert window._input.text() == "Poruka ostaje"
+
+    window.handle_gaze_action(stop_action)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert alarm.stop_calls >= 1
+    assert window._input.text() == "Poruka ostaje"
+
+    window.handle_gaze_action(alarm_action)
+    qtbot.waitUntil(lambda: window._active_dialog is window._alarm_dialog)
+    window._action_buttons[stop_action].click()
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+
+    alarm.start_result = False
+    alarm.last_error = "Audio uređaj nije dostupan."
+    window._action_buttons[alarm_action].click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._alarm_dialog)
+    assert window._alarm_copy.text() == "Audio uređaj nije dostupan."
+    assert window._status_label.text() == "Audio uređaj nije dostupan."
+
+    alarm.failed.emit("Zvuk je prekinut.")
+    assert window._alarm_copy.text() == "Zvuk je prekinut."
+    window._action_buttons[stop_action].click()
+
+
+@pytest.mark.e2e
+def test_speech_sleep_preserves_unfinished_entry_and_supports_mouse_and_gaze(qtbot):
+    phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
+    speech = FakeSpeech()
+    window = SpeechWindow(
+        speech,
+        library_store=FakeLibraryStore(
+            SpeechLibrary(categories=default_categories(), phrases=phrases)
+        ),
+        alarm_sound=FakeAlarmSound(),
+    )
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("Razgovor")
+    window._phrases_button.click()
+    window._next_page_button.click()
+    window._add_item_button.click()
+    window._input.setText("Nedovršena fraza")
+    editor = window._editor
+
+    sleep_action = f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:start"
+    wake_action = f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake"
+    window.handle_gaze_action(sleep_action)
+    qtbot.waitUntil(lambda: window._active_dialog is window._sleep_dialog)
+
+    assert speech.stop_calls == 1
+    assert window._sleep_dialog.geometry() == QRect(window.mapToGlobal(QPoint(0, 0)), window.size())
+    assert window._sleep_dialog.isVisible()
+    assert window._input.text() == "Nedovršena fraza"
+    assert window._editor is editor
+    assert window._list_page == 1
+    assert window._view_mode == "editor"
+    assert editor is not None and editor.message == "Razgovor"
+    space_center = window._space_button.mapToGlobal(window._space_button.rect().center())
+    assert window.action_at_global_point(space_center) is None
+
+    qtbot.mouseClick(window._wake_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == "Nedovršena fraza"
+    assert window._editor is editor
+    assert window._list_page == 1
+
+    window._action_buttons[sleep_action].click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._sleep_dialog)
+    wake_center = window._wake_button.mapToGlobal(window._wake_button.rect().center())
+    assert window.action_at_global_point(wake_center) == wake_action
+    window.handle_gaze_action(wake_action)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == "Nedovršena fraza"
+    assert window._editor is editor
+
+
+@pytest.mark.e2e
+def test_speech_exit_cancel_restores_state_and_confirm_requests_normal_shutdown(qtbot):
+    speech = FakeSpeech()
+    alarm = FakeAlarmSound()
+    window = SpeechWindow(speech, library_store=FakeLibraryStore(), alarm_sound=alarm)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("Poruka")
+    window._categories_button.click()
+    click_speech_action(qtbot, window, "list:select:0")
+    preserved_state = (
+        window._input.text(),
+        window._view_mode,
+        window._category_index,
+        window._list_page,
+    )
+    quit_requests = []
+    window.quit_requested.connect(lambda: quit_requests.append(True))
+
+    exit_action = f"{SPEECH_WINDOW_ACTION_PREFIX}exit"
+    cancel_action = f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"
+    confirm_action = f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"
+    window._action_buttons[exit_action].click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+
+    cancel_button = window._action_buttons[cancel_action]
+    confirm_button = window._action_buttons[confirm_action]
+    cancel_rect = QRect(cancel_button.mapToGlobal(QPoint(0, 0)), cancel_button.size())
+    confirm_rect = QRect(confirm_button.mapToGlobal(QPoint(0, 0)), confirm_button.size())
+    assert window._confirm_title.text() == "Izaći iz aplikacije?"
+    assert window._confirm_button.text() == "Izađi"
+    assert not cancel_rect.intersects(confirm_rect)
+    window.handle_gaze_action(cancel_action)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert (
+        window._input.text(),
+        window._view_mode,
+        window._category_index,
+        window._list_page,
+    ) == preserved_state
+    assert quit_requests == []
+
+    window.handle_gaze_action(exit_action)
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+    qtbot.mouseClick(window._action_buttons[confirm_action], Qt.LeftButton)
+
+    assert quit_requests == [True]
+    assert speech.stop_calls == 1
+    assert alarm.stop_calls >= 1
 
 
 @pytest.mark.e2e
@@ -307,7 +725,7 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
         lambda _point, value, _label: progress.append(value)
     )
     center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
-    times = iter((1.0, 1.249, 1.25, 1.45, 3.0))
+    times = iter((1.0, 1.249, 1.25, 1.45, 3.0, 4.0))
     monkeypatch.setattr("gaze_mouse.settings_window.time.monotonic", lambda: next(times))
 
     window.handle_gaze(QPoint(center))
@@ -317,6 +735,11 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
     assert window._stack.currentIndex() == 0
 
     window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
+
+    window.pause_gaze_interaction()
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]
@@ -413,6 +836,8 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
 
     window = toolbar.HotbarWindow()
     qtbot.addWidget(window)
+    quit_requests = []
+    window._quit_application = lambda: quit_requests.append(True)
 
     assert window._hide_button.text() == "Sakrij"
     assert window._settings_button.text() == "Postavke"
@@ -437,6 +862,8 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
 
     window._run_toolbar_action(SPEECH, source="mouse")
     assert window._speech_window is not None and window._speech_window.isVisible()
+    window._speech_window.quit_requested.emit()
+    assert quit_requests == [True]
 
     window._run_toolbar_action(SETTINGS, source="mouse")
     assert window._controller_window.isHidden()

@@ -9,20 +9,20 @@ from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from gaze_mouse import controller_window as controller_module
 from gaze_mouse import keyboard_window as keyboard_module
 from gaze_mouse import settings_window as settings_module
-from gaze_mouse import speech_window as speech_module
 from gaze_mouse import toolbar as toolbar_module
 from gaze_mouse.controller_window import ControllerWindow
 from gaze_mouse.keyboard_window import KeyboardWindow
 from gaze_mouse.mouse_controller import GazeSettings
 from gaze_mouse.settings_window import SettingsWindow
+from gaze_mouse.speech_library import PhraseRecord, SpeechLibrary, default_categories
 from gaze_mouse.speech_service import SpeechSettings
-from gaze_mouse.speech_window import PhraseRecord, SpeechWindow
+from gaze_mouse.speech_window import SpeechWindow
 
 
 class PreviewAppBar:
@@ -69,6 +69,34 @@ class PreviewSpeech:
 
     def stop(self) -> None:
         return None
+
+
+class PreviewAlarmSound(QObject):
+    failed = Signal(str)
+
+    def start(self) -> bool:
+        return True
+
+    def stop(self) -> None:
+        return None
+
+    @property
+    def last_error(self) -> str | None:
+        return None
+
+
+class PreviewLibraryStore:
+    def __init__(self, phrases: list[PhraseRecord]) -> None:
+        self._library = SpeechLibrary(
+            categories=default_categories(),
+            phrases=phrases,
+        )
+
+    def load(self) -> SpeechLibrary:
+        return self._library
+
+    def save(self, _library: SpeechLibrary) -> bool:
+        return True
 
 
 class PreviewHotbar(toolbar_module.HotbarWindow):
@@ -163,7 +191,6 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
         patch.object(keyboard_module, "WindowsAppBar", PreviewAppBar),
         patch.object(controller_module, "WindowsAppBar", PreviewAppBar),
         patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
-        patch.object(speech_module, "_load_phrases", return_value=sample_phrases),
     )
     widgets: list[QWidget] = []
     snapshots: list[tuple[str, Path]] = []
@@ -193,7 +220,11 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                     (title, _capture_widget(app, settings, output_dir, name, width, height))
                 )
 
-            speech = SpeechWindow(PreviewSpeech())
+            speech = SpeechWindow(
+                PreviewSpeech(),
+                library_store=PreviewLibraryStore(sample_phrases),
+                alarm_sound=PreviewAlarmSound(),
+            )
             widgets.append(speech)
             snapshots.append(
                 (
@@ -201,13 +232,105 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                     _capture_widget(app, speech, output_dir, "speech", width, height),
                 )
             )
-            speech._show_phrase_level()
+            speech._view_mode = "categories"
+            speech._show_list_level()
+            snapshots.append(
+                (
+                    "Speech categories",
+                    _capture_widget(
+                        app,
+                        speech,
+                        output_dir,
+                        "speech-categories",
+                        width,
+                        height,
+                    ),
+                )
+            )
+            speech._category_index = 0
+            speech._view_mode = "answers"
+            speech._show_list_level()
+            snapshots.append(
+                (
+                    "Speech category answers",
+                    _capture_widget(
+                        app,
+                        speech,
+                        output_dir,
+                        "speech-answers",
+                        width,
+                        height,
+                    ),
+                )
+            )
+            speech._view_mode = "phrases"
+            speech._category_index = None
+            speech._show_list_level()
             snapshots.append(
                 (
                     "Saved phrases",
                     _capture_widget(app, speech, output_dir, "phrases", width, height),
                 )
             )
+            speech._start_editor()
+            snapshots.append(
+                (
+                    "Speech shared editor",
+                    _capture_widget(
+                        app,
+                        speech,
+                        output_dir,
+                        "speech-editor",
+                        width,
+                        height,
+                    ),
+                )
+            )
+            speech._start_alarm()
+            snapshots.append(
+                (
+                    "Speech alarm",
+                    _capture_widget(
+                        app,
+                        speech._alarm_dialog,
+                        output_dir,
+                        "speech-alarm",
+                        speech._alarm_dialog.width(),
+                        speech._alarm_dialog.height(),
+                    ),
+                )
+            )
+            speech._stop_alarm()
+            speech._start_sleep()
+            snapshots.append(
+                (
+                    "Speech sleep",
+                    _capture_widget(
+                        app,
+                        speech._sleep_dialog,
+                        output_dir,
+                        "speech-sleep",
+                        width,
+                        height,
+                    ),
+                )
+            )
+            speech._wake_from_sleep()
+            speech._open_exit_confirmation()
+            snapshots.append(
+                (
+                    "Speech exit confirmation",
+                    _capture_widget(
+                        app,
+                        speech._confirm_dialog,
+                        output_dir,
+                        "speech-exit",
+                        speech._confirm_dialog.width(),
+                        speech._confirm_dialog.height(),
+                    ),
+                )
+            )
+            speech._cancel_confirmation()
 
             sidebar_width = 380
             keyboard = KeyboardWindow(speech_settings)

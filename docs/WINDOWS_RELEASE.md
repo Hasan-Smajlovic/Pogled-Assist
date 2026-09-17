@@ -27,12 +27,13 @@ by the optional 32-bit Stream Engine bridge.
    ```
 
 The installer requests Administrator access, preserves `data`, `logs`, root log
-files, and `install_info.json`, and creates the `Tobii Gaze Mouse` desktop
-shortcut. Before replacing files, it rejects a running application, creates and
-smoke-tests a sibling staging directory, copies persistent content into it, and
-renames the existing installation to a backup. The backup remains until the new
-installed application passes its smoke test. If installation or verification
-fails, the installer restores the previous directory. Run
+files, `install_info.json`, local `.venv` speech tools, and local `tools`
+components, and creates the `Tobii Gaze Mouse` desktop shortcut. Before
+replacing files, it rejects both packaged and source-based running applications,
+creates and smoke-tests a sibling staging directory, and renames the existing
+installation to a backup. The backup remains until the new installed application
+passes its smoke test. If installation or verification fails, it restores the
+previous directory. Run
 `C:\TobiiExec\start_gaze_mouse.ps1` or the shortcut later.
 
 The extracted folder is also portable. Run its `start_gaze_mouse.ps1` without
@@ -64,17 +65,15 @@ after a successful update. Update details are appended to
 
 ## Migrate a source installation
 
-The previous source updater has been removed rather than retained as a
-development update tool. `update_windows.ps1` always installs an immutable stable
-release and never downloads a Git branch or repository source archive.
+An existing source installation uses its older updater, so it cannot download
+this replacement updater by itself. Download the first stable release manually,
+verify its checksum, and run that package's `install_windows.ps1`. The installer
+recognizes the source layout and migrates it only after staging succeeds.
 
-An existing source installation under `C:\TobiiExec` may not contain a
-`VERSION`. The new updater recognizes the source layout, reports it as a legacy
-source installation, and performs the same verified release update. Its `.venv`
-and source runtime files are replaced by the packaged application only after the
-staged package passes its smoke test. `data`, `logs`, `install_info.json`, and
-root log files remain in the installed release. Separately installed Tobii,
-speech, and optional 32-bit bridge runtimes are not removed.
+The migration preserves `data`, `logs`, `install_info.json`, root log files,
+local `.venv` speech tools, and local `tools` components. The packaged
+`update_windows.ps1` then installs only immutable stable releases and never
+downloads a Git branch or repository source archive.
 
 ## Interrupted update recovery
 
@@ -168,6 +167,8 @@ Software-only checks on a clean Windows x64 environment:
 - Confirm `data`, `logs`, `install_info.json`, and existing root logs other than
   the appended `update_windows.log` are byte-for-byte unchanged after update and
   rollback tests.
+- Confirm any local `.venv` speech tools and `tools` bridge components remain
+  available after source-install migration and release updates.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
 - Close and reopen the app and confirm settings persist under `data`.
@@ -197,6 +198,13 @@ Download an earlier immutable release, verify its checksum, extract it, and run
 its `install_windows.ps1`. Close Tobii Gaze Mouse first. The installer validates
 the older package before replacing application binaries, preserves
 `C:\TobiiExec\data` and `C:\TobiiExec\logs`, and restores the previous binaries if
-installation fails. If saved settings from a newer version are incompatible,
-back up `data`, remove only the affected JSON file, and restart the older version.
-Never move or recreate an existing release tag during rollback.
+installation fails.
+
+Current releases keep the full Speech library in `data\speech_library.json` and
+maintain a list-only `data\speech_phrases.json` for older releases. Do not delete
+or rename either file during rollback. An older release reads and updates the
+list-only file. When a current release is installed again, it imports newer
+standalone phrase changes while retaining categories and answers from the full
+library. If saved settings from a newer version are incompatible, back up `data`,
+remove only `data\app_settings.json`, and restart the older version. Never move or
+recreate an existing release tag during rollback.

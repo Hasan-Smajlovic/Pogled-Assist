@@ -30,6 +30,69 @@ function Get-PowerShellExecutable {
     return Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 }
 
+function Test-IsSourceAppProcess {
+    param(
+        [object]$Process,
+        [string]$InstallRoot
+    )
+
+    $commandLine = [string]$Process.CommandLine
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        return $false
+    }
+
+    $targetScript = Join-Path $InstallRoot "run_gaze_mouse.py"
+    if ($commandLine.IndexOf($targetScript, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        return $true
+    }
+
+    $executablePath = [string]$Process.ExecutablePath
+    $targetPythonPaths = @(
+        (Join-Path $InstallRoot ".venv\Scripts\python.exe"),
+        (Join-Path $InstallRoot ".venv\Scripts\pythonw.exe")
+    )
+    $usesTargetPython = $targetPythonPaths | Where-Object {
+        $executablePath.Equals($_, [StringComparison]::OrdinalIgnoreCase)
+    }
+    if ($null -eq $usesTargetPython) {
+        return $false
+    }
+
+    return [Regex]::IsMatch(
+        $commandLine,
+        '(^|[\\/"\s])run_gaze_mouse\.py(?=["\s]|$)',
+        [Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+}
+
+function Assert-AppNotRunning {
+    param([string]$InstallRoot)
+
+    $processIds = @(
+        Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Id }
+    )
+    try {
+        $sourceProcesses = Get-CimInstance `
+            -ClassName Win32_Process `
+            -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" `
+            -ErrorAction Stop
+        $processIds += @(
+            $sourceProcesses |
+                Where-Object { Test-IsSourceAppProcess -Process $_ -InstallRoot $InstallRoot } |
+                ForEach-Object { $_.ProcessId }
+        )
+    } catch {
+        throw "Could not check whether the source application is running: $($_.Exception.Message)"
+    }
+
+    $processIds = @($processIds | Sort-Object -Unique)
+    if ($processIds.Count -gt 0) {
+        $processIdList = $processIds -join ", "
+        throw "Close Tobii Gaze Mouse before installing or rolling back. Running process IDs: $processIdList"
+    }
+}
+
 function Enter-InstallLock {
     $mutexName = "Global\TobiiGazeMouse.Install"
     try {
@@ -69,14 +132,6 @@ function Exit-InstallLock {
     $script:InstallMutex.Dispose()
     $script:InstallMutex = $null
     $script:InstallMutexAcquired = $false
-}
-
-function Assert-AppNotRunning {
-    $runningApps = @(Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue)
-    if ($runningApps.Count -gt 0) {
-        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ", "
-        throw "Close Tobii Gaze Mouse before installing, updating, or rolling back. Running process IDs: $processIds"
-    }
 }
 
 function ConvertTo-StableVersion {
@@ -200,6 +255,50 @@ function Copy-PersistentContent {
         }
 }
 
+function Get-ExternalComponentPaths {
+    return @(
+        ".venv",
+        "tools",
+        "edge-playback",
+        "edge-playback.exe",
+        "edge-playback-script.py",
+        "espeak-ng.exe",
+        "tobii_stream_engine.dll",
+        "StreamEngineClient.dll"
+    )
+}
+
+function Copy-ExternalComponents {
+    param(
+        [string]$ExistingRoot,
+        [string]$StagingRoot,
+        [string[]]$RelativePaths
+    )
+
+    foreach ($relativePath in $RelativePaths) {
+        $sourcePath = Join-Path $ExistingRoot $relativePath
+        if (Test-Path -LiteralPath $sourcePath) {
+            Copy-Item -LiteralPath $sourcePath -Destination $StagingRoot -Recurse -Force
+        }
+    }
+}
+
+function Assert-PreservedPaths {
+    param(
+        [string]$Root,
+        [string[]]$RelativePaths
+    )
+
+    $missing = @(
+        $RelativePaths | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $Root $_))
+        }
+    )
+    if ($missing.Count -gt 0) {
+        throw "Installation removed external components that must be preserved: $($missing -join ', ')"
+    }
+}
+
 function Invoke-PackageSmokeTest {
     param(
         [string]$Root,
@@ -261,11 +360,17 @@ function Write-InstallTransaction {
         [string]$BackupPath
     )
 
-    [PSCustomObject]@{
-        InstallRoot = $InstallPath
-        StagingRoot = $StagingPath
-        BackupRoot = $BackupPath
-    } | ConvertTo-Json | Set-Content -LiteralPath $TransactionPath -Encoding UTF8
+    $temporaryPath = "$TransactionPath.$([Guid]::NewGuid().ToString("N")).tmp"
+    try {
+        [PSCustomObject]@{
+            InstallRoot = $InstallPath
+            StagingRoot = $StagingPath
+            BackupRoot = $BackupPath
+        } | ConvertTo-Json | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+        [IO.File]::Move($temporaryPath, $TransactionPath)
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Assert-TransactionOperationPath {
@@ -404,6 +509,7 @@ function Invoke-TransactionalInstall {
     $stagingRoot = Join-Path $Paths.Parent ".$($Paths.Name).install-$operationId"
     $backupRoot = Join-Path $Paths.Parent ".$($Paths.Name).backup-$operationId"
     $hadExistingInstallation = Test-Path -LiteralPath $Paths.Install -PathType Container
+    $preservedExternalPaths = @()
     $swapStarted = $false
     $keepRecoveryFiles = $false
 
@@ -411,6 +517,12 @@ function Invoke-TransactionalInstall {
         Invoke-RobocopyMirror -Source $Paths.Source -Destination $stagingRoot
         if ($hadExistingInstallation) {
             Copy-PersistentContent -ExistingRoot $Paths.Install -StagingRoot $stagingRoot
+            $preservedExternalPaths = @(
+                Get-ExternalComponentPaths | Where-Object {
+                    Test-Path -LiteralPath (Join-Path $Paths.Install $_)
+                }
+            )
+            Copy-ExternalComponents -ExistingRoot $Paths.Install -StagingRoot $stagingRoot -RelativePaths $preservedExternalPaths
         }
         Invoke-PackageSmokeTest -Root $stagingRoot -Label "Staged application verification"
 
@@ -420,13 +532,14 @@ function Invoke-TransactionalInstall {
             -StagingPath $stagingRoot `
             -BackupPath $backupRoot
 
-        Assert-AppNotRunning
+        Assert-AppNotRunning -InstallRoot $Paths.Install
         $swapStarted = $true
         if ($hadExistingInstallation) {
             Move-Item -LiteralPath $Paths.Install -Destination $backupRoot
         }
         Move-Item -LiteralPath $stagingRoot -Destination $Paths.Install
 
+        Assert-PreservedPaths -Root $Paths.Install -RelativePaths $preservedExternalPaths
         Invoke-PackageSmokeTest -Root $Paths.Install -Label "Installed application verification"
         $installedVersionText = (Get-Content -LiteralPath (Join-Path $Paths.Install "VERSION") -Raw).Trim()
         $installedVersion = ConvertTo-StableVersion `
@@ -535,9 +648,9 @@ $installerExitCode = 0
 try {
     $packageVersion = Assert-PackageLayout
     $paths = Get-InstallPaths
-    Assert-AppNotRunning
+    Assert-AppNotRunning -InstallRoot $paths.Install
     Enter-InstallLock
-    Assert-AppNotRunning
+    Assert-AppNotRunning -InstallRoot $paths.Install
     Invoke-TransactionalInstall -Paths $paths -PackageVersion $packageVersion
 
     if (-not $NoDesktopShortcut) {

@@ -40,7 +40,7 @@ AppBar reservation during shutdown.
 | Windows integration | `gaze_mouse/windows_input.py`, `gaze_mouse/appbar.py`, `gaze_mouse/windows_*.py` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
 | User surfaces | `gaze_mouse/*_window.py`, `gaze_mouse/quick_action_*.py` | Settings, speech, keyboard, controller, radial menu, precision zoom |
 | Feedback | `gaze_mouse/gaze_bubble.py`, `gaze_mouse/interaction_overlay.py`, `gaze_mouse/gaze_feedback.py` | Gaze position and dwell progress shown without taking focus |
-| Speech | `gaze_mouse/speech_service.py`, `gaze_mouse/speech_window.py` | eSpeak NG and Edge playback, text entry, saved phrases |
+| Speech | `gaze_mouse/speech_service.py`, `gaze_mouse/speech_window.py`, `gaze_mouse/speech_library.py`, `gaze_mouse/alarm_sound.py` | eSpeak NG and Edge playback, text entry, saved categories, answers and phrases, and the repeating local alarm |
 | Persistent data | `gaze_mouse/settings_store.py`, `gaze_mouse/logging_setup.py` | Settings, phrase data root, logs, safe defaults |
 | Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, verified release update, package build, install, release |
 | Verification | `dev.ps1`, `tests/`, `.github/workflows/` | Local checks, simulated hardware inputs, UI flows, CI, release checks |
@@ -97,7 +97,8 @@ override it for controlled launch and test scenarios.
 
 ```text
 data/app_settings.json   gaze, interaction, startup, logging, and speech settings
-data/speech_phrases.json saved phrases and their use counts
+data/speech_library.json saved categories, answers, phrases, and phrase use counts
+data/speech_phrases.json rollback-compatible standalone phrases for older releases
 logs/latest.txt          current application log when logging is enabled
 ```
 

@@ -99,6 +99,20 @@ sample quality, latency, or hardware accuracy. Report those checks as not run.
 
 ## UI review
 
+### Speech design reference workflow
+
+[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
+is the design source of truth for the Speech window. When a change affects its
+layout, visible copy, control sizes, or interaction flow, update and review the
+HTML reference first, then implement the matching PySide6 change. Keep both
+changes in the same pull request so the reference never describes an older UI.
+If a Speech change has no visible or interaction impact, state that explicitly
+in the pull request instead of editing the reference unnecessarily.
+
+Review the HTML reference at the target display size before generating the Qt
+gallery. The reference documents the intended result; the gallery and real
+application checks confirm that the implementation matches it.
+
 Generate the gallery:
 
 ```powershell
@@ -109,7 +123,7 @@ The command renders:
 
 - Hotbar
 - General, gaze, and speech Settings tabs
-- Speech keyboard and saved phrases
+- Speech keyboard, categories, answers, saved phrases, and shared editor
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
 
