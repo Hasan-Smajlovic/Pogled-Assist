@@ -233,6 +233,41 @@ def test_speech_categories_answers_and_shared_editor_preserve_message(qtbot):
 
 
 @pytest.mark.e2e
+def test_speech_list_and_dialog_controls_are_large_gaze_targets(qtbot):
+    window = SpeechWindow(FakeSpeech(), library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.resize(1440, 900)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    window._categories_button.click()
+    qtbot.waitUntil(window._add_item_button.isVisible)
+
+    list_controls = (
+        window._add_item_button,
+        window._delete_mode_button,
+        window._previous_page_button,
+        window._next_page_button,
+    )
+    assert all(button.width() >= 160 for button in list_controls)
+    assert all(button.height() >= 80 for button in list_controls)
+    alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
+    assert window._key_grid_host.width() >= alarm.width() * 2
+    assert f"{SPEECH_WINDOW_ACTION_PREFIX}close" not in window._action_buttons
+
+    window._input.setText("Poruka")
+    window._clear_button.click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._confirm_dialog)
+
+    cancel = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"]
+    confirm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"]
+    assert window._confirm_dialog.width() >= 900
+    assert window._confirm_dialog.height() >= 440
+    assert cancel.height() >= 128
+    assert confirm.height() >= 128
+
+
+@pytest.mark.e2e
 def test_speech_add_and_cancel_category_answer_and_phrase_editors(qtbot):
     phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
     store = FakeLibraryStore(SpeechLibrary(categories=default_categories(), phrases=phrases))

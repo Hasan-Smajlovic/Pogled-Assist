@@ -295,8 +295,8 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                         speech._alarm_dialog,
                         output_dir,
                         "speech-alarm",
-                        900,
-                        350,
+                        speech._alarm_dialog.width(),
+                        speech._alarm_dialog.height(),
                     ),
                 )
             )
@@ -325,8 +325,8 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                         speech._confirm_dialog,
                         output_dir,
                         "speech-exit",
-                        900,
-                        330,
+                        speech._confirm_dialog.width(),
+                        speech._confirm_dialog.height(),
                     ),
                 )
             )
