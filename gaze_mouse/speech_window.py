@@ -37,8 +37,8 @@ from .speech_library import (
     SpeechLibraryStore,
     clean_text,
     entry_exists,
-    speech_library_store,
     sorted_phrases,
+    speech_library_store,
 )
 from .speech_service import SpeechService, SpeechSettings
 
