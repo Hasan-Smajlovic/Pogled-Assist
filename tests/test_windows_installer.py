@@ -315,6 +315,5 @@ def test_legacy_install_root_is_never_modified(tmp_path):
     completed = _run_installer(package, Path(r"C:\TobiiExec"))
 
     assert completed.returncode != 0
-    assert "belongs to the previous application and will not be changed" in (
-        completed.stdout + completed.stderr
-    )
+    output = " ".join((completed.stdout + completed.stderr).split())
+    assert "belongs to the previous application and will not be changed" in output

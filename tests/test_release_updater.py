@@ -338,9 +338,8 @@ def test_updater_rejects_legacy_install_root_before_network_request():
     )
 
     assert completed.returncode != 0
-    assert "belongs to the previous application and will not be changed" in (
-        completed.stdout + completed.stderr
-    )
+    output = " ".join((completed.stdout + completed.stderr).split())
+    assert "belongs to the previous application and will not be changed" in output
 
 
 def test_concurrent_updater_is_rejected(tmp_path):
