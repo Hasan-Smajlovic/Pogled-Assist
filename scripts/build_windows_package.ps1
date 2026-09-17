@@ -57,6 +57,8 @@ function Invoke-IsolatedInstaller {
         $ErrorActionPreference = "Continue"
         $output = @(& $PowerShellExecutable @arguments 2> $stderrPath)
         $exitCode = $LASTEXITCODE
+        # Keep the child status in the result without leaking it into the build step.
+        $global:LASTEXITCODE = 0
         if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
             $output += Get-Content -LiteralPath $stderrPath
         }
