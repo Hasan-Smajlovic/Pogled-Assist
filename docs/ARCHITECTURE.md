@@ -125,9 +125,10 @@ next installer restore or finish an update interrupted during the directory swap
 ## Design reference
 
 [`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is a self-contained visual and interaction reference used while developing the
-PySide6 speech keyboard. It is not loaded by the application, included by the
-PyInstaller build, or required to install or run Pogled Assist.
+is the self-contained visual and interaction reference used while developing
+the visible PySide6 interface. Its historical filename is retained for stable
+links. It is not loaded by the application, included by the PyInstaller build,
+or required to install or run Pogled Assist.
 
 ## Compatibility contract
 

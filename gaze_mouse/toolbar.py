@@ -42,6 +42,7 @@ from .mouse_controller import (
 from .mouse_gaze_provider import MouseGazeProvider
 from .quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .quick_action_zoom import QuickActionZoomWindow
+from .release_update import ReleaseUpdateError, ReleaseUpdateManager
 from .settings_store import load_app_settings, save_app_settings
 from .settings_window import SettingsWindow
 from .speech_library import speech_library_store
@@ -90,6 +91,7 @@ class HotbarWindow(QWidget):
         self._speech.update_settings(self._initial_speech_settings)
         self._speech_library_store = speech_library_store(get_project_root())
         self._speech_library_store.load()
+        self._release_update_manager = ReleaseUpdateManager(parent=self)
         self._speech_window: SpeechWindow | None = None
         self._keyboard_window: KeyboardWindow | None = None
         self._controller_window: ControllerWindow | None = None
@@ -1049,11 +1051,17 @@ class HotbarWindow(QWidget):
             self._settings_window.activateWindow()
             return
 
-        window = SettingsWindow(self._mouse.settings, self._speech.settings, self)
+        window = SettingsWindow(
+            self._mouse.settings,
+            self._speech.settings,
+            self,
+            update_manager=self._release_update_manager,
+        )
         window.gaze_settings_changed.connect(self._update_gaze_settings)
         window.speech_settings_changed.connect(self._update_speech_settings)
         window.calibration_requested.connect(self._launch_tobii_calibration)
         window.speech_test_requested.connect(self._test_current_speech_settings)
+        window.update_requested.connect(self._start_release_update)
         window.quit_requested.connect(self._quit_application)
         window.closed.connect(self._settings_window_closed)
         self._mouse.gaze_position_changed.connect(window.handle_gaze)
@@ -1101,6 +1109,19 @@ class HotbarWindow(QWidget):
         app = QApplication.instance()
         if app is not None:
             app.quit()
+
+    def _start_release_update(self) -> None:
+        try:
+            self._release_update_manager.launch()
+        except ReleaseUpdateError as error:
+            logger.exception("Could not launch the release updater.")
+            self._set_status("Pokretanje ažuriranja nije uspjelo.")
+            if self._settings_window is not None:
+                self._settings_window.show_update_error(str(error))
+            return
+
+        logger.info("Release updater started; closing the current application.")
+        self._quit_application()
 
     def _update_gaze_settings(self, settings: object) -> None:
         self._mouse.update_settings(settings)

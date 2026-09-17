@@ -5,6 +5,7 @@ param(
     [switch]$NoDesktopShortcut,
     [switch]$NoPause,
     [switch]$NoElevation,
+    [int]$WaitForProcessId = 0,
     [string]$ReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
 )
 
@@ -116,6 +117,10 @@ function Ensure-Administrator {
     }
     if ($NoPause) {
         $arguments += "-NoPause"
+    }
+    if ($WaitForProcessId -gt 0) {
+        $arguments += "-WaitForProcessId"
+        $arguments += $WaitForProcessId
     }
 
     Start-Process `
@@ -321,6 +326,29 @@ function Assert-AppNotRunning {
             throw
         }
         Write-Info "Source-process detection was unavailable. The package installer will perform the final running-app check."
+    }
+}
+
+function Wait-ForRequestingApplication {
+    if ($WaitForProcessId -le 0) {
+        return
+    }
+
+    $requestingProcess = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $requestingProcess) {
+        return
+    }
+
+    Write-Info "Waiting for Pogled Assist process $WaitForProcessId to close."
+    try {
+        if (-not $requestingProcess.WaitForExit(60000)) {
+            throw "Pogled Assist did not close within 60 seconds. The update was not started."
+        }
+    } catch {
+        $stillRunning = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+        if ($null -ne $stillRunning) {
+            throw
+        }
     }
 }
 
@@ -578,6 +606,7 @@ try {
     Start-UpdateTranscript
     Write-Step "Starting Pogled Assist release update"
     Write-Info "Install folder: $InstallRoot"
+    Wait-ForRequestingApplication
     Invoke-ReleaseUpdate
 } catch {
     $script:ExitCode = 1

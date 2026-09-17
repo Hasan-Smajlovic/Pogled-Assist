@@ -120,9 +120,10 @@ the [development guide](docs/DEVELOPMENT.md).
 | Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
 
-The [speech keyboard reference](docs/design/speech-keyboard-reference.html) is a
-development-only HTML prototype for the PySide6 interface. The application does
-not load or package it.
+The [application UI reference](docs/design/speech-keyboard-reference.html) is a
+development-only HTML prototype for the visible PySide6 interface. Its
+historical filename is retained for stable links. The application does not load
+or package it.
 
 ## Runtime requirements
 
