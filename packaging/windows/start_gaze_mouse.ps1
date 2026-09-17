@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 
 $AppRoot = Split-Path -Parent $PSCommandPath
 $LauncherPath = $PSCommandPath
-$AppExecutable = Join-Path $AppRoot "TobiiGazeMouse.exe"
+$AppExecutable = Join-Path $AppRoot "PogledAssist.exe"
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -80,8 +80,8 @@ if (-not (Test-IsAdministrator) -and -not $NoElevation) {
     exit 0
 }
 
-$env:TOBII_GAZE_MOUSE_LOG_ROOT = $AppRoot
-$env:TOBII_GAZE_MOUSE_APP_ROOT = $AppRoot
+$env:POGLED_ASSIST_LOG_ROOT = $AppRoot
+$env:POGLED_ASSIST_APP_ROOT = $AppRoot
 
 if ([string]::IsNullOrWhiteSpace($env:ESPEAK_NG_EXE) -or -not (Test-Path -LiteralPath $env:ESPEAK_NG_EXE)) {
     $env:ESPEAK_NG_EXE = Find-FirstFile -Candidates @(
@@ -93,8 +93,8 @@ if ([string]::IsNullOrWhiteSpace($env:ESPEAK_NG_EXE) -or -not (Test-Path -Litera
     )
 }
 
-if ([string]::IsNullOrWhiteSpace($env:TOBII_GAZE_MOUSE_X86_PYTHON) -or -not (Test-Path -LiteralPath $env:TOBII_GAZE_MOUSE_X86_PYTHON)) {
-    $env:TOBII_GAZE_MOUSE_X86_PYTHON = Find-FirstFile -Candidates @(
+if ([string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_X86_PYTHON) -or -not (Test-Path -LiteralPath $env:POGLED_ASSIST_X86_PYTHON)) {
+    $env:POGLED_ASSIST_X86_PYTHON = Find-FirstFile -Candidates @(
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python310-32\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python310-32bit\python.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "Python310-32\python.exe"),
@@ -114,7 +114,7 @@ if ([string]::IsNullOrWhiteSpace($env:EDGE_PLAYBACK_EXE) -or -not (Test-Path -Li
 try {
     Start-Process -FilePath $AppExecutable -WorkingDirectory $AppRoot | Out-Null
 } catch {
-    Write-Error "Could not launch Tobii Gaze Mouse: $($_.Exception.Message)"
+    Write-Error "Could not launch Pogled Assist: $($_.Exception.Message)"
     if (-not $NoPause) {
         Read-Host "Press Enter to close"
     }

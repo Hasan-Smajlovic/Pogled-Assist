@@ -235,8 +235,8 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simu
 
     assert main_module.main() == 17
     assert ("show", True) in calls
-    assert ("name", "Tobii Gaze Mouse") in calls
-    assert ("org", "PieLabs") in calls
+    assert ("name", "Pogled Assist") in calls
+    assert ("org", "Pogled Assist") in calls
     assert ("simulate_gaze", simulate_gaze) in calls
 
 
@@ -245,7 +245,7 @@ def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):
     monkeypatch.setattr(
         main_module.sys,
         "argv",
-        ["TobiiGazeMouse.exe", main_module.MOUSE_GAZE_SIMULATION_ARG],
+        ["PogledAssist.exe", main_module.MOUSE_GAZE_SIMULATION_ARG],
     )
 
     assert main_module.main() == 2
@@ -253,7 +253,7 @@ def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):
 
 
 def test_frozen_startup_launcher_is_next_to_executable(monkeypatch, tmp_path):
-    executable = tmp_path / "TobiiGazeMouse.exe"
+    executable = tmp_path / "PogledAssist.exe"
     monkeypatch.setattr(windows_startup.sys, "frozen", True, raising=False)
     monkeypatch.setattr(windows_startup.sys, "executable", str(executable))
 
@@ -261,7 +261,7 @@ def test_frozen_startup_launcher_is_next_to_executable(monkeypatch, tmp_path):
 
 
 def test_main_routes_package_smoke_test_without_starting_gui(monkeypatch):
-    monkeypatch.setattr(main_module.sys, "argv", ["TobiiGazeMouse.exe", "--package-smoke-test"])
+    monkeypatch.setattr(main_module.sys, "argv", ["PogledAssist.exe", "--package-smoke-test"])
     monkeypatch.setattr(main_module, "package_smoke_test", lambda: 23)
 
     assert main_module.main() == 23

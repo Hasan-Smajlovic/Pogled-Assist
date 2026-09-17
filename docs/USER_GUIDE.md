@@ -1,6 +1,6 @@
 # User guide
 
-Tobii Gaze Mouse places a toolbar at the top of the primary Windows display. It
+Pogled Assist places a toolbar at the top of the primary Windows display. It
 can move the pointer from gaze, select its own controls by dwell, and perform a
 click after you hold your gaze on a stable target.
 
@@ -123,7 +123,7 @@ Changes are saved immediately to `data\app_settings.json`.
 
 ## Update
 
-Close Tobii Gaze Mouse, open PowerShell in `C:\TobiiExec`, and run:
+Close Pogled Assist, open PowerShell in `C:\PogledAssist`, and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -153,7 +153,7 @@ If the log contains `[WinError 193] %1 is not a valid Win32 application`, the To
 DLL is probably 32-bit. Rerun source setup or configure a 32-bit Python 3.10 path:
 
 ```powershell
-$env:TOBII_GAZE_MOUSE_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
+$env:POGLED_ASSIST_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
 ```
 
 If Stream Engine is installed outside a common location:

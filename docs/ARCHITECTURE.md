@@ -1,6 +1,6 @@
 # Architecture
 
-Tobii Gaze Mouse is one Windows desktop process built with Python and PySide6.
+Pogled Assist is one Windows desktop process built with Python and PySide6.
 It turns Tobii gaze samples into pointer movement, dwell actions, speech, and
 on-screen controls while keeping all settings and phrases on the local machine.
 
@@ -92,7 +92,7 @@ workers, and unregisters the AppBar so Windows restores the full work area.
 ## Persistent data and logs
 
 The runtime root is the executable directory for a packaged build and the
-repository root during source development. `TOBII_GAZE_MOUSE_LOG_ROOT` can
+repository root during source development. `POGLED_ASSIST_LOG_ROOT` can
 override it for controlled launch and test scenarios.
 
 ```text
@@ -111,7 +111,7 @@ rollback work must preserve `data/` and `logs/`.
 `dev.ps1` is the developer entry point. The PyInstaller specification under
 `packaging/windows/` builds the frozen application and includes the icons and
 bridge files needed at runtime. The release package contains its own installer
-and launcher and installs under `C:\TobiiExec`.
+and launcher and installs under `C:\PogledAssist`.
 
 `update_windows.ps1` reads the installed version, resolves the latest stable
 release from `Hasan-Smajlovic/TobiiEyeTrackerTool`, downloads the exact Windows
@@ -127,7 +127,7 @@ next installer restore or finish an update interrupted during the directory swap
 [`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
 is a self-contained visual and interaction reference used while developing the
 PySide6 speech keyboard. It is not loaded by the application, included by the
-PyInstaller build, or required to install or run Tobii Gaze Mouse.
+PyInstaller build, or required to install or run Pogled Assist.
 
 ## Compatibility contract
 
@@ -135,8 +135,9 @@ The current `development` behavior is the baseline for a user who already relies
 on the application. Unless a linked issue explicitly changes a behavior, a
 review-ready change must preserve:
 
-- launch from the installed `C:\TobiiExec` location and from the development
+- launch from the installed `C:\PogledAssist` location and from the development
   entry point;
+- keep the previous installation under `C:\TobiiExec` independent and untouched;
 - hotbar placement, AppBar work-area reservation, hide and restore behavior;
 - tracker fallback, retry, x86 bridge, both-eye gate, and responsive gaze flow;
 - pointer mapping and left, right, and double-click actions;

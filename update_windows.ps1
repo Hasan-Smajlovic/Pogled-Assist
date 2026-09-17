@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = "C:\TobiiExec",
+    [string]$InstallRoot = "C:\PogledAssist",
     [switch]$Launch,
     [switch]$NoDesktopShortcut,
     [switch]$NoPause,
@@ -88,6 +88,14 @@ function Quote-Argument {
     return '"' + $Value.Replace('"', '\"') + '"'
 }
 
+function Assert-DedicatedInstallRoot {
+    $requestedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd("\")
+    $legacyRoot = [IO.Path]::GetFullPath("C:\TobiiExec").TrimEnd("\")
+    if ($requestedRoot.Equals($legacyRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "C:\TobiiExec belongs to the previous application and will not be changed. Install Pogled Assist to C:\PogledAssist or another separate folder."
+    }
+}
+
 function Ensure-Administrator {
     if ($NoElevation -or (Test-IsAdministrator)) {
         return
@@ -120,12 +128,12 @@ function Ensure-Administrator {
 }
 
 function Enter-UpdateLock {
-    $mutexName = "Global\TobiiGazeMouse.Update"
+    $mutexName = "Global\PogledAssist.Update"
     try {
         $createdNew = $false
         $script:UpdateMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
     } catch [System.UnauthorizedAccessException] {
-        $mutexName = "Local\TobiiGazeMouse.Update"
+        $mutexName = "Local\PogledAssist.Update"
         $createdNew = $false
         $script:UpdateMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
     }
@@ -139,7 +147,7 @@ function Enter-UpdateLock {
     if (-not $script:UpdateMutexAcquired) {
         $script:UpdateMutex.Dispose()
         $script:UpdateMutex = $null
-        throw "Another Tobii Gaze Mouse update is already in progress. Wait for it to finish before trying again."
+        throw "Another Pogled Assist update is already in progress. Wait for it to finish before trying again."
     }
 }
 
@@ -163,7 +171,7 @@ function Exit-UpdateLock {
 function Start-UpdateTranscript {
     $script:OperationRoot = Join-Path `
         ([IO.Path]::GetTempPath()) `
-        ("TobiiGazeMouseUpdate_{0}" -f [Guid]::NewGuid().ToString("N"))
+        ("PogledAssistUpdate_{0}" -f [Guid]::NewGuid().ToString("N"))
     [IO.Directory]::CreateDirectory($script:OperationRoot) | Out-Null
     $script:UpdateLogPath = Join-Path $script:OperationRoot "update_windows.log"
 
@@ -250,7 +258,7 @@ function ConvertTo-StableVersion {
 
 function Get-InstalledRelease {
     if (-not (Test-Path -LiteralPath $InstallRoot -PathType Container)) {
-        throw "No Tobii Gaze Mouse installation was found at $InstallRoot. Install a release before using the updater."
+        throw "No Pogled Assist installation was found at $InstallRoot. Install a release before using the updater."
     }
 
     $sourceMarkers = @(
@@ -284,10 +292,10 @@ function Get-InstalledRelease {
 }
 
 function Assert-AppNotRunning {
-    $runningApps = @(Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue)
+    $runningApps = @(Get-Process -Name "PogledAssist" -ErrorAction SilentlyContinue)
     if ($runningApps.Count -gt 0) {
         $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ", "
-        throw "Close Tobii Gaze Mouse before updating. Running process IDs: $processIds"
+        throw "Close Pogled Assist before updating. Running process IDs: $processIds"
     }
 
     try {
@@ -306,7 +314,7 @@ function Assert-AppNotRunning {
         )
         if ($sourceProcesses.Count -gt 0) {
             $processIds = ($sourceProcesses | ForEach-Object { $_.ProcessId }) -join ", "
-            throw "Close the source-installed Tobii Gaze Mouse before updating. Running process IDs: $processIds"
+            throw "Close the source-installed Pogled Assist before updating. Running process IDs: $processIds"
         }
     } catch {
         if ($_.Exception.Message -like "Close the source-installed*") {
@@ -319,7 +327,7 @@ function Assert-AppNotRunning {
 function Get-LatestStableRelease {
     if (
         $ReleaseApiUrl -ne $OfficialReleaseApiUrl -and
-        $env:TOBII_GAZE_MOUSE_TESTING -ne "1"
+        $env:POGLED_ASSIST_TESTING -ne "1"
     ) {
         throw "A custom release source is allowed only by the automated test suite."
     }
@@ -334,7 +342,7 @@ function Get-LatestStableRelease {
             -Uri $ReleaseApiUrl `
             -Headers @{
                 "Accept" = "application/vnd.github+json"
-                "User-Agent" = "TobiiGazeMouseUpdater"
+                "User-Agent" = "PogledAssistUpdater"
             } `
             -UseBasicParsing
         $metadata = $response.Content | ConvertFrom-Json
@@ -359,7 +367,7 @@ function Get-LatestStableRelease {
         throw "Latest release tag must be exactly $normalizedTag. Found: $tag"
     }
 
-    $artifactName = "TobiiGazeMouse-$normalizedTag-windows-x64.zip"
+    $artifactName = "PogledAssist-$normalizedTag-windows-x64.zip"
     $checksumName = "$artifactName.sha256"
     $artifactMatches = @($metadata.assets | Where-Object { $_.name -eq $artifactName })
     $checksumMatches = @($metadata.assets | Where-Object { $_.name -eq $checksumName })
@@ -406,7 +414,7 @@ function Save-ReleaseAsset {
         Invoke-WebRequest `
             -Uri $Url `
             -OutFile $Destination `
-            -Headers @{ "User-Agent" = "TobiiGazeMouseUpdater" } `
+            -Headers @{ "User-Agent" = "PogledAssistUpdater" } `
             -UseBasicParsing
     } catch {
         throw "Could not download $Label from $Url`: $($_.Exception.Message)"
@@ -446,9 +454,9 @@ function Expand-VerifiedRelease {
         throw "The verified release archive could not be extracted: $($_.Exception.Message)"
     }
 
-    $packageRoot = Join-Path $extractRoot "TobiiGazeMouse"
+    $packageRoot = Join-Path $extractRoot "PogledAssist"
     $requiredPaths = @(
-        "TobiiGazeMouse.exe",
+        "PogledAssist.exe",
         "_internal",
         "install_windows.ps1",
         "start_gaze_mouse.ps1",
@@ -518,7 +526,7 @@ function Invoke-ReleaseUpdate {
         $null -ne $installed.Version -and
         $installed.Version -eq $release.Version
     ) {
-        Write-Success "Tobii Gaze Mouse v$($installed.Version.ToString(3)) is already up to date."
+        Write-Success "Pogled Assist v$($installed.Version.ToString(3)) is already up to date."
         return
     }
     if (
@@ -556,18 +564,19 @@ function Invoke-ReleaseUpdate {
         throw "Update verification failed. Installed VERSION $installedVersion does not match $($release.Version)."
     }
 
-    Write-Success "Tobii Gaze Mouse was updated to v$($release.Version.ToString(3))."
+    Write-Success "Pogled Assist was updated to v$($release.Version.ToString(3))."
 }
 
 try {
     if ($env:OS -ne "Windows_NT") {
-        throw "The Tobii Gaze Mouse updater can run only on Windows."
+        throw "The Pogled Assist updater can run only on Windows."
     }
 
+    Assert-DedicatedInstallRoot
     Ensure-Administrator
     Enter-UpdateLock
     Start-UpdateTranscript
-    Write-Step "Starting Tobii Gaze Mouse release update"
+    Write-Step "Starting Pogled Assist release update"
     Write-Info "Install folder: $InstallRoot"
     Invoke-ReleaseUpdate
 } catch {

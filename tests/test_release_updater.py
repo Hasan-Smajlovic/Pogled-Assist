@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UPDATER_SCRIPT = REPO_ROOT / "update_windows.ps1"
 LATEST_VERSION = "0.2.0"
-ARTIFACT_NAME = f"TobiiGazeMouse-v{LATEST_VERSION}-windows-x64.zip"
+ARTIFACT_NAME = f"PogledAssist-v{LATEST_VERSION}-windows-x64.zip"
 
 FAKE_INSTALLER = r"""[CmdletBinding()]
 param(
@@ -119,10 +119,10 @@ def _serve_release(archive: bytes, checksum: str | None = None):
 
 
 def _release_archive(tmp_path: Path, *, installer: str = FAKE_INSTALLER) -> bytes:
-    package = tmp_path / "package" / "TobiiGazeMouse"
+    package = tmp_path / "package" / "PogledAssist"
     (package / "_internal").mkdir(parents=True)
     (package / "_internal" / "runtime.dat").write_bytes(b"fake runtime")
-    (package / "TobiiGazeMouse.exe").write_bytes(b"fake executable")
+    (package / "PogledAssist.exe").write_bytes(b"fake executable")
     (package / "install_windows.ps1").write_text(installer, encoding="utf-8")
     (package / "start_gaze_mouse.ps1").write_text("# fake launcher\n", encoding="utf-8")
     (package / "update_windows.ps1").write_text("# fake updater\n", encoding="utf-8")
@@ -173,7 +173,7 @@ def _updater_command(install_root: Path, release_url: str) -> list[str]:
 def _updater_environment(**overrides: str) -> dict[str, str]:
     environment = os.environ.copy()
     environment.pop("PSMODULEPATH", None)
-    environment["TOBII_GAZE_MOUSE_TESTING"] = "1"
+    environment["POGLED_ASSIST_TESTING"] = "1"
     environment.update(overrides)
     return environment
 
@@ -329,6 +329,18 @@ def test_network_error_does_not_change_installation(tmp_path):
     assert "Could not query the latest stable release" in completed.stdout + completed.stderr
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
+
+
+def test_updater_rejects_legacy_install_root_before_network_request():
+    completed = _run_updater(
+        Path(r"C:\TobiiExec"),
+        "http://127.0.0.1:1/latest",
+    )
+
+    assert completed.returncode != 0
+    assert "belongs to the previous application and will not be changed" in (
+        completed.stdout + completed.stderr
+    )
 
 
 def test_concurrent_updater_is_rejected(tmp_path):

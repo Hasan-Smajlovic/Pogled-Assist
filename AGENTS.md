@@ -1,6 +1,6 @@
 # Agent guide
 
-Tobii Gaze Mouse is a Windows desktop application used through a Tobii Eye
+Pogled Assist is a Windows desktop application used through a Tobii Eye
 Tracker 4C. A person relies on the current installed behavior, so preserving
 working gaze, input, speech, settings, and installation flows is the first
 constraint for every change.

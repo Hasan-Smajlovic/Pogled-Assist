@@ -75,7 +75,7 @@ class HotbarWindow(QWidget):
     def __init__(self, *, simulate_gaze: bool = False) -> None:
         super().__init__()
         logger.info("Creating hotbar window.")
-        self.setWindowTitle("Tobii Gaze Mouse")
+        self.setWindowTitle("Pogled Assist")
         self.setWindowFlags(_no_focus_tool_window_flags())
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.NoFocus)
@@ -468,7 +468,7 @@ class HotbarWindow(QWidget):
     def _build_restore_button(self) -> None:
         button = QToolButton()
         button.setObjectName("restoreHotbarButton")
-        button.setWindowTitle("Prikaži Tobii Gaze Mouse")
+        button.setWindowTitle("Prikaži Pogled Assist")
         button.setWindowFlags(_no_focus_tool_window_flags())
         button.setAttribute(Qt.WA_ShowWithoutActivating, True)
         button.setFocusPolicy(Qt.NoFocus)

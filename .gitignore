@@ -27,7 +27,7 @@ dist/
 *.egg-info/
 .eggs/
 *.spec
-!packaging/windows/TobiiGazeMouse.spec
+!packaging/windows/PogledAssist.spec
 *.manifest
 *.pyd
 *.dll

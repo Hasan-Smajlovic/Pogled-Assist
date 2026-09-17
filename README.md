@@ -1,4 +1,4 @@
-# Tobii Gaze Mouse
+# Pogled Assist
 
 Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into
 pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard,
@@ -31,12 +31,16 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\install_windows.ps1 -Launch
 ```
 
-The installer copies the app to `C:\TobiiExec`, verifies that the packaged
+The installer copies the app to `C:\PogledAssist`, verifies that the packaged
 executable starts, and creates a desktop shortcut. Future updates are installed
 from verified stable GitHub Release artifacts by the packaged
 `update_windows.ps1`. The release includes Python and the application
 dependencies. Tobii software, tracker calibration, speech engines, and the
 optional 32-bit bridge runtime remain separate.
+
+The previous application under `C:\TobiiExec` is a separate installation. The
+Pogled Assist installer and updater refuse that legacy path, so its files,
+desktop shortcut, startup task, settings, and logs remain unchanged.
 
 See the [Windows release guide](docs/WINDOWS_RELEASE.md) for checksum verification,
 external components, rollback, and clean-machine checks.
@@ -51,11 +55,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\setup_windows.ps1
 ```
 
-Source installations live under `C:\TobiiExec`. Add `-Launch` to start the app
-after setup or `-NoPause` when running from an existing terminal. To migrate an
-older source installation, download and install the first stable release
-manually. Its installer preserves local data and external runtime components;
-later releases update through the packaged `update_windows.ps1`.
+Source installations live under `C:\PogledAssist`. Add `-Launch` to start the app
+after setup or `-NoPause` when running from an existing terminal. Existing
+installations under `C:\TobiiExec` are intentionally left in place and can be
+used alongside Pogled Assist. Later Pogled Assist releases update through the
+packaged `update_windows.ps1`.
 
 ## Run
 
@@ -137,7 +141,7 @@ discovery when needed:
 | Variable | Value |
 | --- | --- |
 | `TOBII_STREAM_ENGINE_DLL` | Full path to `tobii_stream_engine.dll` |
-| `TOBII_GAZE_MOUSE_X86_PYTHON` | Full path to 32-bit Python 3.10 |
+| `POGLED_ASSIST_X86_PYTHON` | Full path to 32-bit Python 3.10 |
 | `TOBII_CALIBRATION_COMMAND` | Custom Tobii calibration command |
 | `ESPEAK_NG_EXE` | Full path to `espeak-ng.exe` |
 | `EDGE_PLAYBACK_EXE` | Full path to `edge-playback.exe` |

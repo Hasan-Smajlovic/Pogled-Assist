@@ -47,7 +47,7 @@ public static class Program
         )
         {
             string report = Environment.GetEnvironmentVariable(
-                "TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT"
+                "POGLED_ASSIST_PACKAGE_SMOKE_REPORT"
             );
             if (!String.IsNullOrWhiteSpace(report))
             {
@@ -64,7 +64,7 @@ public static class Program
 
 def _compile_smoke_app(tmp_path: Path) -> Path:
     source_path = tmp_path / "SmokeApp.cs"
-    executable_path = tmp_path / "TobiiGazeMouse.exe"
+    executable_path = tmp_path / "PogledAssist.exe"
     compiler_path = tmp_path / "compile-smoke-app.ps1"
     source_path.write_text(SMOKE_APP_SOURCE, encoding="utf-8")
     compiler_path.write_text(
@@ -98,9 +98,9 @@ def _compile_smoke_app(tmp_path: Path) -> Path:
 
 
 def _release_package(tmp_path: Path, smoke_app: Path) -> Path:
-    package = tmp_path / "release" / "TobiiGazeMouse"
+    package = tmp_path / "release" / "PogledAssist"
     (package / "_internal").mkdir(parents=True)
-    shutil.copy2(smoke_app, package / "TobiiGazeMouse.exe")
+    shutil.copy2(smoke_app, package / "PogledAssist.exe")
     shutil.copy2(INSTALLER_SCRIPT, package / "install_windows.ps1")
     (package / "start_gaze_mouse.ps1").write_text("# fake launcher\n", encoding="utf-8")
     (package / "update_windows.ps1").write_text("# fake updater\n", encoding="utf-8")
@@ -290,7 +290,7 @@ def test_running_application_blocks_install_before_files_change(tmp_path):
         running_app.wait(timeout=5)
 
     assert completed.returncode != 0
-    assert "Close Tobii Gaze Mouse" in completed.stdout + completed.stderr
+    assert "Close Pogled Assist" in completed.stdout + completed.stderr
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
 
@@ -306,3 +306,15 @@ def test_expected_version_mismatch_stops_before_staging(tmp_path):
     assert "does not match expected release" in completed.stdout + completed.stderr
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
+
+
+def test_legacy_install_root_is_never_modified(tmp_path):
+    smoke_app = _compile_smoke_app(tmp_path)
+    package = _release_package(tmp_path, smoke_app)
+
+    completed = _run_installer(package, Path(r"C:\TobiiExec"))
+
+    assert completed.returncode != 0
+    assert "belongs to the previous application and will not be changed" in (
+        completed.stdout + completed.stderr
+    )

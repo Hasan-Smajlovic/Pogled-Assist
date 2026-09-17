@@ -38,7 +38,7 @@ function Install-Actionlint {
     $checksumName = "actionlint_${Version}_checksums.txt"
     $releaseRoot = "https://github.com/rhysd/actionlint/releases/download/v$Version"
     $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd("\")
-    $tempRoot = Join-Path $tempBase ("TobiiGazeMouseActionlint_{0}" -f [Guid]::NewGuid().ToString("N"))
+    $tempRoot = Join-Path $tempBase ("PogledAssistActionlint_{0}" -f [Guid]::NewGuid().ToString("N"))
 
     try {
         New-Item -ItemType Directory -Path $tempRoot | Out-Null

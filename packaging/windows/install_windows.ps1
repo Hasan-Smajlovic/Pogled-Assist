@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = "C:\TobiiExec",
+    [string]$InstallRoot = "C:\PogledAssist",
     [string]$ExpectedVersion = "",
     [switch]$NoDesktopShortcut,
     [switch]$Launch,
@@ -28,6 +28,14 @@ function Quote-Argument {
 
 function Get-PowerShellExecutable {
     return Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+}
+
+function Assert-DedicatedInstallRoot {
+    $requestedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd("\")
+    $legacyRoot = [IO.Path]::GetFullPath("C:\TobiiExec").TrimEnd("\")
+    if ($requestedRoot.Equals($legacyRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "C:\TobiiExec belongs to the previous application and will not be changed. Install Pogled Assist to C:\PogledAssist or another separate folder."
+    }
 }
 
 function Test-IsSourceAppProcess {
@@ -69,7 +77,7 @@ function Assert-AppNotRunning {
     param([string]$InstallRoot)
 
     $processIds = @(
-        Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue |
+        Get-Process -Name "PogledAssist" -ErrorAction SilentlyContinue |
             ForEach-Object { $_.Id }
     )
     try {
@@ -89,17 +97,17 @@ function Assert-AppNotRunning {
     $processIds = @($processIds | Sort-Object -Unique)
     if ($processIds.Count -gt 0) {
         $processIdList = $processIds -join ", "
-        throw "Close Tobii Gaze Mouse before installing or rolling back. Running process IDs: $processIdList"
+        throw "Close Pogled Assist before installing or rolling back. Running process IDs: $processIdList"
     }
 }
 
 function Enter-InstallLock {
-    $mutexName = "Global\TobiiGazeMouse.Install"
+    $mutexName = "Global\PogledAssist.Install"
     try {
         $createdNew = $false
         $script:InstallMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
     } catch [System.UnauthorizedAccessException] {
-        $mutexName = "Local\TobiiGazeMouse.Install"
+        $mutexName = "Local\PogledAssist.Install"
         $createdNew = $false
         $script:InstallMutex = New-Object System.Threading.Mutex($false, $mutexName, [ref]$createdNew)
     }
@@ -113,7 +121,7 @@ function Enter-InstallLock {
     if (-not $script:InstallMutexAcquired) {
         $script:InstallMutex.Dispose()
         $script:InstallMutex = $null
-        throw "Another Tobii Gaze Mouse install or update is already in progress."
+        throw "Another Pogled Assist install or update is already in progress."
     }
 }
 
@@ -152,7 +160,7 @@ function ConvertTo-StableVersion {
 
 function Assert-PackageLayout {
     $requiredSourcePaths = @(
-        "TobiiGazeMouse.exe",
+        "PogledAssist.exe",
         "_internal",
         "install_windows.ps1",
         "start_gaze_mouse.ps1",
@@ -305,17 +313,17 @@ function Invoke-PackageSmokeTest {
         [string]$Label
     )
 
-    $appExecutable = Join-Path $Root "TobiiGazeMouse.exe"
+    $appExecutable = Join-Path $Root "PogledAssist.exe"
     if (-not (Test-Path -LiteralPath $appExecutable -PathType Leaf)) {
-        throw "$Label could not start because TobiiGazeMouse.exe is missing."
+        throw "$Label could not start because PogledAssist.exe is missing."
     }
 
     $reportPath = Join-Path `
         ([IO.Path]::GetTempPath()) `
-        ("TobiiGazeMouseSmoke_{0}.txt" -f [Guid]::NewGuid().ToString("N"))
-    $previousReportPath = $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT
+        ("PogledAssistSmoke_{0}.txt" -f [Guid]::NewGuid().ToString("N"))
+    $previousReportPath = $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT
     try {
-        $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $reportPath
+        $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $reportPath
         $smokeProcess = Start-Process `
             -FilePath $appExecutable `
             -ArgumentList "--package-smoke-test" `
@@ -335,7 +343,7 @@ function Invoke-PackageSmokeTest {
             throw "$Label failed with exit code $($smokeProcess.ExitCode). $report"
         }
     } finally {
-        $env:TOBII_GAZE_MOUSE_PACKAGE_SMOKE_REPORT = $previousReportPath
+        $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $previousReportPath
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
     }
 }
@@ -581,17 +589,17 @@ function Invoke-TransactionalInstall {
 function New-DesktopShortcut {
     param([string]$InstalledRoot)
 
-    $appExecutable = Join-Path $InstalledRoot "TobiiGazeMouse.exe"
+    $appExecutable = Join-Path $InstalledRoot "PogledAssist.exe"
     $launcherPath = Join-Path $InstalledRoot "start_gaze_mouse.ps1"
     try {
         $desktopPath = [Environment]::GetFolderPath("Desktop")
-        $shortcutPath = Join-Path $desktopPath "Tobii Gaze Mouse.lnk"
+        $shortcutPath = Join-Path $desktopPath "Pogled Assist.lnk"
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
         $shortcut.TargetPath = Get-PowerShellExecutable
         $shortcut.Arguments = '-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "' + $launcherPath + '" -NoPause'
         $shortcut.WorkingDirectory = $InstalledRoot
-        $shortcut.Description = "Launch Tobii Gaze Mouse"
+        $shortcut.Description = "Launch Pogled Assist"
         $shortcut.IconLocation = "$appExecutable,0"
         $shortcut.Save()
         Write-Host "Created desktop shortcut: $shortcutPath"
@@ -646,6 +654,7 @@ if (-not (Test-IsAdministrator) -and -not $NoElevation) {
 
 $installerExitCode = 0
 try {
+    Assert-DedicatedInstallRoot
     $packageVersion = Assert-PackageLayout
     $paths = Get-InstallPaths
     Assert-AppNotRunning -InstallRoot $paths.Install
@@ -657,7 +666,7 @@ try {
         New-DesktopShortcut -InstalledRoot $paths.Install
     }
 
-    Write-Host "Installed Tobii Gaze Mouse v$($packageVersion.ToString(3)) to $($paths.Install)"
+    Write-Host "Installed Pogled Assist v$($packageVersion.ToString(3)) to $($paths.Install)"
     Write-Host "Tobii software, tracker calibration, eSpeak NG, optional edge-playback, and an optional 32-bit bridge runtime are not installed by this package."
     Write-Host "See README.md in the installation folder for requirements and manual checks."
 

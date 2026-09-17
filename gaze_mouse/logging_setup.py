@@ -16,7 +16,7 @@ from types import TracebackType
 LOGGER_NAME = "gaze_mouse"
 LOG_DIR_NAME = "logs"
 LATEST_LOG_NAME = "latest.txt"
-LOG_ROOT_ENV = "TOBII_GAZE_MOUSE_LOG_ROOT"
+LOG_ROOT_ENV = "POGLED_ASSIST_LOG_ROOT"
 SETTINGS_FILE = "app_settings.json"
 
 _qt_message_handler = None

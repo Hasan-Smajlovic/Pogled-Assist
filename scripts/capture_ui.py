@@ -141,7 +141,7 @@ def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tobii Gaze Mouse UI preview</title>
+  <title>Pogled Assist UI preview</title>
   <style>
     body {{ margin: 0; padding: 32px; background: #0c0e12; color: #f6f7fb;
       font-family: "Segoe UI", Arial, sans-serif; }}
@@ -158,7 +158,7 @@ def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
 </head>
 <body>
   <header>
-    <h1>Tobii Gaze Mouse UI preview</h1>
+    <h1>Pogled Assist UI preview</h1>
     <p>Generated from the real Qt widgets with hardware and Windows input disabled.</p>
   </header>
   <main>{cards}</main>
