@@ -66,6 +66,7 @@ function Invoke-IsolatedInstaller {
         return [PSCustomObject]@{
             ExitCode = $exitCode
             Output = $output -join [Environment]::NewLine
+            NormalizedOutput = (($output -join " ") -replace "\s+", " ").Trim()
         }
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -226,7 +227,7 @@ try {
         if ($runningSourceResult.ExitCode -eq 0) {
             throw "Installer did not reject a running source application."
         }
-        if ($runningSourceResult.Output -notlike "*Close Tobii Gaze Mouse before installing*") {
+        if ($runningSourceResult.NormalizedOutput -notlike "*Close Tobii Gaze Mouse before installing*") {
             throw "Installer failed for an unexpected reason while the source application was running."
         }
     } finally {
