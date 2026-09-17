@@ -238,7 +238,7 @@ def _powershell_executable() -> Path | str:
     if discovered:
         return Path(discovered)
 
-    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    system_root = os.environ.get("SYSTEMROOT", r"C:\Windows")
     candidate = Path(system_root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     if candidate.is_file():
         return candidate
