@@ -24,6 +24,7 @@ from .gaze_feedback import set_gaze_feedback
 from .gaze_provider import TobiiGazeProvider
 from .interaction_overlay import InteractionOverlayWindow
 from .keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
+from .logging_setup import get_project_root
 from .mouse_controller import (
     CLICK_ACTIONS,
     CONTROLLER,
@@ -43,6 +44,7 @@ from .quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .quick_action_zoom import QuickActionZoomWindow
 from .settings_store import load_app_settings, save_app_settings
 from .settings_window import SettingsWindow
+from .speech_library import speech_library_store
 from .speech_service import SpeechService
 from .speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .tobii_calibration import launch_tobii_guest_calibration
@@ -86,6 +88,8 @@ class HotbarWindow(QWidget):
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
         self._speech = SpeechService()
         self._speech.update_settings(self._initial_speech_settings)
+        self._speech_library_store = speech_library_store(get_project_root())
+        self._speech_library_store.load()
         self._speech_window: SpeechWindow | None = None
         self._keyboard_window: KeyboardWindow | None = None
         self._controller_window: ControllerWindow | None = None
@@ -1011,7 +1015,11 @@ class HotbarWindow(QWidget):
     def _open_speech(self) -> None:
         logger.info("Opening speech window.")
         if self._speech_window is None:
-            self._speech_window = SpeechWindow(self._speech, self)
+            self._speech_window = SpeechWindow(
+                self._speech,
+                self,
+                library_store=self._speech_library_store,
+            )
             self._speech_window.closed.connect(
                 lambda: self._set_status("Prozor za govor je zatvoren.")
             )
@@ -1172,7 +1180,7 @@ class HotbarWindow(QWidget):
         if self._controller_window is not None:
             self._controller_window.cancel_gaze_interaction()
         if self._settings_window is not None:
-            self._settings_window.cancel_gaze_interaction()
+            self._settings_window.pause_gaze_interaction()
 
     def _set_eye_indicators(self, left_open: bool, right_open: bool) -> None:
         self._set_eye_dot(self._left_eye_dot, bool(left_open), "Lijevo")

@@ -165,6 +165,22 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot):
 
 
 @pytest.mark.e2e
+def test_speech_message_does_not_silently_truncate_long_saved_phrases(qtbot):
+    long_phrase = "Vrlo duga poruka " * 30
+    store = FakeLibraryStore(
+        SpeechLibrary(categories=default_categories(), phrases=[PhraseRecord(long_phrase)])
+    )
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("Početak")
+
+    window._append_phrase_to_input(long_phrase)
+
+    assert window._input.text() == f"Početak {long_phrase.strip()} "
+
+
+@pytest.mark.e2e
 def test_speech_categories_answers_and_shared_editor_preserve_message(qtbot):
     store = FakeLibraryStore()
     window = SpeechWindow(FakeSpeech(), library_store=store)
@@ -674,7 +690,7 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
         lambda _point, value, _label: progress.append(value)
     )
     center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
-    times = iter((1.0, 1.249, 1.25, 1.45, 3.0))
+    times = iter((1.0, 1.249, 1.25, 1.45, 3.0, 4.0))
     monkeypatch.setattr("gaze_mouse.settings_window.time.monotonic", lambda: next(times))
 
     window.handle_gaze(QPoint(center))
@@ -684,6 +700,11 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
     assert window._stack.currentIndex() == 0
 
     window.handle_gaze(QPoint(center))
+    window.handle_gaze(QPoint(center))
+
+    assert progress == [0.0, 1.0]
+
+    window.pause_gaze_interaction()
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]

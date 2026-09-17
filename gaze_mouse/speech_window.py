@@ -7,7 +7,6 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Literal
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
@@ -38,6 +37,7 @@ from .speech_library import (
     SpeechLibraryStore,
     clean_text,
     entry_exists,
+    speech_library_store,
     sorted_phrases,
 )
 from .speech_service import SpeechService, SpeechSettings
@@ -85,7 +85,6 @@ KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 PHRASE_BUTTON_MIN_HEIGHT = 64
 ITEMS_PER_PAGE = 6
-PHRASES_FILE = "speech_phrases.json"
 EditorKind = Literal["category", "answer", "phrase"]
 
 
@@ -134,7 +133,7 @@ class SpeechWindow(QWidget):
         self._dialog_actions: set[str] = set()
         self._active_dialog: QDialog | None = None
         self._gaze_target_action: str | None = None
-        self._library_store = library_store or SpeechLibraryStore(_speech_library_path())
+        self._library_store = library_store or speech_library_store(get_project_root())
         self._alarm_sound = alarm_sound or AlarmSound(self)
         self._alarm_sound.failed.connect(self._alarm_failed)
         self._library = self._library_store.load()
@@ -437,7 +436,6 @@ class SpeechWindow(QWidget):
         self._input.setObjectName("speechInput")
         self._input.setAlignment(Qt.AlignCenter)
         self._input.setMinimumHeight(62)
-        self._input.setMaxLength(260)
         self._input.setPlaceholderText("Odaberite grupu slova…")
         self._input.returnPressed.connect(self._play)
         message_layout.addWidget(self._message_label)
@@ -1582,7 +1580,3 @@ def _list_mode(kind: EditorKind) -> str:
         "answer": "answers",
         "phrase": "phrases",
     }[kind]
-
-
-def _speech_library_path() -> Path:
-    return get_project_root() / "data" / PHRASES_FILE

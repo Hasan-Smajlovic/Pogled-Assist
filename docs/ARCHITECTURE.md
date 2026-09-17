@@ -97,7 +97,8 @@ override it for controlled launch and test scenarios.
 
 ```text
 data/app_settings.json   gaze, interaction, startup, logging, and speech settings
-data/speech_phrases.json saved categories, answers, phrases, and phrase use counts
+data/speech_library.json saved categories, answers, phrases, and phrase use counts
+data/speech_phrases.json rollback-compatible standalone phrases for older releases
 logs/latest.txt          current application log when logging is enabled
 ```
 

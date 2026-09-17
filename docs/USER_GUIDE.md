@@ -79,7 +79,9 @@ The controls on the right remain available while browsing or adding entries:
 
 Saved categories, answers, and phrases use UTF-8 text. Selecting an answer or
 phrase appends it to the message, and saved phrases remain ordered by usage count.
-The library is stored in `data\speech_phrases.json`.
+The full library is stored in `data\speech_library.json`. The app also maintains
+`data\speech_phrases.json` so older releases can read standalone phrases during
+rollback.
 
 The Default voice uses eSpeak NG with the Bosnian `bs` voice. Human like uses
 `edge-playback` with `bs-BA-GoranNeural` and requires internet access.

@@ -183,6 +183,33 @@ def test_toolbar_dwell_waits_before_feedback_and_requires_leaving_to_repeat():
     assert actions == ["settings", "settings"]
 
 
+def test_eye_loss_keeps_completed_toolbar_target_blocked_until_valid_gaze_leaves():
+    controller = make_controller()
+    controller.update_settings(
+        GazeSettings(selection_pause_ms=250, dwell_ms=200, click_cooldown_ms=100)
+    )
+    actions = []
+    controller.toolbar_action_requested.connect(actions.append)
+    controller.handle_eye_status(True, True)
+
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 1000)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 1250)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 1450)
+    assert actions == ["speech"]
+
+    controller.handle_eye_status(True, False)
+    controller.handle_eye_status(True, True)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 3000)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 4000)
+    assert actions == ["speech"]
+
+    controller._reset_toolbar_dwell()
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 5000)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 5250)
+    controller._handle_toolbar_dwell("speech", QPoint(10, 10), 5450)
+    assert actions == ["speech", "speech"]
+
+
 def test_cancel_toolbar_interaction_clears_dwell_and_gaze_feedback():
     controller = make_controller()
     gaze_targets = []

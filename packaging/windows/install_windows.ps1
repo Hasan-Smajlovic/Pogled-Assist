@@ -27,21 +27,90 @@ function Get-PowerShellExecutable {
     return Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 }
 
+function Test-IsSourceAppProcess {
+    param(
+        [object]$Process,
+        [string]$InstallRoot
+    )
+
+    $commandLine = [string]$Process.CommandLine
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        return $false
+    }
+
+    $targetScript = Join-Path $InstallRoot "run_gaze_mouse.py"
+    if ($commandLine.IndexOf($targetScript, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        return $true
+    }
+
+    $executablePath = [string]$Process.ExecutablePath
+    $targetPythonPaths = @(
+        (Join-Path $InstallRoot ".venv\Scripts\python.exe"),
+        (Join-Path $InstallRoot ".venv\Scripts\pythonw.exe")
+    )
+    $usesTargetPython = $targetPythonPaths | Where-Object {
+        $executablePath.Equals($_, [StringComparison]::OrdinalIgnoreCase)
+    }
+    if ($null -eq $usesTargetPython) {
+        return $false
+    }
+
+    return [Regex]::IsMatch(
+        $commandLine,
+        '(^|[\\/"\s])run_gaze_mouse\.py(?=["\s]|$)',
+        [Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+}
+
 function Assert-AppNotRunning {
-    $runningApps = @(Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue)
-    if ($runningApps.Count -gt 0) {
-        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ", "
-        throw "Close Tobii Gaze Mouse before installing or rolling back. Running process IDs: $processIds"
+    param([string]$InstallRoot)
+
+    $processIds = @(
+        Get-Process -Name "TobiiGazeMouse" -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Id }
+    )
+    try {
+        $sourceProcesses = Get-CimInstance `
+            -ClassName Win32_Process `
+            -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" `
+            -ErrorAction Stop
+        $processIds += @(
+            $sourceProcesses |
+                Where-Object { Test-IsSourceAppProcess -Process $_ -InstallRoot $InstallRoot } |
+                ForEach-Object { $_.ProcessId }
+        )
+    } catch {
+        throw "Could not check whether the source application is running: $($_.Exception.Message)"
+    }
+
+    $processIds = @($processIds | Sort-Object -Unique)
+    if ($processIds.Count -gt 0) {
+        $processIdList = $processIds -join ", "
+        throw "Close Tobii Gaze Mouse before installing or rolling back. Running process IDs: $processIdList"
     }
 }
 
 function Invoke-RobocopyMirror {
     param(
         [string]$Source,
-        [string]$Destination
+        [string]$Destination,
+        [switch]$PreserveExternalComponents
     )
 
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $excludedDirectories = @("data", "logs")
+    $excludedFiles = @("install_info.json", "*.log")
+    if ($PreserveExternalComponents) {
+        $excludedDirectories += @(".venv", "tools")
+        $excludedFiles += @(
+            "edge-playback",
+            "edge-playback.exe",
+            "edge-playback-script.py",
+            "espeak-ng.exe",
+            "tobii_stream_engine.dll",
+            "StreamEngineClient.dll"
+        )
+    }
     $arguments = @(
         $Source,
         $Destination,
@@ -51,9 +120,8 @@ function Invoke-RobocopyMirror {
         "/NFL",
         "/NDL",
         "/NP",
-        "/XD", "data", "logs",
-        "/XF", "install_info.json", "*.log"
-    )
+        "/XD"
+    ) + $excludedDirectories + @("/XF") + $excludedFiles
     & robocopy @arguments | ForEach-Object { Write-Host $_ }
     $exitCode = $LASTEXITCODE
     if ($exitCode -gt 7) {
@@ -62,6 +130,22 @@ function Invoke-RobocopyMirror {
 
     # Robocopy uses successful non-zero codes when files were copied or changed.
     $global:LASTEXITCODE = 0
+}
+
+function Assert-PreservedPaths {
+    param(
+        [string]$Root,
+        [string[]]$RelativePaths
+    )
+
+    $missing = @(
+        $RelativePaths | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $Root $_))
+        }
+    )
+    if ($missing.Count -gt 0) {
+        throw "Installation removed external components that must be preserved: $($missing -join ', ')"
+    }
 }
 
 function Invoke-PackageSmokeTest {
@@ -166,7 +250,7 @@ if ($sourceFullPath -ne $installFullPath) {
     }
 }
 
-Assert-AppNotRunning
+Assert-AppNotRunning -InstallRoot $installFullPath
 if ($sourceFullPath -ne $installFullPath) {
     $installParent = Split-Path -Parent $installFullPath
     $installName = Split-Path -Leaf $installFullPath
@@ -176,6 +260,21 @@ if ($sourceFullPath -ne $installFullPath) {
     $installChanged = $false
     $keepBackup = $false
     $hadExistingInstallation = Test-Path -LiteralPath $installFullPath
+    $externalRelativePaths = @(
+        ".venv",
+        "tools",
+        "edge-playback",
+        "edge-playback.exe",
+        "edge-playback-script.py",
+        "espeak-ng.exe",
+        "tobii_stream_engine.dll",
+        "StreamEngineClient.dll"
+    )
+    $preservedExternalPaths = @(
+        $externalRelativePaths | Where-Object {
+            Test-Path -LiteralPath (Join-Path $installFullPath $_)
+        }
+    )
 
     New-Item -ItemType Directory -Path $installParent -Force | Out-Null
     try {
@@ -187,9 +286,15 @@ if ($sourceFullPath -ne $installFullPath) {
             Invoke-RobocopyMirror -Source $installFullPath -Destination $backupRoot
         }
 
-        Assert-AppNotRunning
+        Assert-AppNotRunning -InstallRoot $installFullPath
         $installChanged = $true
-        Invoke-RobocopyMirror -Source $stagingRoot -Destination $installFullPath
+        Invoke-RobocopyMirror `
+            -Source $stagingRoot `
+            -Destination $installFullPath `
+            -PreserveExternalComponents
+        Assert-PreservedPaths `
+            -Root $installFullPath `
+            -RelativePaths $preservedExternalPaths
         Invoke-PackageSmokeTest -Root $installFullPath -Label "Installed application verification"
     } catch {
         $installError = $_

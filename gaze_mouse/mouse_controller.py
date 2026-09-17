@@ -291,11 +291,13 @@ class GazeMouseController(QObject):
         )
         self._smooth_physical_point = None
         self._last_cursor_point = None
-        self._reset_toolbar_dwell()
-        self._reset_target_dwell()
+        self._pause_toolbar_dwell()
+        self._pause_target_dwell()
         self._cancel_zoomed_click_state()
         self._native_menu_click_pending = False
-        self.cancel_quick_action_menu()
+        self._quick_menu_open = False
+        self._quick_target = None
+        self._pause_quick_dwell()
         self._set_toolbar_gaze_target(None)
         self.status_changed.emit("Upravljanje pogledom je pauzirano: oba oka moraju biti otvorena.")
 
@@ -601,6 +603,11 @@ class GazeMouseController(QObject):
         self._cancel_interaction("toolbar")
         self._set_toolbar_gaze_target(None)
 
+    def _pause_toolbar_dwell(self) -> None:
+        self._toolbar_selection.pause()
+        self._cancel_interaction("toolbar")
+        self._set_toolbar_gaze_target(None)
+
     def _set_toolbar_gaze_target(self, action: str | None) -> None:
         if action == self._toolbar_gaze_target:
             return
@@ -613,8 +620,18 @@ class GazeMouseController(QObject):
         self._cancel_interaction("target")
         self._target_anchor = None
 
+    def _pause_target_dwell(self) -> None:
+        self._target_selection.pause()
+        self._cancel_interaction("target")
+        self._target_anchor = None
+
     def _reset_quick_dwell(self) -> None:
         self._quick_selection.cancel()
+        self._cancel_interaction("quick")
+        self._quick_anchor = None
+
+    def _pause_quick_dwell(self) -> None:
+        self._quick_selection.pause()
         self._cancel_interaction("quick")
         self._quick_anchor = None
 

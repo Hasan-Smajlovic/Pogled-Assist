@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -28,11 +29,13 @@ from gaze_mouse.speech_service import (
     VOICE_PRESET_HUMAN_LIKE,
     SpeechService,
     SpeechSettings,
+    _application_root,
     _candidate_paths,
     _edge_playback_candidate_paths,
     _voice_output_mentions_bosnian,
 )
 from gaze_mouse.speech_window import _group_letters
+from gaze_mouse.tobii_stream_engine import APP_ROOT_ENV
 
 
 def test_alarm_sound_repeats_in_background_until_stopped(qtbot):
@@ -99,6 +102,23 @@ def test_executable_candidates_prefer_environment_and_remove_duplicates(monkeypa
     assert espeak_candidates[0] == espeak
     assert espeak_candidates.count(espeak) == 1
     assert edge_candidates[0] == edge
+
+
+def test_packaged_speech_candidates_use_the_installed_application_root(monkeypatch, tmp_path):
+    espeak = tmp_path / "tools" / "espeak-ng" / "bin" / "espeak-ng.exe"
+    edge = tmp_path / ".venv" / "Scripts" / "edge-playback.exe"
+    espeak.parent.mkdir(parents=True)
+    edge.parent.mkdir(parents=True)
+    espeak.touch()
+    edge.touch()
+    monkeypatch.setenv(APP_ROOT_ENV, str(tmp_path))
+    monkeypatch.delenv("ESPEAK_NG_EXE", raising=False)
+    monkeypatch.delenv("EDGE_PLAYBACK_EXE", raising=False)
+    monkeypatch.setattr("gaze_mouse.speech_service.shutil.which", lambda _name: None)
+
+    assert _application_root() == tmp_path
+    assert espeak in _candidate_paths()
+    assert edge in _edge_playback_candidate_paths()
 
 
 def test_speech_service_builds_espeak_command(monkeypatch, tmp_path):
@@ -202,8 +222,9 @@ def test_phrase_parsing_and_sorting_are_stable():
 
 
 def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
-    path = tmp_path / "speech_phrases.json"
-    path.write_text(
+    path = tmp_path / "speech_library.json"
+    legacy_path = tmp_path / "speech_phrases.json"
+    legacy_path.write_text(
         json.dumps(
             [
                 {"text": "Dobar dan", "uses": 1},
@@ -214,13 +235,12 @@ def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
         ),
         encoding="utf-8",
     )
-    store = SpeechLibraryStore(path)
+    store = SpeechLibraryStore(path, legacy_path=legacy_path)
 
     loaded = store.load()
 
     assert loaded.categories == default_categories()
     assert loaded.phrases == [PhraseRecord("Dobar dan", 4), PhraseRecord("Želim pomoć", 0)]
-    assert store.save(loaded) is True
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["version"] == 2
     assert saved["categories"][0] == {
@@ -238,6 +258,125 @@ def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
         {"text": "Dobar dan", "uses": 4},
         {"text": "Želim pomoć", "uses": 0},
     ]
+    assert json.loads(legacy_path.read_text(encoding="utf-8")) == saved["phrases"]
+
+
+def test_speech_library_migrates_current_v2_file_without_losing_categories(tmp_path):
+    path = tmp_path / "speech_library.json"
+    legacy_path = tmp_path / "speech_phrases.json"
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "categories": [{"name": "Moje", "answers": ["Jedan", "Dva"]}],
+                "phrases": [{"text": "Hvala", "uses": 3}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SpeechLibraryStore(path, legacy_path=legacy_path)
+
+    loaded = store.load()
+
+    assert loaded == SpeechLibrary(
+        categories=[CategoryRecord("Moje", ["Jedan", "Dva"])],
+        phrases=[PhraseRecord("Hvala", 3)],
+    )
+    assert json.loads(path.read_text(encoding="utf-8"))["categories"] == [
+        {"name": "Moje", "answers": ["Jedan", "Dva"]}
+    ]
+    assert json.loads(legacy_path.read_text(encoding="utf-8")) == [
+        {"text": "Hvala", "uses": 3}
+    ]
+
+
+def test_speech_library_imports_phrase_changes_made_during_rollback(tmp_path):
+    path = tmp_path / "speech_library.json"
+    legacy_path = tmp_path / "speech_phrases.json"
+    store = SpeechLibraryStore(path, legacy_path=legacy_path)
+    library = SpeechLibrary(
+        categories=[CategoryRecord("Moje", ["Odgovor ostaje"])],
+        phrases=[PhraseRecord("Prije rollbacka", 1)],
+    )
+    assert store.save(library) is True
+
+    legacy_path.write_text(
+        json.dumps([{"text": "Dodano u staroj verziji", "uses": 2}]),
+        encoding="utf-8",
+    )
+    newer = path.stat().st_mtime_ns + 1_000_000_000
+    os.utime(legacy_path, ns=(newer, newer))
+
+    loaded = store.load()
+
+    assert loaded.categories == [CategoryRecord("Moje", ["Odgovor ostaje"])]
+    assert loaded.phrases == [PhraseRecord("Dodano u staroj verziji", 2)]
+    assert json.loads(path.read_text(encoding="utf-8"))["phrases"] == [
+        {"text": "Dodano u staroj verziji", "uses": 2}
+    ]
+
+
+def test_speech_library_imports_full_changes_from_a_v2_rollback(tmp_path):
+    path = tmp_path / "speech_library.json"
+    legacy_path = tmp_path / "speech_phrases.json"
+    store = SpeechLibraryStore(path, legacy_path=legacy_path)
+    assert store.save(
+        SpeechLibrary(
+            categories=[CategoryRecord("Prije", ["Stari odgovor"])],
+            phrases=[PhraseRecord("Stara fraza", 1)],
+        )
+    )
+
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "categories": [{"name": "Tokom rollbacka", "answers": ["Novi odgovor"]}],
+                "phrases": [{"text": "Nova fraza", "uses": 4}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    newer = path.stat().st_mtime_ns + 1_000_000_000
+    os.utime(legacy_path, ns=(newer, newer))
+
+    loaded = store.load()
+
+    assert loaded == SpeechLibrary(
+        categories=[CategoryRecord("Tokom rollbacka", ["Novi odgovor"])],
+        phrases=[PhraseRecord("Nova fraza", 4)],
+    )
+    assert json.loads(path.read_text(encoding="utf-8"))["categories"] == [
+        {"name": "Tokom rollbacka", "answers": ["Novi odgovor"]}
+    ]
+    assert json.loads(legacy_path.read_text(encoding="utf-8")) == [
+        {"text": "Nova fraza", "uses": 4}
+    ]
+
+
+def test_speech_library_restores_both_files_when_legacy_write_fails(monkeypatch, tmp_path):
+    path = tmp_path / "speech_library.json"
+    legacy_path = tmp_path / "speech_phrases.json"
+    store = SpeechLibraryStore(path, legacy_path=legacy_path)
+    original = SpeechLibrary(
+        categories=[CategoryRecord("Sačuvano", ["Odgovor"])],
+        phrases=[PhraseRecord("Fraza", 1)],
+    )
+    assert store.save(original)
+    original_path_content = path.read_bytes()
+    original_legacy_content = legacy_path.read_bytes()
+    replace = Path.replace
+
+    def fail_legacy_replace(source, target):
+        if source == legacy_path.with_suffix(legacy_path.suffix + ".tmp"):
+            raise OSError("legacy file is locked")
+        return replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_legacy_replace)
+
+    assert store.save(SpeechLibrary(categories=[], phrases=[])) is False
+    assert path.read_bytes() == original_path_content
+    assert legacy_path.read_bytes() == original_legacy_content
 
 
 def test_speech_library_preserves_saved_empty_categories_and_new_items(tmp_path):

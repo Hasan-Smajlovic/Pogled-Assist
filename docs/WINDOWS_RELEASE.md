@@ -26,8 +26,9 @@ by the optional 32-bit Stream Engine bridge.
    ```
 
 The installer requests Administrator access, mirrors application files to
-`C:\TobiiExec`, preserves `data` and `logs`, and creates the `Tobii Gaze Mouse`
-desktop shortcut. Before replacing files, it rejects a running application,
+`C:\TobiiExec`, preserves `data`, `logs`, local `.venv` speech tools, and local
+`tools` components, and creates the `Tobii Gaze Mouse` desktop shortcut. Before
+replacing files, it rejects both packaged and source-based running applications,
 creates and smoke-tests a staging copy, and backs up the current application
 files. If the copy or installed smoke test fails, it restores the backup. Run
 `C:\TobiiExec\start_gaze_mouse.ps1` or the shortcut later.
@@ -134,6 +135,13 @@ Download an earlier immutable release, verify its checksum, extract it, and run
 its `install_windows.ps1`. Close Tobii Gaze Mouse first. The installer validates
 the older package before replacing application binaries, preserves
 `C:\TobiiExec\data` and `C:\TobiiExec\logs`, and restores the previous binaries if
-installation fails. If saved settings from a newer version are incompatible,
-back up `data`, remove only the affected JSON file, and restart the older version.
-Never move or recreate an existing release tag during rollback.
+installation fails.
+
+Current releases keep the full Speech library in `data\speech_library.json` and
+maintain a list-only `data\speech_phrases.json` for older releases. Do not delete
+or rename either file during rollback. An older release reads and updates the
+list-only file. When a current release is installed again, it imports newer
+standalone phrase changes while retaining categories and answers from the full
+library. If saved settings from a newer version are incompatible, back up `data`,
+remove only `data\app_settings.json`, and restart the older version. Never move or
+recreate an existing release tag during rollback.

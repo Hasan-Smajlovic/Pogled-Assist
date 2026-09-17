@@ -10,6 +10,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 SPEECH_LIBRARY_VERSION = 2
+SPEECH_LIBRARY_FILE = "speech_library.json"
+LEGACY_PHRASES_FILE = "speech_phrases.json"
 
 
 @dataclass(eq=True)
@@ -70,66 +72,62 @@ def default_categories() -> list[CategoryRecord]:
     ]
 
 
+def speech_library_store(root: Path) -> SpeechLibraryStore:
+    return SpeechLibraryStore(
+        root / "data" / SPEECH_LIBRARY_FILE,
+        legacy_path=root / "data" / LEGACY_PHRASES_FILE,
+    )
+
+
 class SpeechLibraryStore:
-    def __init__(self, path: Path) -> None:
+    """Keep the full library and the rollback phrase list in sync."""
+
+    def __init__(self, path: Path, *, legacy_path: Path | None = None) -> None:
+        if legacy_path == path:
+            raise ValueError("The v2 library and legacy phrase paths must differ.")
         self.path = path
+        self.legacy_path = legacy_path
 
     def load(self) -> SpeechLibrary:
-        if not self.path.exists():
-            return SpeechLibrary(categories=default_categories())
+        data = _read_json(self.path)
+        if data is _MISSING:
+            return self._load_legacy_for_migration()
+        if data is _INVALID:
+            return self._fallback_after_invalid_primary()
 
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except Exception:
-            logger.exception("Could not load the speech library from %s.", self.path)
-            return SpeechLibrary(categories=default_categories())
-
-        if isinstance(data, list):
-            return SpeechLibrary(
-                categories=default_categories(),
-                phrases=_parse_phrases(data),
-            )
-
-        if not isinstance(data, dict):
-            logger.warning("Speech library did not contain an object or legacy list: %s", self.path)
-            return SpeechLibrary(categories=default_categories())
-
-        categories_value = data.get("categories")
-        categories = (
-            _parse_categories(categories_value)
-            if isinstance(categories_value, list)
-            else default_categories()
-        )
-        phrases_value = data.get("phrases", [])
-        phrases = _parse_phrases(phrases_value) if isinstance(phrases_value, list) else []
-        return SpeechLibrary(categories=categories, phrases=phrases)
+        library = _parse_library(data, self.path)
+        if library is None:
+            return self._fallback_after_invalid_primary()
+        self._sync_legacy_file(library)
+        return library
 
     def save(self, library: SpeechLibrary) -> bool:
-        payload = {
-            "version": SPEECH_LIBRARY_VERSION,
-            "categories": [
-                {"name": category.name, "answers": list(category.answers)}
-                for category in library.categories
-            ],
-            "phrases": [
-                {"text": phrase.text, "uses": max(0, int(phrase.uses))}
-                for phrase in sorted_phrases(library.phrases)
-            ],
-        }
-        temp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+        payload = _library_payload(library)
+        targets: list[tuple[Path, object]] = [(self.path, payload)]
+        if self.legacy_path is not None:
+            targets.append((self.legacy_path, payload["phrases"]))
+
+        originals: dict[Path, bytes | None] = {}
+        temp_paths: list[Path] = []
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            temp_path.replace(self.path)
+            for target, _target_payload in targets:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                originals[target] = target.read_bytes() if target.exists() else None
+
+            for target, target_payload in targets:
+                temp_path = target.with_suffix(target.suffix + ".tmp")
+                temp_path.write_text(
+                    json.dumps(target_payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                temp_paths.append(temp_path)
+
+            for (target, _target_payload), temp_path in zip(targets, temp_paths, strict=True):
+                temp_path.replace(target)
         except Exception:
             logger.exception("Could not save the speech library to %s.", self.path)
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                logger.warning("Could not remove temporary speech library file %s.", temp_path)
+            _remove_temp_files(temp_paths)
+            _restore_files(originals)
             return False
 
         logger.info(
@@ -139,6 +137,129 @@ class SpeechLibraryStore:
             self.path,
         )
         return True
+
+    def _load_legacy_for_migration(self) -> SpeechLibrary:
+        if self.legacy_path is None:
+            return SpeechLibrary(categories=default_categories())
+
+        data = _read_json(self.legacy_path)
+        if data is _MISSING or data is _INVALID:
+            return SpeechLibrary(categories=default_categories())
+        library = _parse_library(data, self.legacy_path)
+        if library is None:
+            return SpeechLibrary(categories=default_categories())
+
+        if not self.save(library):
+            logger.warning("Could not migrate the speech library from %s.", self.legacy_path)
+        return library
+
+    def _fallback_after_invalid_primary(self) -> SpeechLibrary:
+        if self.legacy_path is None:
+            return SpeechLibrary(categories=default_categories())
+
+        legacy_data = _read_json(self.legacy_path)
+        if not isinstance(legacy_data, list):
+            return SpeechLibrary(categories=default_categories())
+        return SpeechLibrary(
+            categories=default_categories(),
+            phrases=_parse_phrases(legacy_data),
+        )
+
+    def _sync_legacy_file(self, library: SpeechLibrary) -> None:
+        if self.legacy_path is None:
+            return
+
+        legacy_data = _read_json(self.legacy_path)
+        if isinstance(legacy_data, list):
+            legacy_phrases = _parse_phrases(legacy_data)
+            if legacy_phrases == library.phrases:
+                return
+            if self._legacy_is_newer():
+                library.phrases = legacy_phrases
+        elif isinstance(legacy_data, dict) and self._legacy_is_newer():
+            legacy_library = _parse_library(legacy_data, self.legacy_path)
+            if legacy_library is not None:
+                library.categories = legacy_library.categories
+                library.phrases = legacy_library.phrases
+
+        if not self.save(library):
+            logger.warning("Could not synchronize the rollback-compatible phrase file.")
+
+    def _legacy_is_newer(self) -> bool:
+        if self.legacy_path is None:
+            return False
+        try:
+            return self.legacy_path.stat().st_mtime_ns > self.path.stat().st_mtime_ns
+        except OSError:
+            return False
+
+
+_MISSING = object()
+_INVALID = object()
+
+
+def _read_json(path: Path) -> object:
+    if not path.exists():
+        return _MISSING
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("Could not load the speech library from %s.", path)
+        return _INVALID
+
+
+def _parse_library(data: object, path: Path) -> SpeechLibrary | None:
+    if isinstance(data, list):
+        return SpeechLibrary(categories=default_categories(), phrases=_parse_phrases(data))
+    if not isinstance(data, dict):
+        logger.warning("Speech library did not contain an object or legacy list: %s", path)
+        return None
+
+    categories_value = data.get("categories")
+    categories = (
+        _parse_categories(categories_value)
+        if isinstance(categories_value, list)
+        else default_categories()
+    )
+    phrases_value = data.get("phrases", [])
+    phrases = _parse_phrases(phrases_value) if isinstance(phrases_value, list) else []
+    return SpeechLibrary(categories=categories, phrases=phrases)
+
+
+def _library_payload(library: SpeechLibrary) -> dict[str, object]:
+    return {
+        "version": SPEECH_LIBRARY_VERSION,
+        "categories": [
+            {"name": category.name, "answers": list(category.answers)}
+            for category in library.categories
+        ],
+        "phrases": [
+            {"text": phrase.text, "uses": max(0, int(phrase.uses))}
+            for phrase in sorted_phrases(library.phrases)
+        ],
+    }
+
+
+def _remove_temp_files(paths: list[Path]) -> None:
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove temporary speech library file %s.", path)
+
+
+def _restore_files(originals: dict[Path, bytes | None]) -> None:
+    # Saving spans two files so rollback must restore both if the second replace fails.
+    for path, content in originals.items():
+        try:
+            if content is None:
+                path.unlink(missing_ok=True)
+                continue
+            restore_path = path.with_suffix(path.suffix + ".restore.tmp")
+            restore_path.write_bytes(content)
+            restore_path.replace(path)
+        except OSError:
+            logger.exception("Could not restore speech library file %s.", path)
 
 
 def clean_text(value: object) -> str:
