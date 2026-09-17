@@ -269,3 +269,49 @@ def test_main_routes_package_smoke_test_without_starting_gui(monkeypatch):
 
 def test_source_tree_passes_package_smoke_test():
     assert main_module.package_smoke_test() == 0
+
+
+def test_setup_application_logging_handles_missing_standard_streams(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "__stdout__", None)
+    monkeypatch.setattr(sys, "__stderr__", None)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(logging_setup, "get_project_root", lambda: tmp_path)
+
+    try:
+        latest_log = logging_setup.setup_application_logging()
+        root_logger = logging.getLogger()
+        stream_handlers = [
+            handler
+            for handler in root_logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+        assert not stream_handlers
+
+        print("hello from stdout")
+        sys.stderr.write("hello from stderr\n")
+        logging.shutdown()
+
+        content = latest_log.read_text(encoding="utf-8")
+        assert "Logging initialized." in content
+        assert "hello from stdout" in content
+        assert "hello from stderr" in content
+    finally:
+        logging_setup._restore_standard_streams()
+        logging_setup._clear_root_handlers()
+
+
+def test_stream_to_logger_reentrancy_protection():
+    calls = []
+
+    class ReentrantLogger:
+        def log(self, level, message):
+            calls.append((level, message))
+            stream.write("recursive message\n")
+
+    logger = ReentrantLogger()
+    stream = logging_setup.StreamToLogger(logger, logging.INFO, fallback_stream=None)
+    stream.write("initial message\n")
+
+    assert calls == [(logging.INFO, "initial message")]
