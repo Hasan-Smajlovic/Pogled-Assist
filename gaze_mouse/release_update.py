@@ -19,12 +19,8 @@ from PySide6.QtCore import QObject, Signal
 
 from .logging_setup import get_project_root
 
-RELEASE_API_URL = (
-    "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
-)
-RELEASE_DOWNLOAD_ROOT = (
-    "https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/download"
-)
+RELEASE_API_URL = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
+RELEASE_DOWNLOAD_ROOT = "https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/download"
 UPDATE_CHECK_TIMEOUT_SECONDS = 10
 _STABLE_VERSION_PATTERN = re.compile(
     r"^(?:v)?(?P<major>0|[1-9][0-9]*)\."
@@ -47,9 +43,7 @@ class StableVersion:
     def parse(cls, value: str, *, label: str) -> StableVersion:
         match = _STABLE_VERSION_PATTERN.fullmatch(value.strip())
         if match is None:
-            raise ReleaseUpdateError(
-                f"{label} mora biti stabilna verzija poput 0.2.0."
-            )
+            raise ReleaseUpdateError(f"{label} mora biti stabilna verzija poput 0.2.0.")
         return cls(*(int(match.group(name)) for name in ("major", "minor", "patch")))
 
     def __str__(self) -> str:
@@ -224,10 +218,15 @@ def _validate_release(payload: Any, *, release_api_url: str) -> StableVersion:
         raise ReleaseUpdateError("GitHub izdanje nema ispravnu listu datoteka.")
 
     for name, expected_url in required_assets.items():
-        matches = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") == name]
+        matches = [
+            asset for asset in assets if isinstance(asset, dict) and asset.get("name") == name
+        ]
         if len(matches) != 1:
             raise ReleaseUpdateError(f"Stabilnom izdanju nedostaje datoteka {name}.")
-        if release_api_url == RELEASE_API_URL and matches[0].get("browser_download_url") != expected_url:
+        if (
+            release_api_url == RELEASE_API_URL
+            and matches[0].get("browser_download_url") != expected_url
+        ):
             raise ReleaseUpdateError(f"Datoteka {name} nije objavljena na očekivanoj lokaciji.")
 
     return version
