@@ -144,6 +144,7 @@ preserve it:
 
 ```text
 data\app_settings.json
+data\speech_library.json
 data\speech_phrases.json
 logs\latest.txt
 ```

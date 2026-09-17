@@ -148,7 +148,65 @@ try {
         -InstallRoot $InstallRoot `
         -NoDesktopShortcut `
         -NoElevation
-    Write-Host "Isolated installer smoke test passed."
+
+    $preservedFiles = @{
+        ".venv\Scripts\edge-playback.exe" = "preserved edge playback"
+        "tools\tobii\tobii_stream_engine.dll" = "preserved Tobii DLL"
+    }
+    foreach ($relativePath in $preservedFiles.Keys) {
+        $fullPath = Join-Path $InstallRoot $relativePath
+        New-Item -ItemType Directory -Path (Split-Path -Parent $fullPath) -Force | Out-Null
+        Set-Content -LiteralPath $fullPath -Value $preservedFiles[$relativePath] -Encoding ASCII
+    }
+
+    & $InstallerPath `
+        -InstallRoot $InstallRoot `
+        -NoDesktopShortcut `
+        -NoElevation
+    foreach ($relativePath in $preservedFiles.Keys) {
+        $fullPath = Join-Path $InstallRoot $relativePath
+        $actual = (Get-Content -LiteralPath $fullPath -Raw).Trim()
+        if ($actual -ne $preservedFiles[$relativePath]) {
+            throw "Installer did not preserve external component: $relativePath"
+        }
+    }
+
+    $sourceScript = Join-Path $InstallRoot "run_gaze_mouse.py"
+    Set-Content `
+        -LiteralPath $sourceScript `
+        -Value "import time; time.sleep(60)" `
+        -Encoding ASCII
+    $sourceProcess = Start-Process `
+        -FilePath $PythonExecutable `
+        -ArgumentList @("-B", ('"' + $sourceScript + '"')) `
+        -WorkingDirectory $InstallRoot `
+        -PassThru
+    try {
+        Start-Sleep -Milliseconds 500
+        $runningSourceWasBlocked = $false
+        try {
+            & $InstallerPath `
+                -InstallRoot $InstallRoot `
+                -NoDesktopShortcut `
+                -NoElevation
+        } catch {
+            if ($_.Exception.Message -like "Close Tobii Gaze Mouse before installing*") {
+                $runningSourceWasBlocked = $true
+            } else {
+                throw
+            }
+        }
+        if (-not $runningSourceWasBlocked) {
+            throw "Installer did not reject a running source application."
+        }
+    } finally {
+        if (-not $sourceProcess.HasExited) {
+            Stop-Process -Id $sourceProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        $sourceProcess.Dispose()
+    }
+
+    Write-Host "Isolated install, upgrade preservation, and running-app checks passed."
 } finally {
     if (Test-Path -LiteralPath $InstallerSmokeRoot) {
         Remove-Item -LiteralPath $InstallerSmokeRoot -Recurse -Force

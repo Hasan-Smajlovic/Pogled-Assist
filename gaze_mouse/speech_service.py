@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .tobii_stream_engine import APP_ROOT_ENV
+
 logger = logging.getLogger(__name__)
 
 BOSNIAN_LANGUAGE = "bs"
@@ -254,8 +256,8 @@ def _candidate_paths() -> list[Path]:
     if path_match:
         candidates.append(Path(path_match))
 
-    project_root = Path(__file__).resolve().parents[1]
-    tools_root = project_root / "tools" / "espeak-ng"
+    app_root = _application_root()
+    tools_root = app_root / "tools" / "espeak-ng"
     if tools_root.exists():
         candidates.extend(sorted(tools_root.rglob("espeak-ng.exe")))
 
@@ -308,12 +310,12 @@ def _edge_playback_candidate_paths() -> list[Path]:
         ]
     )
 
-    project_root = Path(__file__).resolve().parents[1]
+    app_root = _application_root()
     candidates.extend(
         [
-            project_root / ".venv" / "Scripts" / "edge-playback.exe",
-            project_root / ".venv" / "Scripts" / "edge-playback",
-            project_root / ".venv" / "bin" / "edge-playback",
+            app_root / ".venv" / "Scripts" / "edge-playback.exe",
+            app_root / ".venv" / "Scripts" / "edge-playback",
+            app_root / ".venv" / "bin" / "edge-playback",
         ]
     )
 
@@ -326,6 +328,15 @@ def _edge_playback_candidate_paths() -> list[Path]:
             deduped.append(candidate)
 
     return deduped
+
+
+def _application_root() -> Path:
+    configured = os.environ.get(APP_ROOT_ENV, "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
 def _is_valid_espeak_ng(path: Path) -> bool:

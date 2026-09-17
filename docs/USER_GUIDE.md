@@ -63,12 +63,25 @@ point. Gaze does not move the real pointer while the zoom or menu is open.
 ## Speech
 
 Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter.
-Space and Backspace stay on the bottom row. Play sends the current text to the
-selected speech engine without clearing it.
+Space and Backspace stay on the bottom row. `Izgovori` sends the current text to
+the selected speech engine without clearing it. `Kategorije` contains saved groups
+of answers, while `Fraze` contains standalone reusable text. Both lists support
+adding and deleting entries with the same grouped keyboard.
 
-Phrases stores reusable UTF-8 text. Saved phrases are ordered by usage count.
-Selecting one appends it to the input and increases its count. Phrase data is
-stored in `data\speech_phrases.json`.
+The controls on the right remain available while browsing or adding entries:
+
+- `Alarm` stops speech, repeats a local sound, and opens a dialog. Select
+  `Zaustavi alarm` to silence it and return to the same Speech state.
+- `Sleep` stops speech and blacks out the display. Select `Nastavi` by gaze or
+  mouse to restore the message, current list and page, and any unfinished entry.
+- `Izlaz` asks for confirmation. `Odustani` returns to the same state, while
+  `Izađi` closes the whole application through its normal shutdown path.
+
+Saved categories, answers, and phrases use UTF-8 text. Selecting an answer or
+phrase appends it to the message, and saved phrases remain ordered by usage count.
+The full library is stored in `data\speech_library.json`. The app also maintains
+`data\speech_phrases.json` so older releases can read standalone phrases during
+rollback.
 
 The Default voice uses eSpeak NG with the Bosnian `bs` voice. Human like uses
 `edge-playback` with `bs-BA-GoranNeural` and requires internet access.
@@ -135,5 +148,6 @@ The launcher writes `start_gaze_mouse.log` even when its window is hidden.
 
 ## Exit
 
-Use Quit app from General settings. `Ctrl+Q` works while the hotbar has focus, and
-`Alt+F4` closes the active application window.
+Use `Izlaz` on the Speech screen or Quit app from General settings. `Ctrl+Q`
+works while the hotbar has focus, and `Alt+F4` closes the active application
+window.

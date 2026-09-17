@@ -78,6 +78,11 @@ class GazeSelectionTimer:
             self._blocked_target = None
         self._clear_target()
 
+    def pause(self) -> None:
+        """Drop pending progress without treating invalid gaze as leaving the target."""
+
+        self._clear_target()
+
     def _start(self, target: object, now_ms: float) -> None:
         self._target = target
         self._started_ms = float(now_ms)

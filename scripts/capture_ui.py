@@ -9,7 +9,7 @@ from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from gaze_mouse import controller_window as controller_module
@@ -68,6 +68,20 @@ class PreviewSpeech:
         return True
 
     def stop(self) -> None:
+        return None
+
+
+class PreviewAlarmSound(QObject):
+    failed = Signal(str)
+
+    def start(self) -> bool:
+        return True
+
+    def stop(self) -> None:
+        return None
+
+    @property
+    def last_error(self) -> str | None:
         return None
 
 
@@ -209,6 +223,7 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
             speech = SpeechWindow(
                 PreviewSpeech(),
                 library_store=PreviewLibraryStore(sample_phrases),
+                alarm_sound=PreviewAlarmSound(),
             )
             widgets.append(speech)
             snapshots.append(
@@ -271,6 +286,51 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                     ),
                 )
             )
+            speech._start_alarm()
+            snapshots.append(
+                (
+                    "Speech alarm",
+                    _capture_widget(
+                        app,
+                        speech._alarm_dialog,
+                        output_dir,
+                        "speech-alarm",
+                        speech._alarm_dialog.width(),
+                        speech._alarm_dialog.height(),
+                    ),
+                )
+            )
+            speech._stop_alarm()
+            speech._start_sleep()
+            snapshots.append(
+                (
+                    "Speech sleep",
+                    _capture_widget(
+                        app,
+                        speech._sleep_dialog,
+                        output_dir,
+                        "speech-sleep",
+                        width,
+                        height,
+                    ),
+                )
+            )
+            speech._wake_from_sleep()
+            speech._open_exit_confirmation()
+            snapshots.append(
+                (
+                    "Speech exit confirmation",
+                    _capture_widget(
+                        app,
+                        speech._confirm_dialog,
+                        output_dir,
+                        "speech-exit",
+                        speech._confirm_dialog.width(),
+                        speech._confirm_dialog.height(),
+                    ),
+                )
+            )
+            speech._cancel_confirmation()
 
             sidebar_width = 380
             keyboard = KeyboardWindow(speech_settings)

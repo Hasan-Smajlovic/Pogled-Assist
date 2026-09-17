@@ -7,7 +7,6 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Literal
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
@@ -28,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from .gaze_feedback import set_gaze_feedback
 from .logging_setup import get_project_root
 from .speech_library import (
@@ -38,6 +38,7 @@ from .speech_library import (
     clean_text,
     entry_exists,
     sorted_phrases,
+    speech_library_store,
 )
 from .speech_service import SpeechService, SpeechSettings
 
@@ -83,8 +84,10 @@ GROUP_GRID_MAX_COLUMNS = 6
 KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 PHRASE_BUTTON_MIN_HEIGHT = 64
+LIST_ACTION_MIN_HEIGHT = 80
+LIST_ACTION_MIN_WIDTH = 160
+DIALOG_ACTION_MIN_HEIGHT = 128
 ITEMS_PER_PAGE = 6
-PHRASES_FILE = "speech_phrases.json"
 EditorKind = Literal["category", "answer", "phrase"]
 
 
@@ -102,6 +105,7 @@ class SpeechWindow(QWidget):
     closed = Signal()
     interaction_context_changed = Signal()
     mouse_action_started = Signal()
+    quit_requested = Signal()
 
     def __init__(
         self,
@@ -109,6 +113,7 @@ class SpeechWindow(QWidget):
         parent: QWidget | None = None,
         letters_per_group: int | None = None,
         library_store: SpeechLibraryStore | None = None,
+        alarm_sound: AlarmSound | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("speechWindow")
@@ -131,7 +136,9 @@ class SpeechWindow(QWidget):
         self._dialog_actions: set[str] = set()
         self._active_dialog: QDialog | None = None
         self._gaze_target_action: str | None = None
-        self._library_store = library_store or SpeechLibraryStore(_speech_library_path())
+        self._library_store = library_store or speech_library_store(get_project_root())
+        self._alarm_sound = alarm_sound or AlarmSound(self)
+        self._alarm_sound.failed.connect(self._alarm_failed)
         self._library = self._library_store.load()
         self._list_page = 0
         self._category_index: int | None = None
@@ -184,6 +191,7 @@ class SpeechWindow(QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Speech window close event received.")
         self._restore_message_if_editing()
+        self._alarm_sound.stop()
         if self._active_dialog is not None:
             self._active_dialog.done(0)
         self._set_gaze_target_action(None)
@@ -195,7 +203,10 @@ class SpeechWindow(QWidget):
         super().resizeEvent(event)
         self._modal_backdrop.setGeometry(self.rect())
         if self._active_dialog is not None:
-            self._position_dialog(self._active_dialog)
+            if self._active_dialog is self._sleep_dialog:
+                self._position_sleep_dialog()
+            else:
+                self._position_dialog(self._active_dialog)
 
     def action_at_global_point(self, point: QPoint) -> str | None:
         actions = (
@@ -319,19 +330,19 @@ class SpeechWindow(QWidget):
             QPushButton#systemAlarm {
                 background: #552326;
                 border-color: #94434a;
-                color: #dbaeb1;
+                color: #ffd5d7;
                 font-size: 27px;
             }
             QPushButton#systemSleep {
                 background: #202538;
                 border-color: #5b658c;
-                color: #afb6d2;
+                color: #e0e5ff;
                 font-size: 27px;
             }
             QPushButton#systemExit {
                 background: #1c2029;
                 border-color: #303747;
-                color: #8791a3;
+                color: #eef2f8;
                 font-size: 27px;
             }
             QPushButton#phraseButton {
@@ -343,13 +354,7 @@ class SpeechWindow(QWidget):
                 color: #fecaca;
                 font-size: 19px;
             }
-            QPushButton#headerActionButton { font-size: 15px; }
-            QPushButton#closeSpeechButton {
-                background: #252a34;
-                color: #cbd4e2;
-                font-size: 14px;
-                font-weight: 600;
-            }
+            QPushButton#headerActionButton { font-size: 18px; }
             QFrame#modalBackdrop { background: rgba(0, 0, 0, 190); }
             QDialog#speechDialog {
                 background: #111318;
@@ -359,25 +364,42 @@ class SpeechWindow(QWidget):
             }
             QDialog#speechDialog QLabel#dialogTitle {
                 color: #eef2f8;
-                font-size: 27px;
+                font-size: 30px;
                 font-weight: 500;
             }
-            QDialog#speechDialog QLabel#dialogCopy { color: #dce6f3; font-size: 20px; }
+            QDialog#speechDialog QLabel#dialogCopy { color: #dce6f3; font-size: 22px; }
             QDialog#speechDialog QPushButton#dialogLetterButton {
-                font-size: 34px;
-                min-height: 100px;
+                font-size: 38px;
+                min-height: 120px;
             }
             QDialog#speechDialog QPushButton#dialogBackButton {
-                font-size: 20px;
-                min-height: 100px;
+                font-size: 22px;
+                min-height: 120px;
             }
             QDialog#speechDialog QPushButton#dialogConfirmButton {
                 background: #552326;
                 border-color: #94434a;
                 color: #ffd5d7;
-                min-height: 92px;
+                font-size: 22px;
+                min-height: 128px;
             }
-            QDialog#speechDialog QPushButton#dialogCancelButton { min-height: 92px; }
+            QDialog#speechDialog QPushButton#dialogCancelButton {
+                font-size: 22px;
+                min-height: 128px;
+            }
+            QDialog#sleepDialog { background: #000000; }
+            QDialog#sleepDialog QPushButton#wakeButton {
+                background: #08090b;
+                border-color: #2b3038;
+                color: #7f8794;
+                font-size: 28px;
+                min-height: 140px;
+            }
+            QDialog#sleepDialog QPushButton#wakeButton:hover {
+                background: #111318;
+                border-color: #657084;
+                color: #bac5d4;
+            }
             QWidget#speechWindow QPushButton[gazeTarget="true"][gazePulse="0"],
             QWidget#speechWindow QDialog#speechDialog QPushButton[gazeTarget="true"][gazePulse="0"] {
                 background: #f0c84a;
@@ -411,14 +433,21 @@ class SpeechWindow(QWidget):
         message_layout.setSpacing(4)
         self._message_label = QLabel("Vaša poruka", message_box)
         self._message_label.setObjectName("messageLabel")
+        self._status_label = QLabel("", message_box)
+        self._status_label.setObjectName("statusLabel")
+        self._status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        message_header = QHBoxLayout()
+        message_header.setContentsMargins(0, 0, 0, 0)
+        message_header.addWidget(self._message_label)
+        message_header.addWidget(self._status_label, 1)
         self._input = QLineEdit(message_box)
         self._input.setObjectName("speechInput")
         self._input.setAlignment(Qt.AlignCenter)
         self._input.setMinimumHeight(62)
-        self._input.setMaxLength(260)
         self._input.setPlaceholderText("Odaberite grupu slova…")
         self._input.returnPressed.connect(self._play)
-        message_layout.addWidget(self._message_label)
+        message_layout.addLayout(message_header)
         message_layout.addWidget(self._input, 1)
 
         self._play_button = self._make_button(
@@ -464,24 +493,41 @@ class SpeechWindow(QWidget):
         self._view_title = QLabel("Odaberite grupu slova", main_panel)
         self._view_title.setObjectName("sectionLabel")
         self._back_button = self._make_button(
-            "Nazad", "list:back", "headerActionButton", minimum_height=44
+            "Nazad",
+            "list:back",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
         )
         self._add_item_button = self._make_button(
-            "Dodaj", "list:add", "headerActionButton", minimum_height=44
+            "Dodaj",
+            "list:add",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
         )
         self._delete_mode_button = self._make_button(
             "Obriši",
             "list:delete-mode",
             "headerActionButton",
-            minimum_height=44,
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
             checkable=True,
         )
         self._cancel_editor_button = self._make_button(
-            "Odustani", "editor:cancel", "headerActionButton", minimum_height=44
+            "Odustani",
+            "editor:cancel",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
         )
         self._save_item_button = self._make_button(
-            "Sačuvaj", "editor:save", "primaryButton", minimum_height=44
+            "Sačuvaj", "editor:save", "primaryButton", minimum_height=LIST_ACTION_MIN_HEIGHT
         )
+        for button in (
+            self._back_button,
+            self._add_item_button,
+            self._delete_mode_button,
+            self._cancel_editor_button,
+            self._save_item_button,
+        ):
+            button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
         view_header.addWidget(self._view_title, 1)
         view_header.addWidget(self._back_button)
         view_header.addWidget(self._add_item_button)
@@ -502,14 +548,22 @@ class SpeechWindow(QWidget):
         paging.setContentsMargins(0, 0, 0, 0)
         paging.setSpacing(8)
         self._previous_page_button = self._make_button(
-            "Prethodna", "list:page:previous", "headerActionButton", minimum_height=44
+            "Prethodna",
+            "list:page:previous",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
         )
         self._page_label = QLabel("", main_panel)
         self._page_label.setObjectName("sectionLabel")
         self._page_label.setAlignment(Qt.AlignCenter)
         self._next_page_button = self._make_button(
-            "Sljedeća", "list:page:next", "headerActionButton", minimum_height=44
+            "Sljedeća",
+            "list:page:next",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
         )
+        self._previous_page_button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
+        self._next_page_button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
         paging.addStretch(1)
         paging.addWidget(self._previous_page_button)
         paging.addWidget(self._page_label)
@@ -520,25 +574,30 @@ class SpeechWindow(QWidget):
         main_layout.addLayout(paging)
 
         system_panel = QWidget(self)
+        system_panel.setMinimumWidth(280)
+        system_panel.setMaximumWidth(480)
         system_layout = QVBoxLayout(system_panel)
         system_layout.setContentsMargins(0, 0, 0, 0)
         system_layout.setSpacing(8)
         controls_label = QLabel("Kontrole", system_panel)
         controls_label.setObjectName("sectionLabel")
         system_layout.addWidget(controls_label)
-        for title, subtitle, object_name in (
-            ("Alarm", "Pozovi pomoć", "systemAlarm"),
-            ("Odmor", "Odmori oči", "systemSleep"),
-            ("Izlaz", "Zatvori aplikaciju", "systemExit"),
+        for title, subtitle, command, object_name in (
+            ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
+            ("Sleep", "Odmori oči", "sleep:start", "systemSleep"),
+            ("Izlaz", "Zatvori aplikaciju", "exit", "systemExit"),
         ):
-            button = QPushButton(f"{title}\n{subtitle}", system_panel)
-            button.setObjectName(object_name)
-            button.setEnabled(False)
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            button = self._make_button(
+                f"{title}\n{subtitle}",
+                command,
+                object_name,
+                parent=system_panel,
+                minimum_height=100,
+            )
             system_layout.addWidget(button, 1)
 
-        workspace.addWidget(main_panel, 145)
-        workspace.addWidget(system_panel, 100)
+        workspace.addWidget(main_panel, 3)
+        workspace.addWidget(system_panel, 1)
 
         utility_row = QHBoxLayout()
         utility_row.setContentsMargins(0, 0, 0, 0)
@@ -556,24 +615,10 @@ class SpeechWindow(QWidget):
         utility_row.addWidget(self._backspace_button, 10)
         utility_row.addWidget(self._keyboard_toggle_button, 10)
 
-        footer = QHBoxLayout()
-        footer.setContentsMargins(0, 0, 0, 0)
-        footer.setSpacing(10)
-        self._status_label = QLabel("Odaberite grupu, zatim slovo.", self)
-        self._status_label.setObjectName("statusLabel")
-        self._status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self._close_speech_button = self._make_button(
-            "Zatvori govor", "close", "closeSpeechButton", minimum_height=40
-        )
-        self._close_speech_button.setMinimumWidth(160)
-        footer.addWidget(self._status_label, 1)
-        footer.addWidget(self._close_speech_button)
-
         root.addLayout(topbar)
         root.addLayout(predictions)
         root.addLayout(workspace, 1)
         root.addLayout(utility_row)
-        root.addLayout(footer)
 
         self._modal_backdrop = QFrame(self)
         self._modal_backdrop.setObjectName("modalBackdrop")
@@ -582,8 +627,8 @@ class SpeechWindow(QWidget):
     def _build_dialogs(self) -> None:
         self._letter_dialog = self._new_dialog()
         letter_layout = QVBoxLayout(self._letter_dialog)
-        letter_layout.setContentsMargins(24, 22, 24, 24)
-        letter_layout.setSpacing(18)
+        letter_layout.setContentsMargins(32, 30, 32, 32)
+        letter_layout.setSpacing(24)
         self._letter_dialog_title = QLabel("Odaberite slovo", self._letter_dialog)
         self._letter_dialog_title.setObjectName("dialogTitle")
         self._letter_grid_host = QWidget(self._letter_dialog)
@@ -599,8 +644,8 @@ class SpeechWindow(QWidget):
 
         self._confirm_dialog = self._new_dialog()
         confirm_layout = QVBoxLayout(self._confirm_dialog)
-        confirm_layout.setContentsMargins(24, 22, 24, 24)
-        confirm_layout.setSpacing(18)
+        confirm_layout.setContentsMargins(32, 30, 32, 32)
+        confirm_layout.setSpacing(24)
         self._confirm_title = QLabel("Potvrda", self._confirm_dialog)
         self._confirm_title.setObjectName("dialogTitle")
         self._confirm_copy = QLabel("Cijela poruka bit će obrisana.", self._confirm_dialog)
@@ -608,20 +653,20 @@ class SpeechWindow(QWidget):
         self._confirm_copy.setWordWrap(True)
         confirm_actions = QHBoxLayout()
         confirm_actions.setContentsMargins(0, 0, 0, 0)
-        confirm_actions.setSpacing(18)
+        confirm_actions.setSpacing(24)
         cancel = self._make_button(
             "Odustani",
             "confirm:cancel",
             "dialogCancelButton",
             parent=self._confirm_dialog,
-            minimum_height=92,
+            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
         )
         self._confirm_button = self._make_button(
             "Potvrdi",
             "confirm:accept",
             "dialogConfirmButton",
             parent=self._confirm_dialog,
-            minimum_height=92,
+            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
         )
         confirm_actions.addWidget(cancel, 1)
         confirm_actions.addWidget(self._confirm_button, 1)
@@ -633,9 +678,53 @@ class SpeechWindow(QWidget):
             lambda _result, dialog=self._confirm_dialog: self._dialog_finished(dialog)
         )
 
-    def _new_dialog(self) -> QDialog:
+        self._alarm_dialog = self._new_dialog()
+        alarm_layout = QVBoxLayout(self._alarm_dialog)
+        alarm_layout.setContentsMargins(32, 30, 32, 32)
+        alarm_layout.setSpacing(24)
+        alarm_title = QLabel("Alarm je uključen", self._alarm_dialog)
+        alarm_title.setObjectName("dialogTitle")
+        self._alarm_copy = QLabel(
+            "Zvučni signal se ponavlja dok ga ne zaustavite.", self._alarm_dialog
+        )
+        self._alarm_copy.setObjectName("dialogCopy")
+        self._alarm_copy.setWordWrap(True)
+        stop_alarm = self._make_button(
+            "Zaustavi alarm",
+            "alarm:stop",
+            "dialogConfirmButton",
+            parent=self._alarm_dialog,
+            minimum_height=140,
+        )
+        alarm_layout.addWidget(alarm_title)
+        alarm_layout.addWidget(self._alarm_copy)
+        alarm_layout.addStretch(1)
+        alarm_layout.addWidget(stop_alarm)
+        self._alarm_dialog.finished.connect(
+            lambda _result, dialog=self._alarm_dialog: self._dialog_finished(dialog)
+        )
+
+        self._sleep_dialog = self._new_dialog(object_name="sleepDialog")
+        sleep_layout = QVBoxLayout(self._sleep_dialog)
+        sleep_layout.setContentsMargins(32, 32, 32, 56)
+        sleep_layout.addStretch(1)
+        self._wake_button = self._make_button(
+            "Nastavi",
+            "sleep:wake",
+            "wakeButton",
+            parent=self._sleep_dialog,
+            minimum_height=140,
+        )
+        self._wake_button.setMinimumWidth(320)
+        self._wake_button.setMaximumWidth(420)
+        sleep_layout.addWidget(self._wake_button, 0, Qt.AlignHCenter)
+        self._sleep_dialog.finished.connect(
+            lambda _result, dialog=self._sleep_dialog: self._dialog_finished(dialog)
+        )
+
+    def _new_dialog(self, *, object_name: str = "speechDialog") -> QDialog:
         dialog = QDialog(self)
-        dialog.setObjectName("speechDialog")
+        dialog.setObjectName(object_name)
         dialog.setModal(True)
         dialog.setWindowModality(Qt.ApplicationModal)
         dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -659,7 +748,7 @@ class SpeechWindow(QWidget):
             self._key_grid.addWidget(button, index // columns, index % columns)
 
         self._update_view_controls()
-        self._set_status("Odaberite grupu, zatim slovo.")
+        self._set_status("")
         self._context_changed()
 
     def _show_symbols_level(self) -> None:
@@ -677,7 +766,7 @@ class SpeechWindow(QWidget):
             self._key_grid.addWidget(button, index // 4, index % 4)
 
         self._update_view_controls()
-        self._set_status("Odaberite broj ili znak.")
+        self._set_status("")
         self._context_changed()
 
     def _show_list_level(self) -> None:
@@ -696,7 +785,7 @@ class SpeechWindow(QWidget):
             empty.setObjectName("phraseButton")
             empty.setEnabled(False)
             self._key_grid.addWidget(empty, 0, 0, 3, 2)
-            self._set_status("Lista je prazna. Odaberite Dodaj za novi unos.")
+            self._set_status("")
         else:
             page_start = self._list_page * ITEMS_PER_PAGE
             visible_items = items[page_start : page_start + ITEMS_PER_PAGE]
@@ -709,11 +798,7 @@ class SpeechWindow(QWidget):
                 )
                 button.setMinimumHeight(PHRASE_BUTTON_MIN_HEIGHT)
                 self._key_grid.addWidget(button, position // 2, position % 2)
-            self._set_status(
-                "Odaberite stavku za brisanje."
-                if self._deletion_mode
-                else "Odaberite stavku ili dodajte novu."
-            )
+            self._set_status("Odaberite stavku za brisanje." if self._deletion_mode else "")
 
         self._update_view_controls()
         self._context_changed()
@@ -767,7 +852,7 @@ class SpeechWindow(QWidget):
                 action,
                 "dialogLetterButton",
                 parent=self._letter_dialog,
-                minimum_height=100,
+                minimum_height=120,
             )
             self._letter_dialog_actions.add(action)
             self._letter_grid.addWidget(button, index // columns, index % columns)
@@ -778,7 +863,7 @@ class SpeechWindow(QWidget):
             back_action,
             "dialogBackButton",
             parent=self._letter_dialog,
-            minimum_height=100,
+            minimum_height=120,
         )
         self._letter_dialog_actions.add(back_action)
         back_index = len(group)
@@ -792,7 +877,7 @@ class SpeechWindow(QWidget):
         item_count = len(self._letter_groups[group_index]) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
-        self._open_dialog(self._letter_dialog, min(760, 172 + rows * 126))
+        self._open_dialog(self._letter_dialog, min(820, 210 + rows * 150))
 
     def _open_clear_dialog(self) -> None:
         if not self._input.text():
@@ -825,7 +910,7 @@ class SpeechWindow(QWidget):
             self._action("confirm:cancel"),
             self._action("confirm:accept"),
         }
-        self._open_dialog(self._confirm_dialog, 330)
+        self._open_dialog(self._confirm_dialog, 460)
 
     def _cancel_confirmation(self) -> None:
         self._confirm_action = None
@@ -838,6 +923,67 @@ class SpeechWindow(QWidget):
         if action is not None:
             action()
 
+    def _start_alarm(self) -> None:
+        self._speech.stop()
+        self._alarm_copy.setText("Pokrećem zvučni signal…")
+        self._dialog_actions = {self._action("alarm:stop")}
+        self._open_dialog(self._alarm_dialog, 460)
+        try:
+            started = self._alarm_sound.start()
+        except Exception:
+            logger.exception("Alarm sound could not be started.")
+            started = False
+        if started:
+            self._alarm_copy.setText("Zvučni signal se ponavlja dok ga ne zaustavite.")
+            self._set_status("Alarm je uključen.")
+        else:
+            self._alarm_failed(self._alarm_sound.last_error or ALARM_UNAVAILABLE_MESSAGE)
+
+    def _alarm_failed(self, message: str) -> None:
+        if self._active_dialog is self._alarm_dialog:
+            self._alarm_copy.setText(message)
+        self._set_status(message)
+
+    def _stop_alarm(self) -> None:
+        self._alarm_sound.stop()
+        if self._active_dialog is self._alarm_dialog:
+            self._close_dialog()
+        self._set_status("Alarm je zaustavljen.")
+
+    def _start_sleep(self) -> None:
+        self._speech.stop()
+        self._dialog_actions = {self._action("sleep:wake")}
+        self._context_changed()
+        self._active_dialog = self._sleep_dialog
+        self._modal_backdrop.hide()
+        self._position_sleep_dialog()
+        self._sleep_dialog.show()
+        self._sleep_dialog.raise_()
+        self._sleep_dialog.activateWindow()
+        self._set_status("Odmor je uključen.")
+
+    def _position_sleep_dialog(self) -> None:
+        top_left = self.mapToGlobal(QPoint(0, 0))
+        self._sleep_dialog.setGeometry(QRect(top_left, self.size()))
+
+    def _wake_from_sleep(self) -> None:
+        if self._active_dialog is self._sleep_dialog:
+            self._close_dialog()
+        self._set_status("Možete nastaviti.")
+
+    def _open_exit_confirmation(self) -> None:
+        self._open_confirmation(
+            "Izaći iz aplikacije?",
+            "Za povratak na razgovor odaberite Odustani.",
+            "Izađi",
+            self._request_quit,
+        )
+
+    def _request_quit(self) -> None:
+        self._alarm_sound.stop()
+        self._speech.stop()
+        self.quit_requested.emit()
+
     def _clear_input(self) -> None:
         self._input.clear()
         self._set_status("Tekst je obrisan.")
@@ -848,8 +994,9 @@ class SpeechWindow(QWidget):
         self._modal_backdrop.setGeometry(self.rect())
         self._modal_backdrop.show()
         self._modal_backdrop.raise_()
-        width = max(520, min(960, self.width() - 80))
-        dialog.resize(width, min(height, max(300, self.height() - 64)))
+        available_width = max(320, self.width() - 64)
+        width = min(1280, max(680, round(self.width() * 0.68)), available_width)
+        dialog.resize(width, min(height, max(320, self.height() - 64)))
         self._position_dialog(dialog)
         dialog.show()
         dialog.raise_()
@@ -867,6 +1014,8 @@ class SpeechWindow(QWidget):
         if dialog is not self._active_dialog:
             return
         self._active_dialog = None
+        if dialog is self._alarm_dialog:
+            self._alarm_sound.stop()
         if dialog is self._confirm_dialog:
             self._confirm_action = None
         self._dialog_actions.clear()
@@ -1044,9 +1193,7 @@ class SpeechWindow(QWidget):
             return
         command = action.removeprefix(SPEECH_WINDOW_ACTION_PREFIX)
 
-        if command == "close":
-            self.close()
-        elif command == "clear":
+        if command == "clear":
             self._open_clear_dialog()
         elif command == "confirm:cancel":
             self._cancel_confirmation()
@@ -1054,6 +1201,16 @@ class SpeechWindow(QWidget):
             self._accept_confirmation()
         elif command == "play":
             self._play()
+        elif command == "alarm:start":
+            self._start_alarm()
+        elif command == "alarm:stop":
+            self._stop_alarm()
+        elif command == "sleep:start":
+            self._start_sleep()
+        elif command == "sleep:wake":
+            self._wake_from_sleep()
+        elif command == "exit":
+            self._open_exit_confirmation()
         elif command == "categories":
             self._toggle_categories()
         elif command == "phrases":
@@ -1440,7 +1597,3 @@ def _list_mode(kind: EditorKind) -> str:
         "answer": "answers",
         "phrase": "phrases",
     }[kind]
-
-
-def _speech_library_path() -> Path:
-    return get_project_root() / "data" / PHRASES_FILE
