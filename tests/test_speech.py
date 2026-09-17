@@ -314,7 +314,7 @@ def test_speech_library_imports_phrase_changes_made_during_rollback(tmp_path):
     ]
 
 
-def test_speech_library_imports_full_changes_from_a_v2_rollback(tmp_path):
+def test_speech_library_imports_v2_rollback_phrases_without_losing_categories(tmp_path):
     path = tmp_path / "speech_library.json"
     legacy_path = tmp_path / "speech_phrases.json"
     store = SpeechLibraryStore(path, legacy_path=legacy_path)
@@ -325,27 +325,22 @@ def test_speech_library_imports_full_changes_from_a_v2_rollback(tmp_path):
         )
     )
 
-    legacy_path.write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "categories": [{"name": "Tokom rollbacka", "answers": ["Novi odgovor"]}],
-                "phrases": [{"text": "Nova fraza", "uses": 4}],
-            }
-        ),
-        encoding="utf-8",
-    )
+    rollback_store = SpeechLibraryStore(legacy_path)
+    rollback_library = rollback_store.load()
+    assert rollback_library.categories == default_categories()
+    rollback_library.phrases = [PhraseRecord("Nova fraza", 4)]
+    assert rollback_store.save(rollback_library)
     newer = path.stat().st_mtime_ns + 1_000_000_000
     os.utime(legacy_path, ns=(newer, newer))
 
     loaded = store.load()
 
     assert loaded == SpeechLibrary(
-        categories=[CategoryRecord("Tokom rollbacka", ["Novi odgovor"])],
+        categories=[CategoryRecord("Prije", ["Stari odgovor"])],
         phrases=[PhraseRecord("Nova fraza", 4)],
     )
     assert json.loads(path.read_text(encoding="utf-8"))["categories"] == [
-        {"name": "Tokom rollbacka", "answers": ["Novi odgovor"]}
+        {"name": "Prije", "answers": ["Stari odgovor"]}
     ]
     assert json.loads(legacy_path.read_text(encoding="utf-8")) == [
         {"text": "Nova fraza", "uses": 4}

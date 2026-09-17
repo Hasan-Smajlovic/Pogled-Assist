@@ -179,7 +179,8 @@ class SpeechLibraryStore:
         elif isinstance(legacy_data, dict) and self._legacy_is_newer():
             legacy_library = _parse_library(legacy_data, self.legacy_path)
             if legacy_library is not None:
-                library.categories = legacy_library.categories
+                # A v2 rollback rebuilds categories from defaults after reading the
+                # list-only file, so only its phrase changes are safe to import.
                 library.phrases = legacy_library.phrases
 
         if not self.save(library):
