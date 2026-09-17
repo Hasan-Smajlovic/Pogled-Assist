@@ -52,9 +52,10 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 Source installations live under `C:\TobiiExec`. Add `-Launch` to start the app
-after setup or `-NoPause` when running from an existing terminal. Running the
-installed `update_windows.ps1` migrates an existing source installation to the
-stable packaged release channel.
+after setup or `-NoPause` when running from an existing terminal. To migrate an
+older source installation, download and install the first stable release
+manually. Its installer preserves local data and external runtime components;
+later releases update through the packaged `update_windows.ps1`.
 
 ## Run
 

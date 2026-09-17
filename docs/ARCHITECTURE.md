@@ -116,11 +116,11 @@ and launcher and installs under `C:\TobiiExec`.
 `update_windows.ps1` reads the installed version, resolves the latest stable
 release from `Hasan-Smajlovic/TobiiEyeTrackerTool`, downloads the exact Windows
 ZIP and checksum assets, and verifies them before invoking the package installer.
-It also migrates the older source installation layout to the packaged release
-channel. The installer stages and smoke-tests the new package, carries persistent
-data into it, swaps sibling directories, and retains the previous directory until
-the installed smoke test passes. A transaction marker lets the next installer
-run restore or finish an update interrupted during the directory swap.
+The first packaged installer migrates an older source layout. The installer
+stages and smoke-tests the new package, carries persistent data and external
+runtime components into it, swaps sibling directories, and retains the previous
+directory until the installed smoke test passes. A transaction marker lets the
+next installer restore or finish an update interrupted during the directory swap.
 
 ## Design reference
 

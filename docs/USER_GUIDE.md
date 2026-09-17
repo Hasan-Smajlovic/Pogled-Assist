@@ -138,9 +138,10 @@ the download, checksum, staging, or installed smoke test fails, the previous
 installation remains available. Rerun the same command after an interrupted
 update so the installer can recover the saved transaction.
 
-The same command migrates an older source installation under `C:\TobiiExec` to
-the packaged release channel. Updates never install a repository branch, draft,
-or prerelease.
+An older source installation has the previous updater, so download and install
+the first stable release manually to migrate it to the packaged channel. Its
+installer keeps user data and local runtime components. Later updates never
+install a repository branch, draft, or prerelease.
 
 ## Troubleshooting
 
