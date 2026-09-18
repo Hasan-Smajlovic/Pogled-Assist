@@ -108,7 +108,15 @@
     #message::placeholder { color: #a0adbf; font-size: .8em; }
     .section-label { margin: 0; color: #bac5d4; font-size: 14px; font-weight: 500; }
     .predictions { display: grid; gap: 7px; }
-    .prediction-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); }
+    .prediction-controls { display: flex; gap: var(--gap); }
+    .prediction-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); flex: 1; min-width: 0; }
+    .prediction-row button { overflow-wrap: anywhere; }
+    #undo-word { width: 170px; min-height: 66px; font-size: 20px; }
+    .learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .learning-grid button { min-height: 76px; overflow-wrap: anywhere; }
+    .learning-actions { display: flex; gap: 12px; align-items: center; }
+    .learning-actions button { min-height: 68px; flex: 1; }
+    .learning-hint { color: #bac5d4; line-height: 1.5; }
     .word { min-height: 78px; border-color: #366c8d; background: #173447; color: #dff4ff; }
     .word:hover { background: #24516c; }
     .workspace { display: grid; grid-template-columns: minmax(0, 3fr) clamp(280px, 25%, 480px); gap: var(--gap); min-height: 0; }
@@ -305,7 +313,10 @@
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
       <h2 class="section-label">Brzi izbor</h2>
-      <div id="predictions" class="prediction-row"></div>
+      <div class="prediction-controls">
+        <div id="predictions" class="prediction-row"></div>
+        <button id="undo-word" type="button" data-action="undo-word" disabled>Poništi riječ</button>
+      </div>
     </section>
     <div class="workspace">
       <section class="main-panel" aria-labelledby="view-title">
@@ -345,11 +356,11 @@
     </header>
     <div class="settings-body">
       <nav class="settings-nav settings-panel" aria-label="Grupe postavki">
-        <button type="button" aria-pressed="true">Opće postavke</button>
+        <button type="button" data-settings-action="general-settings" aria-pressed="true">Opće postavke</button>
         <button type="button" aria-pressed="false">Postavke pogleda</button>
-        <button type="button" aria-pressed="false">Postavke govora</button>
+        <button type="button" data-settings-action="speech-settings" aria-pressed="false">Postavke govora</button>
       </nav>
-      <section class="settings-page settings-panel" aria-labelledby="general-settings-title">
+      <section id="general-settings" class="settings-page settings-panel" aria-labelledby="general-settings-title">
         <header class="settings-page-header">
           <h2 id="general-settings-title">Opće postavke</h2>
           <button class="settings-danger" type="button">Isključi aplikaciju</button>
@@ -368,6 +379,23 @@
           <button class="settings-primary" type="button" data-settings-action="install-update" hidden>↓&nbsp;&nbsp;Ažuriraj na v0.2.0</button>
         </section>
       </section>
+      <section id="speech-settings" class="settings-page settings-panel" hidden>
+        <h2>Postavke govora</h2>
+        <p class="learning-hint">Prijedlozi riječi rade i bez interneta. Naučene riječi čuvaju se na ovom računaru.</p>
+        <div class="learning-actions"><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
+      </section>
+      <section id="learning-settings" class="settings-page settings-panel" hidden>
+        <div class="learning-actions"><h2>Naučene riječi</h2><button type="button" data-settings-action="speech-settings">Nazad</button></div>
+        <p class="learning-hint">Odaberite riječ, zatim Zaboravi riječ. Riječ iz osnovnog rječnika i dalje se može pojaviti u prijedlozima.</p>
+        <div id="learned-words" class="learning-grid"></div>
+        <p id="learning-selection" role="status">Odaberite riječ.</p>
+        <div class="learning-actions">
+          <button type="button" disabled>Prethodna</button><span>1 / 1</span><button type="button" disabled>Sljedeća</button>
+          <button id="forget-word" type="button" data-settings-action="forget-word" disabled>Zaboravi riječ</button>
+        </div>
+        <p id="learning-status" role="status" class="learning-hint">Učenje je sačuvano.</p>
+        <div class="learning-actions"><button id="retry-learning" type="button" data-settings-action="retry-learning" disabled>Pokušaj ponovo</button></div>
+      </section>
     </div>
   </main>
   <details class="reference" hidden>
@@ -380,7 +408,10 @@
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
         <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
         <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Sleep i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
-        <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor nudi primjere riječi, bez Python predviđanja.</li>
+        <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
+        <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
+        <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
+        <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model.</li>
         <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora; Izlaz uz potvrdu zatvara aplikaciju.</li>
         <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. Pomjeranje na drugi cilj poništava oba tajmera. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
@@ -391,6 +422,7 @@
       </ul>
       <label><input id="gaze-demo" type="checkbox" checked> Pokazivač miša simulira pogled</label>
       <p class="muted">Za pregled klikom isključite simulaciju. Klik i fizička tastatura rade i bez čekanja.</p>
+      <label>Primjer stanja učenja <select id="learning-demo-state"><option value="saved">Sačuvano</option><option value="write">Spremanje nije uspjelo</option><option value="read">Učitavanje nije uspjelo</option><option value="empty">Nema naučenih riječi</option></select></label>
     </div>
   </details>
   <dialog id="letters-dialog" aria-labelledby="letters-title">
@@ -430,7 +462,7 @@
         ['O', 'P', 'R', 'S', 'Š'], ['T', 'U', 'V', 'Z', 'Ž']
       ];
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
-      const WORDS = ['jutro', 'sam', 'hvala', 'molim', 'te', 'trebam', 'vode', 'dobro', 'donesi', 'mi', 'jastuk', 'telefon', 'sada', 'kasnije', 'želim', 'hladno', 'toplo'];
+      const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO'];
       const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
       const GAZE_FILL_MS = 500;
@@ -456,6 +488,13 @@
       let gazeFrame = 0;
       let clickFromGaze = false;
       let lastGazeClick = { target: null, time: 0 };
+      let blockedGaze = null;
+      let undoWord = null;
+      let savedUndo = null;
+      let autoSpace = false;
+      let lastText = '';
+      let learnedWords = ['ĆEVAPI', 'DŽEZ', 'KAHVA', 'LJETO', 'NJIVA', 'ŠETNJA'];
+      let selectedWord = null;
 
       render();
 
@@ -473,7 +512,12 @@
         resetGaze();
         handleAction(button.dataset.action, button.dataset.value);
       });
-      message.addEventListener('input', () => { renderPredictions(); updateSave(); });
+      message.addEventListener('input', () => {
+        if (autoSpace && message.value.length === lastText.length + 1 && message.value.startsWith(lastText) && /[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
+        undoWord = null; autoSpace = false; renderPredictions(); updateSave();
+      });
+      for (const event of ['click', 'keyup', 'select']) message.addEventListener(event, renderPredictions);
+      $('learning-demo-state').addEventListener('change', renderLearning);
       document.addEventListener('keydown', event => {
         if (event.altKey || event.ctrlKey || event.metaKey || document.querySelector('dialog[open]')) return;
         if (event.target.closest('input, summary')) return;
@@ -484,10 +528,12 @@
       });
       document.addEventListener('pointermove', event => {
         if (event.pointerType === 'touch' || !$('gaze-demo').checked) return;
-        const button = event.target.closest('button[data-action]:not(:disabled)');
+        const button = event.target.closest('button');
+        if (blockedGaze === button) return;
+        blockedGaze = null;
         if (button === gazeTarget) return;
         resetGaze();
-        if (!button) return;
+        if (!button || button.disabled) return;
         gazeTarget = button;
         gazeStart = performance.now();
         gazeFrame = requestAnimationFrame(tickGaze);
@@ -518,6 +564,26 @@
       }
 
       function handleSettingsAction(action) {
+        if (['general-settings', 'speech-settings', 'learning-settings'].includes(action)) {
+          for (const id of ['general-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
+          for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
+          if (action === 'learning-settings') renderLearning();
+          return;
+        }
+        if (action === 'forget-word' && selectedWord) {
+          if ($('learning-demo-state').value === 'write') {
+            $('learning-status').textContent = 'Učenje nije sačuvano. Pokušajte ponovo.';
+            $('retry-learning').disabled = false;
+          } else {
+            learnedWords = learnedWords.filter(word => word !== selectedWord);
+            selectedWord = null; renderLearning();
+            $('learning-status').textContent = 'Riječ je zaboravljena. Vaša poruka je sačuvana.';
+          }
+          return;
+        }
+        if (action === 'retry-learning') {
+          $('learning-demo-state').value = 'saved'; renderLearning(); return;
+        }
         const status = $('update-status');
         const pageStatus = $('settings-status');
         const checkButton = document.querySelector('[data-settings-action="check-update"]');
@@ -532,6 +598,23 @@
           status.textContent = 'Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije.';
           pageStatus.textContent = 'Pokrećem ažuriranje.';
         }
+      }
+
+      function renderLearning() {
+        const state = $('learning-demo-state').value;
+        const available = state === 'read' || state === 'empty' ? [] : learnedWords;
+        $('learned-words').replaceChildren();
+        available.forEach(word => {
+          const button = document.createElement('button');
+          button.type = 'button'; button.textContent = word;
+          button.setAttribute('aria-pressed', String(selectedWord === word));
+          button.onclick = () => { selectedWord = word; renderLearning(); };
+          $('learned-words').append(button);
+        });
+        $('learning-selection').textContent = selectedWord ? `Odabrano: ${selectedWord}` : available.length ? 'Odaberite riječ.' : state === 'read' ? 'Naučene riječi nisu učitane.' : 'Nema naučenih riječi.';
+        $('forget-word').disabled = !available.includes(selectedWord);
+        $('learning-status').textContent = state === 'read' ? 'Datoteka nije učitana i nije promijenjena. Pokušajte ponovo.' : state === 'write' ? 'Učenje nije sačuvano. Pokušajte ponovo.' : 'Učenje je sačuvano.';
+        $('retry-learning').disabled = !['read', 'write'].includes(state);
       }
 
       function render() {
@@ -575,6 +658,9 @@
           case 'symbol': append(value); break;
           case 'close-letters': closeDialog($('letters-dialog')); break;
           case 'word': appendWord(value, true); break;
+          case 'undo-word':
+            if (undoWord) { message.value = undoWord.text; autoSpace = undoWord.autoSpace; undoWord = null; renderPredictions(); updateSave(); }
+            break;
           case 'space': append(' '); break;
           case 'backspace': backspace(); break;
           case 'clear':
@@ -690,6 +776,8 @@
       function startEditor() {
         editor = { kind: view === 'phrases' ? 'phrase' : category ? 'answer' : 'category', view, category, page };
         savedMessage = message.value;
+        savedUndo = { undoWord, autoSpace };
+        undoWord = null; autoSpace = false;
         message.value = '';
         view = 'keyboard';
         deleting = false;
@@ -720,6 +808,8 @@
         category = editor.category;
         page = save ? Math.floor((destination.length - 1) / PAGE_SIZE) : editor.page;
         message.value = savedMessage;
+        undoWord = savedUndo?.undoWord || null; autoSpace = savedUndo?.autoSpace || false;
+        savedUndo = null;
         savedMessage = '';
         editor = null;
         render();
@@ -727,6 +817,8 @@
       }
 
       function append(value) {
+        if (autoSpace && /^[.,?!]$/.test(value)) message.value = message.value.slice(0, -1);
+        undoWord = null; autoSpace = false;
         message.value += value;
         message.scrollLeft = message.scrollWidth;
         renderPredictions();
@@ -734,15 +826,18 @@
       }
 
       function appendWord(word, complete = false) {
+        undoWord = complete ? { text: message.value, autoSpace } : null;
         let prefix = message.value;
-        if (complete && prefix && !/\s$/.test(prefix)) prefix = prefix.replace(/\S+$/, '');
+        if (complete && prefix && !/\s$/.test(prefix)) prefix = prefix.replace(/[a-zčćđšž]+$/iu, '');
         if (prefix && !/\s$/.test(prefix)) prefix += ' ';
         message.value = `${prefix}${word} `;
+        autoSpace = complete;
         renderPredictions();
         updateSave();
       }
 
       function backspace() {
+        undoWord = null; autoSpace = false;
         const value = message.value;
         const end = value.slice(-2).toLocaleUpperCase('bs');
         message.value = value.slice(0, ['DŽ', 'LJ', 'NJ'].includes(end) ? -2 : -1);
@@ -750,19 +845,24 @@
         updateSave();
       }
 
-      function updateSave() { $('save').disabled = !message.value.trim(); }
+      function updateSave() { $('save').disabled = !message.value.trim(); lastText = message.value; $('undo-word').disabled = !undoWord; }
 
       function renderPredictions() {
-        const partial = /\s$/.test(message.value) ? '' : message.value.split(/\s/).pop().toLocaleLowerCase('bs');
-        const matches = partial ? WORDS.filter(word => word.startsWith(partial)) : WORDS;
-        $('predictions').replaceChildren();
+        if (gazeTarget) blockedGaze = gazeTarget;
+        resetGaze();
+        const partial = message.value.match(/[a-zčćđšž]+$/iu)?.[0].toLocaleLowerCase('bs') || '';
+        const pattern = new RegExp('^' + (partial.match(/dj|./gu) || []).map(letter => ({ dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' }[letter] || letter)).join(''), 'iu');
+        const enabled = editor?.kind !== 'category' && message.selectionStart === message.value.length && message.selectionEnd === message.value.length && (partial || !message.value || /[\s.,?!]$/.test(message.value));
+        const matches = enabled ? (partial ? WORDS.filter(word => pattern.test(word)) : /ŽELIM\s+$/iu.test(message.value) ? ['VODU', 'RAZGOVARATI', 'ČAJ', 'KAFU', 'ODMORITI'] : WORDS) : [];
+        if (!$('predictions').children.length) for (let index = 0; index < 5; index++) $('predictions').append(makeButton('·', 'word', '', 'word'));
         for (let index = 0; index < 5; index++) {
           const word = matches[index];
-          const button = makeButton(word || '·', 'word', word || '', 'word');
+          const button = $('predictions').children[index];
+          button.textContent = word || '·'; button.dataset.value = word || '';
           button.disabled = !word;
-          if (!word) button.setAttribute('aria-label', 'Nema prijedloga');
-          $('predictions').append(button);
+          button.setAttribute('aria-label', word || 'Nema prijedloga');
         }
+        $('undo-word').disabled = !undoWord;
       }
 
       function speak() {
@@ -865,6 +965,7 @@
         }
         if (elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
           const target = gazeTarget;
+          blockedGaze = target;
           lastGazeClick = { target, time: now };
           clickFromGaze = true;
           target.click();

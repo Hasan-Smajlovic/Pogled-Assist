@@ -27,7 +27,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 12 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 19 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
@@ -35,6 +35,17 @@ components.
 | `.\dev.ps1 format` | Not required | Ruff safe fixes, import ordering, and source formatting |
 | `.\dev.ps1 check` | Not required | Lint, tests, coverage, package build, and frozen executable smoke test |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
+
+Reproduce the frozen Bosnian suggestion measurements from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset development --output language\bs\evaluation-development.json
+.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation-heldout.json
+```
+
+The development set is available for model decisions. Do not tune from the
+held-out result. The scoring contract and frozen hashes are under
+`tests\fixtures\speech_suggestions`.
 
 Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
 categories enforced by the required PR checks.
@@ -128,7 +139,7 @@ Generate the gallery:
 The command renders:
 
 - Hotbar
-- General, gaze, and speech Settings tabs
+- General, gaze, speech, and learned-word Settings surfaces
 - Speech keyboard, categories, answers, saved phrases, and shared editor
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
@@ -152,6 +163,13 @@ On a normal development machine, verify:
 - Settings survive an application restart.
 - Logs appear under `logs` only when logging is enabled.
 - Closing the app removes AppBar reservations and child windows.
+- Bosnian suggestions complete a partial word and offer a next word offline.
+- Moving the caret or selecting text disables suggestions; returning to the end
+  restores them without changing the message.
+- Suggestion undo, punctuation spacing, phrase or answer editor restoration, and
+  individual learned-word removal work with mouse and simulated gaze.
+- Closing and reopening preserves `data\speech_learning.json`; a forced write
+  failure leaves the previous file intact and can be retried from Settings.
 
 On the Tobii machine, additionally verify:
 

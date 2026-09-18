@@ -35,6 +35,7 @@ from .logging_setup import set_application_logging_enabled
 from .mouse_controller import GazeSettings
 from .release_update import ReleaseCheckResult, ReleaseUpdateManager
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
+from .suggestion_service import SuggestionService
 from .windows_startup import is_windows_startup_enabled, set_windows_startup_enabled
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class SettingsWindow(QWidget):
         parent: QWidget | None = None,
         *,
         update_manager: ReleaseUpdateManager | None = None,
+        suggestions: SuggestionService | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Postavke")
@@ -72,6 +74,13 @@ class SettingsWindow(QWidget):
         self._gaze_settings = replace(gaze_settings)
         self._speech_settings = replace(speech_settings)
         self._update_manager = update_manager
+        self._suggestions = suggestions or SuggestionService(self)
+        self._word_page = 0
+        self._chosen_word: str | None = None
+        self._visible_words: list[str] = []
+        self._learning_busy = False
+        self._last_learning_point: QPoint | None = None
+        self._blocked_learning_button: QWidget | None = None
         self._gaze_actions: dict[QWidget, GazeCallback] = {}
         self._gaze_names: dict[QWidget, str] = {}
         self._gaze_target: QWidget | None = None
@@ -81,6 +90,8 @@ class SettingsWindow(QWidget):
 
         self._sync_startup_setting_from_windows()
         self._build_ui()
+        self._suggestions.status_changed.connect(self._learning_status_changed)
+        self._suggestions.storage_finished.connect(self._learning_saved)
         self._install_shortcuts()
         self._refresh_values()
         self._initialize_release_update()
@@ -108,6 +119,13 @@ class SettingsWindow(QWidget):
         super().closeEvent(event)
 
     def handle_gaze(self, point: QPoint) -> None:
+        self._last_learning_point = QPoint(point)
+        if self._blocked_learning_button is not None:
+            button = self._blocked_learning_button
+            if QRect(button.mapToGlobal(QPoint(0, 0)), button.size()).contains(point):
+                self.cancel_gaze_interaction(require_leave=True)
+                return
+            self._blocked_learning_button = None
         if not self.isVisible():
             self.cancel_gaze_interaction()
             return
@@ -167,6 +185,7 @@ class SettingsWindow(QWidget):
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
             }
+            QWidget#settingsRoot QLabel { color: #f4f1ea; }
             QLabel#titleLabel {
                 color: #ffffff;
                 font-size: 25px;
@@ -225,6 +244,11 @@ class SettingsWindow(QWidget):
             QToolButton:hover {
                 background: #363936;
                 border-color: #69736d;
+            }
+            QToolButton:disabled {
+                background: #242624;
+                border-color: #363a37;
+                color: #747b76;
             }
             QToolButton:checked {
                 background: #1d6f68;
@@ -418,6 +442,7 @@ class SettingsWindow(QWidget):
         self._stack.addWidget(self._build_general_page())
         self._stack.addWidget(self._build_gaze_page())
         self._stack.addWidget(self._build_speech_page())
+        self._stack.addWidget(self._build_learning_page())
         body.addWidget(self._stack, 1)
 
         self._select_tab(0)
@@ -691,11 +716,174 @@ class SettingsWindow(QWidget):
             minimum_size=QSize(190, 64),
         )
         actions.addWidget(self._test_speech_button)
+        self._learned_words_button = self._make_button(
+            "Naučene riječi", self._open_learning, minimum_size=QSize(210, 64)
+        )
+        actions.addWidget(self._learned_words_button)
         actions.addStretch(1)
         layout.addLayout(actions)
         layout.addStretch(1)
 
         return page
+
+    def _build_learning_page(self) -> QWidget:
+        page = QFrame(self)
+        page.setObjectName("settingsPanel")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        header = QHBoxLayout()
+        title = QLabel("Naučene riječi", page)
+        title.setObjectName("sectionTitle")
+        header.addWidget(title, 1)
+        header.addWidget(
+            self._make_button("Nazad", lambda: self._select_tab(2), minimum_size=QSize(170, 68))
+        )
+        layout.addLayout(header)
+        hint = QLabel(
+            "Odaberite riječ, zatim Zaboravi riječ. Riječ iz osnovnog rječnika i dalje se može pojaviti u prijedlozima.",
+            page,
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        grid = QGridLayout()
+        grid.setSpacing(12)
+        self._word_buttons = []
+        for index in range(6):
+            button = self._make_button(
+                "·",
+                lambda index=index: self._choose_word(index),
+                checkable=True,
+                minimum_size=QSize(170, 76),
+            )
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+            grid.addWidget(button, index // 2, index % 2)
+            self._word_buttons.append(button)
+        layout.addLayout(grid, 1)
+        self._word_selection_label = QLabel("Odaberite riječ.", page)
+        self._word_selection_label.setWordWrap(True)
+        layout.addWidget(self._word_selection_label)
+        actions = QHBoxLayout()
+        self._word_previous = self._make_button(
+            "Prethodna", lambda: self._change_word_page(-1), minimum_size=QSize(160, 68)
+        )
+        self._word_next = self._make_button(
+            "Sljedeća", lambda: self._change_word_page(1), minimum_size=QSize(160, 68)
+        )
+        self._word_page_label = QLabel("1 / 1", page)
+        self._forget_word_button = self._make_button(
+            "Zaboravi riječ", self._forget_word, minimum_size=QSize(180, 68)
+        )
+        for widget in (
+            self._word_previous,
+            self._word_page_label,
+            self._word_next,
+            self._forget_word_button,
+        ):
+            actions.addWidget(widget)
+        layout.addLayout(actions)
+        self._learning_status_label = QLabel("", page)
+        self._learning_status_label.setWordWrap(True)
+        layout.addWidget(self._learning_status_label)
+        self._retry_learning_button = self._make_button(
+            "Pokušaj ponovo", self._retry_learning, minimum_size=QSize(200, 68)
+        )
+        layout.addWidget(self._retry_learning_button)
+        self._refresh_learning()
+        return page
+
+    def _open_learning(self) -> None:
+        self._select_tab(2)
+        self._stack.setCurrentIndex(3)
+        self._word_page = 0
+        self._chosen_word = None
+        self._refresh_learning()
+
+    def _refresh_learning(self) -> None:
+        if self._last_learning_point is not None:
+            for button in self._word_buttons:
+                if button.isVisible() and QRect(
+                    button.mapToGlobal(QPoint(0, 0)), button.size()
+                ).contains(self._last_learning_point):
+                    self._blocked_learning_button = button
+                    break
+        self.cancel_gaze_interaction(require_leave=True)
+        learned = self._suggestions.store.learned_words()
+        pages = max(1, (len(learned) + 5) // 6)
+        self._word_page = min(self._word_page, pages - 1)
+        self._visible_words = learned[self._word_page * 6 : self._word_page * 6 + 6]
+        if self._chosen_word not in self._visible_words:
+            self._chosen_word = None
+        for index, button in enumerate(self._word_buttons):
+            word = self._visible_words[index] if index < len(self._visible_words) else ""
+            button.setText(word.upper() if word else "·")
+            button.setAccessibleName(word.upper() if word else "Nema naučene riječi")
+            button.setChecked(bool(word) and word == self._chosen_word)
+            button.setEnabled(bool(word) and not self._learning_busy)
+            self._gaze_names[button] = word.upper()
+        self._word_previous.setEnabled(self._word_page > 0 and not self._learning_busy)
+        self._word_next.setEnabled(self._word_page + 1 < pages and not self._learning_busy)
+        self._word_page_label.setText(f"{self._word_page + 1} / {pages}")
+        self._forget_word_button.setEnabled(
+            self._chosen_word is not None and not self._learning_busy
+        )
+        self._retry_learning_button.setEnabled(
+            bool(self._suggestions.store.error) and not self._learning_busy
+        )
+        self._word_selection_label.setText(
+            f"Odabrano: {self._chosen_word.upper()}"
+            if self._chosen_word
+            else "Odaberite riječ."
+            if learned
+            else "Naučene riječi nisu učitane."
+            if self._suggestions.store.error
+            else "Nema naučenih riječi."
+        )
+        self._learning_status_label.setText(
+            "Spremam promjenu…"
+            if self._learning_busy
+            else self._suggestions.store.error or "Učenje je sačuvano."
+        )
+
+    def _choose_word(self, index: int) -> None:
+        if not self._learning_busy and 0 <= index < len(self._visible_words):
+            self._chosen_word = self._visible_words[index]
+            self._refresh_learning()
+
+    def _change_word_page(self, delta: int) -> None:
+        self._word_page = max(0, self._word_page + delta)
+        self._chosen_word = None
+        self._refresh_learning()
+
+    def _forget_word(self) -> None:
+        if self._chosen_word is None or self._learning_busy:
+            return
+        word = self._chosen_word
+        self._learning_busy = True
+        self._refresh_learning()
+        self._suggestions.forget(word)
+
+    def _retry_learning(self) -> None:
+        if self._learning_busy:
+            return
+        self._learning_busy = True
+        self._refresh_learning()
+        self._suggestions.retry()
+
+    def _learning_saved(self, successful: bool) -> None:
+        was_busy = self._learning_busy
+        self._learning_busy = False
+        self._refresh_learning()
+        if was_busy:
+            self._set_status(
+                "Promjena je sačuvana."
+                if successful
+                else "Promjena nije sačuvana. Pokušajte ponovo."
+            )
+
+    def _learning_status_changed(self, _message: str) -> None:
+        if self._stack.currentIndex() == 3:
+            self._refresh_learning()
 
     def _make_adjust_row(
         self,
