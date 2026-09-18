@@ -388,21 +388,21 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                 )
             )
             speech._wake_from_sleep()
-            speech._open_exit_confirmation()
+            speech._open_exit_dialog()
             snapshots.append(
                 (
                     "Speech exit confirmation",
                     _capture_widget(
                         app,
-                        speech._confirm_dialog,
+                        speech._exit_dialog,
                         output_dir,
                         "speech-exit",
-                        speech._confirm_dialog.width(),
-                        speech._confirm_dialog.height(),
+                        speech._exit_dialog.width(),
+                        speech._exit_dialog.height(),
                     ),
                 )
             )
-            speech._cancel_confirmation()
+            speech._close_dialog()
 
             sidebar_width = 380
             keyboard = KeyboardWindow(speech_settings)

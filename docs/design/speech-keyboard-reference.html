@@ -153,17 +153,18 @@
     .letter-grid button { min-height: 120px; font-size: 38px; }
     .letter-grid .back { font-size: 22px; }
     .dialog-copy { margin: 0 0 32px; color: #dce6f3; font-size: 22px; line-height: 1.5; overflow-wrap: anywhere; }
-    #confirm-dialog, #alarm-dialog { display: none; height: min(460px, calc(100dvh - 64px)); }
-    #confirm-dialog[open], #alarm-dialog[open] { display: flex; flex-direction: column; }
+    #confirm-dialog, #exit-dialog, #alarm-dialog { display: none; height: min(460px, calc(100dvh - 64px)); }
+    #confirm-dialog[open], #exit-dialog[open], #alarm-dialog[open] { display: flex; flex-direction: column; }
     .confirm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: auto; }
+    .exit-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .confirm-actions button { min-height: 128px; font-size: 22px; }
     #alarm-dialog [data-action="stop-alarm"] { min-height: 140px; margin-top: auto; font-size: 22px; }
-    #sleep-screen, #closed-screen { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; }
-    #sleep-screen[open], #closed-screen[open] { display: grid; place-items: center; }
+    #sleep-screen, #speech-closed-screen, #closed-screen { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; }
+    #sleep-screen[open], #speech-closed-screen[open], #closed-screen[open] { display: grid; place-items: center; }
     #wake { position: absolute; bottom: 8vh; width: min(420px, 70vw); min-height: 140px; background: #08090b; border-color: #2b3038; color: #7f8794; font-size: 28px; }
     #wake:hover { background: #111318; border-color: #657084; color: #bac5d4; }
-    #closed-screen .closed-content { text-align: center; padding: 24px; }
-    #closed-screen button { width: min(420px, 80vw); }
+    #speech-closed-screen .closed-content, #closed-screen .closed-content { text-align: center; padding: 24px; }
+    #speech-closed-screen button, #closed-screen button { width: min(420px, 80vw); }
     #gaze-ring { position: fixed; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; pointer-events: none; z-index: 100; background: conic-gradient(#f7d85a var(--progress, 0deg), #f7d85a33 0); mask: radial-gradient(transparent 52%, #000 56%); }
     button.gaze-target { border-color: #f7d85a; box-shadow: inset 0 0 0 2px #f7d85a; }
     .settings-screen {
@@ -306,7 +307,7 @@
           <label id="message-label" for="message">Vaša poruka</label>
           <span id="status" role="status" aria-live="polite"></span>
         </div>
-        <input id="message" type="text" autocomplete="off" spellcheck="false" placeholder="Odaberite grupu slova…">
+        <input id="message" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
       </div>
       <button class="primary" type="button" data-action="speak">Izgovori</button>
       <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
@@ -339,7 +340,7 @@
         <h2 class="section-label">Kontrole</h2>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
         <button class="sleep" type="button" data-action="sleep">Sleep<small>Odmori oči</small></button>
-        <button type="button" data-action="exit">Izlaz<small>Zatvori aplikaciju</small></button>
+        <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
       </aside>
     </div>
     <div class="utility-row">
@@ -406,17 +407,17 @@
       <ul>
         <li>Šest grupa ostaje na početnom ekranu. Grupa otvara prozor sa pet slova. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
-        <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
+        <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
         <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Sleep i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
         <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
         <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
         <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
         <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model.</li>
-        <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora; Izlaz uz potvrdu zatvara aplikaciju.</li>
+        <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
         <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. Pomjeranje na drugi cilj poništava oba tajmera. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
         <li>Sleep zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
-        <li>Izlaz traži potvrdu i prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
+        <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
         <li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li>
         <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno spremanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li>
       </ul>
@@ -437,6 +438,15 @@
       <button id="confirm-button" class="danger" type="button" data-action="confirm">Potvrdi</button>
     </div>
   </dialog>
+  <dialog id="exit-dialog" aria-labelledby="exit-title" aria-describedby="exit-copy">
+    <h2 id="exit-title">Izaći iz govornog načina?</h2>
+    <p id="exit-copy" class="dialog-copy">Možete se vratiti na razgovor, izaći iz govornog načina ili ugasiti cijelu aplikaciju.</p>
+    <div class="confirm-actions exit-actions">
+      <button type="button" data-action="cancel-exit" autofocus>Odustani</button>
+      <button type="button" data-action="leave-speech">Izađi</button>
+      <button class="danger" type="button" data-action="quit-app">Ugasi aplikaciju</button>
+    </div>
+  </dialog>
   <dialog id="alarm-dialog" aria-labelledby="alarm-title" aria-describedby="alarm-copy">
     <h2 id="alarm-title">Alarm je uključen</h2>
     <p id="alarm-copy" class="dialog-copy">Zvučni signal se ponavlja dok ga ne zaustavite.</p>
@@ -444,6 +454,13 @@
   </dialog>
   <dialog id="sleep-screen" aria-label="Odmor očiju">
     <button id="wake" type="button" data-action="wake">Nastavi</button>
+  </dialog>
+  <dialog id="speech-closed-screen" aria-labelledby="speech-closed-title">
+    <div class="closed-content">
+      <h2 id="speech-closed-title">Govorni način je zatvoren</h2>
+      <p class="dialog-copy">Poruka je sačuvana za sljedeće otvaranje.</p>
+      <button type="button" data-action="reopen-speech">Ponovo otvori govor</button>
+    </div>
   </dialog>
   <dialog id="closed-screen" aria-labelledby="closed-title">
     <div class="closed-content">
@@ -514,6 +531,10 @@
       });
       message.addEventListener('input', () => {
         if (autoSpace && message.value.length === lastText.length + 1 && message.value.startsWith(lastText) && /[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
+        const start = message.selectionStart;
+        const end = message.selectionEnd;
+        message.value = message.value.toLocaleUpperCase('bs');
+        message.setSelectionRange(start, end);
         undoWord = null; autoSpace = false; renderPredictions(); updateSave();
       });
       for (const event of ['click', 'keyup', 'select']) message.addEventListener(event, renderPredictions);
@@ -629,7 +650,7 @@
         $('phrases-toggle').disabled = Boolean(editor);
         $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
         message.placeholder = editor ? 'Unesite tekst…' : 'Odaberite grupu slova…';
-        $('view-title').textContent = editor ? editorTitle() : view === 'phrases' ? 'Moje fraze' : browsing ? activeCategory?.name || 'Kategorije' : symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
+        $('view-title').textContent = editor ? editorTitle() : view === 'phrases' ? 'Moje fraze' : browsing ? activeCategory?.name.toLocaleUpperCase('bs') || 'Kategorije' : symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
         $('back').hidden = !browsing || !category;
         $('add').hidden = !browsing;
         $('add').textContent = view === 'phrases' ? 'Dodaj frazu' : category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
@@ -693,7 +714,11 @@
           case 'stop-alarm': stopAlarm(); break;
           case 'sleep': window.speechSynthesis?.cancel(); openDialog($('sleep-screen')); break;
           case 'wake': closeDialog($('sleep-screen')); say('Možete nastaviti.'); break;
-          case 'exit': askConfirm('Izaći iz aplikacije?', 'Za povratak na razgovor odaberite Odustani.', 'Izađi', () => { window.speechSynthesis?.cancel(); openDialog($('closed-screen')); }); break;
+          case 'exit': openDialog($('exit-dialog')); break;
+          case 'cancel-exit': closeDialog($('exit-dialog')); break;
+          case 'leave-speech': window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('speech-closed-screen')); break;
+          case 'quit-app': window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('closed-screen')); break;
+          case 'reopen-speech': closeDialog($('speech-closed-screen')); break;
           case 'reopen': closeDialog($('closed-screen')); break;
         }
       }
@@ -730,7 +755,7 @@
         page = Math.min(Math.max(page, 0), pages - 1);
         content.replaceChildren();
         for (const item of items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
-          const button = makeButton(item.name || item.text, 'item', item.id, deleting ? 'item danger' : 'item');
+          const button = makeButton((item.name || item.text).toLocaleUpperCase('bs'), 'item', item.id, deleting ? 'item danger' : 'item');
           if (deleting || item.items) {
             const hint = document.createElement('small');
             hint.textContent = deleting ? 'Obriši' : `Odgovori: ${item.items.length}`;
@@ -792,7 +817,7 @@
 
       function finishEditor(save) {
         if (!editor) return;
-        const text = message.value.trim().replace(/\s+/g, ' ');
+        const text = message.value.trim().replace(/\s+/g, ' ').toLocaleUpperCase('bs');
         if (save && !text) { say('Prvo unesite tekst.'); return; }
         const destination = editor.kind === 'phrase' ? library.phrases : editor.kind === 'category' ? library.categories : library.categories.find(item => item.id === editor.category).items;
         if (save && destination.some(item => (item.name || item.text).toLocaleLowerCase('bs') === text.toLocaleLowerCase('bs'))) {
@@ -819,7 +844,7 @@
       function append(value) {
         if (autoSpace && /^[.,?!]$/.test(value)) message.value = message.value.slice(0, -1);
         undoWord = null; autoSpace = false;
-        message.value += value;
+        message.value += value.toLocaleUpperCase('bs');
         message.scrollLeft = message.scrollWidth;
         renderPredictions();
         updateSave();
@@ -830,7 +855,7 @@
         let prefix = message.value;
         if (complete && prefix && !/\s$/.test(prefix)) prefix = prefix.replace(/[a-zčćđšž]+$/iu, '');
         if (prefix && !/\s$/.test(prefix)) prefix += ' ';
-        message.value = `${prefix}${word} `;
+        message.value = `${prefix}${word.toLocaleUpperCase('bs')} `;
         autoSpace = complete;
         renderPredictions();
         updateSave();

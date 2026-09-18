@@ -174,7 +174,7 @@ def test_stale_results_and_category_editor_results_never_become_selectable(qtbot
     stale_owner, stale_revision, _text = service.requests[-1]
     window._input.setText("mo")
     owner, revision, text = service.requests[-1]
-    assert text == "mo"
+    assert text == "MO"
 
     service.predictions_ready.emit(stale_owner, stale_revision, ["ŽELIM"])
     assert all(not button.isEnabled() for button in window._prediction_buttons)
@@ -187,7 +187,7 @@ def test_stale_results_and_category_editor_results_never_become_selectable(qtbot
     assert window._editor is not None and window._editor.kind == "category"
     window._input.setText("nova")
     assert all(not button.isEnabled() for button in window._prediction_buttons)
-    assert service.requests[-1][2] == "mo"
+    assert service.requests[-1][2] == "MO"
 
     window._cancel_editor_button.click()
     category = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}list:select:0"]
@@ -198,7 +198,7 @@ def test_stale_results_and_category_editor_results_never_become_selectable(qtbot
     assert window._editor is not None and window._editor.kind == "answer"
     window._input.setText("zel")
     answer_owner, answer_revision, answer_text = service.requests[-1]
-    assert answer_text == "zel"
+    assert answer_text == "ZEL"
     service.predictions_ready.emit(answer_owner, answer_revision, ["ŽELIM"])
     window._prediction_buttons[0].click()
     assert window._input.text() == "ŽELIM "
@@ -266,7 +266,7 @@ def test_editor_suggestions_are_isolated_and_only_successful_save_learns(
     assert window._undo_word_button.isEnabled()
 
     window._undo_word_button.click()
-    assert window._input.text() == "vo"
+    assert window._input.text() == "VO"
     assert service.store.snapshot()[("vodu",)] == 0
 
     window._add_item_button.click()

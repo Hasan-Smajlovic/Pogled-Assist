@@ -627,7 +627,7 @@ class SpeechWindow(QWidget):
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
             ("Sleep", "Odmori oči", "sleep:start", "systemSleep"),
-            ("Izlaz", "Zatvori aplikaciju", "exit", "systemExit"),
+            ("Izlaz", "Izađi ili ugasi aplikaciju", "exit", "systemExit"),
         ):
             button = self._make_button(
                 f"{title}\n{subtitle}",
@@ -718,6 +718,53 @@ class SpeechWindow(QWidget):
         confirm_layout.addLayout(confirm_actions)
         self._confirm_dialog.finished.connect(
             lambda _result, dialog=self._confirm_dialog: self._dialog_finished(dialog)
+        )
+
+        self._exit_dialog = self._new_dialog()
+        exit_layout = QVBoxLayout(self._exit_dialog)
+        exit_layout.setContentsMargins(32, 30, 32, 32)
+        exit_layout.setSpacing(24)
+        exit_title = QLabel("Izaći iz govornog načina?", self._exit_dialog)
+        exit_title.setObjectName("dialogTitle")
+        exit_copy = QLabel(
+            "Možete se vratiti na razgovor, izaći iz govornog načina ili ugasiti cijelu aplikaciju.",
+            self._exit_dialog,
+        )
+        exit_copy.setObjectName("dialogCopy")
+        exit_copy.setWordWrap(True)
+        exit_actions = QHBoxLayout()
+        exit_actions.setContentsMargins(0, 0, 0, 0)
+        exit_actions.setSpacing(24)
+        cancel_exit = self._make_button(
+            "Odustani",
+            "exit:cancel",
+            "dialogCancelButton",
+            parent=self._exit_dialog,
+            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
+        )
+        leave_speech = self._make_button(
+            "Izađi",
+            "exit:leave-speech",
+            "dialogCancelButton",
+            parent=self._exit_dialog,
+            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
+        )
+        quit_app = self._make_button(
+            "Ugasi aplikaciju",
+            "exit:quit-app",
+            "dialogConfirmButton",
+            parent=self._exit_dialog,
+            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
+        )
+        exit_actions.addWidget(cancel_exit, 1)
+        exit_actions.addWidget(leave_speech, 1)
+        exit_actions.addWidget(quit_app, 1)
+        exit_layout.addWidget(exit_title)
+        exit_layout.addWidget(exit_copy)
+        exit_layout.addStretch(1)
+        exit_layout.addLayout(exit_actions)
+        self._exit_dialog.finished.connect(
+            lambda _result, dialog=self._exit_dialog: self._dialog_finished(dialog)
         )
 
         self._alarm_dialog = self._new_dialog()
@@ -859,13 +906,16 @@ class SpeechWindow(QWidget):
         if self._view_mode == "phrases":
             return "Moje fraze"
         category = self._active_category()
-        return category.name if self._view_mode == "answers" and category else "Kategorije"
+        return (
+            _uppercase(category.name) if self._view_mode == "answers" and category else "Kategorije"
+        )
 
     def _list_item_text(self, item: CategoryRecord | PhraseRecord | str) -> str:
         if isinstance(item, CategoryRecord):
             suffix = "Obriši" if self._deletion_mode else f"Odgovori: {len(item.answers)}"
-            return f"{item.name}\n{suffix}"
+            return f"{_uppercase(item.name)}\n{suffix}"
         text = item.text if isinstance(item, PhraseRecord) else item
+        text = _uppercase(text)
         return f"{text}\nObriši" if self._deletion_mode else text
 
     def _active_category(self) -> CategoryRecord | None:
@@ -1013,15 +1063,21 @@ class SpeechWindow(QWidget):
             self._close_dialog()
         self._set_status("Možete nastaviti.")
 
-    def _open_exit_confirmation(self) -> None:
-        self._open_confirmation(
-            "Izaći iz aplikacije?",
-            "Za povratak na razgovor odaberite Odustani.",
-            "Izađi",
-            self._request_quit,
-        )
+    def _open_exit_dialog(self) -> None:
+        self._dialog_actions = {
+            self._action("exit:cancel"),
+            self._action("exit:leave-speech"),
+            self._action("exit:quit-app"),
+        }
+        self._open_dialog(self._exit_dialog, 460)
+
+    def _leave_speech_mode(self) -> None:
+        self._close_dialog()
+        self._speech.stop()
+        self.close()
 
     def _request_quit(self) -> None:
+        self._close_dialog()
         self._alarm_sound.stop()
         self._speech.stop()
         self.quit_requested.emit()
@@ -1258,7 +1314,13 @@ class SpeechWindow(QWidget):
         elif command == "sleep:wake":
             self._wake_from_sleep()
         elif command == "exit":
-            self._open_exit_confirmation()
+            self._open_exit_dialog()
+        elif command == "exit:cancel":
+            self._close_dialog()
+        elif command == "exit:leave-speech":
+            self._leave_speech_mode()
+        elif command == "exit:quit-app":
+            self._request_quit()
         elif command == "categories":
             self._toggle_categories()
         elif command == "phrases":
@@ -1372,7 +1434,7 @@ class SpeechWindow(QWidget):
     def _save_editor(self) -> None:
         if self._editor is None:
             return
-        text = clean_text(self._input.text())
+        text = _uppercase(clean_text(self._input.text()))
         if not text:
             self._set_status("Prvo unesite tekst.")
             return
@@ -1525,9 +1587,11 @@ class SpeechWindow(QWidget):
             return
         item = items[index]
         if isinstance(item, CategoryRecord):
-            copy_text = f'Kategorija "{item.name}" i svi njeni odgovori bit će obrisani.'
+            name = _uppercase(item.name)
+            copy_text = f'Kategorija "{name}" i svi njeni odgovori bit će obrisani.'
         else:
             text = item.text if isinstance(item, PhraseRecord) else item
+            text = _uppercase(text)
             copy_text = f'"{text}" će biti obrisano iz liste.'
         view_mode = self._view_mode
         category_index = self._category_index
@@ -1579,10 +1643,17 @@ class SpeechWindow(QWidget):
     def _text_changed(self, text: str) -> None:
         if self._updating_input:
             return
-        corrected = self._composition.edit(text)
+        cursor_position = self._input.cursorPosition()
+        selection_start = self._input.selectionStart()
+        selection_length = _utf16_length(self._input.selectedText())
+        corrected = self._composition.edit(_uppercase(text))
         if corrected != text:
             self._updating_input = True
             self._input.setText(corrected)
+            if selection_start >= 0:
+                self._input.setSelection(selection_start, selection_length)
+            else:
+                self._input.setCursorPosition(min(cursor_position, _utf16_length(corrected)))
             self._updating_input = False
         self._suggestions.persist()
         self._refresh_suggestions()
@@ -1626,7 +1697,7 @@ class SpeechWindow(QWidget):
         if not self._suggestion_allowed() or self._input.text() != self._prediction_text:
             return
         for index, button in enumerate(self._prediction_buttons):
-            candidate = candidates[index] if index < len(candidates) else ""
+            candidate = _uppercase(candidates[index]) if index < len(candidates) else ""
             button.setText(candidate or "·")
             button.setAccessibleName(candidate or "Nema prijedloga")
             button.setEnabled(bool(candidate))
@@ -1644,21 +1715,21 @@ class SpeechWindow(QWidget):
 
     def _set_composed_text(self, text: str) -> None:
         self._updating_input = True
-        self._input.setText(text)
+        self._input.setText(_uppercase(text))
         self._input.setFocus(Qt.FocusReason.MouseFocusReason)
         self._updating_input = False
         self._suggestions.persist()
         self._refresh_suggestions()
 
     def _append_text(self, value: str) -> None:
-        self._input.setText(f"{self._input.text()}{value}")
+        self._input.setText(f"{self._input.text()}{_uppercase(value)}")
         self._input.setFocus(Qt.FocusReason.MouseFocusReason)
 
     def _append_phrase_to_input(self, phrase: str) -> None:
         current = self._input.text()
         if current and not current.endswith(" "):
             current = f"{current} "
-        self._input.setText(f"{current}{phrase.strip()} ")
+        self._input.setText(f"{current}{_uppercase(phrase.strip())} ")
         self._input.setFocus(Qt.FocusReason.MouseFocusReason)
 
     def _backspace(self) -> None:
@@ -1738,3 +1809,11 @@ def _list_mode(kind: EditorKind) -> str:
         "answer": "answers",
         "phrase": "phrases",
     }[kind]
+
+
+def _uppercase(text: str) -> str:
+    return text.upper()
+
+
+def _utf16_length(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2

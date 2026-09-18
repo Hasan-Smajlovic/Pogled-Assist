@@ -66,7 +66,9 @@ Speech opens a full-screen Bosnian keyboard. Select a letter group, then a lette
 Space and Backspace stay on the bottom row. `Izgovori` sends the current text to
 the selected speech engine without clearing it. `Kategorije` contains saved groups
 of answers, while `Fraze` contains standalone reusable text. Both lists support
-adding and deleting entries with the same grouped keyboard.
+adding and deleting entries with the same grouped keyboard. The conversation
+message and all category, answer, and phrase content appear and are entered in
+uppercase. Text typed or pasted with lowercase letters is converted immediately.
 
 `Brzi izbor` shows up to five uppercase Bosnian suggestions. It completes the
 word at the end of the input or adds a next word followed by one space. The
@@ -90,8 +92,10 @@ The controls on the right remain available while browsing or adding entries:
   `Zaustavi alarm` to silence it and return to the same Speech state.
 - `Sleep` stops speech and blacks out the display. Select `Nastavi` by gaze or
   mouse to restore the message, current list and page, and any unfinished entry.
-- `Izlaz` asks for confirmation. `Odustani` returns to the same state, while
-  `Izađi` closes the whole application through its normal shutdown path.
+- `Izlaz` offers three choices. `Odustani` returns to the same state, `Izađi`
+  closes only Speech mode while preserving the conversation message, and
+  `Ugasi aplikaciju` closes the whole application through its normal shutdown
+  path.
 
 Saved categories, answers, and phrases use UTF-8 text. Selecting an answer or
 phrase appends it to the message, and saved phrases remain ordered by usage count.
@@ -194,6 +198,7 @@ folder.
 
 ## Exit
 
-Use `Izlaz` on the Speech screen or Quit app from General settings. `Ctrl+Q`
-works while the hotbar has focus, and `Alt+F4` closes the active application
-window.
+Use `Izlaz` on the Speech screen to return to the hotbar or close the whole
+application. Quit app from General settings always closes the application.
+`Ctrl+Q` works while the hotbar has focus, and `Alt+F4` closes the active
+application window.

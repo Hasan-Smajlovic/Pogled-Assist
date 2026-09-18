@@ -35,7 +35,7 @@ criteria. Existing project guidance remains in its owning documents:
 | Area | Requirement |
 | --- | --- |
 | Language | Bosnian words in Latin script, including Bosnian letters and inflected forms. |
-| Letter case | Display and insert suggestions in uppercase, matching the gaze keyboard. Match prefixes without case sensitivity. |
+| Letter case | Display and enter the conversation message, suggestions, categories, answers, and phrases in uppercase. Normalize lowercase or mixed-case input immediately and match prefixes without case sensitivity. |
 | Completion | Offer completions of a word already being typed. |
 | Prediction | Offer the next word using the preceding text. |
 | Availability | Work offline from the first launch with bundled language data. No initial download or paid inference service is required. |
@@ -216,18 +216,19 @@ suggestion labels still require dedicated verification of that integration.
 
 ### Letter case
 
-Display and insert every suggestion in uppercase, matching the existing gaze
-keyboard. Apply this equally to conversation messages and phrase or answer
-editors, with the same result for gaze and mouse. Prefix matching is
-case-insensitive: `zel`, `ZEL`, and `Zel` can all offer `ŽELIM` under the agreed
-Bosnian-letter matching rules.
+Display and enter all speech content in uppercase, including the conversation
+message, suggestions, category names, answers, and phrases. Apply this equally
+to grouped-keyboard input, physical-keyboard input, pasted text, saved library
+content, gaze, and mouse. Prefix matching remains case-insensitive: `zel`, `ZEL`,
+and `Zel` all become `ZEL` and can offer `ŽELIM` under the agreed Bosnian-letter
+matching rules.
 
-Only the selected completion or next word is inserted in uppercase. Do not
-change the case of the rest of the input or rewrite text when merely displaying
-suggestions. Undo restores the original prefix and its exact case. Treat case
-variants of a word as the same word for matching and personal learning, without
-merging distinct Bosnian letters. Sentence position does not change the
-uppercase display or insertion rule.
+Normalize the active input immediately instead of maintaining mixed-case state.
+Suggestion undo restores the previous uppercase prefix. Treat case variants of a
+word as the same word for matching and personal learning, without merging
+distinct Bosnian letters. Existing saved library entries may retain their stored
+case until they are edited, but the Speech screen displays and inserts them in
+uppercase.
 
 ### Bosnian spelling
 
@@ -701,10 +702,10 @@ items remain open until the handoff checks above are recorded.
   without requiring a typed space. A comma retains the sentence context. Seed
   preparation and personal learning use the same boundaries, and personal
   preferences and previous message text remain intact.
-- [x] Suggestions display and insert uppercase words in all supported inputs,
-  match lowercase, uppercase, and mixed-case prefixes, preserve the case of
-  surrounding text, and restore the exact original case on undo. Case variants
-  do not become separate learned words.
+- [x] The conversation message, suggestions, categories, answers, and phrases
+  display and enter as uppercase. Lowercase and mixed-case input normalize
+  immediately, suggestion undo restores the prior uppercase input, and case
+  variants do not become separate learned words.
 - [x] One-step suggestion undo restores the exact prior text and reverses
   learning from that selection. Waiting or looking elsewhere does not expire
   undo; later text edits expire it, and a new suggestion replaces it with undo
