@@ -180,7 +180,7 @@ class SettingsWindow(QWidget):
         self.setStyleSheet(
             """
             QWidget#settingsRoot {
-                background: #151515;
+                background: #111312;
                 color: #f4f1ea;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
@@ -197,8 +197,21 @@ class SettingsWindow(QWidget):
             }
             QLabel#sectionTitle {
                 color: #ffffff;
-                font-size: 22px;
+                font-size: 24px;
                 font-weight: 650;
+            }
+            QLabel#sectionDescription {
+                color: #aeb9b3;
+                font-size: 14px;
+            }
+            QLabel#navSectionLabel, QLabel#groupLabel {
+                color: #8fa099;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#navNote {
+                color: #8fa099;
+                font-size: 13px;
             }
             QLabel#settingTitle {
                 color: #ffffff;
@@ -214,35 +227,35 @@ class SettingsWindow(QWidget):
                 font-size: 15px;
             }
             QLabel#valueLabel {
-                background: #101010;
+                background: #0f1110;
                 border: 1px solid #3a3d3b;
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #ffffff;
                 font-size: 24px;
                 font-weight: 650;
                 padding: 12px 18px;
             }
-            QFrame#settingsPanel {
-                background: #1e1f1e;
+            QFrame#navPanel, QFrame#contentPanel {
+                background: #191c1a;
                 border: 1px solid #343a36;
-                border-radius: 8px;
+                border-radius: 14px;
             }
             QFrame#settingRow {
-                background: #242624;
+                background: #222522;
                 border: 1px solid #3a403c;
-                border-radius: 8px;
+                border-radius: 10px;
             }
             QToolButton {
-                background: #2b2d2b;
-                border: 1px solid #494f4b;
-                border-radius: 8px;
+                background: #272a28;
+                border: 1px solid #414742;
+                border-radius: 10px;
                 color: #f5f3ef;
                 font-size: 15px;
                 font-weight: 600;
                 padding: 10px 14px;
             }
             QToolButton:hover {
-                background: #363936;
+                background: #323633;
                 border-color: #69736d;
             }
             QToolButton:disabled {
@@ -254,6 +267,23 @@ class SettingsWindow(QWidget):
                 background: #1d6f68;
                 border-color: #74d3c6;
                 color: #ffffff;
+            }
+            QToolButton#navButton {
+                background: transparent;
+                border-color: transparent;
+                text-align: left;
+            }
+            QToolButton#navButton:hover {
+                background: #252a27;
+                border-color: #3c4540;
+            }
+            QToolButton#navButton:checked, QToolButton#primaryButton {
+                background: #1d6f68;
+                border-color: #74d3c6;
+                color: #ffffff;
+            }
+            QToolButton#adjustButton {
+                background: #242825;
             }
             QToolButton[gazeTarget="true"] {
                 background: #3a3420;
@@ -271,8 +301,8 @@ class SettingsWindow(QWidget):
                 color: #ffffff;
             }
             QToolButton#dangerButton {
-                background: #4b2224;
-                border-color: #7d383e;
+                background: #492326;
+                border-color: #804047;
             }
             QToolButton#dangerButton[gazeTarget="true"] {
                 background: #5d3422;
@@ -289,11 +319,11 @@ class SettingsWindow(QWidget):
                 color: #ffffff;
             }
             QCheckBox {
-                background: #242624;
+                background: #222522;
                 border: 1px solid #3a403c;
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #f5f3ef;
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: 600;
                 padding: 14px 18px;
                 spacing: 14px;
@@ -330,9 +360,9 @@ class SettingsWindow(QWidget):
                 color: #ffffff;
             }
             QComboBox {
-                background: #101010;
+                background: #0f1110;
                 border: 1px solid #4c534e;
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #ffffff;
                 font-size: 20px;
                 font-weight: 650;
@@ -373,19 +403,11 @@ class SettingsWindow(QWidget):
         )
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 18, 22, 22)
-        root.setSpacing(16)
+        root.setContentsMargins(24, 20, 24, 24)
+        root.setSpacing(18)
 
         top_bar = QHBoxLayout()
-        top_bar.setSpacing(14)
-        self._exit_button = self._make_button(
-            "Zatvori",
-            self.close,
-            icon_name="fa5s.times",
-            object_name="dangerButton",
-            minimum_size=QSize(128, 58),
-        )
-        top_bar.addWidget(self._exit_button, 0, Qt.AlignLeft)
+        top_bar.setSpacing(16)
 
         title = QLabel("Postavke", self)
         title.setObjectName("titleLabel")
@@ -397,44 +419,65 @@ class SettingsWindow(QWidget):
         self._status_label.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
         self._status_label.setMinimumWidth(360)
         top_bar.addWidget(self._status_label, 0)
+        self._exit_button = self._make_button(
+            "Zatvori",
+            self.close,
+            icon_name="fa5s.times",
+            object_name="dangerButton",
+            minimum_size=QSize(128, 58),
+        )
+        top_bar.addWidget(self._exit_button, 0, Qt.AlignRight)
         root.addLayout(top_bar)
 
         body = QHBoxLayout()
-        body.setSpacing(16)
+        body.setSpacing(18)
         root.addLayout(body, 1)
 
         nav_panel = QFrame(self)
-        nav_panel.setObjectName("settingsPanel")
-        nav_panel.setFixedWidth(250)
+        nav_panel.setObjectName("navPanel")
+        nav_panel.setFixedWidth(264)
         nav_layout = QVBoxLayout(nav_panel)
-        nav_layout.setContentsMargins(12, 12, 12, 12)
+        nav_layout.setContentsMargins(14, 14, 14, 14)
         nav_layout.setSpacing(10)
+
+        nav_label = QLabel("KATEGORIJE", nav_panel)
+        nav_label.setObjectName("navSectionLabel")
+        nav_label.setContentsMargins(8, 4, 8, 2)
+        nav_layout.addWidget(nav_label)
 
         self._general_tab_button = self._make_button(
             "Opće postavke",
             lambda: self._select_tab(0),
             icon_name="fa5s.sliders-h",
+            object_name="navButton",
             checkable=True,
-            minimum_size=QSize(216, 74),
+            minimum_size=QSize(234, 72),
         )
         self._gaze_tab_button = self._make_button(
             "Postavke pogleda",
             lambda: self._select_tab(1),
             icon_name="fa5s.eye",
+            object_name="navButton",
             checkable=True,
-            minimum_size=QSize(216, 74),
+            minimum_size=QSize(234, 72),
         )
         self._speech_tab_button = self._make_button(
             "Postavke govora",
             lambda: self._select_tab(2),
             icon_name="fa5s.volume-up",
+            object_name="navButton",
             checkable=True,
-            minimum_size=QSize(216, 74),
+            minimum_size=QSize(234, 72),
         )
         nav_layout.addWidget(self._general_tab_button)
         nav_layout.addWidget(self._gaze_tab_button)
         nav_layout.addWidget(self._speech_tab_button)
         nav_layout.addStretch(1)
+        nav_note = QLabel("Promjene se primjenjuju i čuvaju automatski.", nav_panel)
+        nav_note.setObjectName("navNote")
+        nav_note.setWordWrap(True)
+        nav_note.setContentsMargins(8, 0, 8, 6)
+        nav_layout.addWidget(nav_note)
 
         body.addWidget(nav_panel, 0)
 
@@ -449,17 +492,22 @@ class SettingsWindow(QWidget):
 
     def _build_general_page(self) -> QWidget:
         page = QFrame(self)
-        page.setObjectName("settingsPanel")
+        page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(14)
 
-        header = QHBoxLayout()
+        header = QGridLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(12)
+        header.setHorizontalSpacing(16)
+        header.setVerticalSpacing(4)
+        header.setColumnStretch(0, 1)
         title = QLabel("Opće postavke", page)
         title.setObjectName("sectionTitle")
-        header.addWidget(title, 1, Qt.AlignVCenter | Qt.AlignLeft)
+        description = QLabel("Pokretanje, zapisivanje i ažuriranje aplikacije.", page)
+        description.setObjectName("sectionDescription")
+        header.addWidget(title, 0, 0, Qt.AlignVCenter | Qt.AlignLeft)
+        header.addWidget(description, 1, 0, Qt.AlignVCenter | Qt.AlignLeft)
         self._quit_button = self._make_button(
             "Isključi aplikaciju",
             self._request_quit,
@@ -467,33 +515,40 @@ class SettingsWindow(QWidget):
             object_name="dangerButton",
             minimum_size=QSize(154, 58),
         )
-        header.addWidget(self._quit_button, 0, Qt.AlignVCenter | Qt.AlignRight)
+        header.addWidget(self._quit_button, 0, 1, 2, 1, Qt.AlignVCenter | Qt.AlignRight)
         layout.addLayout(header)
 
+        options_label = QLabel("POKRETANJE I DIJAGNOSTIKA", page)
+        options_label.setObjectName("groupLabel")
+        layout.addWidget(options_label)
         actions = QGridLayout()
         actions.setHorizontalSpacing(12)
         actions.setVerticalSpacing(12)
         self._startup_checkbox = self._make_checkbox(
-            "Pokreni uz Windows kao administrator",
+            "Pokreni uz Windows (administrator)",
             self._toggle_start_with_windows,
-            minimum_size=QSize(520, 66),
+            minimum_size=QSize(260, 72),
         )
         self._logging_checkbox = self._make_checkbox(
             "Uključi zapisivanje",
             self._toggle_logging_enabled,
-            minimum_size=QSize(520, 66),
+            minimum_size=QSize(260, 72),
         )
         self._launcher_window_checkbox = self._make_checkbox(
-            "Prikaži PowerShell prozor pri pokretanju",
+            "Prikaži PowerShell pri pokretanju",
             self._toggle_show_launcher_window,
-            minimum_size=QSize(520, 66),
+            minimum_size=QSize(260, 72),
         )
         actions.addWidget(self._startup_checkbox, 0, 0)
-        actions.addWidget(self._logging_checkbox, 1, 0)
-        actions.addWidget(self._launcher_window_checkbox, 2, 0)
-        actions.setColumnStretch(1, 1)
+        actions.addWidget(self._logging_checkbox, 0, 1)
+        actions.addWidget(self._launcher_window_checkbox, 0, 2)
+        for column in range(3):
+            actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
 
+        update_label = QLabel("VERZIJA APLIKACIJE", page)
+        update_label.setObjectName("groupLabel")
+        layout.addWidget(update_label)
         update_row = QFrame(page)
         update_row.setObjectName("settingRow")
         update_layout = QGridLayout(update_row)
@@ -532,14 +587,17 @@ class SettingsWindow(QWidget):
 
     def _build_gaze_page(self) -> QWidget:
         page = QFrame(self)
-        page.setObjectName("settingsPanel")
+        page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(14)
 
         title = QLabel("Postavke pogleda", page)
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
+        description = QLabel("Podesite brzinu, stabilnost i povratnu informaciju pogleda.", page)
+        description.setObjectName("sectionDescription")
+        layout.addWidget(description)
 
         self._selection_pause_value = self._make_value_label(page)
         layout.addWidget(
@@ -596,6 +654,9 @@ class SettingsWindow(QWidget):
             )
         )
 
+        actions_label = QLabel("PONAŠANJE I KALIBRACIJA", page)
+        actions_label.setObjectName("groupLabel")
+        layout.addWidget(actions_label)
         actions = QGridLayout()
         actions.setHorizontalSpacing(12)
         actions.setVerticalSpacing(12)
@@ -631,12 +692,21 @@ class SettingsWindow(QWidget):
             icon_name="fa5s.crosshairs",
             minimum_size=QSize(230, 64),
         )
+        for widget in (
+            self._move_pointer_button,
+            self._gaze_bubble_button,
+            self._interaction_overlay_button,
+            self._precision_zoom_checkbox,
+            self._calibration_button,
+        ):
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         actions.addWidget(self._move_pointer_button, 0, 0)
         actions.addWidget(self._gaze_bubble_button, 0, 1)
-        actions.addWidget(self._calibration_button, 1, 0)
-        actions.addWidget(self._interaction_overlay_button, 1, 1)
-        actions.addWidget(self._precision_zoom_checkbox, 2, 0)
-        actions.setColumnStretch(2, 1)
+        actions.addWidget(self._interaction_overlay_button, 0, 2)
+        actions.addWidget(self._precision_zoom_checkbox, 1, 0)
+        actions.addWidget(self._calibration_button, 1, 1, 1, 2)
+        for column in range(3):
+            actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
         layout.addStretch(1)
 
@@ -644,14 +714,17 @@ class SettingsWindow(QWidget):
 
     def _build_speech_page(self) -> QWidget:
         page = QFrame(self)
-        page.setObjectName("settingsPanel")
+        page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(14)
 
         title = QLabel("Postavke govora", page)
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
+        description = QLabel("Podesite glas i raspored tastature za komunikaciju.", page)
+        description.setObjectName("sectionDescription")
+        layout.addWidget(description)
 
         self._speed_value = self._make_value_label(page)
         layout.addWidget(
@@ -707,20 +780,24 @@ class SettingsWindow(QWidget):
         voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
         layout.addWidget(voice_row)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(12)
+        actions_label = QLabel("AKCIJE", page)
+        actions_label.setObjectName("groupLabel")
+        layout.addWidget(actions_label)
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(12)
         self._test_speech_button = self._make_button(
             "Isprobaj govor",
             self._request_speech_test,
             icon_name="fa5s.play",
-            minimum_size=QSize(190, 64),
+            object_name="primaryButton",
+            minimum_size=QSize(240, 64),
         )
-        actions.addWidget(self._test_speech_button)
+        actions.addWidget(self._test_speech_button, 0, 0)
         self._learned_words_button = self._make_button(
-            "Naučene riječi", self._open_learning, minimum_size=QSize(210, 64)
+            "Naučene riječi", self._open_learning, minimum_size=QSize(240, 64)
         )
-        actions.addWidget(self._learned_words_button)
-        actions.addStretch(1)
+        actions.addWidget(self._learned_words_button, 0, 1)
+        actions.setColumnStretch(2, 1)
         layout.addLayout(actions)
         layout.addStretch(1)
 
@@ -728,9 +805,9 @@ class SettingsWindow(QWidget):
 
     def _build_learning_page(self) -> QWidget:
         page = QFrame(self)
-        page.setObjectName("settingsPanel")
+        page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(12)
         header = QHBoxLayout()
         title = QLabel("Naučene riječi", page)
@@ -912,19 +989,21 @@ class SettingsWindow(QWidget):
             "Manje",
             decrease,
             icon_name="fa5s.minus",
+            object_name="adjustButton",
             minimum_size=QSize(112, 58),
         )
         plus_button = self._make_button(
             "Više",
             increase,
             icon_name="fa5s.plus",
+            object_name="adjustButton",
             minimum_size=QSize(112, 58),
         )
 
         layout.addWidget(title_label, 0, 0)
         layout.addWidget(hint_label, 1, 0)
-        layout.addWidget(value_label, 0, 1, 2, 1)
-        layout.addWidget(minus_button, 0, 2, 2, 1)
+        layout.addWidget(minus_button, 0, 1, 2, 1)
+        layout.addWidget(value_label, 0, 2, 2, 1)
         layout.addWidget(plus_button, 0, 3, 2, 1)
 
         return row
@@ -933,7 +1012,7 @@ class SettingsWindow(QWidget):
         label = QLabel(parent)
         label.setObjectName("valueLabel")
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumWidth(150)
+        label.setMinimumWidth(160)
         return label
 
     def _make_button(
@@ -969,6 +1048,7 @@ class SettingsWindow(QWidget):
     ) -> QCheckBox:
         checkbox = QCheckBox(text, self)
         checkbox.setMinimumSize(minimum_size or QSize(250, 58))
+        checkbox.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         checkbox.pressed.connect(lambda: self.cancel_gaze_interaction(require_leave=True))
         checkbox.clicked.connect(lambda _checked=False, item=callback: item())

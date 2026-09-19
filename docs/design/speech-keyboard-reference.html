@@ -170,54 +170,60 @@
     .settings-screen {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
       min-height: 680px;
       height: calc(100vh - 24px);
       height: calc(100dvh - 24px);
       max-width: 2200px;
       margin: 0 auto;
-      padding: 18px 22px 22px;
-      background: #151515;
+      padding: 20px 24px 24px;
+      background: #111312;
       color: #f4f1ea;
     }
     .settings-screen button {
       min-height: 58px;
       padding: 10px 14px;
-      border-color: #494f4b;
-      background: #2b2d2b;
+      border-color: #414742;
+      border-radius: 10px;
+      background: #272a28;
       color: #f5f3ef;
       font-size: 15px;
     }
-    .settings-screen button:hover { background: #363936; border-color: #69736d; }
+    .settings-screen button:hover { background: #323633; border-color: #69736d; }
     .settings-screen button[aria-pressed="true"], .settings-screen .settings-primary {
       border-color: #74d3c6;
       background: #1d6f68;
       color: #fff;
     }
-    .settings-topbar { display: flex; align-items: center; gap: 14px; }
+    .settings-topbar { display: flex; align-items: center; gap: 16px; }
     .settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
     .settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
-    .settings-danger { background: #4b2224 !important; border-color: #7d383e !important; }
-    .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; }
-    .settings-panel { border: 1px solid #343a36; border-radius: 8px; background: #1e1f1e; }
-    .settings-nav { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-    .settings-nav button { min-height: 74px; }
-    .settings-page { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
-    .settings-page-header { display: flex; align-items: center; gap: 12px; }
-    .settings-page-header h2 { flex: 1; margin: 0; color: #fff; font-size: 22px; font-weight: 650; }
-    .settings-options { display: grid; gap: 12px; }
+    .settings-danger { background: #492326 !important; border-color: #804047 !important; }
+    .settings-body { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 18px; flex: 1; min-height: 0; }
+    .settings-panel { border: 1px solid #343a36; border-radius: 14px; background: #191c1a; }
+    .settings-nav { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+    .settings-nav-label { margin: 4px 8px 2px; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .settings-nav button { justify-content: flex-start; min-height: 72px; text-align: left; }
+    .settings-nav-note { margin: auto 8px 6px; color: #8fa099; font-size: 13px; line-height: 1.45; }
+    .settings-page { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+    .settings-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
+    .settings-page-header h2 { margin: 0; color: #fff; font-size: 24px; font-weight: 650; }
+    .settings-page-header p { margin: 0; color: #aeb9b3; font-size: 14px; }
+    .settings-page-header button { grid-column: 2; grid-row: 1 / span 2; }
+    .settings-group-label { margin: 4px 2px 0; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .settings-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .settings-checkbox {
       display: flex;
       align-items: center;
       gap: 14px;
       min-height: 66px;
-      width: min(520px, 100%);
+      width: auto;
       padding: 14px 18px;
       border: 1px solid #3a403c;
-      border-radius: 8px;
-      background: #242624;
+      border-radius: 10px;
+      background: #222522;
       color: #f5f3ef;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
     }
     .settings-checkbox input { width: 28px; height: 28px; accent-color: #1d6f68; }
@@ -228,14 +234,31 @@
       gap: 12px;
       padding: 14px 16px;
       border: 1px solid #3a403c;
-      border-radius: 8px;
-      background: #242624;
+      border-radius: 10px;
+      background: #222522;
     }
     .update-copy h3 { margin: 0 0 6px; color: #fff; font-size: 17px; font-weight: 600; }
     .update-copy p { margin: 0; color: #d8d3c8; font-size: 15px; }
     .update-card button { min-height: 64px; }
     .update-card [data-settings-action="check-update"] { min-width: 210px; }
     .update-card [data-settings-action="install-update"] { min-width: 250px; }
+    .setting-row {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) 112px 160px 112px;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid #3a403c;
+      border-radius: 10px;
+      background: #222522;
+    }
+    .setting-copy h3 { margin: 0 0 5px; color: #fff; font-size: 17px; font-weight: 600; }
+    .setting-copy p { margin: 0; color: #b9b2a5; font-size: 13px; }
+    .setting-value { display: grid; place-items: center; min-height: 58px; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
+    .settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; min-height: 64px; }
+    .settings-action-grid .wide { grid-column: 2 / -1; }
+    .speech-actions { display: grid; grid-template-columns: repeat(2, minmax(210px, 280px)); gap: 12px; }
     @media (max-height: 760px) and (min-width: 901px) {
       body { padding: 8px; }
       .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 80px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
@@ -258,10 +281,12 @@
       .view-header button { flex: 1; }
       .settings-screen { height: auto; min-height: calc(100dvh - 16px); padding: 14px; }
       .settings-status { min-width: 0; }
-      .settings-body { grid-template-columns: 210px minmax(0, 1fr); }
+      .settings-body { grid-template-columns: 220px minmax(0, 1fr); }
       .settings-nav { padding: 10px; }
+      .settings-options { grid-template-columns: 1fr; }
       .update-card { grid-template-columns: 1fr; }
       .update-card button { width: 100%; }
+      .setting-row { grid-template-columns: minmax(220px, 1fr) 104px 145px 104px; }
     }
     @media (max-width: 560px) {
       :root { --gap: 8px; }
@@ -288,8 +313,13 @@
       .settings-status { flex: 1; text-align: left; }
       .settings-body { display: flex; flex-direction: column; }
       .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .settings-nav-label, .settings-nav-note { display: none; }
       .settings-nav button { min-height: 62px; padding: 8px; font-size: 13px; }
       .settings-page { padding: 14px; }
+      .setting-row { grid-template-columns: 1fr 1fr 1fr; }
+      .setting-copy { grid-column: 1 / -1; }
+      .settings-action-grid, .speech-actions { grid-template-columns: 1fr; }
+      .settings-action-grid .wide { grid-column: auto; }
     }
   </style>
 </head>
@@ -351,26 +381,31 @@
   </main>
   <main id="settings-screen" class="settings-screen" aria-label="Pogled Assist postavke" hidden>
     <header class="settings-topbar">
-      <button class="settings-danger" type="button">✕&nbsp;&nbsp;Zatvori</button>
       <h1>Postavke</h1>
       <p id="settings-status" class="settings-status" role="status" aria-live="polite">Spremno</p>
+      <button class="settings-danger" type="button">✕&nbsp;&nbsp;Zatvori</button>
     </header>
     <div class="settings-body">
       <nav class="settings-nav settings-panel" aria-label="Grupe postavki">
+        <p class="settings-nav-label">Kategorije</p>
         <button type="button" data-settings-action="general-settings" aria-pressed="true">Opće postavke</button>
-        <button type="button" aria-pressed="false">Postavke pogleda</button>
+        <button type="button" data-settings-action="gaze-settings" aria-pressed="false">Postavke pogleda</button>
         <button type="button" data-settings-action="speech-settings" aria-pressed="false">Postavke govora</button>
+        <p class="settings-nav-note">Promjene se primjenjuju i čuvaju automatski.</p>
       </nav>
       <section id="general-settings" class="settings-page settings-panel" aria-labelledby="general-settings-title">
         <header class="settings-page-header">
           <h2 id="general-settings-title">Opće postavke</h2>
+          <p>Pokretanje, zapisivanje i ažuriranje aplikacije.</p>
           <button class="settings-danger" type="button">Isključi aplikaciju</button>
         </header>
+        <p class="settings-group-label">Pokretanje i dijagnostika</p>
         <div class="settings-options">
-          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows kao administrator</label>
+          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows (administrator)</label>
           <label class="settings-checkbox"><input type="checkbox">Uključi zapisivanje</label>
-          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell prozor pri pokretanju</label>
+          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell pri pokretanju</label>
         </div>
+        <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">
           <div class="update-copy">
             <h3 id="update-title">Ažuriranja</h3>
@@ -380,10 +415,35 @@
           <button class="settings-primary" type="button" data-settings-action="install-update" hidden>↓&nbsp;&nbsp;Ažuriraj na v0.2.0</button>
         </section>
       </section>
+      <section id="gaze-settings" class="settings-page settings-panel" hidden>
+        <header class="settings-page-header">
+          <h2>Postavke pogleda</h2>
+          <p>Podesite brzinu, stabilnost i povratnu informaciju pogleda.</p>
+        </header>
+        <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Radijus stabilnog pogleda</h3><p>Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">48 px</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Pauza između radnji</h3><p>Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">350 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Uglađivanje pokazivača</h3><p>Niže vrijednosti su mirnije, a više brže prate pogled.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">1.00</strong><button>+&nbsp; Više</button></div>
+        <p class="settings-group-label">Ponašanje i kalibracija</p>
+        <div class="settings-action-grid">
+          <button class="settings-primary" type="button">Pomjeraj pokazivač pogledom</button>
+          <button class="settings-primary" type="button">Prikaži oznaku pogleda</button>
+          <button class="settings-primary" type="button">Prikaži napredak radnje</button>
+          <label class="settings-checkbox"><input type="checkbox" checked>Koristi precizno uvećanje</label>
+          <button class="wide" type="button">Pokreni Tobii kalibraciju</button>
+        </div>
+      </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>
-        <h2>Postavke govora</h2>
-        <p class="learning-hint">Prijedlozi riječi rade i bez interneta. Naučene riječi čuvaju se na ovom računaru.</p>
-        <div class="learning-actions"><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
+        <header class="settings-page-header">
+          <h2>Postavke govora</h2>
+          <p>Podesite glas i raspored tastature za komunikaciju.</p>
+        </header>
+        <div class="setting-row"><div class="setting-copy"><h3>Brzina govora</h3><p>Broj riječi u minuti koji koristi eSpeak NG.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">155 riječi/min</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Broj slova u grupi</h3><p>Broj slova u svakoj grupi na ekranima za govor i tastaturu.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">5</strong><button>+&nbsp; Više</button></div>
+        <section class="update-card"><div class="update-copy"><h3>Glas</h3><p>Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.</p></div><button type="button">Standardni</button></section>
+        <p class="settings-group-label">Akcije</p>
+        <div class="speech-actions"><button class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
       </section>
       <section id="learning-settings" class="settings-page settings-panel" hidden>
         <div class="learning-actions"><h2>Naučene riječi</h2><button type="button" data-settings-action="speech-settings">Nazad</button></div>
@@ -585,8 +645,8 @@
       }
 
       function handleSettingsAction(action) {
-        if (['general-settings', 'speech-settings', 'learning-settings'].includes(action)) {
-          for (const id of ['general-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
+        if (['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings'].includes(action)) {
+          for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
           for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
           if (action === 'learning-settings') renderLearning();
           return;
