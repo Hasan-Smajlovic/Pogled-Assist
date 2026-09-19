@@ -16,8 +16,14 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gaze_mouse.suggestion_model import MODEL_METADATA_PATH, WordModel, load_model
-from gaze_mouse.suggestion_text import insert_word, words
+from gaze_mouse.suggestion_model import (
+    MODEL_METADATA_PATH,
+    MODEL_PATH,
+    WordModel,
+    load_model,
+    load_model_from_paths,
+)
+from gaze_mouse.suggestion_text import START, insert_word, words
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "speech_suggestions"
 
@@ -36,6 +42,22 @@ def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> 
     text = text.upper()
     composed = ""
     activations = entered = selections = departures = hits = queries = 0
+    prediction = dict.fromkeys(
+        (
+            "sentence_start_queries",
+            "sentence_start_top_one_hits",
+            "sentence_start_top_five_hits",
+            "next_word_queries",
+            "next_word_top_one_hits",
+            "next_word_top_five_hits",
+            "completion_queries",
+            "completion_top_one_hits",
+            "completion_top_five_hits",
+            "completion_selections",
+            "prediction_selections",
+        ),
+        0,
+    )
     durations = []
     last_slot = None
     automatic_space = False
@@ -75,6 +97,14 @@ def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> 
                 durations.append((time.perf_counter() - started) * 1000)
                 queries += 1
                 hits += target in candidates
+                kind = (
+                    "completion"
+                    if index
+                    else ("sentence_start" if token.context == (START,) else "next_word")
+                )
+                prediction[f"{kind}_queries"] += 1
+                prediction[f"{kind}_top_one_hits"] += bool(candidates and candidates[0] == target)
+                prediction[f"{kind}_top_five_hits"] += target in candidates
             if target in candidates and 2 * (len(units) - index) + int(has_space) > 1:
                 slot = candidates.index(target)
                 departures += last_slot == slot
@@ -82,6 +112,7 @@ def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> 
                 automatic_space = True
                 activations += 1
                 selections += 1
+                prediction["completion_selections" if index else "prediction_selections"] += 1
                 last_slot = slot
                 break
             if index < len(units):
@@ -102,11 +133,17 @@ def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> 
         "queries": queries,
         "corrections": 0,
         "undo": 0,
+        **prediction,
         "durations_ms": durations,
     }
 
 
-def evaluate(dataset: str) -> dict:
+def evaluate(
+    dataset: str,
+    *,
+    model_path: Path = MODEL_PATH,
+    metadata_path: Path = MODEL_METADATA_PATH,
+) -> dict:
     frozen = json.loads((FIXTURES / "frozen.json").read_text())
     for name, digest in frozen["sha256"].items():
         if hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() != digest:
@@ -114,7 +151,10 @@ def evaluate(dataset: str) -> dict:
     with (FIXTURES / f"{dataset}.tsv").open(encoding="utf-8") as stream:
         cases = list(csv.DictReader(stream, delimiter="\t"))
     started = time.perf_counter()
-    model = load_model()
+    if model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH:
+        model = load_model()
+    else:
+        model = load_model_from_paths(model_path, metadata_path)
     loading_ms = (time.perf_counter() - started) * 1000
     results = []
     totals: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -138,6 +178,12 @@ def evaluate(dataset: str) -> dict:
         totals[name]["activation_reduction_percent"] = round(
             100 * (1 - totals[name]["activations"] / totals["keyboard"]["activations"]), 2
         )
+        for kind in ("sentence_start", "next_word", "completion"):
+            count = totals[name][f"{kind}_queries"]
+            for top in ("one", "five"):
+                totals[name][f"{kind}_top_{top}_percent"] = (
+                    round(100 * totals[name][f"{kind}_top_{top}_hits"] / count, 2) if count else 0.0
+                )
     for values in categories.values():
         values["contextual_reduction_percent"] = round(
             100 * (1 - values["contextual"] / values["keyboard"]), 2
@@ -146,10 +192,23 @@ def evaluate(dataset: str) -> dict:
         "dataset": dataset,
         "messages": len(cases),
         "dataset_sha256": frozen["sha256"][f"{dataset}.tsv"],
-        "model": json.loads(MODEL_METADATA_PATH.read_text()),
+        "model": json.loads(metadata_path.read_text(encoding="utf-8")),
         "environment": {"platform": platform.platform(), "python": platform.python_version()},
         "profile": "empty per message",
         "assumption": "ideal exact beneficial selection; no intentional mistakes",
+        "ranking": {
+            "method": "adaptive context interpolation",
+            "context_discount": model.context_discount,
+            "implementation_sha256": hashlib.sha256(
+                (MODEL_PATH.parents[1] / "suggestion_model.py").read_bytes()
+            ).hexdigest(),
+        },
+        "metric_notes": {
+            "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
+            "sentence_start": "One query before typing each sentence-initial word, reported separately.",
+            "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
+            "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending.",
+        },
         "loading_ms": round(loading_ms, 2),
         "latency": {
             name: {
@@ -169,9 +228,11 @@ def evaluate(dataset: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=("development", "heldout"), default="development")
+    parser.add_argument("--model", type=Path, default=MODEL_PATH)
+    parser.add_argument("--metadata", type=Path, default=MODEL_METADATA_PATH)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = evaluate(args.dataset)
+    result = evaluate(args.dataset, model_path=args.model, metadata_path=args.metadata)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

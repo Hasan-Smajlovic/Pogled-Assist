@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
+from collections import Counter
 
 import pytest
 
@@ -91,6 +93,16 @@ def test_longer_context_changes_prediction_and_unknown_prefix_is_empty():
     assert model.predict("qwert") == []
 
 
+def test_next_word_pool_keeps_rare_contextual_and_personal_candidates():
+    counts = {(word,): 100 - index for index, word in enumerate("abcdef")}
+    counts.update({("rijetka",): 1, ("želim", "rijetka"): 50})
+    model = WordModel(counts)
+
+    assert model.predict("želim ")[0] == "RIJETKA"
+    personal = Counter({("lična",): 4, ("trebam", "lična"): 4})
+    assert model.predict("trebam ", personal)[0] == "LIČNA"
+
+
 def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     metadata = json.loads(MODEL_METADATA_PATH.read_text(encoding="utf-8"))
@@ -98,14 +110,15 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
 
     assert metadata["source"] == "CLASSLA-web.bs 2.0"
     assert metadata["source_license"] == "CC0-1.0"
-    assert metadata["counts"]["words"] == 20_000
+    assert metadata["counts"]["words"] == 60_000
+    assert metadata["supplement"]["rows"] == 527
     assert hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest() == metadata["model_sha256"]
     assert (
         hashlib.sha256((root / "scripts" / "prepare_speech_model.py").read_bytes()).hexdigest()
         == metadata["preparation_sha256"]
     )
     assert (
-        hashlib.sha256((root / "language" / "bs" / "conversation.txt").read_bytes()).hexdigest()
+        hashlib.sha256((root / "language" / "bs" / "conversation.tsv").read_bytes()).hexdigest()
         == metadata["supplement_sha256"]
     )
     assert (
@@ -114,3 +127,47 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
     )
     assert load_model().predict("žel")[0] == "ŽELIM"
     assert load_model().predict("")[:5] == ["SELAM", "JA", "KAKO", "MOŽE", "HVALA"]
+
+
+def test_bundled_model_preserves_starters_and_basic_needs():
+    model = load_model()
+    root = MODEL_PATH.parents[2]
+    with (root / "language/bs/starters.tsv").open(encoding="utf-8") as stream:
+        starters = {row["word"] for row in csv.DictReader(stream, delimiter="\t")}
+    assert set(model.contexts[(START,)]) == starters
+    assert {"VODE", "POMOĆ"} <= set(model.predict("TREBA MI "))
+    assert model.predict("TREBA MI ")[0] != "JE"
+    assert {"GLAVA", "STOMAK"} <= set(model.predict("BOLI ME "))
+    assert model.predict("POM")[0] == "POMOZI"
+    assert model.predict("ZAT")[0] == "ZATVORI"
+
+
+def test_sparse_context_backs_off_but_supported_context_overrides_common_pair():
+    counts = {("je",): 100_000, ("vode",): 100, ("mi", "je"): 1000, ("treba", "mi", "vode"): 3}
+    assert WordModel(counts).predict("TREBA MI ")[0] == "JE"
+    counts[("treba", "mi", "vode")] = 200
+    assert WordModel(counts).predict("TREBA MI ")[0] == "VODE"
+
+
+def test_evaluation_separates_starters_next_words_and_completions():
+    from scripts.evaluate_speech_model import simulate
+
+    class ScriptedModel:
+        def predict(self, text, *, contextual=True):
+            return {
+                "": ["ŽELIM"],
+                "ŽELIM ": [],
+                "ŽELIM V": ["VODE"],
+                "ŽELIM VODE. ": ["HVALA"],
+            }.get(text, [])
+
+    result = simulate("Želim vode. Hvala.", ScriptedModel())
+    assert result["sentence_start_queries"] == 2
+    assert result["sentence_start_top_one_hits"] == 2
+    assert result["next_word_queries"] == 1
+    assert result["next_word_top_five_hits"] == 0
+    assert result["completion_queries"] == 1
+    assert result["completion_top_one_hits"] == 1
+    assert result["prediction_selections"] == 2
+    assert result["completion_selections"] == 1
+    assert result["activations"] == 12

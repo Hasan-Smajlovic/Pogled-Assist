@@ -384,9 +384,18 @@ The Bosnian corpus archive was downloaded and verified against the published MD5
 before preparation. The retained archive SHA-256, sample configuration, genre and
 domain counts, preparation inputs, and model checksum are recorded in
 [`bosnian-model.meta.json`](../gaze_mouse/assets/bosnian-model.meta.json). The
-prepared model contains 20,000 words, 57,282 bigrams, and 44,372 trigrams in a
-562,835-byte gzip file. The full source archive is a development input and is not
-distributed with the application.
+prepared model contains 60,000 words, 125,342 bigrams, and 103,788 trigrams in a
+1,348,957-byte gzip file. Its web sample contains 5,482,578 tokens from 20,924
+documents across 1,635 domains. The full source archive is a development input
+and is not distributed with the application.
+
+The reviewed supplement is a structured TSV with 527 synthetic conversation
+messages in 12 categories and explicit weights. Immediate needs, health, care,
+comfort, food and drink, and emergencies receive more weight than general
+conversation, memories, opinions, and humour. The 52 reviewed sentence starters
+are stored separately and all survive model pruning. A repository test rejects
+exact overlap between the supplement and either frozen evaluation set. That
+check does not establish independence from paraphrases or similar expressions.
 
 ### Statistical baseline
 
@@ -415,6 +424,23 @@ needed for the measured model size or latency. Pressagio 0.1.6 was rejected beca
 its older generic API does not provide the required Bosnian matching, occurrence
 reversal, or storage recovery behaviour.
 
+Context weights adapt to the retained evidence. Starting with the unigram
+distribution, each longer available context takes a share of
+`min(0.9, count / (count + 10 * distinct_next_words))`; the remaining share stays
+with shorter contexts. Counts include weighted seed examples and personal
+counts, so this is a ranking heuristic, not a calibrated probability of being
+correct. The 10% fallback floor keeps other completions eligible. The existing
+separate personal/base blend remains in place.
+
+[`ranking-benchmark.json`](../language/bs/ranking-benchmark.json) compares fixed
+and adaptive weights on the same prepared language data. Fixed weights need
+1,018 development activations; discounts of 2 and 10 both need 1,014, with the
+same 72/168 next-word top-five and 47/168 top-one hits. Discount 40 needs 1,022
+activations and loses next-word hits. The recorded tie rule selects 10, which
+backs off more on sparse contexts than 2. These are development results, not
+independent validation. The prior 500-message model with fixed weights needed
+1,028 development activations.
+
 ## Quality and performance evaluation
 
 Use at least 100 reviewed synthetic Bosnian messages, covering everyday needs,
@@ -441,6 +467,19 @@ and the contextual model. Record:
   unrelated contexts.
 - Update latency, initial loading time, memory use, and prepared data size.
 
+Evaluation reports count one `next_word` query before the first letter of each
+non-sentence-initial word and report exact top-one and top-five rates. Sentence
+starts have their own denominator. Completion queries occur after at least one
+letter along the ideal selection path; their hit rate is path-dependent and must
+not be described as next-word accuracy. Selection counts also distinguish
+prediction from completion. The frozen keyboard scoring method is unchanged.
+
+The original held-out set has been inspected in repeated implementation reviews.
+Its unchanged 100 messages now serve as a regression set. Do not tune from it,
+and do not present a new run as fresh blind validation. Independent quality
+validation requires new messages authored and reviewed separately, kept away
+from supplement and ranking decisions until the candidate is fixed.
+
 The agreed initial usefulness target is at least 20% fewer required gaze
 selections in the offline evaluation than the existing grouped keyboard on the
 same messages. Count activations for spaces, corrections, and undo, and report
@@ -464,13 +503,24 @@ Prediction work must not stall the UI or apply an old result to changed text.
 The frozen Mac evaluation is recorded in
 [`evaluation-development.json`](../language/bs/evaluation-development.json) and
 [`evaluation-heldout.json`](../language/bs/evaluation-heldout.json). On the first
-held-out run, the contextual model used 3,724 activations versus 6,337 for the
-grouped keyboard, a 41.23% reduction. Every conversation category exceeded the
-20% target. Loaded contextual queries measured 5.98 ms mean, 21.62 ms p95, and
-24.43 ms maximum on that Mac run; initial loading was 235.31 ms. These are
-development measurements, not the required end-to-end result on the reference
-Windows laptop with speech and gaze active. Real Windows and Tobii validation
-remains required separately.
+held-out run, the original 20,000-word contextual model used 3,724 activations
+versus 6,337 for the grouped keyboard, a 41.23% reduction. The 500-message,
+60,000-word model subsequently used 3,441 activations, a 45.70% reduction.
+The current 527-message model and adaptive ranking were selected from the
+development comparisons in [`model-benchmark.json`](../language/bs/model-benchmark.json)
+and [`ranking-benchmark.json`](../language/bs/ranking-benchmark.json).
+Its final regression run used 3,417 activations, a 46.08% reduction, and every
+conversation category remained above the 20% target. Exact next-word top-five
+hits rose from 127/475 (26.74%) to 128/475 (26.95%); top-one hits rose from
+76/475 (16.00%) to 78/475 (16.42%). Sentence starts are excluded from those
+rates. The improvement is modest and does not establish blind generalisation.
+Loaded contextual queries measured 1.29 ms mean, 7.19 ms p95, and 12.70 ms
+maximum on the final Mac regression run; initial loading was 570.23 ms. An
+isolated loader process reached 171.3 MB peak RSS, compared with 20.1 MB after
+importing the module without loading the model. These are development
+measurements, not the required end-to-end result on the reference Windows laptop
+with speech and gaze active. Real Windows and Tobii validation remains required
+separately.
 
 ## Technical choices to validate
 
@@ -482,7 +532,7 @@ for changing the agreed behaviour or acceptance targets.
 | Choice | Required evidence | Current state |
 | --- | --- | --- |
 | Prediction library and prefix index | Bosnian matching correctness, development-set quality, speed, memory use, runtime compatibility, packaging, and maintainability. | Selected standard-library sorted index and application-specific n-gram ranker. Unicode and prefix cases are covered by pytest; no new runtime dependency is required. |
-| Prepared seed and ranking configuration | Reproducible source processing, language review, vocabulary and n-gram counts, measured ranking behaviour, and data size. | Prepared from verified CLASSLA-web.bs 2.0 plus the reviewed conversational supplement. Metadata and both evaluation artifacts are linked above. |
+| Prepared seed and ranking configuration | Reproducible source processing, language review, vocabulary and n-gram counts, measured ranking behaviour, and data size. | Prepared from verified CLASSLA-web.bs 2.0 plus 527 weighted reviewed conversation messages and all 52 starters. Development-only vocabulary and ranking comparisons selected 60k and adaptive discount 10; metadata, benchmarks, and evaluation artifacts are linked above. |
 | Personal storage and event accounting | Reversible occurrence-level learning, deduplication, durable word removal, failure handling, and preservation across app updates and rollback. | Implemented as version 1 aggregate counts with occurrence-level session credits, atomic replacement, unreadable-file preservation, retry, and installer preservation of `data/`. |
 | UI layout and controls | Reviewed HTML states for suggestions, undo, editors, learned-word removal, retry, and error feedback at provisional sizes on Mac, then confirmed at actual Windows display settings. | HTML states are implemented. Qt galleries were reviewed at 1280x720 and 1440x900; target Windows display and real gaze review remain pending. |
 
@@ -618,24 +668,25 @@ Mac run alone must never close the full feature acceptance.
 ## Mac verification and Windows handoff
 
 The current handoff is the working diff on branch
-`feat/4-bosnian-speech-suggestions`, based on revision `5d8592e35d8e`. The last
-Mac verification ran on 2026-09-18 with macOS 27.0 arm64, Python 3.10.21,
+`feat/4-bosnian-speech-suggestions`, based on revision `b3ff22c`. The last
+Mac verification ran on 2026-09-19 with macOS 27.0 arm64, Python 3.10.21,
 PySide6 6.11.2, and Qt 6.11.2.
 
 The prepared model was rebuilt from all 2,538,848 records in the verified source
-archive. The regenerated gzip was byte-for-byte identical to the bundled file,
-with SHA-256
-`257616c41791b708bd5d705afcebe24002e07e50d8e7b07332a768ff48f86074`.
-The development and held-out evaluation commands reproduced their activation
-totals. The checked-in held-out result remains 3,724 contextual activations
-against 6,337 grouped-keyboard activations, a 41.23% reduction.
+archive. The 20k, 40k, and 60k candidates shared one preparation pass, and the
+development-only rule selected 60k. The selected candidate is byte-for-byte
+identical to the bundled gzip, with SHA-256
+`1fcd68c09860a6844ec187f91fb2759f8a4f26eb20dc939d314d7bf39acdb7f5`.
+The development and held-out regression commands reproduced 1,014 and 3,417
+contextual activations respectively. The regression result is a 46.08% reduction
+from the 6,337 grouped-keyboard activations.
 
 The following software checks passed on Mac:
 
 - Ruff lint and formatting, Python bytecode compilation, `git diff --check`,
   actionlint 1.7.12, and PSScriptAnalyzer 1.25.0 for all 10 PowerShell scripts.
-- The complete pytest suite with coverage: 189 passed, 23 Windows-only tests
-  skipped, and 67.8% coverage against the 60% repository floor.
+- The complete pytest suite with coverage: 202 passed, 23 Windows-only tests
+  skipped, and 68.6% coverage against the 60% repository floor.
 - The source `--package-smoke-test`, including model checksum validation and an
   offline `ŽELIM` prediction.
 - All 19 deterministic Qt gallery surfaces rendered. The Speech and learned-word
@@ -653,14 +704,18 @@ git diff --check
 pwsh -NoLogo -NoProfile -File scripts/check_powershell.ps1
 .dev-tools/actionlint/1.7.12-darwin-arm64/actionlint
 .venv/bin/python -B -m gaze_mouse.main --package-smoke-test
-.venv/bin/python scripts/prepare_speech_model.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output /private/tmp/bosnian-model.json.gz
-.venv/bin/python scripts/evaluate_speech_model.py --dataset development --output /private/tmp/pogled-evaluation-development-final.json
-.venv/bin/python scripts/evaluate_speech_model.py --dataset heldout --output /private/tmp/pogled-evaluation-heldout-final.json
+.venv/bin/python scripts/prepare_speech_model.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output /private/tmp/pogled-refinement.D5ILcD/candidate.json.gz
+.venv/bin/python scripts/benchmark_speech_models.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output-dir /private/tmp/pogled-refinement.D5ILcD/models --report language/bs/model-benchmark.json
+.venv/bin/python scripts/compare_speech_ranking.py --output language/bs/ranking-benchmark.json
+.venv/bin/python scripts/evaluate_speech_model.py --dataset development --output language/bs/evaluation-development.json
+.venv/bin/python scripts/evaluate_speech_model.py --dataset heldout --output language/bs/evaluation-heldout.json
 .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-assist-suggestions-1280 --width 1280 --height 720
 .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-assist-suggestions-1440 --width 1440 --height 900
 ```
 
-The HTML reference source was reviewed against the Qt result. Direct rendering
+The language-model update has no visible UI change, so the earlier Qt gallery
+and HTML review remain applicable. The HTML reference source was reviewed
+against the Qt result. Direct rendering
 of the local HTML file remains pending because the available controlled browser
 blocked local-file access. The following checks also remain pending and must run
 on the owning environment before full acceptance:

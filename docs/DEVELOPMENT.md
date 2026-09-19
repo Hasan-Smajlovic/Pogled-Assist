@@ -47,6 +47,33 @@ The development set is available for model decisions. Do not tune from the
 held-out result. The scoring contract and frozen hashes are under
 `tests\fixtures\speech_suggestions`.
 
+The original held-out messages have now been inspected in repeated reviews;
+keep their frozen text as a regression set, not a fresh blind quality estimate.
+An independently authored and reviewed set, withheld until model selection is
+complete, is still needed for that claim. Reports separate sentence starters,
+exact next-word hits before the first letter, and completion queries along the
+simulated typing path. Their percentages are not interchangeable.
+
+When changing the prepared language data, compare the supported vocabulary
+sizes in one corpus pass before rebuilding the bundled model:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\model-benchmark.json
+.\.venv\Scripts\python.exe scripts\prepare_speech_model.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz
+.\.venv\Scripts\python.exe scripts\compare_speech_ranking.py --output language\bs\ranking-benchmark.json
+```
+
+The ranking comparison holds language data fixed and compares the original fixed
+weights with adaptive discounts of 2, 10, and 40 on development messages only.
+It rejects latency or quality regressions and records its selection rule and
+recommendation. If changing the chosen discount, update `WordModel.context_discount`
+and rerun the vocabulary comparison before evaluating the regression set.
+
+The verified CLASSLA archive is a local development input and is not downloaded
+by setup or included in a release. Its source URL and integrity hashes are in the
+bundled model metadata. Candidate selection uses only the development set; run
+the held-out evaluation once after the model choice is fixed.
+
 Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
 categories enforced by the required PR checks.
 
