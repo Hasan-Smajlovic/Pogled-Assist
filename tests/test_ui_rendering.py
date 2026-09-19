@@ -17,3 +17,5 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path):
         assert not image.isNull(), snapshot.name
         assert image.width() >= 380, snapshot.name
         assert image.height() >= 70, snapshot.name
+        if snapshot.name.startswith("settings-"):
+            assert (image.width(), image.height()) == (1280, 720), snapshot.name

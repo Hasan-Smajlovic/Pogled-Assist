@@ -111,7 +111,10 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
     assert metadata["source"] == "CLASSLA-web.bs 2.0"
     assert metadata["source_license"] == "CC0-1.0"
     assert metadata["counts"]["words"] == 60_000
-    assert metadata["supplement"]["rows"] == 527
+    with (root / "language/bs/conversation.tsv").open(encoding="utf-8") as stream:
+        assert metadata["supplement"]["rows"] == sum(
+            1 for _ in csv.DictReader(stream, delimiter="\t")
+        )
     assert hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest() == metadata["model_sha256"]
     assert (
         hashlib.sha256((root / "scripts" / "prepare_speech_model.py").read_bytes()).hexdigest()
@@ -125,8 +128,42 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
         hashlib.sha256((root / "language" / "bs" / "starters.tsv").read_bytes()).hexdigest()
         == metadata["starters_sha256"]
     )
+    assert (
+        hashlib.sha256((root / "language/bs/spelling.tsv").read_bytes()).hexdigest()
+        == metadata["spelling_sha256"]
+    )
+    with (root / "language/bs/spelling.tsv").open(encoding="utf-8") as stream:
+        assert metadata["configuration"]["spelling_replacements"] == sum(
+            1 for _ in csv.DictReader(stream, delimiter="\t")
+        )
     assert load_model().predict("žel")[0] == "ŽELIM"
     assert load_model().predict("")[:5] == ["SELAM", "JA", "KAKO", "MOŽE", "HVALA"]
+
+
+def test_bundled_model_corrects_reviewed_spellings_without_folding_ambiguous_words():
+    vocabulary = load_model().vocabulary
+    root = MODEL_PATH.parents[2]
+    with (root / "language/bs/spelling.tsv").open(encoding="utf-8") as stream:
+        replacements = list(csv.DictReader(stream, delimiter="\t"))
+
+    assert all(row["variant"] not in vocabulary for row in replacements)
+    assert all(row["word"] in vocabulary for row in replacements)
+    assert {
+        "bas",
+        "baš",
+        "kuca",
+        "kuća",
+        "oci",
+        "oči",
+        "reci",
+        "reći",
+        "rijeci",
+        "riječi",
+        "znaci",
+        "znači",
+        "zvuci",
+        "zvuči",
+    } <= vocabulary
 
 
 def test_bundled_model_preserves_starters_and_basic_needs():

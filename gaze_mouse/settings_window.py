@@ -403,8 +403,8 @@ class SettingsWindow(QWidget):
         )
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 24)
-        root.setSpacing(18)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
 
         top_bar = QHBoxLayout()
         top_bar.setSpacing(16)
@@ -430,15 +430,15 @@ class SettingsWindow(QWidget):
         root.addLayout(top_bar)
 
         body = QHBoxLayout()
-        body.setSpacing(18)
+        body.setSpacing(14)
         root.addLayout(body, 1)
 
         nav_panel = QFrame(self)
         nav_panel.setObjectName("navPanel")
-        nav_panel.setFixedWidth(264)
+        nav_panel.setFixedWidth(250)
         nav_layout = QVBoxLayout(nav_panel)
-        nav_layout.setContentsMargins(14, 14, 14, 14)
-        nav_layout.setSpacing(10)
+        nav_layout.setContentsMargins(12, 12, 12, 12)
+        nav_layout.setSpacing(8)
 
         nav_label = QLabel("KATEGORIJE", nav_panel)
         nav_label.setObjectName("navSectionLabel")
@@ -451,7 +451,7 @@ class SettingsWindow(QWidget):
             icon_name="fa5s.sliders-h",
             object_name="navButton",
             checkable=True,
-            minimum_size=QSize(234, 72),
+            minimum_size=QSize(224, 66),
         )
         self._gaze_tab_button = self._make_button(
             "Postavke pogleda",
@@ -459,7 +459,7 @@ class SettingsWindow(QWidget):
             icon_name="fa5s.eye",
             object_name="navButton",
             checkable=True,
-            minimum_size=QSize(234, 72),
+            minimum_size=QSize(224, 66),
         )
         self._speech_tab_button = self._make_button(
             "Postavke govora",
@@ -467,7 +467,7 @@ class SettingsWindow(QWidget):
             icon_name="fa5s.volume-up",
             object_name="navButton",
             checkable=True,
-            minimum_size=QSize(234, 72),
+            minimum_size=QSize(224, 66),
         )
         nav_layout.addWidget(self._general_tab_button)
         nav_layout.addWidget(self._gaze_tab_button)
@@ -494,8 +494,8 @@ class SettingsWindow(QWidget):
         page = QFrame(self)
         page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
 
         header = QGridLayout()
         header.setContentsMargins(0, 0, 0, 0)
@@ -525,19 +525,19 @@ class SettingsWindow(QWidget):
         actions.setHorizontalSpacing(12)
         actions.setVerticalSpacing(12)
         self._startup_checkbox = self._make_checkbox(
-            "Pokreni uz Windows (administrator)",
+            "Pokreni uz Windows",
             self._toggle_start_with_windows,
-            minimum_size=QSize(260, 72),
+            minimum_size=QSize(240, 58),
         )
         self._logging_checkbox = self._make_checkbox(
             "Uključi zapisivanje",
             self._toggle_logging_enabled,
-            minimum_size=QSize(260, 72),
+            minimum_size=QSize(240, 58),
         )
         self._launcher_window_checkbox = self._make_checkbox(
-            "Prikaži PowerShell pri pokretanju",
+            "Prikaži PowerShell",
             self._toggle_show_launcher_window,
-            minimum_size=QSize(260, 72),
+            minimum_size=QSize(240, 58),
         )
         actions.addWidget(self._startup_checkbox, 0, 0)
         actions.addWidget(self._logging_checkbox, 0, 1)
@@ -589,8 +589,8 @@ class SettingsWindow(QWidget):
         page = QFrame(self)
         page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
 
         title = QLabel("Postavke pogleda", page)
         title.setObjectName("sectionTitle")
@@ -665,32 +665,32 @@ class SettingsWindow(QWidget):
             self._toggle_move_pointer,
             icon_name="fa5s.mouse-pointer",
             checkable=True,
-            minimum_size=QSize(230, 64),
+            minimum_size=QSize(220, 58),
         )
         self._gaze_bubble_button = self._make_button(
             "Prikaži oznaku pogleda",
             self._toggle_gaze_bubble,
             icon_name="fa5s.bullseye",
             checkable=True,
-            minimum_size=QSize(220, 64),
+            minimum_size=QSize(210, 58),
         )
         self._interaction_overlay_button = self._make_button(
             "Prikaži napredak radnje",
             self._toggle_interaction_overlay,
             icon_name="fa5s.circle-notch",
             checkable=True,
-            minimum_size=QSize(220, 64),
+            minimum_size=QSize(210, 58),
         )
         self._precision_zoom_checkbox = self._make_checkbox(
             "Koristi precizno uvećanje",
             self._toggle_precision_zoom,
-            minimum_size=QSize(230, 64),
+            minimum_size=QSize(220, 58),
         )
         self._calibration_button = self._make_button(
             "Pokreni Tobii kalibraciju",
             self._request_calibration,
             icon_name="fa5s.crosshairs",
-            minimum_size=QSize(230, 64),
+            minimum_size=QSize(220, 58),
         )
         for widget in (
             self._move_pointer_button,
@@ -716,8 +716,8 @@ class SettingsWindow(QWidget):
         page = QFrame(self)
         page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
 
         title = QLabel("Postavke govora", page)
         title.setObjectName("sectionTitle")
@@ -768,7 +768,7 @@ class SettingsWindow(QWidget):
         voice_hint.setWordWrap(True)
 
         self._voice_combo = QComboBox(voice_row)
-        self._voice_combo.setMinimumSize(QSize(260, 64))
+        self._voice_combo.setMinimumSize(QSize(260, 58))
         self._voice_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         for value, label in VOICE_PRESETS:
             self._voice_combo.addItem(label, value)
@@ -790,11 +790,11 @@ class SettingsWindow(QWidget):
             self._request_speech_test,
             icon_name="fa5s.play",
             object_name="primaryButton",
-            minimum_size=QSize(240, 64),
+            minimum_size=QSize(240, 58),
         )
         actions.addWidget(self._test_speech_button, 0, 0)
         self._learned_words_button = self._make_button(
-            "Naučene riječi", self._open_learning, minimum_size=QSize(240, 64)
+            "Naučene riječi", self._open_learning, minimum_size=QSize(240, 58)
         )
         actions.addWidget(self._learned_words_button, 0, 1)
         actions.setColumnStretch(2, 1)
@@ -807,14 +807,14 @@ class SettingsWindow(QWidget):
         page = QFrame(self)
         page.setObjectName("contentPanel")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
         header = QHBoxLayout()
         title = QLabel("Naučene riječi", page)
         title.setObjectName("sectionTitle")
         header.addWidget(title, 1)
         header.addWidget(
-            self._make_button("Nazad", lambda: self._select_tab(2), minimum_size=QSize(170, 68))
+            self._make_button("Nazad", lambda: self._select_tab(2), minimum_size=QSize(170, 58))
         )
         layout.addLayout(header)
         hint = QLabel(
@@ -831,7 +831,7 @@ class SettingsWindow(QWidget):
                 "·",
                 lambda index=index: self._choose_word(index),
                 checkable=True,
-                minimum_size=QSize(170, 76),
+                minimum_size=QSize(170, 68),
             )
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
             grid.addWidget(button, index // 2, index % 2)
@@ -842,14 +842,14 @@ class SettingsWindow(QWidget):
         layout.addWidget(self._word_selection_label)
         actions = QHBoxLayout()
         self._word_previous = self._make_button(
-            "Prethodna", lambda: self._change_word_page(-1), minimum_size=QSize(160, 68)
+            "Prethodna", lambda: self._change_word_page(-1), minimum_size=QSize(160, 58)
         )
         self._word_next = self._make_button(
-            "Sljedeća", lambda: self._change_word_page(1), minimum_size=QSize(160, 68)
+            "Sljedeća", lambda: self._change_word_page(1), minimum_size=QSize(160, 58)
         )
         self._word_page_label = QLabel("1 / 1", page)
         self._forget_word_button = self._make_button(
-            "Zaboravi riječ", self._forget_word, minimum_size=QSize(180, 68)
+            "Zaboravi riječ", self._forget_word, minimum_size=QSize(180, 58)
         )
         for widget in (
             self._word_previous,
@@ -863,7 +863,7 @@ class SettingsWindow(QWidget):
         self._learning_status_label.setWordWrap(True)
         layout.addWidget(self._learning_status_label)
         self._retry_learning_button = self._make_button(
-            "Pokušaj ponovo", self._retry_learning, minimum_size=QSize(200, 68)
+            "Pokušaj ponovo", self._retry_learning, minimum_size=QSize(200, 58)
         )
         layout.addWidget(self._retry_learning_button)
         self._refresh_learning()
@@ -974,9 +974,9 @@ class SettingsWindow(QWidget):
         row.setObjectName("settingRow")
         row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout(row)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(14, 4, 14, 4)
         layout.setHorizontalSpacing(12)
-        layout.setVerticalSpacing(5)
+        layout.setVerticalSpacing(2)
         layout.setColumnStretch(0, 1)
 
         title_label = QLabel(title, row)
@@ -990,14 +990,14 @@ class SettingsWindow(QWidget):
             decrease,
             icon_name="fa5s.minus",
             object_name="adjustButton",
-            minimum_size=QSize(112, 58),
+            minimum_size=QSize(104, 52),
         )
         plus_button = self._make_button(
             "Više",
             increase,
             icon_name="fa5s.plus",
             object_name="adjustButton",
-            minimum_size=QSize(112, 58),
+            minimum_size=QSize(104, 52),
         )
 
         layout.addWidget(title_label, 0, 0)
@@ -1012,7 +1012,7 @@ class SettingsWindow(QWidget):
         label = QLabel(parent)
         label.setObjectName("valueLabel")
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumWidth(160)
+        label.setMinimumWidth(148)
         return label
 
     def _make_button(

@@ -9,6 +9,7 @@ from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from functools import lru_cache
+from heapq import nsmallest
 from pathlib import Path
 
 from .suggestion_text import START, index_key, prefix_pattern, query, valid_word
@@ -20,6 +21,8 @@ MODEL_METADATA_PATH = MODEL_PATH.with_name("bosnian-model.meta.json")
 
 class WordModel:
     context_discount = 10.0
+    personal_context_discount = 2.5
+    personal_context_blend = 2.0
 
     def __init__(
         self,
@@ -28,6 +31,8 @@ class WordModel:
         rows = counts.items() if isinstance(counts, Mapping) else counts
         self.contexts: dict[tuple[str, ...], dict[str, int]] = defaultdict(dict)
         for key, count in rows:
+            if count <= 0:
+                continue
             self.contexts[key[:-1]][key[-1]] = count
         self.vocabulary = self.contexts[()].keys()
         self.index = sorted((index_key(word), word) for word in self.vocabulary)
@@ -36,61 +41,86 @@ class WordModel:
         self.unigram_ranking = sorted(
             self.vocabulary, key=lambda word: (-self.contexts[()].get(word, 0), word)
         )
+        self._fallback_cache: tuple[WordModel, int, list[str]] | None = None
+
+    def matching(self, prefix: str) -> set[str]:
+        key = index_key(prefix)
+        begin, end = bisect_left(self.keys, key), bisect_right(self.keys, key + "\U0010ffff")
+        pattern = prefix_pattern(prefix)
+        return {word for _key, word in self.index[begin:end] if pattern.match(word)}
+
+    def _fallback(self, personal: WordModel | None, limit: int) -> list[str]:
+        if personal is None or not personal.vocabulary:
+            return self.unigram_ranking[:limit]
+        if self._fallback_cache is not None:
+            previous, previous_limit, result = self._fallback_cache
+            if previous is personal and previous_limit == limit:
+                return result
+        base, own = self.contexts[()], personal.contexts[()]
+        total, own_total = max(1, self.totals.get((), 0)), personal.totals[()]
+        boost = min(0.25, own_total / (own_total + 40))
+        # Context-free candidates need the blended ranking: a word can rank
+        # highly in the blend without being in either source's top five.
+        result = nsmallest(
+            limit,
+            base.keys() | own.keys(),
+            key=lambda word: (
+                -((1 - boost) * base.get(word, 0) / total + boost * own.get(word, 0) / own_total),
+                word,
+            ),
+        )
+        self._fallback_cache = personal, limit, result
+        return result
 
     def predict(
         self,
         text: str,
-        personal: Counter[tuple[str, ...]] | None = None,
+        personal: Counter[tuple[str, ...]] | WordModel | None = None,
         *,
         limit: int = 5,
         contextual: bool = True,
     ) -> list[str]:
+        if limit <= 0:
+            return []
         request = query(text)
         if request is None:
             return []
         prefix, context, _start = request
-        learned = personal or Counter()
-        pattern = prefix_pattern(prefix)
-        if prefix:
-            key = index_key(prefix)
-            begin, end = bisect_left(self.keys, key), bisect_right(self.keys, key + "\U0010ffff")
-            candidates = {word for _key, word in self.index[begin:end] if pattern.match(word)}
-        else:
-            candidates = set(self.unigram_ranking[:limit])
-            if contextual:
-                for size in range(1, len(context) + 1):
-                    candidates.update(self.contexts.get(context[-size:], {}))
-        candidates.update(
-            key[0]
-            for key, count in learned.items()
-            if len(key) == 1 and count > 0 and pattern.match(key[0])
-        )
-        if not candidates:
-            return []
-
+        learned = personal
+        if personal is not None and not isinstance(personal, WordModel):
+            learned = WordModel(personal)
         contexts = [()]
         if contextual:
             contexts.extend(context[-size:] for size in range(1, len(context) + 1))
-        personal_rows: dict[tuple[str, ...], dict[str, int]] = {item: {} for item in contexts}
-        for key, count in learned.items():
-            if key[:-1] in personal_rows and count > 0:
-                personal_rows[key[:-1]][key[-1]] = count
+        if prefix:
+            candidates = self.matching(prefix)
+            if learned is not None:
+                candidates.update(learned.matching(prefix))
+        else:
+            candidates = set(self._fallback(learned, limit))
+            for preceding in contexts[1:]:
+                candidates.update(self.contexts.get(preceding, {}))
+                if learned is not None:
+                    candidates.update(learned.contexts.get(preceding, {}))
+        if not candidates:
+            return []
 
         rows = []
         evidence = []
         for preceding in contexts:
             base = self.contexts.get(preceding, {})
-            own = personal_rows[preceding]
-            total, own_total = self.totals.get(preceding, 0), sum(own.values())
+            own = learned.contexts.get(preceding, {}) if learned is not None else {}
+            total = self.totals.get(preceding, 0)
+            own_total = learned.totals.get(preceding, 0) if learned is not None else 0
             if not total and not own_total:
                 continue
             own_weight = (
-                min(0.8, own_total / (own_total + 4))
+                min(0.8, own_total / (own_total + self.personal_context_blend))
                 if preceding
                 else min(0.25, own_total / (own_total + 40))
             )
             distinct = len(base) + sum(word not in base for word in own)
-            evidence.append((preceding, total + own_total, distinct))
+            evidence.append((preceding, total, own_total, distinct))
             rows.append((base, own, max(1, total), max(1, own_total), own_weight))
         weights = self._context_weights(evidence)
         weighted_rows = [(*row, weight) for row, weight in zip(rows, weights, strict=True)]
@@ -103,14 +133,22 @@ class WordModel:
             )
             return -value, word
 
-        return [word.upper() for word in sorted(candidates, key=score)[:limit]]
+        return [word.upper() for word in nsmallest(limit, candidates, key=score)]
 
-    def _context_weights(self, evidence: list[tuple[tuple[str, ...], int, int]]) -> list[float]:
+    def _context_weights(
+        self, evidence: list[tuple[tuple[str, ...], int, int, int]]
+    ) -> list[float]:
         weights: list[float] = []
-        for _context, total, distinct in evidence:
+        for _context, total, own_total, distinct in evidence:
             # Sparse contexts retain support from shorter contexts. Keep a floor
-            # for fallback words even when weighted training counts are large.
-            confidence = min(0.9, total / (total + self.context_discount * distinct))
+            # for fallback words, while repeated personal phrasing earns trust
+            # faster than anonymous corpus text.
+            base_confidence = total / (total + self.context_discount * distinct)
+            own_confidence = own_total / (own_total + self.personal_context_discount * distinct)
+            confidence = min(
+                0.9,
+                1 - (1 - base_confidence) * (1 - own_confidence),
+            )
             if not weights:
                 weights.append(1.0)
             else:

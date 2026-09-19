@@ -47,6 +47,12 @@ class LearningStore:
         with self._lock:
             return self._counts.copy()
 
+    def snapshot_if_changed(self, revision: int) -> tuple[int, Counter[Key]] | None:
+        with self._lock:
+            if self.revision == revision:
+                return None
+            return self.revision, self._counts.copy()
+
     def learned_words(self) -> list[str]:
         with self._lock:
             return sorted(
@@ -113,6 +119,7 @@ class LearningStore:
                     )
                     disk.update(self._pending)
                     self._counts = +disk
+                    self.revision += 1
                     self._unreadable = False
             with self._lock:
                 revision = self.revision

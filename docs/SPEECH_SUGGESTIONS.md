@@ -1,8 +1,9 @@
 # Bosnian speech suggestions
 
-Status: Mac implementation and all available software verification are complete
-for issue #4. Windows packaging, target-display, performance, and real Tobii
-verification are still required. This document owns the requirements,
+Status: The current implementation and language-data refinements for issue #4
+have Mac software verification. Windows packaging, target-display and performance
+checks, and real Tobii verification are still required.
+This document owns the requirements,
 implementation record, and acceptance plan for word suggestions in the Speech
 screen's `Brzi izbor` area.
 
@@ -384,18 +385,61 @@ The Bosnian corpus archive was downloaded and verified against the published MD5
 before preparation. The retained archive SHA-256, sample configuration, genre and
 domain counts, preparation inputs, and model checksum are recorded in
 [`bosnian-model.meta.json`](../gaze_mouse/assets/bosnian-model.meta.json). The
-prepared model contains 60,000 words, 125,342 bigrams, and 103,788 trigrams in a
-1,348,957-byte gzip file. Its web sample contains 5,482,578 tokens from 20,924
-documents across 1,635 domains. The full source archive is a development input
-and is not distributed with the application.
+selected model contains 60,000 words, 125,899 bigrams, 104,965 trigrams, and
+3,515 protected reviewed n-grams in a 1,358,833-byte gzip file. Its web sample
+contains 5,482,578 tokens from 20,924 documents across 1,635 domains. The full
+source archive is a development input and is not distributed with the
+application.
 
-The reviewed supplement is a structured TSV with 527 synthetic conversation
-messages in 12 categories and explicit weights. Immediate needs, health, care,
-comfort, food and drink, and emergencies receive more weight than general
-conversation, memories, opinions, and humour. The 52 reviewed sentence starters
-are stored separately and all survive model pruning. A repository test rejects
-exact overlap between the supplement and either frozen evaluation set. That
-check does not establish independence from paraphrases or similar expressions.
+The supplement is a structured TSV with 640 synthetic conversation messages in
+12 categories and explicit weights. Immediate needs, health, care, comfort, food
+and drink, and emergencies receive more weight than general conversation,
+memories, opinions, and humour. The 70 reviewed sentence starters are stored
+separately and all survive model pruning. A repository test rejects exact overlap
+between the supplement and either frozen evaluation set. That check does not
+establish independence from paraphrases or similar expressions.
+
+### Verified refinement candidate
+
+The selected conversation supplement includes more short requests, questions,
+responses, social conversation, and masculine and feminine forms. Sentence
+starters include additional ordinary openings such as `IMAM`, `HOĆU`, `DOBAR`,
+`MOŽEŠ`, `MOŽETE`, `HAJDE`, and `SADA`. The model metadata and all generated
+reports record the current input counts, hashes, and selected model checksum.
+
+Preparation reserves vocabulary space for reviewed words within the 60,000-word
+budget. Reviewed word pairs and triples survive both context and global pruning;
+the pruning limits now apply to web-only combinations. A starter absent from
+other inputs receives a positive unigram count, so it remains loadable and
+eligible for completion. `language/bs/spelling.tsv` contains 90 explicit,
+reviewed mappings for common ASCII spellings in the web source, such as `cini`
+to `čini`. It deliberately leaves ambiguous pairs such as `sto` and `što`,
+`oci` and `oči`, `reci` and `reći`, and `suma` and `šuma` separate. It does not
+fold arbitrary diacritics, alter typed input, or change personal learning.
+
+The runtime indexes personal counts on the prediction worker when their revision
+changes. Prefix queries reuse that index; next-word queries combine relevant
+contexts with the highest-scoring blended unigram candidates. This retains words
+that rank well only after blending and avoids sorting every learned word for
+each next-word request. Undo, forgetting, new learning, and storage recovery
+invalidate the relevant profile through its revision.
+
+Evaluation explains exact next-word misses and accepts an externally frozen
+message set with a required checksum. The learning report covers 14 synthetic
+scenarios and records ranks after zero, one, three, and ten uses, unrelated
+context controls, and large-profile timings. Every target is visible after one
+use, first after three uses, and preserves its unrelated control result. These
+scenarios are development data, not independent quality evidence. A new
+independently authored message set is still required; no such set is claimed
+here.
+
+Regression test sources accompany these changes. Mac tests, lint, model
+benchmarks, evaluation reports, package smoke testing, and provisional UI
+rendering are recorded below. Rebuild and verification commands are owned by the
+[development guide](DEVELOPMENT.md). The language refinement itself does not
+change the suggestion layout. The separately modernised Settings layout is
+reflected in the HTML design reference and reviewed Qt galleries. Windows and
+real-device checks remain pending.
 
 ### Statistical baseline
 
@@ -425,21 +469,24 @@ its older generic API does not provide the required Bosnian matching, occurrence
 reversal, or storage recovery behaviour.
 
 Context weights adapt to the retained evidence. Starting with the unigram
-distribution, each longer available context takes a share of
-`min(0.9, count / (count + 10 * distinct_next_words))`; the remaining share stays
-with shorter contexts. Counts include weighted seed examples and personal
-counts, so this is a ranking heuristic, not a calibrated probability of being
-correct. The 10% fallback floor keeps other completions eligible. The existing
-separate personal/base blend remains in place.
+distribution, each longer available base context earns confidence from
+`count / (count + 10 * distinct_next_words)`. Personal context earns confidence
+separately with a 2.5 discount, then the two sources are combined and capped at
+90%; the remaining share stays with shorter contexts. The applicable personal
+row is blended with the base row using a denominator of 2, so repeated personal
+phrasing becomes useful quickly without replacing all fallback choices. These
+are ranking heuristics, not calibrated probabilities. The 10% fallback floor
+keeps other completions eligible.
 
 [`ranking-benchmark.json`](../language/bs/ranking-benchmark.json) compares fixed
-and adaptive weights on the same prepared language data. Fixed weights need
-1,018 development activations; discounts of 2 and 10 both need 1,014, with the
-same 72/168 next-word top-five and 47/168 top-one hits. Discount 40 needs 1,022
-activations and loses next-word hits. The recorded tie rule selects 10, which
-backs off more on sparse contexts than 2. These are development results, not
-independent validation. The prior 500-message model with fixed weights needed
-1,028 development activations.
+and adaptive weights on the same prepared language data. Fixed weights and
+adaptive discounts of 2 and 10 each need 1,002 development activations, with
+74/168 next-word top-five and 47/168 top-one hits. A separate sparse-context
+contract rejects fixed weights and discount 2 because both overtrust a trigram
+seen only three times. Discounts 10 and 40 pass that contract, but discount 40
+needs 1,010 activations and loses four top-five and two top-one next-word hits.
+The recorded rule therefore selects discount 10. These are development results,
+not independent validation.
 
 ## Quality and performance evaluation
 
@@ -500,27 +547,31 @@ budget. Test on the reference laptop with speech and gaze active and report
 loading separately.
 Prediction work must not stall the UI or apply an old result to changed text.
 
-The frozen Mac evaluation is recorded in
+The selected candidate's frozen Mac evaluation is recorded in
 [`evaluation-development.json`](../language/bs/evaluation-development.json) and
 [`evaluation-heldout.json`](../language/bs/evaluation-heldout.json). On the first
 held-out run, the original 20,000-word contextual model used 3,724 activations
 versus 6,337 for the grouped keyboard, a 41.23% reduction. The 500-message,
 60,000-word model subsequently used 3,441 activations, a 45.70% reduction.
-The current 527-message model and adaptive ranking were selected from the
-development comparisons in [`model-benchmark.json`](../language/bs/model-benchmark.json)
-and [`ranking-benchmark.json`](../language/bs/ranking-benchmark.json).
-Its final regression run used 3,417 activations, a 46.08% reduction, and every
-conversation category remained above the 20% target. Exact next-word top-five
-hits rose from 127/475 (26.74%) to 128/475 (26.95%); top-one hits rose from
-76/475 (16.00%) to 78/475 (16.42%). Sentence starts are excluded from those
-rates. The improvement is modest and does not establish blind generalisation.
-Loaded contextual queries measured 1.29 ms mean, 7.19 ms p95, and 12.70 ms
-maximum on the final Mac regression run; initial loading was 570.23 ms. An
-isolated loader process reached 171.3 MB peak RSS, compared with 20.1 MB after
-importing the module without loading the model. These are development
-measurements, not the required end-to-end result on the reference Windows laptop
-with speech and gaze active. Real Windows and Tobii validation remains required
-separately.
+The current 640-message model, 90 spelling mappings, and adaptive ranking were
+selected from the development comparisons in
+[`model-benchmark.json`](../language/bs/model-benchmark.json) and
+[`ranking-benchmark.json`](../language/bs/ranking-benchmark.json). It needs 1,002
+activations versus 2,272 for the grouped keyboard on the development set, a
+55.90% reduction, with 74/168 exact next-word top-five and 47/168 top-one hits.
+Its final held-out regression run needs 3,378 activations versus 6,337, a 46.69%
+reduction, and every conversation category remains above the 20% target. Exact
+next-word top-five hits are 132/475 (27.79%); top-one hits are 83/475 (17.47%).
+Sentence starts are excluded from those rates. This unchanged set has been
+inspected and is regression evidence, not blind generalisation.
+
+Loaded contextual queries measured 0.98 ms mean, 5.18 ms p95, and 9.30 ms
+maximum on the final Mac regression run; initial loading was 597.93 ms. The
+150,000-entry synthetic personal profile measured 75.28 ms to build its index,
+29.17 ms for the first query, and 9.41 ms p95 after reuse. These are model-only
+Mac development measurements, not the required end-to-end result on the
+reference Windows laptop with speech and gaze active. Real Windows and Tobii
+validation remains required separately.
 
 ## Technical choices to validate
 
@@ -532,7 +583,7 @@ for changing the agreed behaviour or acceptance targets.
 | Choice | Required evidence | Current state |
 | --- | --- | --- |
 | Prediction library and prefix index | Bosnian matching correctness, development-set quality, speed, memory use, runtime compatibility, packaging, and maintainability. | Selected standard-library sorted index and application-specific n-gram ranker. Unicode and prefix cases are covered by pytest; no new runtime dependency is required. |
-| Prepared seed and ranking configuration | Reproducible source processing, language review, vocabulary and n-gram counts, measured ranking behaviour, and data size. | Prepared from verified CLASSLA-web.bs 2.0 plus 527 weighted reviewed conversation messages and all 52 starters. Development-only vocabulary and ranking comparisons selected 60k and adaptive discount 10; metadata, benchmarks, and evaluation artifacts are linked above. |
+| Prepared seed and ranking configuration | Reproducible source processing, language review, vocabulary and n-gram counts, measured ranking behaviour, and data size. | Prepared from verified CLASSLA-web.bs 2.0 plus 640 weighted reviewed conversation messages, all 70 starters, and 90 reviewed web-spelling mappings. Development-only vocabulary, ranking, sparse-context, and learning comparisons selected 60k and adaptive discount 10; metadata, benchmarks, and evaluation artifacts are linked above. |
 | Personal storage and event accounting | Reversible occurrence-level learning, deduplication, durable word removal, failure handling, and preservation across app updates and rollback. | Implemented as version 1 aggregate counts with occurrence-level session credits, atomic replacement, unreadable-file preservation, retry, and installer preservation of `data/`. |
 | UI layout and controls | Reviewed HTML states for suggestions, undo, editors, learned-word removal, retry, and error feedback at provisional sizes on Mac, then confirmed at actual Windows display settings. | HTML states are implemented. Qt galleries were reviewed at 1280x720 and 1440x900; target Windows display and real gaze review remain pending. |
 
@@ -668,7 +719,7 @@ Mac run alone must never close the full feature acceptance.
 ## Mac verification and Windows handoff
 
 The current handoff is the working diff on branch
-`feat/4-bosnian-speech-suggestions`, based on revision `b3ff22c`. The last
+`feat/4-bosnian-speech-suggestions`, based on revision `7a5bfe2`. The last
 Mac verification ran on 2026-09-19 with macOS 27.0 arm64, Python 3.10.21,
 PySide6 6.11.2, and Qt 6.11.2.
 
@@ -676,22 +727,25 @@ The prepared model was rebuilt from all 2,538,848 records in the verified source
 archive. The 20k, 40k, and 60k candidates shared one preparation pass, and the
 development-only rule selected 60k. The selected candidate is byte-for-byte
 identical to the bundled gzip, with SHA-256
-`1fcd68c09860a6844ec187f91fb2759f8a4f26eb20dc939d314d7bf39acdb7f5`.
-The development and held-out regression commands reproduced 1,014 and 3,417
-contextual activations respectively. The regression result is a 46.08% reduction
+`ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e`.
+The development and held-out regression commands reproduced 1,002 and 3,378
+contextual activations respectively. The regression result is a 46.69% reduction
 from the 6,337 grouped-keyboard activations.
 
 The following software checks passed on Mac:
 
 - Ruff lint and formatting, Python bytecode compilation, `git diff --check`,
   actionlint 1.7.12, and PSScriptAnalyzer 1.25.0 for all 10 PowerShell scripts.
-- The complete pytest suite with coverage: 202 passed, 23 Windows-only tests
-  skipped, and 68.6% coverage against the 60% repository floor.
+- The complete pytest suite with coverage: 214 passed, 23 Windows-only tests
+  skipped, and 68.73% coverage against the 60% repository floor.
 - The source `--package-smoke-test`, including model checksum validation and an
   offline `ŽELIM` prediction.
 - All 19 deterministic Qt gallery surfaces rendered. The Speech and learned-word
   Settings states were reviewed at 1280 by 720 and 1440 by 900 with no clipping,
-  overlap, or contrast defect remaining.
+  overlap, truncation, or contrast defect remaining.
+- Model benchmarks, development and held-out regression evaluation, and all 14
+  personal-learning scenarios passed. Each learning target is visible after one
+  use and first after three, without losing its unrelated control result.
 
 The recorded commands were:
 
@@ -699,26 +753,26 @@ The recorded commands were:
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 .venv/bin/python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
-git diff --check
+git diff --check development
 .venv/bin/python -B -m pytest -p no:cacheprovider --cov=gaze_mouse --cov=scripts --cov-report=term-missing:skip-covered --cov-fail-under=60
 pwsh -NoLogo -NoProfile -File scripts/check_powershell.ps1
 .dev-tools/actionlint/1.7.12-darwin-arm64/actionlint
 .venv/bin/python -B -m gaze_mouse.main --package-smoke-test
-.venv/bin/python scripts/prepare_speech_model.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output /private/tmp/pogled-refinement.D5ILcD/candidate.json.gz
-.venv/bin/python scripts/benchmark_speech_models.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output-dir /private/tmp/pogled-refinement.D5ILcD/models --report language/bs/model-benchmark.json
+.venv/bin/python scripts/benchmark_speech_models.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output-dir /private/tmp/pogled-suggestions-review-final-v2 --report language/bs/model-benchmark.json
 .venv/bin/python scripts/compare_speech_ranking.py --output language/bs/ranking-benchmark.json
 .venv/bin/python scripts/evaluate_speech_model.py --dataset development --output language/bs/evaluation-development.json
 .venv/bin/python scripts/evaluate_speech_model.py --dataset heldout --output language/bs/evaluation-heldout.json
-.venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-assist-suggestions-1280 --width 1280 --height 720
-.venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-assist-suggestions-1440 --width 1440 --height 900
+.venv/bin/python scripts/evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language/bs/evaluation-learning.json
+QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-review-ui-1280-final --width 1280 --height 720
+QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-review-ui-1440-final --width 1440 --height 900
 ```
 
-The language-model update has no visible UI change, so the earlier Qt gallery
-and HTML review remain applicable. The HTML reference source was reviewed
-against the Qt result. Direct rendering
-of the local HTML file remains pending because the available controlled browser
-blocked local-file access. The following checks also remain pending and must run
-on the owning environment before full acceptance:
+The language-model update has no visible suggestion-layout change. The separate
+Settings modernisation and matching HTML reference update were reviewed in the
+final Qt galleries. The HTML reference source was reviewed against the Qt result.
+Direct rendering of the local HTML file remains pending because the available
+controlled browser blocked local-file access. The following checks also remain
+pending and must run on the owning environment before full acceptance:
 
 - `dev.ps1 check` and `dev.ps1 package` on Windows, including the frozen
   executable smoke test.
@@ -732,8 +786,9 @@ on the owning environment before full acceptance:
 
 ## Acceptance checklist
 
-Checked items have complete Mac software evidence. Hardware- or Windows-specific
-items remain open until the handoff checks above are recorded.
+Checked items record Mac software evidence for the current refinement candidate.
+Hardware- or Windows-specific items remain open until the handoff checks above
+are recorded.
 
 - [ ] A fresh installation offers Bosnian completion and next-word suggestions
   without any network request or first-use download.
@@ -815,5 +870,6 @@ items remain open until the handoff checks above are recorded.
 - [ ] At least 95% of loaded suggestion updates display applicable results within
   100 ms on the reference Windows machine with speech and gaze active. Initial
   loading time, memory use, and prepared data size are recorded separately.
-- [x] Offline packaging, data preservation, visible UI, and real gaze checks
-  are recorded separately, with unavailable checks explicitly marked not run.
+- [x] Software results and unavailable Windows packaging, data preservation,
+  target-display, and real-gaze checks are recorded separately; unavailable
+  checks are explicitly marked not run.

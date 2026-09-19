@@ -9,13 +9,13 @@ import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from gaze_mouse.suggestion_text import START, words
+from gaze_mouse.suggestion_text import START, spelling, valid_word, words
 
 SOURCE_MD5 = "f92e72f4fe08362a1297f311ac20ad33"
 SOURCE_URL = "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11"
@@ -80,6 +80,9 @@ class PreparedCounts:
     starters_sha256: str
     sample: dict
     supplement: dict
+    protected_ngrams: frozenset[tuple[str, ...]] = field(default_factory=frozenset)
+    spelling_sha256: str = ""
+    spelling_replacements: int = 0
 
 
 def metadata_path(model_path: Path) -> Path:
@@ -126,6 +129,31 @@ def load_supplement(path: Path) -> tuple[list[tuple[str, int, str]], dict]:
     }
 
 
+def load_spelling(path: Path) -> dict[str, str]:
+    """Only fold explicitly reviewed web spellings, never arbitrary diacritics."""
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["variant", "word"]:
+            raise ValueError("Spelling data needs variant and word columns")
+        result = {}
+        for line_number, row in enumerate(reader, 2):
+            variant, word = row.get("variant"), row.get("word")
+            if (
+                None in row
+                or not variant
+                or not word
+                or not valid_word(variant)
+                or not valid_word(word)
+                or variant == word
+                or variant in result
+            ):
+                raise ValueError(f"Invalid spelling row on line {line_number}")
+            result[variant] = word
+    if result.keys() & set(result.values()):
+        raise ValueError("Spelling replacements must not form chains or cycles")
+    return result
+
+
 def _source_hashes(source: Path) -> tuple[str, str]:
     md5, sha = hashlib.md5(), hashlib.sha256()
     with source.open("rb") as stream:
@@ -154,6 +182,8 @@ def prepare_counts(
 
     source_md5, source_sha256 = _source_hashes(source)
     conversation_rows, supplement_metadata = load_supplement(supplement)
+    spelling_path = supplement.with_name("spelling.tsv")
+    replacements = load_spelling(spelling_path)
     counts: Counter[tuple[str, ...]] = Counter()
     domains: Counter[str] = Counter()
     genres: Counter[str] = Counter()
@@ -191,7 +221,9 @@ def prepare_counts(
                 for token in tokens:
                     if len(token.text) == 1 and token.text not in {"a", "i", "o", "s", "u"}:
                         continue
-                    counts.update(token.keys)
+                    counts.update(
+                        tuple(replacements.get(word, word) for word in key) for key in token.keys
+                    )
                     used += 1
                 if used >= 500:
                     break
@@ -202,11 +234,14 @@ def prepare_counts(
                 token_count += used
 
     supplement_words = set()
+    protected_ngrams = set()
     for text, weight, _category in conversation_rows:
         for token in words(text):
             supplement_words.add(token.text)
             for key in token.keys:
                 counts[key] += weight * supplement_multiplier
+                if len(key) > 1:
+                    protected_ngrams.add(key)
 
     starters_path = supplement.with_name("starters.tsv")
     # Web headings and dates are poor defaults for starting a conversation.
@@ -216,8 +251,13 @@ def prepare_counts(
     starter_rows = 0
     seen_starters = set()
     with starters_path.open(encoding="utf-8") as stream:
-        for row in csv.DictReader(stream, delimiter="\t"):
-            word = row["word"].strip().lower()
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["word", "weight"]:
+            raise ValueError("Starters need word and weight columns")
+        for row in reader:
+            if None in row or not row.get("word") or not row.get("weight"):
+                raise ValueError(f"Invalid starter row: {row!r}")
+            word = spelling(row["word"].strip())
             weight = int(row["weight"])
             tokens = words(word)
             if (
@@ -230,8 +270,12 @@ def prepare_counts(
                 raise ValueError(f"Invalid starter row: {row!r}")
             seen_starters.add(word)
             counts[(START, word)] = weight * starter_multiplier
+            # A starter may be absent from both the corpus and supplement.
+            counts[(word,)] = max(counts[(word,)], MINIMUM_WORD_COUNT)
             supplement_words.add(word)
             starter_rows += 1
+    if not starter_rows:
+        raise ValueError("Starters must not be empty")
 
     return PreparedCounts(
         counts=counts,
@@ -251,6 +295,9 @@ def prepare_counts(
             "news_limit": news_limit,
         },
         supplement={**supplement_metadata, "starters": starter_rows},
+        protected_ngrams=frozenset(protected_ngrams),
+        spelling_sha256=hashlib.sha256(spelling_path.read_bytes()).hexdigest(),
+        spelling_replacements=len(replacements),
     )
 
 
@@ -273,7 +320,13 @@ def write_model(
         ),
         key=lambda item: (-item[0], item[1]),
     )
-    allowed = {word for _count, word in common[:vocabulary]} | set(prepared.supplement_words)
+    allowed = set(prepared.supplement_words)
+    if len(allowed) > vocabulary:
+        raise ValueError("Vocabulary limit is smaller than the reviewed vocabulary")
+    for _count, word in common:
+        if len(allowed) >= vocabulary:
+            break
+        allowed.add(word)
     retained = {(word,): counts[(word,)] for word in allowed}
     contexts: dict[tuple[str, ...], list[tuple[tuple[str, ...], int]]] = defaultdict(list)
     for key, count in counts.items():
@@ -285,11 +338,16 @@ def write_model(
             contexts[key[:-1]].append((key, count))
     ngrams = []
     for context, rows in contexts.items():
-        # Curated starters must survive both the context and global pruning limits.
+        # Reviewed combinations must survive web-frequency pruning. The limits
+        # apply only to web-only rows, so common web phrases cannot evict them.
         if context == (START,):
             retained.update(rows)
         else:
-            ngrams.extend(sorted(rows, key=lambda item: (-item[1], item[0]))[:PER_CONTEXT_LIMIT])
+            retained.update((key, count) for key, count in rows if key in prepared.protected_ngrams)
+            web_rows = [item for item in rows if item[0] not in prepared.protected_ngrams]
+            ngrams.extend(
+                sorted(web_rows, key=lambda item: (-item[1], item[0]))[:PER_CONTEXT_LIMIT]
+            )
     for length in (2, 3):
         retained.update(
             sorted(
@@ -308,7 +366,7 @@ def write_model(
     destination.write_bytes(encoded)
     metadata = {
         "version": 1,
-        "model_id": f"bs-classla-2.0-conversation-3-v{vocabulary}-2026-09-19",
+        "model_id": f"bs-classla-2.0-conversation-4-v{vocabulary}-{hashlib.sha256(encoded).hexdigest()[:12]}",
         "source": "CLASSLA-web.bs 2.0",
         "source_url": SOURCE_URL,
         "source_license": "CC0-1.0",
@@ -316,6 +374,10 @@ def write_model(
         "source_sha256": prepared.source_sha256,
         "supplement_sha256": prepared.supplement_sha256,
         "starters_sha256": prepared.starters_sha256,
+        "spelling_sha256": prepared.spelling_sha256,
+        "tokenizer_sha256": hashlib.sha256(
+            (Path(__file__).resolve().parents[1] / "gaze_mouse" / "suggestion_text.py").read_bytes()
+        ).hexdigest(),
         "preparation_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "model_sha256": hashlib.sha256(encoded).hexdigest(),
         "sample": prepared.sample,
@@ -328,11 +390,15 @@ def write_model(
             "per_ngram_order_limit": PER_NGRAM_ORDER_LIMIT,
             "supplement_multiplier": supplement_multiplier,
             "starter_multiplier": starter_multiplier,
+            "protect_reviewed_ngrams": True,
+            "spelling_scope": "reviewed replacements in web data only",
+            "spelling_replacements": prepared.spelling_replacements,
         },
         "counts": {
             "words": len(allowed),
             "bigrams": sum(len(key) == 2 for key in retained),
             "trigrams": sum(len(key) == 3 for key in retained),
+            "protected_ngrams": sum(key in retained for key in prepared.protected_ngrams),
         },
         "compressed_bytes": len(encoded),
     }

@@ -28,7 +28,33 @@ class FixedWeightModel(WordModel):
     """Experimental control matching the original context weighting."""
 
     def _context_weights(self, evidence):
-        return [(0.12, 0.33, 0.55)[len(context)] for context, _total, _distinct in evidence]
+        return [
+            (0.12, 0.33, 0.55)[len(context)] for context, _total, _own_total, _distinct in evidence
+        ]
+
+
+def sparse_context_check(model: WordModel) -> dict:
+    """Check that weak context backs off and repeated context takes over."""
+    counts = {
+        ("je",): 100_000,
+        ("vode",): 100,
+        ("mi", "je"): 1_000,
+        ("treba", "mi", "vode"): 3,
+    }
+
+    def predict(trigram_count: int) -> str:
+        counts[("treba", "mi", "vode")] = trigram_count
+        candidate = type(model)(counts)
+        candidate.context_discount = model.context_discount
+        return candidate.predict("TREBA MI ")[0]
+
+    sparse = predict(3)
+    supported = predict(200)
+    return {
+        "sparse_result": sparse,
+        "supported_result": supported,
+        "passed": sparse == "JE" and supported == "VODE",
+    }
 
 
 def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> dict:
@@ -65,6 +91,7 @@ def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> di
                 "next_word_top_one_hits": totals["next_word_top_one_hits"],
                 "next_word_top_five_hits": totals["next_word_top_five_hits"],
                 "completion_selections": totals["completion_selections"],
+                "sparse_context": sparse_context_check(candidate),
                 "latency": {
                     "mean_ms": round(statistics.mean(durations), 2),
                     "p95_ms": round(sorted(durations)[int(0.95 * (len(durations) - 1))], 2),
@@ -78,6 +105,7 @@ def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> di
         if row["latency"]["p95_ms"] <= 50
         and row["activations"] <= control_result["activations"]
         and row["next_word_top_five_hits"] >= control_result["next_word_top_five_hits"]
+        and row["sparse_context"]["passed"]
     ]
     if not eligible:
         raise ValueError("No ranking meets the latency and quality requirements")
@@ -100,7 +128,8 @@ def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> di
         ).hexdigest(),
         "environment": {"platform": platform.platform(), "python": platform.python_version()},
         "selection_rule": (
-            "p95 at most 50 ms and no regression from fixed weights in activations or next-word top-five hits; "
+            "p95 at most 50 ms, no regression from fixed weights in activations or next-word top-five hits, "
+            "and sparse context must back off while repeated context takes over; "
             "then fewest activations, most next-word top-five and top-one hits; "
             "ties prefer fixed weights, otherwise the larger discount for more fallback on sparse contexts"
         ),

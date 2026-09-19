@@ -174,6 +174,7 @@ def _capture_widget(
     widget.resize(width, height)
     if widget.layout() is not None:
         widget.layout().activate()
+    widget.repaint()
     app.processEvents()
 
     image_path = output_dir / f"{name}.png"

@@ -10,7 +10,7 @@ import platform
 import statistics
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -143,13 +143,40 @@ def evaluate(
     *,
     model_path: Path = MODEL_PATH,
     metadata_path: Path = MODEL_METADATA_PATH,
+    cases_path: Path | None = None,
+    expected_sha256: str | None = None,
 ) -> dict:
-    frozen = json.loads((FIXTURES / "frozen.json").read_text())
-    for name, digest in frozen["sha256"].items():
-        if hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() != digest:
-            raise ValueError(f"Frozen evaluation file changed: {name}")
-    with (FIXTURES / f"{dataset}.tsv").open(encoding="utf-8") as stream:
-        cases = list(csv.DictReader(stream, delimiter="\t"))
+    if cases_path is None:
+        frozen = json.loads((FIXTURES / "frozen.json").read_text())
+        for name, digest in frozen["sha256"].items():
+            if hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() != digest:
+                raise ValueError(f"Frozen evaluation file changed: {name}")
+        cases_path = FIXTURES / f"{dataset}.tsv"
+        expected_sha256 = frozen["sha256"][cases_path.name]
+    elif not expected_sha256:
+        raise ValueError("External messages require their previously frozen SHA-256")
+    else:
+        dataset = "external"
+    digest = hashlib.sha256(cases_path.read_bytes()).hexdigest()
+    if digest != expected_sha256:
+        raise ValueError("Evaluation messages do not match their frozen SHA-256")
+    with cases_path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["id", "category", "text"]:
+            raise ValueError("Evaluation messages need id, category, and text columns")
+        cases = list(reader)
+    identifiers = set()
+    for case in cases:
+        if (
+            None in case
+            or not all((case.get(key) or "").strip() for key in ("id", "category", "text"))
+            or case["id"] in identifiers
+            or not words(case["text"])
+        ):
+            raise ValueError(f"Invalid or duplicate evaluation row: {case!r}")
+        identifiers.add(case["id"])
+    if not cases:
+        raise ValueError("Evaluation messages must not be empty")
     started = time.perf_counter()
     if model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH:
         model = load_model()
@@ -160,6 +187,7 @@ def evaluate(
     totals: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     categories: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     timings: dict[str, list[float]] = defaultdict(list)
+    miss_totals: Counter[str] = Counter()
     for case in cases:
         row = {"id": case["id"], "category": case["category"]}
         for name, engine, contextual in (
@@ -173,6 +201,8 @@ def evaluate(
             for key, value in outcome.items():
                 totals[name][key] += value
             categories[case["category"]][name] += outcome["activations"]
+        row["misses"] = diagnose(model, case["text"])
+        miss_totals.update(miss["reason"] for miss in row["misses"])
         results.append(row)
     for name in ("frequency", "contextual"):
         totals[name]["activation_reduction_percent"] = round(
@@ -191,7 +221,8 @@ def evaluate(
     return {
         "dataset": dataset,
         "messages": len(cases),
-        "dataset_sha256": frozen["sha256"][f"{dataset}.tsv"],
+        "dataset_sha256": digest,
+        "independence": "Not established by this script; external authorship and a preselected model are required.",
         "model": json.loads(metadata_path.read_text(encoding="utf-8")),
         "environment": {"platform": platform.platform(), "python": platform.python_version()},
         "profile": "empty per message",
@@ -202,6 +233,10 @@ def evaluate(
             "implementation_sha256": hashlib.sha256(
                 (MODEL_PATH.parents[1] / "suggestion_model.py").read_bytes()
             ).hexdigest(),
+            "tokenizer_sha256": hashlib.sha256(
+                (MODEL_PATH.parents[1] / "suggestion_text.py").read_bytes()
+            ).hexdigest(),
+            "evaluator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         },
         "metric_notes": {
             "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
@@ -221,18 +256,61 @@ def evaluate(
         },
         "totals": dict(totals),
         "categories": dict(categories),
+        "miss_reasons": dict(miss_totals),
         "cases": results,
     }
 
 
+def diagnose(model: WordModel, text: str) -> list[dict]:
+    """Explain exact-word misses before typing, separately from completion trials."""
+    misses = []
+    for token in words(text):
+        candidates = model.predict(text[: token.start])
+        if token.text.upper() in candidates:
+            continue
+        has_context = any(
+            token.text in model.contexts.get(token.context[-size:], {})
+            for size in range(1, len(token.context) + 1)
+        )
+        if token.text not in model.vocabulary:
+            reason = "missing_vocabulary"
+        elif not has_context:
+            reason = "missing_context"
+        else:
+            reason = "ranked_below_five"
+        misses.append(
+            {
+                "target": token.text.upper(),
+                "context": list(token.context),
+                "kind": "sentence_start" if token.context == (START,) else "next_word",
+                "reason": reason,
+                "candidates": candidates,
+            }
+        )
+    return misses
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", choices=("development", "heldout"), default="development")
+    dataset = parser.add_mutually_exclusive_group()
+    dataset.add_argument("--dataset", choices=("development", "heldout"), default="development")
+    dataset.add_argument("--cases", type=Path, help="Separately authored TSV messages")
+    parser.add_argument(
+        "--expected-sha256", help="Hash frozen before selecting the candidate model"
+    )
     parser.add_argument("--model", type=Path, default=MODEL_PATH)
     parser.add_argument("--metadata", type=Path, default=MODEL_METADATA_PATH)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = evaluate(args.dataset, model_path=args.model, metadata_path=args.metadata)
+    if args.expected_sha256 and args.cases is None:
+        parser.error("--expected-sha256 requires --cases")
+    result = evaluate(
+        args.dataset,
+        model_path=args.model,
+        metadata_path=args.metadata,
+        cases_path=args.cases,
+        expected_sha256=args.expected_sha256,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

@@ -93,7 +93,12 @@ Settings changes update the live mouse and speech services and are saved
 immediately. `SuggestionService` is also owned by the hotbar and shared by Speech
 and Settings. It loads and queries the immutable base model away from the Qt event
 loop, coalesces pending requests, and writes personal counts through a separate
-worker. The Speech input validates the request owner, revision, text, caret, and
+worker. The prediction worker builds a personal prefix and context index only
+when the learning revision changes; ordinary typing reuses it. Storage recovery
+also advances that revision, so merged disk data cannot leave a stale index.
+Context-free candidates use the combined base and personal unigram ranking,
+while both sources supply their relevant contextual candidates. The Speech input
+validates the request owner, revision, text, caret, and
 selection before displaying a result. Closing the hotbar closes every child
 surface, flushes suggestion learning, stops speech and gaze workers, and
 unregisters the AppBar so Windows restores the full work area.

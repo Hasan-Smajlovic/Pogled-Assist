@@ -29,6 +29,8 @@ class SuggestionService(QObject):
         super().__init__(parent)
         self.store = LearningStore(path)
         self._model = model
+        self._personal_model: WordModel | None = None
+        self._personal_revision = -1
         self._model_error = ""
         self._pending: dict[object, tuple[int, str]] = {}
         self._predicting = False
@@ -90,7 +92,6 @@ class SuggestionService(QObject):
             return
         owner = next(iter(self._pending))
         revision, text = self._pending.pop(owner)
-        personal = self.store.snapshot()
         self._predicting = True
 
         def predict() -> tuple:
@@ -102,7 +103,14 @@ class SuggestionService(QObject):
                     self._model_error = (
                         "Prijedlozi iz rječnika nisu dostupni. Možete nastaviti pisati."
                     )
-            return owner, revision, self._model.predict(text, personal)
+            # Copy and index a changed profile in the worker, never on the Qt
+            # event loop. Ordinary typing reuses the same immutable index.
+            snapshot = self.store.snapshot_if_changed(self._personal_revision)
+            if snapshot is not None:
+                personal_revision, counts = snapshot
+                self._personal_model = WordModel(counts)
+                self._personal_revision = personal_revision
+            return owner, revision, self._model.predict(text, self._personal_model)
 
         self._worker.submit(predict).add_done_callback(
             lambda future: self._deliver(self._prediction_done, future)

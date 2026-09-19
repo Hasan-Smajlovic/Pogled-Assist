@@ -65,14 +65,60 @@ sizes in one corpus pass before rebuilding the bundled model:
 
 The ranking comparison holds language data fixed and compares the original fixed
 weights with adaptive discounts of 2, 10, and 40 on development messages only.
-It rejects latency or quality regressions and records its selection rule and
-recommendation. If changing the chosen discount, update `WordModel.context_discount`
-and rerun the vocabulary comparison before evaluating the regression set.
+It rejects latency or quality regressions, checks that sparse contexts back off
+while supported contexts remain useful, and records its selection rule and
+recommendation. If changing the chosen discount, update
+`WordModel.context_discount` and rerun the vocabulary comparison before
+evaluating the regression set.
 
 The verified CLASSLA archive is a local development input and is not downloaded
 by setup or included in a release. Its source URL and integrity hashes are in the
 bundled model metadata. Candidate selection uses only the development set; run
 the held-out evaluation once after the model choice is fixed.
+
+`conversation.tsv`, `starters.tsv`, and `spelling.tsv` are build inputs, not files
+loaded by the installed application. Rebuild the bundled model after changing
+them or the preparation script. Spelling replacements apply only to web training
+data; personal spelling and typed text are preserved. The vocabulary budget
+reserves space for reviewed words, and reviewed word combinations survive the
+web-only pruning limits. Run the commands above to refresh the generated model,
+metadata, and comparison reports before review. An old report does not validate
+a model with a different checksum.
+
+The evaluation report includes each exact-word miss before typing, classified
+as missing vocabulary, missing context, or a word ranked below the five visible
+candidates. Completion remains a separate metric. Compare these causes as well
+as activation counts when choosing the next data change.
+
+Measure personal learning and large synthetic profiles separately:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation-learning.json
+```
+
+This uses synthetic scenarios from `language/bs/learning.tsv`, with separate
+profiles and checkpoints after zero, one, three, and ten message uses. It also
+records unrelated control predictions and exits unsuccessfully if a target is
+not visible after one use, not first after three uses, or displaces an unrelated
+expected top-five result. The optional stress measurements report index
+construction, the first query, and reused-index queries separately. They exclude
+Qt dispatch, display, file I/O, and Tobii processing, so they cannot establish
+the Windows end-to-end latency target.
+
+For fresh quality validation, have a separate author prepare and freeze a TSV
+with `id`, `category`, and `text` columns and its SHA-256 before the candidate is
+selected. Use synthetic text with the same punctuation supported by the frozen
+keyboard protocol. Keep those messages out of preparation and tuning. After
+selecting the candidate, evaluate that exact file:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --cases C:\Temp\speech-evaluation.tsv --expected-sha256 "<previously-frozen-sha256>" --output .dev-tools\speech-external-evaluation.json
+```
+
+The script verifies the supplied checksum and reports miss diagnostics. It does
+not certify independent authorship or freeze a set retroactively. Do not add
+private conversations to the repository. Existing regression fixtures remain
+unchanged.
 
 Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
 categories enforced by the required PR checks.

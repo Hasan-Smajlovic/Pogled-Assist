@@ -2,18 +2,21 @@
   "dataset": "development",
   "messages": 40,
   "dataset_sha256": "1aa3659e62e293dde6a3dfd4084aa3e313ed91fa6739a9c44775ee47f587f96f",
+  "independence": "Not established by this script; external authorship and a preselected model are required.",
   "model": {
     "version": 1,
-    "model_id": "bs-classla-2.0-conversation-3-v60000-2026-09-19",
+    "model_id": "bs-classla-2.0-conversation-4-v60000-ffb09b61638b",
     "source": "CLASSLA-web.bs 2.0",
     "source_url": "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11",
     "source_license": "CC0-1.0",
     "source_md5": "f92e72f4fe08362a1297f311ac20ad33",
     "source_sha256": "2b8e8e853e6ca974ef64072b9367d2aa935584c0fcc6e132a965747215af2ada",
-    "supplement_sha256": "ceaec5e0246efc9a8911c84160e8c6b9e374b5d1f8b171c121f6642943924db4",
-    "starters_sha256": "7cfc1eee98e5671a3852f76e484c80c5159dbdb45445bca946ca0b8087b44dd9",
-    "preparation_sha256": "3e7efc0c4d70df726b5bc69803f4d6f5911682c9b2667d2463ad84d4c0a17e21",
-    "model_sha256": "1fcd68c09860a6844ec187f91fb2759f8a4f26eb20dc939d314d7bf39acdb7f5",
+    "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
+    "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
+    "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
+    "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
+    "preparation_sha256": "514de6401bd2f20d7baa170af3712aa9d4b85904803ffac09acc6ffea96802cf",
+    "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
     "sample": {
       "records_scanned": 2538848,
       "documents": 20924,
@@ -32,36 +35,36 @@
       "news_limit": 3000
     },
     "supplement": {
-      "rows": 527,
+      "rows": 640,
       "categories": {
-        "care": 57,
-        "comfort": 42,
-        "conversation": 62,
+        "care": 62,
+        "comfort": 45,
+        "conversation": 108,
         "emergency": 35,
-        "family_social": 35,
-        "food_drink": 45,
-        "greetings": 20,
-        "health": 63,
-        "humour": 25,
-        "memories": 30,
-        "needs": 78,
-        "opinions": 35
+        "family_social": 40,
+        "food_drink": 62,
+        "greetings": 24,
+        "health": 66,
+        "humour": 26,
+        "memories": 31,
+        "needs": 100,
+        "opinions": 41
       },
       "weighted_rows": {
-        "care": 456,
-        "comfort": 294,
-        "conversation": 190,
+        "care": 496,
+        "comfort": 315,
+        "conversation": 372,
         "emergency": 350,
-        "family_social": 105,
-        "food_drink": 270,
-        "greetings": 60,
-        "health": 504,
-        "humour": 50,
-        "memories": 60,
-        "needs": 554,
-        "opinions": 70
+        "family_social": 120,
+        "food_drink": 372,
+        "greetings": 72,
+        "health": 528,
+        "humour": 52,
+        "memories": 62,
+        "needs": 708,
+        "opinions": 88
       },
-      "starters": 52
+      "starters": 70
     },
     "configuration": {
       "maximum_vocabulary": 60000,
@@ -70,14 +73,18 @@
       "per_context_limit": 32,
       "per_ngram_order_limit": 160000,
       "supplement_multiplier": 40,
-      "starter_multiplier": 200
+      "starter_multiplier": 200,
+      "protect_reviewed_ngrams": true,
+      "spelling_scope": "reviewed replacements in web data only",
+      "spelling_replacements": 90
     },
     "counts": {
       "words": 60000,
-      "bigrams": 125342,
-      "trigrams": 103788
+      "bigrams": 125899,
+      "trigrams": 104965,
+      "protected_ngrams": 3515
     },
-    "compressed_bytes": 1348957
+    "compressed_bytes": 1358833
   },
   "environment": {
     "platform": "macOS-27.0-arm64-arm-64bit",
@@ -88,7 +95,9 @@
   "ranking": {
     "method": "adaptive context interpolation",
     "context_discount": 10.0,
-    "implementation_sha256": "8e4a552ff34b412f150ea14f66534bb1eeff7dee19a75db32275d822f3b9d44b"
+    "implementation_sha256": "1ab4cd5fd42e3df5ebcacde9f0023d113a19d86b79af5b3e107548d2a6f26187",
+    "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
+    "evaluator_sha256": "f474aa2deb3a740d487abfdd5f98248742a7d71d75f4f605743788854883ec79"
   },
   "metric_notes": {
     "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
@@ -96,17 +105,17 @@
     "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
     "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending."
   },
-  "loading_ms": 565.75,
+  "loading_ms": 607.92,
   "latency": {
     "frequency": {
-      "mean_ms": 0.99,
-      "p95_ms": 3.82,
-      "max_ms": 9.48
+      "mean_ms": 0.72,
+      "p95_ms": 2.58,
+      "max_ms": 6.3
     },
     "contextual": {
-      "mean_ms": 1.07,
-      "p95_ms": 4.64,
-      "max_ms": 12.52
+      "mean_ms": 0.83,
+      "p95_ms": 3.49,
+      "max_ms": 9.68
     }
   },
   "totals": {
@@ -132,12 +141,12 @@
       "prediction_selections": 0
     },
     "frequency": {
-      "activations": 1342,
-      "letters": 509,
+      "activations": 1338,
+      "letters": 507,
       "suggestion_selections": 192,
       "same_slot_departures": 1,
       "top_five_hits": 203,
-      "queries": 717,
+      "queries": 715,
       "corrections": 0,
       "undo": 0,
       "sentence_start_queries": 40,
@@ -146,26 +155,26 @@
       "next_word_queries": 168,
       "next_word_top_one_hits": 1,
       "next_word_top_five_hits": 16,
-      "completion_queries": 509,
-      "completion_top_one_hits": 55,
+      "completion_queries": 507,
+      "completion_top_one_hits": 57,
       "completion_top_five_hits": 186,
       "completion_selections": 175,
       "prediction_selections": 17,
-      "activation_reduction_percent": 40.93,
+      "activation_reduction_percent": 41.11,
       "sentence_start_top_one_percent": 0.0,
       "sentence_start_top_five_percent": 2.5,
       "next_word_top_one_percent": 0.6,
       "next_word_top_five_percent": 9.52,
-      "completion_top_one_percent": 10.81,
-      "completion_top_five_percent": 36.54
+      "completion_top_one_percent": 11.24,
+      "completion_top_five_percent": 36.69
     },
     "contextual": {
-      "activations": 1014,
-      "letters": 344,
+      "activations": 1002,
+      "letters": 338,
       "suggestion_selections": 195,
-      "same_slot_departures": 28,
+      "same_slot_departures": 27,
       "top_five_hits": 203,
-      "queries": 552,
+      "queries": 546,
       "corrections": 0,
       "undo": 0,
       "sentence_start_queries": 40,
@@ -173,39 +182,39 @@
       "sentence_start_top_five_hits": 3,
       "next_word_queries": 168,
       "next_word_top_one_hits": 47,
-      "next_word_top_five_hits": 72,
-      "completion_queries": 344,
-      "completion_top_one_hits": 43,
-      "completion_top_five_hits": 128,
-      "completion_selections": 120,
-      "prediction_selections": 75,
-      "activation_reduction_percent": 55.37,
+      "next_word_top_five_hits": 74,
+      "completion_queries": 338,
+      "completion_top_one_hits": 41,
+      "completion_top_five_hits": 126,
+      "completion_selections": 118,
+      "prediction_selections": 77,
+      "activation_reduction_percent": 55.9,
       "sentence_start_top_one_percent": 0.0,
       "sentence_start_top_five_percent": 7.5,
       "next_word_top_one_percent": 27.98,
-      "next_word_top_five_percent": 42.86,
-      "completion_top_one_percent": 12.5,
-      "completion_top_five_percent": 37.21
+      "next_word_top_five_percent": 44.05,
+      "completion_top_one_percent": 12.13,
+      "completion_top_five_percent": 37.28
     }
   },
   "categories": {
     "needs": {
       "keyboard": 397,
       "frequency": 235,
-      "contextual": 195,
-      "contextual_reduction_percent": 50.88
+      "contextual": 193,
+      "contextual_reduction_percent": 51.39
     },
     "conversation": {
       "keyboard": 340,
-      "frequency": 206,
-      "contextual": 150,
-      "contextual_reduction_percent": 55.88
+      "frequency": 210,
+      "contextual": 142,
+      "contextual_reduction_percent": 58.24
     },
     "humour": {
       "keyboard": 500,
-      "frequency": 295,
-      "contextual": 235,
-      "contextual_reduction_percent": 53.0
+      "frequency": 293,
+      "contextual": 237,
+      "contextual_reduction_percent": 52.6
     },
     "memories": {
       "keyboard": 559,
@@ -215,10 +224,15 @@
     },
     "opinions": {
       "keyboard": 476,
-      "frequency": 272,
-      "contextual": 216,
-      "contextual_reduction_percent": 54.62
+      "frequency": 266,
+      "contextual": 212,
+      "contextual_reduction_percent": 55.46
     }
+  },
+  "miss_reasons": {
+    "ranked_below_five": 43,
+    "missing_context": 85,
+    "missing_vocabulary": 3
   },
   "cases": [
     {
@@ -246,12 +260,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 18,
-        "letters": 6,
+        "activations": 16,
+        "letters": 5,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
         "top_five_hits": 3,
-        "queries": 9,
+        "queries": 8,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -260,19 +274,19 @@
         "next_word_queries": 2,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 6,
+        "completion_queries": 5,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 18,
-        "letters": 6,
+        "activations": 16,
+        "letters": 5,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
         "top_five_hits": 3,
-        "queries": 9,
+        "queries": 8,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -281,12 +295,61 @@
         "next_word_queries": 2,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 6,
+        "completion_queries": 5,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "ŽELIM",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "POPITI",
+          "context": [
+            "<s>",
+            "želim"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO",
+            "DA"
+          ]
+        },
+        {
+          "target": "VODE",
+          "context": [
+            "želim",
+            "popiti"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NEŠTO",
+            "U",
+            "I",
+            "ČAŠU",
+            "KAFU"
+          ]
+        }
+      ]
     },
     {
       "id": "d02",
@@ -353,7 +416,40 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "MOLIM",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "OKRENI",
+          "context": [
+            "molim",
+            "te"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "PODIGNI",
+            "NAZOVI",
+            "ZAPIŠI",
+            "OSTANI",
+            "DONESI"
+          ]
+        }
+      ]
     },
     {
       "id": "d03",
@@ -401,12 +497,12 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 25,
-        "letters": 9,
+        "activations": 23,
+        "letters": 8,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 13,
+        "queries": 12,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -414,13 +510,62 @@
         "sentence_start_top_five_hits": 0,
         "next_word_queries": 3,
         "next_word_top_one_hits": 0,
-        "next_word_top_five_hits": 0,
-        "completion_queries": 9,
+        "next_word_top_five_hits": 1,
+        "completion_queries": 8,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 4,
-        "completion_selections": 4,
-        "prediction_selections": 0
-      }
+        "completion_top_five_hits": 3,
+        "completion_selections": 3,
+        "prediction_selections": 1
+      },
+      "misses": [
+        {
+          "target": "OTVORITE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PROZOR",
+          "context": [
+            "<s>",
+            "otvorite"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SE",
+            "SVOJE",
+            "APLIKACIJU",
+            "I",
+            "VRATA"
+          ]
+        },
+        {
+          "target": "NA",
+          "context": [
+            "otvorite",
+            "prozor"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "JER",
+            "DO",
+            "MALO",
+            "I",
+            "RAMA"
+          ]
+        }
+      ]
     },
     {
       "id": "d04",
@@ -487,7 +632,57 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "JOŠ",
+          "context": [
+            "može",
+            "li"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SE",
+            "MI",
+            "NEKO",
+            "BITI",
+            "JE"
+          ]
+        },
+        {
+          "target": "JEDNA",
+          "context": [
+            "li",
+            "još"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "UVIJEK",
+            "NEKO",
+            "MALO",
+            "NEKA",
+            "JEDAN"
+          ]
+        },
+        {
+          "target": "ŠOLJA",
+          "context": [
+            "još",
+            "jedna"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "OD",
+            "STVAR",
+            "U",
+            "JE",
+            "VELIKA"
+          ]
+        }
+      ]
     },
     {
       "id": "d05",
@@ -554,7 +749,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 3,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "GLAD",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "MI",
+          "context": [
+            "<s>",
+            "glad"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "ZA",
+            "A",
+            "U",
+            "ŽEĐ"
+          ]
+        },
+        {
+          "target": "POKVARILA",
+          "context": [
+            "mi",
+            "je"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "UTRNULA",
+            "DRAGO",
+            "IZAZVAO",
+            "POMOGLA",
+            "GOVORITI"
+          ]
+        },
+        {
+          "target": "RASPOLOŽENJE",
+          "context": [
+            "je",
+            "pokvarila"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "U",
+            "DA",
+            "SE"
+          ]
+        }
+      ]
     },
     {
       "id": "d06",
@@ -602,12 +862,12 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 23,
-        "letters": 8,
+        "activations": 25,
+        "letters": 9,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 12,
+        "queries": 13,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -616,12 +876,61 @@
         "next_word_queries": 3,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 8,
+        "completion_queries": 9,
         "completion_top_one_hits": 2,
         "completion_top_five_hits": 3,
         "completion_selections": 2,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "DONESI",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "DRUGU",
+          "context": [
+            "donesi",
+            "mi"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ]
+        },
+        {
+          "target": "DEKU",
+          "context": [
+            "mi",
+            "drugu"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "STRANU",
+            "I",
+            "GODINU",
+            "U",
+            "OSOBU"
+          ]
+        }
+      ]
     },
     {
       "id": "d07",
@@ -648,12 +957,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 19,
-        "letters": 6,
+        "activations": 21,
+        "letters": 7,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 10,
+        "queries": 11,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -662,8 +971,8 @@
         "next_word_queries": 3,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 6,
-        "completion_top_one_hits": 0,
+        "completion_queries": 7,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
@@ -681,14 +990,47 @@
         "sentence_start_top_one_hits": 0,
         "sentence_start_top_five_hits": 0,
         "next_word_queries": 3,
-        "next_word_top_one_hits": 0,
+        "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 2,
         "completion_queries": 2,
         "completion_top_one_hits": 0,
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 2
-      }
+      },
+      "misses": [
+        {
+          "target": "OSTANI",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "JOŠ",
+          "context": [
+            "ostani",
+            "ovdje"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "JE",
+            "ME",
+            "SE",
+            "U",
+            "I"
+          ]
+        }
+      ]
     },
     {
       "id": "d08",
@@ -755,7 +1097,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "UGASITE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "TELEVIZOR",
+          "context": [
+            "<s>",
+            "ugasite"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "U",
+            "DA",
+            "SE"
+          ]
+        },
+        {
+          "target": "DOK",
+          "context": [
+            "ugasite",
+            "televizor"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "U",
+            "I",
+            "JE",
+            "DA",
+            "SE"
+          ]
+        },
+        {
+          "target": "RAZGOVARAMO",
+          "context": [
+            "televizor",
+            "dok"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SE",
+            "JE",
+            "SU",
+            "NE",
+            "SAM"
+          ]
+        }
+      ]
     },
     {
       "id": "d09",
@@ -822,7 +1229,40 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "DOBRO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "SVIMA",
+          "context": [
+            "dobro",
+            "veče"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "NA",
+            "PRIJE",
+            "U"
+          ]
+        }
+      ]
     },
     {
       "id": "d10",
@@ -870,12 +1310,12 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 24,
-        "letters": 8,
+        "activations": 20,
+        "letters": 6,
         "suggestion_selections": 5,
-        "same_slot_departures": 0,
+        "same_slot_departures": 1,
         "top_five_hits": 5,
-        "queries": 13,
+        "queries": 11,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -884,12 +1324,77 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 8,
-        "completion_top_one_hits": 2,
+        "completion_queries": 6,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "ŠTA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "ĆETE",
+          "context": [
+            "<s>",
+            "šta"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SE",
+            "JE",
+            "DANAS",
+            "ĆEMO",
+            "MISLIŠ"
+          ]
+        },
+        {
+          "target": "RADITI",
+          "context": [
+            "šta",
+            "ćete"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SE",
+            "DOĆI",
+            "PONOVO",
+            "BITI",
+            "DOBITI"
+          ]
+        },
+        {
+          "target": "VIKEND",
+          "context": [
+            "raditi",
+            "za"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SEBE",
+            "SVE",
+            "TO",
+            "VRIJEME",
+            "POMOĆ"
+          ]
+        }
+      ]
     },
     {
       "id": "d11",
@@ -937,12 +1442,12 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 15,
-        "letters": 3,
+        "activations": 13,
+        "letters": 2,
         "suggestion_selections": 6,
-        "same_slot_departures": 2,
+        "same_slot_departures": 3,
         "top_five_hits": 6,
-        "queries": 9,
+        "queries": 8,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -950,13 +1455,30 @@
         "sentence_start_top_five_hits": 0,
         "next_word_queries": 5,
         "next_word_top_one_hits": 2,
-        "next_word_top_five_hits": 4,
-        "completion_queries": 3,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 2,
-        "completion_selections": 2,
-        "prediction_selections": 4
-      }
+        "next_word_top_five_hits": 5,
+        "completion_queries": 2,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 1,
+        "completion_selections": 1,
+        "prediction_selections": 5
+      },
+      "misses": [
+        {
+          "target": "BAŠ",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        }
+      ]
     },
     {
       "id": "d12",
@@ -1004,12 +1526,12 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 18,
-        "letters": 6,
+        "activations": 14,
+        "letters": 4,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
         "top_five_hits": 3,
-        "queries": 9,
+        "queries": 7,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -1018,12 +1540,45 @@
         "next_word_queries": 2,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 6,
-        "completion_top_one_hits": 1,
+        "completion_queries": 4,
+        "completion_top_one_hits": 0,
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "ČUJEMO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "KASNIJE",
+          "context": [
+            "čujemo",
+            "se"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "OPET",
+            "U",
+            "NE",
+            "DA",
+            "I"
+          ]
+        }
+      ]
     },
     {
       "id": "d13",
@@ -1090,7 +1645,40 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "KO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "FINALU",
+          "context": [
+            "pobijedio",
+            "u"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "BIH",
+            "SARAJEVU",
+            "KOJOJ",
+            "OVOM",
+            "BOSNI"
+          ]
+        }
+      ]
     },
     {
       "id": "d14",
@@ -1117,12 +1705,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 38,
-        "letters": 15,
+        "activations": 40,
+        "letters": 16,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
         "top_five_hits": 5,
-        "queries": 20,
+        "queries": 21,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -1131,7 +1719,7 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 15,
+        "completion_queries": 16,
         "completion_top_one_hits": 0,
         "completion_top_five_hits": 5,
         "completion_selections": 4,
@@ -1157,7 +1745,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 3,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "PRIČAJ",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "NAM",
+          "context": [
+            "<s>",
+            "pričaj"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "MI",
+            "SA",
+            "I",
+            "JE",
+            "U"
+          ]
+        },
+        {
+          "target": "O",
+          "context": [
+            "pričaj",
+            "nam"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "JE",
+            "SE",
+            "DANAS",
+            "DA",
+            "NE"
+          ]
+        },
+        {
+          "target": "NOVOM",
+          "context": [
+            "nam",
+            "o"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "TOME",
+            "ČEMU",
+            "SVOM",
+            "NEČEMU",
+            "PLANOVIMA"
+          ]
+        }
+      ]
     },
     {
       "id": "d15",
@@ -1224,7 +1877,25 @@
         "completion_top_five_hits": 1,
         "completion_selections": 1,
         "prediction_selections": 4
-      }
+      },
+      "misses": [
+        {
+          "target": "DANAS",
+          "context": [
+            "je",
+            "brat"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "KOJI",
+            "OD",
+            "MI"
+          ]
+        }
+      ]
     },
     {
       "id": "d16",
@@ -1251,6 +1922,27 @@
         "prediction_selections": 0
       },
       "frequency": {
+        "activations": 29,
+        "letters": 11,
+        "suggestion_selections": 4,
+        "same_slot_departures": 0,
+        "top_five_hits": 4,
+        "queries": 15,
+        "corrections": 0,
+        "undo": 0,
+        "sentence_start_queries": 1,
+        "sentence_start_top_one_hits": 0,
+        "sentence_start_top_five_hits": 0,
+        "next_word_queries": 3,
+        "next_word_top_one_hits": 0,
+        "next_word_top_five_hits": 1,
+        "completion_queries": 11,
+        "completion_top_one_hits": 3,
+        "completion_top_five_hits": 3,
+        "completion_selections": 3,
+        "prediction_selections": 1
+      },
+      "contextual": {
         "activations": 27,
         "letters": 10,
         "suggestion_selections": 4,
@@ -1263,35 +1955,47 @@
         "sentence_start_top_one_hits": 0,
         "sentence_start_top_five_hits": 0,
         "next_word_queries": 3,
-        "next_word_top_one_hits": 0,
-        "next_word_top_five_hits": 1,
-        "completion_queries": 10,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 3,
-        "completion_selections": 3,
-        "prediction_selections": 1
-      },
-      "contextual": {
-        "activations": 25,
-        "letters": 9,
-        "suggestion_selections": 4,
-        "same_slot_departures": 2,
-        "top_five_hits": 4,
-        "queries": 13,
-        "corrections": 0,
-        "undo": 0,
-        "sentence_start_queries": 1,
-        "sentence_start_top_one_hits": 0,
-        "sentence_start_top_five_hits": 0,
-        "next_word_queries": 3,
-        "next_word_top_one_hits": 2,
+        "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 2,
-        "completion_queries": 9,
+        "completion_queries": 10,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 2
-      }
+      },
+      "misses": [
+        {
+          "target": "JESTE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "ODMORILI",
+          "context": [
+            "li",
+            "se"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NASPAVAO",
+            "U",
+            "TO",
+            "I",
+            "RADI"
+          ]
+        }
+      ]
     },
     {
       "id": "d17",
@@ -1333,7 +2037,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 13,
-        "completion_top_one_hits": 4,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
@@ -1358,7 +2062,24 @@
         "completion_top_five_hits": 1,
         "completion_selections": 1,
         "prediction_selections": 6
-      }
+      },
+      "misses": [
+        {
+          "target": "NEKO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        }
+      ]
     },
     {
       "id": "d18",
@@ -1425,7 +2146,72 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "OVAJ",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "KOLAČ",
+          "context": [
+            "<s>",
+            "ovaj"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "POLOŽAJ",
+            "JASTUK",
+            "PUT",
+            "JE",
+            "NAČIN"
+          ]
+        },
+        {
+          "target": "TRAŽI",
+          "context": [
+            "ovaj",
+            "kolač"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "IMA",
+            "OD",
+            "I",
+            "SA",
+            "KOJI"
+          ]
+        },
+        {
+          "target": "DOBROVOLJCA",
+          "context": [
+            "kolač",
+            "traži"
+          ],
+          "kind": "next_word",
+          "reason": "missing_vocabulary",
+          "candidates": [
+            "DA",
+            "OD",
+            "I",
+            "SE",
+            "POMOĆ"
+          ]
+        }
+      ]
     },
     {
       "id": "d19",
@@ -1473,12 +2259,12 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 25,
-        "letters": 8,
+        "activations": 29,
+        "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 2,
         "top_five_hits": 6,
-        "queries": 14,
+        "queries": 16,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -1487,12 +2273,61 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 3,
         "next_word_top_five_hits": 3,
-        "completion_queries": 8,
-        "completion_top_one_hits": 1,
+        "completion_queries": 10,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "MOGU",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "JA",
+          "context": [
+            "<s>",
+            "mogu"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "LI",
+            "DIJELITI",
+            "SE",
+            "BITI",
+            "DA"
+          ]
+        },
+        {
+          "target": "DIJELITI",
+          "context": [
+            "mogu",
+            "ja"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "DA",
+            "SAM",
+            "BIH",
+            "I",
+            "TO"
+          ]
+        }
+      ]
     },
     {
       "id": "d20",
@@ -1543,7 +2378,7 @@
         "activations": 34,
         "letters": 12,
         "suggestion_selections": 7,
-        "same_slot_departures": 2,
+        "same_slot_departures": 1,
         "top_five_hits": 7,
         "queries": 19,
         "corrections": 0,
@@ -1555,11 +2390,76 @@
         "next_word_top_one_hits": 2,
         "next_word_top_five_hits": 3,
         "completion_queries": 12,
-        "completion_top_one_hits": 3,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "IZGLEDA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "KLJUČEVI",
+          "context": [
+            "da",
+            "su"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SE",
+            "U",
+            "SVI",
+            "TO",
+            "ONI"
+          ]
+        },
+        {
+          "target": "OTIŠLI",
+          "context": [
+            "su",
+            "ključevi"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "OPET",
+            "I",
+            "JE",
+            "U",
+            "DA"
+          ]
+        },
+        {
+          "target": "ŠETNJU",
+          "context": [
+            "otišli",
+            "u"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "BIH",
+            "SARAJEVU",
+            "KOJOJ",
+            "OVOM",
+            "BOSNI"
+          ]
+        }
+      ]
     },
     {
       "id": "d21",
@@ -1626,7 +2526,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 3,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "TI",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "UVIJEK",
+          "context": [
+            "<s>",
+            "ti"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SI",
+            "JE",
+            "SE",
+            "NE",
+            "I"
+          ]
+        },
+        {
+          "target": "IMAŠ",
+          "context": [
+            "ti",
+            "uvijek"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "JE",
+            "SE",
+            "U",
+            "SMO",
+            "NIJE"
+          ]
+        },
+        {
+          "target": "ODGOVOR",
+          "context": [
+            "imaš",
+            "spreman"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "DUHOVIT",
+            "DA",
+            "ZA",
+            "NA",
+            "I"
+          ]
+        }
+      ]
     },
     {
       "id": "d22",
@@ -1693,7 +2658,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 2
-      }
+      },
+      "misses": [
+        {
+          "target": "ZA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "DOBAR",
+          "context": [
+            "<s>",
+            "za"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "RAZLIKU",
+            "VRIJEME",
+            "TO",
+            "SVE",
+            "ONE"
+          ]
+        },
+        {
+          "target": "NIKADA",
+          "context": [
+            "dobar",
+            "vic"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "UVIJEK",
+            "JE",
+            "NIJE",
+            "I",
+            "O"
+          ]
+        },
+        {
+          "target": "KASNO",
+          "context": [
+            "nikada",
+            "nije"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "BILO",
+            "BIO",
+            "NI",
+            "BILA",
+            "U"
+          ]
+        }
+      ]
     },
     {
       "id": "d23",
@@ -1720,12 +2750,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 33,
-        "letters": 12,
+        "activations": 31,
+        "letters": 11,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
         "top_five_hits": 6,
-        "queries": 18,
+        "queries": 17,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -1734,19 +2764,19 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 12,
+        "completion_queries": 11,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 29,
-        "letters": 10,
+        "activations": 27,
+        "letters": 9,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 16,
+        "queries": 15,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -1755,12 +2785,62 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 2,
-        "completion_queries": 10,
-        "completion_top_one_hits": 1,
+        "completion_queries": 9,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "USPIJE",
+          "context": [
+            "kako",
+            "ti"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "JE",
+            "SE",
+            "KAZES",
+            "TO",
+            "SI"
+          ]
+        },
+        {
+          "target": "ZAGORJETI",
+          "context": [
+            "ti",
+            "uspije"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "DA",
+            "I",
+            "ONDA",
+            "JE",
+            "U"
+          ]
+        },
+        {
+          "target": "ČAJ",
+          "context": [
+            "zagorjeti",
+            "i"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "DA",
+            "U",
+            "NA",
+            "TO",
+            "NE"
+          ]
+        }
+      ]
     },
     {
       "id": "d24",
@@ -1827,7 +2907,88 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "DANAS",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "TI",
+          "context": [
+            "<s>",
+            "danas"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SE",
+            "SAM",
+            "IMAM",
+            "JE",
+            "MI"
+          ]
+        },
+        {
+          "target": "OPRAŠTAMO",
+          "context": [
+            "danas",
+            "ti"
+          ],
+          "kind": "next_word",
+          "reason": "missing_vocabulary",
+          "candidates": [
+            "JE",
+            "SI",
+            "SE",
+            "POKAŽEM",
+            "I"
+          ]
+        },
+        {
+          "target": "TAJ",
+          "context": [
+            "ti",
+            "opraštamo"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "U",
+            "DA",
+            "SE"
+          ]
+        },
+        {
+          "target": "REZULTAT",
+          "context": [
+            "opraštamo",
+            "taj"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NAČIN",
+            "STARI",
+            "DAN",
+            "PUT",
+            "MIRIS"
+          ]
+        }
+      ]
     },
     {
       "id": "d25",
@@ -1894,7 +3055,56 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 4
-      }
+      },
+      "misses": [
+        {
+          "target": "NEKADA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PO",
+          "context": [
+            "sve",
+            "komšije"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SU",
+            "I",
+            "U",
+            "PRIJATELJE",
+            "JE"
+          ]
+        },
+        {
+          "target": "IMENU",
+          "context": [
+            "komšije",
+            "po"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "MOM",
+            "SEBI",
+            "JEDNO",
+            "OVOM",
+            "TOME"
+          ]
+        }
+      ]
     },
     {
       "id": "d26",
@@ -1961,7 +3171,40 @@
         "completion_top_five_hits": 1,
         "completion_selections": 0,
         "prediction_selections": 4
-      }
+      },
+      "misses": [
+        {
+          "target": "MOJ",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PLAV",
+          "context": [
+            "bio",
+            "je"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "TO",
+            "I",
+            "CRVENE",
+            "U",
+            "NA"
+          ]
+        }
+      ]
     },
     {
       "id": "d27",
@@ -2028,7 +3271,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "U",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "DJETINJSTVU",
+          "context": [
+            "<s>",
+            "u"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "TOM",
+            "OVOM",
+            "NASTAVKU",
+            "SVAKOM",
+            "OKVIRU"
+          ]
+        },
+        {
+          "target": "SMO",
+          "context": [
+            "u",
+            "djetinjstvu"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "A",
+            "U",
+            "DA"
+          ]
+        },
+        {
+          "target": "ČESTO",
+          "context": [
+            "djetinjstvu",
+            "smo"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SE",
+            "U",
+            "MI",
+            "DA",
+            "I"
+          ]
+        }
+      ]
     },
     {
       "id": "d28",
@@ -2095,7 +3403,40 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "SJEĆAM",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PEKMEZA",
+          "context": [
+            "mirisa",
+            "domaćeg"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "HLJEBA",
+            "GRAĐEVINCA",
+            "PROIZVODA",
+            "TIMA",
+            "TERENA"
+          ]
+        }
+      ]
     },
     {
       "id": "d29",
@@ -2162,7 +3503,120 @@
         "completion_top_five_hits": 7,
         "completion_selections": 6,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "NA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "TOM",
+          "context": [
+            "<s>",
+            "na"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "KRAJU",
+            "PRIMJER",
+            "TAJ",
+            "OSNOVU",
+            "OVAJ"
+          ]
+        },
+        {
+          "target": "PUTOVANJU",
+          "context": [
+            "na",
+            "tom"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "PUTU",
+            "PODRUČJU",
+            "MJESTU",
+            "DIJELU",
+            "SLUČAJU"
+          ]
+        },
+        {
+          "target": "SMO",
+          "context": [
+            "tom",
+            "putovanju"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "U",
+            "KROZ",
+            "DO",
+            "JE"
+          ]
+        },
+        {
+          "target": "UPOZNALI",
+          "context": [
+            "putovanju",
+            "smo"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SE",
+            "U",
+            "MI",
+            "DA",
+            "I"
+          ]
+        },
+        {
+          "target": "DOBRE",
+          "context": [
+            "smo",
+            "upoznali"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "SA",
+            "SU",
+            "SMO",
+            "I",
+            "U"
+          ]
+        },
+        {
+          "target": "LJUDE",
+          "context": [
+            "upoznali",
+            "dobre"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "KOMŠIJE",
+            "VOLJE",
+            "I",
+            "REZULTATE",
+            "ZA"
+          ]
+        }
+      ]
     },
     {
       "id": "d30",
@@ -2229,7 +3683,88 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "NISMO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "MNOGO",
+          "context": [
+            "nismo",
+            "imali"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SMO",
+            "SU",
+            "PRILIKU",
+            "I",
+            "U"
+          ]
+        },
+        {
+          "target": "STVARI",
+          "context": [
+            "imali",
+            "mnogo"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "BOLJE",
+            "VIŠE",
+            "JE",
+            "TOGA",
+            "MI"
+          ]
+        },
+        {
+          "target": "ALI",
+          "context": [
+            "mnogo",
+            "stvari"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "KOJE",
+            "I",
+            "U",
+            "NA",
+            "ZA"
+          ]
+        },
+        {
+          "target": "SMO",
+          "context": [
+            "stvari",
+            "ali"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "I",
+            "JE",
+            "NE",
+            "TO",
+            "SE"
+          ]
+        }
+      ]
     },
     {
       "id": "d31",
@@ -2296,7 +3831,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "STARE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "ČUVAJU",
+          "context": [
+            "stare",
+            "fotografije"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "BUDE",
+            "S",
+            "ZAJEDNO",
+            "I",
+            "NA"
+          ]
+        },
+        {
+          "target": "LIJEPE",
+          "context": [
+            "fotografije",
+            "čuvaju"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "U",
+            "I",
+            "NA",
+            "ZA",
+            "OD"
+          ]
+        },
+        {
+          "target": "TRENUTKE",
+          "context": [
+            "čuvaju",
+            "lijepe"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "GODINE",
+            "I",
+            "USPOMENE",
+            "STVARI",
+            "RIJEČI"
+          ]
+        }
+      ]
     },
     {
       "id": "d32",
@@ -2363,7 +3963,56 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "VRATILI",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PRIJE",
+          "context": [
+            "se",
+            "kući"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "DOK",
+            "SAMO",
+            "I",
+            "U",
+            "JE"
+          ]
+        },
+        {
+          "target": "SNIJEGA",
+          "context": [
+            "kući",
+            "prije"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NEGO",
+            "SVEGA",
+            "ODLASKA",
+            "POSJETE",
+            "RAZGOVORA"
+          ]
+        }
+      ]
     },
     {
       "id": "d33",
@@ -2390,12 +4039,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 33,
-        "letters": 12,
+        "activations": 29,
+        "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 18,
+        "queries": 16,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -2404,19 +4053,19 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 12,
+        "completion_queries": 10,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 23,
-        "letters": 7,
+        "activations": 21,
+        "letters": 6,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
         "top_five_hits": 6,
-        "queries": 13,
+        "queries": 12,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -2425,12 +4074,77 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 2,
         "next_word_top_five_hits": 2,
-        "completion_queries": 7,
+        "completion_queries": 6,
         "completion_top_one_hits": 2,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 2
-      }
+      },
+      "misses": [
+        {
+          "target": "MISLIM",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "RAZGOVOR",
+          "context": [
+            "mislim",
+            "da"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "JE",
+            "ĆU",
+            "SE",
+            "BI",
+            "ĆE"
+          ]
+        },
+        {
+          "target": "MNOGO",
+          "context": [
+            "razgovor",
+            "može"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "POMOĆI",
+            "BITI",
+            "SE",
+            "DA",
+            "LI"
+          ]
+        },
+        {
+          "target": "POMOĆI",
+          "context": [
+            "može",
+            "mnogo"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "DA",
+            "BOLJE",
+            "VIŠE",
+            "JE",
+            "TOGA"
+          ]
+        }
+      ]
     },
     {
       "id": "d34",
@@ -2497,7 +4211,88 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "NE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "BIH",
+          "context": [
+            "<s>",
+            "ne"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "MOGU",
+            "OSJEĆAM",
+            "ŽELIM",
+            "TREBA",
+            "ZNAM"
+          ]
+        },
+        {
+          "target": "ŽURIO",
+          "context": [
+            "ne",
+            "bih"
+          ],
+          "kind": "next_word",
+          "reason": "missing_vocabulary",
+          "candidates": [
+            "DA",
+            "I",
+            "SE",
+            "MOGLA",
+            "VODU"
+          ]
+        },
+        {
+          "target": "S",
+          "context": [
+            "bih",
+            "žurio"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "I",
+            "JE",
+            "U",
+            "DA",
+            "SE"
+          ]
+        },
+        {
+          "target": "ODGOVOROM",
+          "context": [
+            "žurio",
+            "s"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "OBZIROM",
+            "TIM",
+            "DRUGE",
+            "NOGU",
+            "TOBOM"
+          ]
+        }
+      ]
     },
     {
       "id": "d35",
@@ -2539,7 +4334,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 9,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
@@ -2560,11 +4355,60 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 3,
         "completion_queries": 4,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
-      }
+      },
+      "misses": [
+        {
+          "target": "VAŽNO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "VREMENA",
+          "context": [
+            "je",
+            "imati"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "DOBRE",
+            "DOVOLJNO",
+            "NA",
+            "I",
+            "U"
+          ]
+        },
+        {
+          "target": "DRUGE",
+          "context": [
+            "vremena",
+            "za"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "ODGOVOR",
+            "IGRU",
+            "SEBE",
+            "TO",
+            "SVE"
+          ]
+        }
+      ]
     },
     {
       "id": "d36",
@@ -2631,7 +4475,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "SVAKA",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "GENERACIJA",
+          "context": [
+            "<s>",
+            "svaka"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "CAST",
+            "ČAST",
+            "OD",
+            "ŽENA",
+            "OSOBA"
+          ]
+        },
+        {
+          "target": "IMA",
+          "context": [
+            "svaka",
+            "generacija"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "JE",
+            "I",
+            "KOJA",
+            "NA",
+            "SE"
+          ]
+        },
+        {
+          "target": "IZAZOVE",
+          "context": [
+            "ima",
+            "svoje"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "PLANOVE",
+            "MJESTO",
+            "KARAKTERISTIKE",
+            "RAZLOGE",
+            "ČARI"
+          ]
+        }
+      ]
     },
     {
       "id": "d37",
@@ -2698,7 +4607,88 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "VIŠE",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "MI",
+          "context": [
+            "<s>",
+            "više"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "OD",
+            "VOLIM",
+            "NEGO",
+            "JE",
+            "INFORMACIJA"
+          ]
+        },
+        {
+          "target": "ODGOVARA",
+          "context": [
+            "više",
+            "mi"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "JE",
+            "SE",
+            "DA",
+            "TELEFON",
+            "NAOČALE"
+          ]
+        },
+        {
+          "target": "OTVOREN",
+          "context": [
+            "mi",
+            "odgovara"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "MI",
+            "I",
+            "NA",
+            "DA",
+            "ZA"
+          ]
+        },
+        {
+          "target": "RAZGOVOR",
+          "context": [
+            "odgovara",
+            "otvoren"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "ZA",
+            "JE",
+            "I",
+            "U",
+            "DO"
+          ]
+        }
+      ]
     },
     {
       "id": "d38",
@@ -2765,7 +4755,40 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 2
-      }
+      },
+      "misses": [
+        {
+          "target": "TREBAMO",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "ČUVATI",
+          "context": [
+            "<s>",
+            "trebamo"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "RAZMOTRITI",
+            "LI",
+            "SE",
+            "BITI",
+            "I"
+          ]
+        }
+      ]
     },
     {
       "id": "d39",
@@ -2792,12 +4815,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 32,
-        "letters": 13,
+        "activations": 30,
+        "letters": 12,
         "suggestion_selections": 2,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 17,
+        "queries": 16,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -2806,19 +4829,19 @@
         "next_word_queries": 3,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 13,
+        "completion_queries": 12,
         "completion_top_one_hits": 2,
         "completion_top_five_hits": 4,
         "completion_selections": 2,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 27,
-        "letters": 10,
+        "activations": 25,
+        "letters": 9,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 14,
+        "queries": 13,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -2827,12 +4850,77 @@
         "next_word_queries": 3,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 10,
-        "completion_top_one_hits": 2,
+        "completion_queries": 9,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 3,
         "prediction_selections": 0
-      }
+      },
+      "misses": [
+        {
+          "target": "ŽELIM",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "PROBAT",
+          "context": [
+            "<s>",
+            "želim"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO",
+            "DA"
+          ]
+        },
+        {
+          "target": "NEŠTO",
+          "context": [
+            "želim",
+            "probat"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "ĆU",
+            "I",
+            "JE",
+            "U",
+            "DA"
+          ]
+        },
+        {
+          "target": "NOVO",
+          "context": [
+            "probat",
+            "nešto"
+          ],
+          "kind": "next_word",
+          "reason": "ranked_below_five",
+          "candidates": [
+            "POJESTI",
+            "ŠTO",
+            "DRUGO",
+            "GORI",
+            "DA"
+          ]
+        }
+      ]
     },
     {
       "id": "d40",
@@ -2899,7 +4987,72 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
-      }
+      },
+      "misses": [
+        {
+          "target": "ĐACI",
+          "context": [
+            "<s>"
+          ],
+          "kind": "sentence_start",
+          "reason": "missing_context",
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ]
+        },
+        {
+          "target": "TREBAJU",
+          "context": [
+            "<s>",
+            "đaci"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "BI",
+            "I",
+            "JE",
+            "U",
+            "DA"
+          ]
+        },
+        {
+          "target": "VIŠE",
+          "context": [
+            "đaci",
+            "trebaju"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "POMAGATI",
+            "BITI",
+            "DA",
+            "I",
+            "SE"
+          ]
+        },
+        {
+          "target": "PRAKTIČNE",
+          "context": [
+            "trebaju",
+            "više"
+          ],
+          "kind": "next_word",
+          "reason": "missing_context",
+          "candidates": [
+            "OD",
+            "NEGO",
+            "VREMENA",
+            "SNAGE",
+            "NE"
+          ]
+        }
+      ]
     }
   ]
 }

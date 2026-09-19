@@ -1,0 +1,15 @@
+id	learn	query	target	control	control_target
+water	Želim vodu	ŽELIM 	VODU	BOLI ME 	GLAVA
+tea	Ja bih čaj	JA BIH 	ČAJ	TREBA MI 	POMOĆ
+phone	Donesi mi telefon	DONESI MI 	TELEFON	BOLI ME 	STOMAK
+personal_word	Pozovi Zvrkovića	POZOVI 	ZVRKOVIĆA	TREBA MI 	VODE
+starter	Zdravo svima		ZDRAVO	NE MOGU 	DISATI
+inflection	Dodaj mi šolju	DODAJ MI 	ŠOLJU	BOLI ME 	GLAVA
+medicine	Treba mi inhalator	TREBA MI 	INHALATOR	BOLI ME 	GLAVA
+family_name	Nazovi Hadžića	NAZOVI 	HADŽIĆA	TREBA MI 	VODE
+preference	Radije bih supu	RADIJE BIH 	SUPU	NE MOGU 	DISATI
+colloquial	Moram završit posao	MORAM 	ZAVRŠIT	DONESI MI 	TELEFON
+two_word_context	Danas želim razgovarati	DANAS ŽELIM 	RAZGOVARATI	BOLI ME 	STOMAK
+case_insensitive	VOLIM BUREK	volim 	BUREK	TREBA MI 	POMOĆ
+sentence_starter	Laku noć		LAKU	NE MOGU 	DISATI
+rare_diacritic	Dodaj mi ćebe	DODAJ MI 	ĆEBE	BOLI ME 	GLAVA

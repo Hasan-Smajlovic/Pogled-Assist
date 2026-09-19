@@ -526,3 +526,116 @@ conversation	3	Šta se desilo?
 conversation	3	Kako je na poslu?
 conversation	3	Kada ćete doći?
 conversation	3	Volio bih otići vani.
+food_drink	6	Ja bih čaj bez šećera.
+food_drink	6	Ja bih vodu sobne temperature.
+food_drink	6	Ja bih kafu poslije doručka.
+needs	7	Ja bih razgovarao kada budeš slobodan.
+needs	7	Ja bih odmorio prije posjete.
+conversation	4	Ja bih radije saslušao tvoju ideju.
+conversation	4	Ja bih prvo pitao ostale.
+food_drink	6	Htio bih popiti nešto toplo.
+food_drink	6	Htio bih pojesti manji obrok.
+needs	7	Htio bih pozvati nekoga da mi pomogne.
+needs	7	Htio bih promijeniti položaj naslona.
+conversation	4	Htio bih reći kako ja to vidim.
+conversation	4	Htio bih čuti kako je prošao izlet.
+food_drink	6	Htjela bih vodu u manjoj čaši.
+needs	7	Htjela bih odmoriti prije razgovora.
+conversation	4	Htjela bih pitati nešto o tome.
+food_drink	6	Želim vodu bez leda, ako može.
+food_drink	6	Želim piti polako, sačekaj između gutljaja.
+needs	7	Želim telefon da provjerim poruke.
+needs	7	Želim odmor prije nego nastavimo.
+conversation	4	Želim pričati o nečemu veselijem.
+conversation	4	Želim čuti i tvoju stranu priče.
+conversation	4	Želim pitati kada možemo ponoviti druženje.
+food_drink	6	Hoću čaj kada se malo ohladi.
+food_drink	6	Hoću vode prije sljedećeg zalogaja.
+needs	7	Hoću odmoriti oči nekoliko minuta.
+conversation	4	Hoću reći da mi je drago što si tu.
+conversation	4	Hoću pokušati objasniti drugačije.
+needs	7	Donesi mi telefon s punjača.
+food_drink	6	Donesi mi vodu u čistoj čaši.
+food_drink	6	Donesi mi čaj kad bude spreman.
+care	8	Donesi mi jastuk iz druge sobe.
+comfort	7	Donesi mi deku koja je na stolici.
+needs	7	Donesi mi naočale iz kutije.
+needs	7	Donesite mi telefon kada završite.
+food_drink	6	Donesite mi vode prije ručka.
+food_drink	6	Dodaj mi vode, čaša je prazna.
+needs	7	Dodaj mi telefon da vidim ko zove.
+care	8	Dodaj mi jastuk za lijevu ruku.
+needs	7	Daj mi telefon na trenutak, molim te.
+food_drink	6	Daj mi vode kada progutam.
+conversation	4	Daj mi priliku da dovršim misao.
+conversation	4	Daj mi još vremena za odgovor.
+needs	7	Možeš li donijeti telefon prije nego sjedneš?
+food_drink	6	Možeš li dodati vode u ovu čašu?
+care	8	Možeš li podignuti naslon još malo?
+comfort	7	Možeš li smanjiti svjetlo iznad kreveta?
+conversation	4	Možeš li ponoviti zadnji dio pitanja?
+conversation	4	Možeš li pročitati šta piše na poruci?
+conversation	4	Možeš li objasniti na šta si mislio?
+needs	7	Možete li ostaviti telefon nadohvat ruke?
+care	8	Možete li namjestiti jastuk ispod ramena?
+conversation	4	Možete li govoriti jedno po jedno?
+conversation	4	Možete li ponoviti ime koje ste rekli?
+conversation	4	Molim te, pročitaj mi cijelu poruku.
+needs	7	Molim te, donesi telefon kada se napuni.
+care	8	Molim te, podigni mi ruku malo više.
+comfort	7	Molim te, zatvori prozor jer mi je hladno.
+conversation	4	Molim vas, sačekajte dok napišem pitanje.
+conversation	4	Molim vas, ponovite jer nisam sve razumio.
+conversation	4	Imam pitanje o sutrašnjem dogovoru.
+conversation	4	Imam ideju kako da provedemo popodne.
+needs	7	Imam još nešto da kažem prije odlaska.
+health	8	Imam bol u ramenu kad ležim ovako.
+health	8	Imam osjećaj da mi je jastuk previsok.
+conversation	4	Jesam li dobro razumio vrijeme dolaska?
+conversation	4	Jesi li uspio završiti ono što si planirao?
+family_social	3	Jesi li razgovarao s porodicom danas?
+food_drink	6	Jesi li stavio šećer u ovaj čaj?
+conversation	4	Jesi li vidjela fotografije s izleta?
+conversation	4	Jeste li čuli kako je prošla utakmica?
+conversation	4	Kako si proveo slobodno jutro?
+conversation	4	Kako si uspjela pronaći taj stari album?
+family_social	3	Kako ste stigli po ovom vremenu?
+conversation	4	Šta ćemo raditi kad prestane kiša?
+conversation	4	Šta misliš o tome da pustimo film?
+conversation	4	Kada možemo nastaviti ovaj razgovor?
+needs	7	Kada možeš pomoći da se premjestim?
+conversation	4	Gdje si našao tako lijepu fotografiju?
+conversation	4	Ko će nam se pridružiti poslije ručka?
+conversation	4	Da, odgovara mi da dođete popodne.
+conversation	4	Da, želim čuti kako se priča završila.
+needs	7	Ne, sačekaj da objasnim šta mi treba.
+conversation	4	Ne, mislio sam na nešto sasvim drugo.
+conversation	4	Jesam, čuo sam posljednju rečenicu.
+conversation	4	Nisam, možeš li mi ponovo pročitati.
+needs	7	Sada mi treba kratka pauza od ekrana.
+conversation	4	Sada možemo nastaviti gdje smo stali.
+conversation	4	Sada razumijem zašto si to predložio.
+conversation	4	Hajde da pričamo o planovima za ljeto.
+conversation	4	Hajde da pogledamo fotografije zajedno.
+humour	2	Hajde da čujem i tvoju verziju tog vica.
+greetings	3	Dobar dan, baš je lijepo ponovo vas vidjeti.
+greetings	3	Dobro jutro, jesi li se naspavao?
+greetings	3	Izvini što mi treba malo duže da odgovorim.
+greetings	3	Izvinite, mogu li nešto pitati prije nego krenete?
+opinions	3	Meni se čini da vrijedi pokušati još jednom.
+opinions	3	Meni se sviđa kako si uredio sobu.
+opinions	3	Meni se više dopada prva fotografija.
+opinions	3	Radije bih slušao muziku nego gledao vijesti.
+opinions	3	Radije bih razgovarala nakon kratkog odmora.
+opinions	3	Voljela bih čuti šta ostali predlažu.
+family_social	3	Volio bih razgovarati s prijateljem kad bude slobodan.
+family_social	3	Voljela bih vidjeti slike s porodičnog okupljanja.
+memories	2	Sinoć sam se sjetio našeg izleta na planinu.
+conversation	3	Sinoć sam gledao zanimljiv film do kraja.
+health	8	Sinoć sam spavao bolje nego prethodne noći.
+conversation	3	Sutra ćemo nastaviti razgovor kad dođeš.
+family_social	3	Sutra ćemo nazvati rodbinu poslije doručka.
+conversation	4	Ponovi molim te samo posljednje pitanje.
+conversation	4	Pričajte mi kako ste proveli vikend.
+needs	7	Dođi bliže da ti pokažem šta mi smeta.
+needs	7	Čekaj malo, nisam još završio odgovor.

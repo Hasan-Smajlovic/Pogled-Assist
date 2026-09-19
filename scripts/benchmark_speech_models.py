@@ -67,6 +67,7 @@ def benchmark(
         candidates.append(
             {
                 "requested_vocabulary": size,
+                "model_sha256": metadata[size]["model_sha256"],
                 "actual_vocabulary": metadata[size]["counts"]["words"],
                 "bigrams": metadata[size]["counts"]["bigrams"],
                 "trigrams": metadata[size]["counts"]["trigrams"],
@@ -102,6 +103,10 @@ def benchmark(
         "environment": {"platform": platform.platform(), "python": platform.python_version()},
         "preparation_seconds": round(preparation_seconds, 2),
         "recommended_vocabulary": recommended["requested_vocabulary"],
+        "ranking": {
+            "context_discount": model.context_discount,
+            "implementation_sha256": result["ranking"]["implementation_sha256"],
+        },
         "candidates": candidates,
     }
 

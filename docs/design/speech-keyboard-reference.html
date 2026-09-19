@@ -113,9 +113,9 @@
     .prediction-row button { overflow-wrap: anywhere; }
     #undo-word { width: 170px; min-height: 66px; font-size: 20px; }
     .learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .learning-grid button { min-height: 76px; overflow-wrap: anywhere; }
+    .learning-grid button { min-height: 68px; overflow-wrap: anywhere; }
     .learning-actions { display: flex; gap: 12px; align-items: center; }
-    .learning-actions button { min-height: 68px; flex: 1; }
+    .learning-actions button { min-height: 58px; flex: 1; }
     .learning-hint { color: #bac5d4; line-height: 1.5; }
     .word { min-height: 78px; border-color: #366c8d; background: #173447; color: #dff4ff; }
     .word:hover { background: #24516c; }
@@ -170,13 +170,13 @@
     .settings-screen {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 12px;
       min-height: 680px;
       height: calc(100vh - 24px);
       height: calc(100dvh - 24px);
       max-width: 2200px;
       margin: 0 auto;
-      padding: 20px 24px 24px;
+      padding: 16px;
       background: #111312;
       color: #f4f1ea;
     }
@@ -199,13 +199,13 @@
     .settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
     .settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
     .settings-danger { background: #492326 !important; border-color: #804047 !important; }
-    .settings-body { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 18px; flex: 1; min-height: 0; }
+    .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0; }
     .settings-panel { border: 1px solid #343a36; border-radius: 14px; background: #191c1a; }
-    .settings-nav { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+    .settings-nav { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
     .settings-nav-label { margin: 4px 8px 2px; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-    .settings-nav button { justify-content: flex-start; min-height: 72px; text-align: left; }
+    .settings-nav button { justify-content: flex-start; min-height: 66px; text-align: left; }
     .settings-nav-note { margin: auto 8px 6px; color: #8fa099; font-size: 13px; line-height: 1.45; }
-    .settings-page { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+    .settings-page { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
     .settings-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
     .settings-page-header h2 { margin: 0; color: #fff; font-size: 24px; font-weight: 650; }
     .settings-page-header p { margin: 0; color: #aeb9b3; font-size: 14px; }
@@ -216,7 +216,7 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      min-height: 66px;
+      min-height: 58px;
       width: auto;
       padding: 14px 18px;
       border: 1px solid #3a403c;
@@ -244,10 +244,10 @@
     .update-card [data-settings-action="install-update"] { min-width: 250px; }
     .setting-row {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 112px 160px 112px;
+      grid-template-columns: minmax(260px, 1fr) 104px 148px 104px;
       align-items: center;
       gap: 12px;
-      padding: 14px 16px;
+      padding: 4px 14px;
       border: 1px solid #3a403c;
       border-radius: 10px;
       background: #222522;
@@ -256,7 +256,7 @@
     .setting-copy p { margin: 0; color: #b9b2a5; font-size: 13px; }
     .setting-value { display: grid; place-items: center; min-height: 58px; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
     .settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; min-height: 64px; }
+    .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; min-height: 58px; }
     .settings-action-grid .wide { grid-column: 2 / -1; }
     .speech-actions { display: grid; grid-template-columns: repeat(2, minmax(210px, 280px)); gap: 12px; }
     @media (max-height: 760px) and (min-width: 901px) {
@@ -401,9 +401,9 @@
         </header>
         <p class="settings-group-label">Pokretanje i dijagnostika</p>
         <div class="settings-options">
-          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows (administrator)</label>
+          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows</label>
           <label class="settings-checkbox"><input type="checkbox">Uključi zapisivanje</label>
-          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell pri pokretanju</label>
+          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell</label>
         </div>
         <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">

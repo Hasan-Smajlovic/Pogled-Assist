@@ -6,10 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from gaze_mouse.suggestion_model import load_model_from_paths
+from gaze_mouse.suggestion_model import WordModel, load_model_from_paths
 from gaze_mouse.suggestion_text import START, words
 from scripts.benchmark_speech_models import choose_candidate
-from scripts.prepare_speech_model import PreparedCounts, load_supplement, metadata_path, write_model
+from scripts.compare_speech_ranking import FixedWeightModel, sparse_context_check
+from scripts.prepare_speech_model import (
+    PreparedCounts,
+    load_spelling,
+    load_supplement,
+    metadata_path,
+    write_model,
+)
 
 
 def test_curated_starters_survive_context_and_global_pruning(tmp_path, monkeypatch):
@@ -119,3 +126,69 @@ def test_benchmark_prefers_coverage_and_size_inside_quality_band():
 def test_benchmark_rejects_candidates_that_all_exceed_latency_budget():
     with pytest.raises(ValueError, match="latency budget"):
         choose_candidate([{"latency": {"p95_ms": 51}}])
+
+
+def test_ranking_comparison_rejects_fixed_weights_for_sparse_context():
+    counts = {("vode",): 1}
+
+    assert not sparse_context_check(FixedWeightModel(counts))["passed"]
+    assert sparse_context_check(WordModel(counts))["passed"]
+
+
+def test_reviewed_pairs_survive_high_frequency_web_competition(tmp_path, monkeypatch):
+    counts = Counter({("mi",): 1000, ("je",): 1000, ("telefon",): 10})
+    counts.update({("mi", "je"): 1000, ("mi", "telefon"): 10})
+    prepared = PreparedCounts(
+        counts,
+        frozenset({"mi", "telefon"}),
+        "",
+        "",
+        "",
+        "",
+        {},
+        {},
+        protected_ngrams=frozenset({("mi", "telefon")}),
+    )
+    monkeypatch.setattr("scripts.prepare_speech_model.PER_CONTEXT_LIMIT", 1)
+    monkeypatch.setattr("scripts.prepare_speech_model.PER_NGRAM_ORDER_LIMIT", 1)
+    destination = tmp_path / "candidate.json.gz"
+
+    write_model(prepared, destination, vocabulary=3)
+    model = load_model_from_paths(destination, metadata_path(destination))
+
+    assert model.contexts[("mi",)] == {"je": 1000, "telefon": 10}
+
+
+def test_vocabulary_budget_reserves_room_for_reviewed_words(tmp_path):
+    prepared = PreparedCounts(
+        Counter({("je",): 1000, ("se",): 900, ("telefon",): 5}),
+        frozenset({"telefon"}),
+        "",
+        "",
+        "",
+        "",
+        {},
+        {},
+    )
+    destination = tmp_path / "candidate.json.gz"
+    write_model(prepared, destination, vocabulary=2)
+    model = load_model_from_paths(destination, metadata_path(destination))
+
+    assert set(model.vocabulary) == {"je", "telefon"}
+
+
+def test_spelling_map_only_changes_reviewed_variants(tmp_path):
+    path = tmp_path / "spelling.tsv"
+    path.write_text("variant\tword\ncini\tčini\n", encoding="utf-8")
+    replacements = load_spelling(path)
+
+    assert replacements.get("cini", "cini") == "čini"
+    assert replacements.get("suma", "suma") == "suma"
+    assert replacements.get("šuma", "šuma") == "šuma"
+
+
+def test_spelling_map_rejects_ambiguous_chains(tmp_path):
+    path = tmp_path / "spelling.tsv"
+    path.write_text("variant\tword\ncini\tčini\nčini\tcini\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="chains or cycles"):
+        load_spelling(path)
