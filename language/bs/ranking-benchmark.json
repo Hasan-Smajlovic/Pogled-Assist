@@ -1,0 +1,89 @@
+{
+  "dataset": "development",
+  "dataset_sha256": "1aa3659e62e293dde6a3dfd4084aa3e313ed91fa6739a9c44775ee47f587f96f",
+  "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+  "implementation_sha256": "1ab4cd5fd42e3df5ebcacde9f0023d113a19d86b79af5b3e107548d2a6f26187",
+  "environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.10.21"
+  },
+  "selection_rule": "p95 at most 50 ms, no regression from fixed weights in activations or next-word top-five hits, and sparse context must back off while repeated context takes over; then fewest activations, most next-word top-five and top-one hits; ties prefer fixed weights, otherwise the larger discount for more fallback on sparse contexts",
+  "recommended": {
+    "ranking": "adaptive",
+    "context_discount": 10
+  },
+  "candidates": [
+    {
+      "ranking": "fixed",
+      "context_discount": null,
+      "activations": 1002,
+      "next_word_queries": 168,
+      "next_word_top_one_hits": 47,
+      "next_word_top_five_hits": 74,
+      "completion_selections": 119,
+      "sparse_context": {
+        "sparse_result": "VODE",
+        "supported_result": "VODE",
+        "passed": false
+      },
+      "latency": {
+        "mean_ms": 0.86,
+        "p95_ms": 3.53
+      }
+    },
+    {
+      "ranking": "adaptive",
+      "context_discount": 2,
+      "activations": 1002,
+      "next_word_queries": 168,
+      "next_word_top_one_hits": 47,
+      "next_word_top_five_hits": 74,
+      "completion_selections": 118,
+      "sparse_context": {
+        "sparse_result": "VODE",
+        "supported_result": "VODE",
+        "passed": false
+      },
+      "latency": {
+        "mean_ms": 0.85,
+        "p95_ms": 3.67
+      }
+    },
+    {
+      "ranking": "adaptive",
+      "context_discount": 10,
+      "activations": 1002,
+      "next_word_queries": 168,
+      "next_word_top_one_hits": 47,
+      "next_word_top_five_hits": 74,
+      "completion_selections": 118,
+      "sparse_context": {
+        "sparse_result": "JE",
+        "supported_result": "VODE",
+        "passed": true
+      },
+      "latency": {
+        "mean_ms": 0.83,
+        "p95_ms": 3.51
+      }
+    },
+    {
+      "ranking": "adaptive",
+      "context_discount": 40,
+      "activations": 1010,
+      "next_word_queries": 168,
+      "next_word_top_one_hits": 45,
+      "next_word_top_five_hits": 70,
+      "completion_selections": 122,
+      "sparse_context": {
+        "sparse_result": "JE",
+        "supported_result": "VODE",
+        "passed": true
+      },
+      "latency": {
+        "mean_ms": 0.83,
+        "p95_ms": 3.62
+      }
+    }
+  ]
+}

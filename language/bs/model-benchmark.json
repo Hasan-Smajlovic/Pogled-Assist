@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "dataset": "development",
+  "selection_rule": "p95 model latency at most 50 ms; then within 0.5% of the fewest activations prefer fewer missing development words and a smaller model",
+  "environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.10.21"
+  },
+  "preparation_seconds": 118.08,
+  "recommended_vocabulary": 60000,
+  "ranking": {
+    "context_discount": 10.0,
+    "implementation_sha256": "1ab4cd5fd42e3df5ebcacde9f0023d113a19d86b79af5b3e107548d2a6f26187"
+  },
+  "candidates": [
+    {
+      "requested_vocabulary": 20000,
+      "model_sha256": "fa3a4c8910626832347dcd50c735046e52a806201480f8512c602c18dcff44c8",
+      "actual_vocabulary": 20000,
+      "bigrams": 105625,
+      "trigrams": 96916,
+      "compressed_bytes": 1038346,
+      "development_missing_words": [
+        "dobrovoljca",
+        "odgovorom",
+        "odmorili",
+        "opraštamo",
+        "pekmeza",
+        "plav",
+        "pokvarila",
+        "ugasite",
+        "đaci",
+        "žurio"
+      ],
+      "development_missing_word_count": 10,
+      "loading_ms": 432.92,
+      "latency": {
+        "mean_ms": 0.29,
+        "p95_ms": 1.17,
+        "max_ms": 3.29
+      },
+      "activations": 1023,
+      "activation_reduction_percent": 54.97,
+      "next_word_top_one_percent": 27.98,
+      "next_word_top_five_percent": 44.05
+    },
+    {
+      "requested_vocabulary": 40000,
+      "model_sha256": "a60706aacdb3f16c8fd7b24d4060d6473e0c33facc8491f97c77a002e7ac4154",
+      "actual_vocabulary": 40000,
+      "bigrams": 120160,
+      "trigrams": 102828,
+      "compressed_bytes": 1234419,
+      "development_missing_words": [
+        "dobrovoljca",
+        "odmorili",
+        "opraštamo",
+        "žurio"
+      ],
+      "development_missing_word_count": 4,
+      "loading_ms": 552.87,
+      "latency": {
+        "mean_ms": 0.56,
+        "p95_ms": 2.37,
+        "max_ms": 6.65
+      },
+      "activations": 1003,
+      "activation_reduction_percent": 55.85,
+      "next_word_top_one_percent": 27.98,
+      "next_word_top_five_percent": 44.05
+    },
+    {
+      "requested_vocabulary": 60000,
+      "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+      "actual_vocabulary": 60000,
+      "bigrams": 125899,
+      "trigrams": 104965,
+      "compressed_bytes": 1358833,
+      "development_missing_words": [
+        "dobrovoljca",
+        "opraštamo",
+        "žurio"
+      ],
+      "development_missing_word_count": 3,
+      "loading_ms": 659.86,
+      "latency": {
+        "mean_ms": 0.8,
+        "p95_ms": 3.27,
+        "max_ms": 9.13
+      },
+      "activations": 1002,
+      "activation_reduction_percent": 55.9,
+      "next_word_top_one_percent": 27.98,
+      "next_word_top_five_percent": 44.05
+    }
+  ]
+}

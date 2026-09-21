@@ -1,0 +1,3 @@
+scripts/prepare_speech_model.py text eol=lf
+language/bs/*.tsv text eol=lf
+gaze_mouse/assets/bosnian-model.json.gz binary
