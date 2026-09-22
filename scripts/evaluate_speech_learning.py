@@ -18,13 +18,15 @@ if __package__ in (None, ""):
 
 from gaze_mouse.suggestion_learning import LearningStore
 from gaze_mouse.suggestion_model import (
+    ISLAMIC_MODEL_PATH,
     MODEL_METADATA_PATH,
     MODEL_PATH,
     WordModel,
+    load_model,
     load_model_from_paths,
 )
 
-SCENARIOS = Path(__file__).resolve().parents[1] / "language" / "bs" / "learning.tsv"
+SCENARIOS = Path(__file__).resolve().parents[1] / "language" / "bs" / "evaluation" / "learning.tsv"
 
 
 def rank(candidates: list[str], target: str) -> int | None:
@@ -150,10 +152,14 @@ def main() -> None:
     args = parser.parse_args()
     if any(size < 0 for size in args.stress_sizes):
         parser.error("Profile sizes must not be negative")
-    model = load_model_from_paths(args.model, args.metadata)
+    bundled = args.model == MODEL_PATH and args.metadata == MODEL_METADATA_PATH
+    model = load_model() if bundled else load_model_from_paths(args.model, args.metadata)
     scenarios = evaluate_learning(model, args.scenarios)
     result = {
         "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
+        "islamic_model_sha256": (
+            hashlib.sha256(ISLAMIC_MODEL_PATH.read_bytes()).hexdigest() if bundled else None
+        ),
         "scenarios_sha256": hashlib.sha256(args.scenarios.read_bytes()).hexdigest(),
         "implementation_sha256": hashlib.sha256(
             (MODEL_PATH.parents[1] / "suggestion_model.py").read_bytes()
@@ -173,7 +179,7 @@ def main() -> None:
     args.output.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, indent=2))
     if not result["quality"]["passed"]:
         raise SystemExit("Personal-learning quality checks failed")
 

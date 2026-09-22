@@ -155,9 +155,11 @@ undo state available.
 
 When the next text entry after a suggestion is `.`, `,`, `?`, or `!`, remove the
 single trailing space automatically inserted by that suggestion and place the
-punctuation immediately after the word. Apply this at the end of the active
-supported input for both gaze and mouse or physical keyboard entry. The rule
-does not add punctuation keys to the existing gaze keyboard.
+punctuation immediately after the word. After entering `.` or `?`, append one
+space automatically. Ignore an immediately repeated space so the automatic
+separator is not duplicated. Apply this at the end of the active supported input
+for both gaze and mouse or physical keyboard entry. The rule does not add
+punctuation keys to the existing gaze keyboard.
 
 When selecting a next word directly after one of these punctuation marks, insert
 one space before the word if there is no separating whitespace, then leave the
@@ -170,7 +172,7 @@ suggestion selection.
 
 | Input before action | Action | Input afterwards |
 | --- | --- | --- |
-| `ŽELIM VODU␠` | Enter `.` | `ŽELIM VODU.` |
+| `ŽELIM VODU␠` | Enter `.` | `ŽELIM VODU.␠` |
 | `ŽELIM VODU.` | Select `HVALA` | `ŽELIM VODU. HVALA␠` |
 | `ŽELIM VODU.␠` | Select `HVALA` | `ŽELIM VODU. HVALA␠` |
 
@@ -399,6 +401,20 @@ separately and all survive model pruning. A repository test rejects exact overla
 between the supplement and either frozen evaluation set. That check does not
 establish independence from paraphrases or similar expressions.
 
+A second, independently rebuildable layer contains 180 reviewed synthetic
+messages in eight Islamic-domain categories. It contributes 406 words and
+specific two-word contexts without replacing the general 60,000-word
+model. The coverage includes worship, Qur'an and hadith, Ramadan and Bajram,
+mosque and community life, Islamic scholarship, ethical vocabulary, greetings,
+and biographical phrases relevant to a former imam. Spelling and terminology
+were checked against the Islamic Community in Bosnia and Herzegovina's
+[Islam.ba platform](https://www.islam.ba/platforma) and its
+[short terminology guide](https://www.islam.ba/teme/tekst/kratki-rjecnik-pojmovnik-islamskih-termina);
+the training sentences themselves are project-authored and contain no private
+conversation. Apostrophes are supported inside words so `KUR` or `KURAN` can
+complete to the canonical `KUR'AN` even though the grouped keyboard has no
+apostrophe key.
+
 ### Verified refinement candidate
 
 The selected conversation supplement includes more short requests, questions,
@@ -411,7 +427,7 @@ Preparation reserves vocabulary space for reviewed words within the 60,000-word
 budget. Reviewed word pairs and triples survive both context and global pruning;
 the pruning limits now apply to web-only combinations. A starter absent from
 other inputs receives a positive unigram count, so it remains loadable and
-eligible for completion. `language/bs/spelling.tsv` contains 90 explicit,
+eligible for completion. `language/bs/model/core/spelling.tsv` contains 90 explicit,
 reviewed mappings for common ASCII spellings in the web source, such as `cini`
 to `čini`. It deliberately leaves ambiguous pairs such as `sto` and `što`,
 `oci` and `oči`, `reci` and `reći`, and `suma` and `šuma` separate. It does not
@@ -478,7 +494,7 @@ phrasing becomes useful quickly without replacing all fallback choices. These
 are ranking heuristics, not calibrated probabilities. The 10% fallback floor
 keeps other completions eligible.
 
-[`ranking-benchmark.json`](../language/bs/ranking-benchmark.json) compares fixed
+[`ranking.json`](../language/bs/benchmarks/ranking.json) compares fixed
 and adaptive weights on the same prepared language data. Fixed weights and
 adaptive discounts of 2 and 10 each need 1,002 development activations, with
 74/168 next-word top-five and 47/168 top-one hits. A separate sparse-context
@@ -548,15 +564,15 @@ loading separately.
 Prediction work must not stall the UI or apply an old result to changed text.
 
 The selected candidate's frozen Mac evaluation is recorded in
-[`evaluation-development.json`](../language/bs/evaluation-development.json) and
-[`evaluation-heldout.json`](../language/bs/evaluation-heldout.json). On the first
+[`development.json`](../language/bs/evaluation/reports/development.json) and
+[`heldout.json`](../language/bs/evaluation/reports/heldout.json). On the first
 held-out run, the original 20,000-word contextual model used 3,724 activations
 versus 6,337 for the grouped keyboard, a 41.23% reduction. The 500-message,
 60,000-word model subsequently used 3,441 activations, a 45.70% reduction.
 The current 640-message model, 90 spelling mappings, and adaptive ranking were
 selected from the development comparisons in
-[`model-benchmark.json`](../language/bs/model-benchmark.json) and
-[`ranking-benchmark.json`](../language/bs/ranking-benchmark.json). It needs 1,002
+[`model.json`](../language/bs/benchmarks/model.json) and
+[`ranking.json`](../language/bs/benchmarks/ranking.json). It needs 1,002
 activations versus 2,272 for the grouped keyboard on the development set, a
 55.90% reduction, with 74/168 exact next-word top-five and 47/168 top-one hits.
 Its final held-out regression run needs 3,378 activations versus 6,337, a 46.69%
@@ -758,11 +774,11 @@ git diff --check development
 pwsh -NoLogo -NoProfile -File scripts/check_powershell.ps1
 .dev-tools/actionlint/1.7.12-darwin-arm64/actionlint
 .venv/bin/python -B -m gaze_mouse.main --package-smoke-test
-.venv/bin/python scripts/benchmark_speech_models.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output-dir /private/tmp/pogled-suggestions-review-final-v2 --report language/bs/model-benchmark.json
-.venv/bin/python scripts/compare_speech_ranking.py --output language/bs/ranking-benchmark.json
-.venv/bin/python scripts/evaluate_speech_model.py --dataset development --output language/bs/evaluation-development.json
-.venv/bin/python scripts/evaluate_speech_model.py --dataset heldout --output language/bs/evaluation-heldout.json
-.venv/bin/python scripts/evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language/bs/evaluation-learning.json
+.venv/bin/python scripts/benchmark_speech_models.py .dev-tools/corpora/CLASSLA-web.bs.2.0.jsonl.gz --output-dir /private/tmp/pogled-suggestions-review-final-v2 --report language/bs/benchmarks/model.json
+.venv/bin/python scripts/compare_speech_ranking.py --output language/bs/benchmarks/ranking.json
+.venv/bin/python scripts/evaluate_speech_model.py --dataset development --output language/bs/evaluation/reports/development.json
+.venv/bin/python scripts/evaluate_speech_model.py --dataset heldout --output language/bs/evaluation/reports/heldout.json
+.venv/bin/python scripts/evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language/bs/evaluation/reports/learning.json
 QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-review-ui-1280-final --width 1280 --height 720
 QT_QPA_PLATFORM=offscreen .venv/bin/python -B -m scripts.capture_ui --output /private/tmp/pogled-review-ui-1440-final --width 1440 --height 900
 ```
@@ -783,6 +799,39 @@ pending and must run on the owning environment before full acceptance:
 - Real Tobii selection and eye-loss safety, AppBar, calibration, Windows input,
   and offline and online speech checks from the existing development and release
   guides.
+
+### Windows software verification for the Islamic layer and automatic spacing
+
+The working diff on `development` was checked on 2026-09-22 with Windows 11,
+Python 3.12.14, PySide6 6.11.2, and Qt 6.11.2. This environment verifies the
+software behaviour but does not replace the required Python 3.10 release build
+or target-device checks.
+
+The following checks passed:
+
+- GitHub Actions syntax, Ruff lint and formatting, Python bytecode compilation,
+  PSScriptAnalyzer 1.25.0 for all 10 PowerShell scripts, `git diff --check`, and
+  the source package smoke test with both language layers.
+- The hardware-independent suite excluding the blocked installer module: 239
+  passed with 69.64% coverage against the 60% floor. The focused Islamic model,
+  text, UI, and runtime-entrypoint set passed all 59 tests.
+- The rebuilt model contains 406 reviewed words and 506 specific two-word
+  contexts. Development evaluation reproduced 1,042 contextual activations, a
+  54.93% reduction, with 74 of 168 next-word targets in the visible five.
+  Held-out regression evaluation reproduced 3,476 activations, a 46.00%
+  reduction, with 132 of 475 next-word targets in the visible five. All personal
+  learning scenarios passed.
+
+Seven installer tests could not complete as a trustworthy release result in this
+host policy. A sandboxed run denied process inspection. A separate unrestricted
+run passed three tests, while Windows Application Control blocked the temporary
+unsigned test executable required by the remaining four. No installed
+application or user data was changed. The machine has no working Python 3.10
+installation, and the repository `.venv` points to a removed Python 3.10 path,
+so `dev.ps1 check`, the PyInstaller package build, and frozen executable smoke
+test were not run. Real Tobii selection, eye-loss safety, AppBar, calibration,
+speech hardware, offline installation, update and rollback, and target-display
+checks also remain pending.
 
 ## Acceptance checklist
 
@@ -808,6 +857,9 @@ are recorded.
   its automatically inserted trailing space. A following suggested word gets a
   separating space when needed, without duplicating existing whitespace or
   reformatting earlier text. Its undo restores the exact previous input.
+- [x] Entering `.` or `?` at the end of a supported input automatically adds one
+  following space for the next sentence and ignores an immediately repeated
+  space.
 - [x] `.`, `?`, and `!` start a new prediction context and offer sentence starters
   without requiring a typed space. A comma retains the sentence context. Seed
   preparation and personal learning use the same boundaries, and personal

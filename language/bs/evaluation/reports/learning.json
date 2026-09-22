@@ -1,15 +1,16 @@
 {
   "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+  "islamic_model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
   "scenarios_sha256": "f66daf0313ccb5a2f9e3beea3977030cacaa7a91c9491aca4870e4feebd7a2ca",
-  "implementation_sha256": "1ab4cd5fd42e3df5ebcacde9f0023d113a19d86b79af5b3e107548d2a6f26187",
+  "implementation_sha256": "8491e9e76b337bf8fd4be9c967c9ba835e19418368f2af2bb1a060cfd35a8b35",
   "ranking": {
     "context_discount": 10.0,
     "personal_context_discount": 2.5,
     "personal_context_blend": 2.0
   },
   "environment": {
-    "platform": "macOS-27.0-arm64-arm-64bit",
-    "python": "3.10.21"
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14"
   },
   "scope": "Synthetic development scenarios, not blind validation or Windows UI latency. Each use is a separate submitted message.",
   "quality": {
@@ -36,7 +37,7 @@
             "BITI",
             "JOŠ",
             "MALO",
-            "DA"
+            "SLUŠATI"
           ],
           "target_rank": null,
           "control_candidates": [
@@ -629,9 +630,9 @@
           "candidates": [
             "DOKTORA",
             "ME",
+            "IMAMA",
             "I",
-            "JE",
-            "U"
+            "JE"
           ],
           "target_rank": null,
           "control_candidates": [
@@ -650,8 +651,8 @@
             "DOKTORA",
             "HADŽIĆA",
             "ME",
-            "I",
-            "JE"
+            "IMAMA",
+            "I"
           ],
           "target_rank": 2,
           "control_candidates": [
@@ -670,8 +671,8 @@
             "HADŽIĆA",
             "DOKTORA",
             "ME",
-            "NAZOVI",
-            "I"
+            "IMAMA",
+            "NAZOVI"
           ],
           "target_rank": 1,
           "control_candidates": [
@@ -690,8 +691,8 @@
             "HADŽIĆA",
             "DOKTORA",
             "ME",
-            "NAZOVI",
-            "I"
+            "IMAMA",
+            "NAZOVI"
           ],
           "target_rank": 1,
           "control_candidates": [
@@ -1222,33 +1223,33 @@
       "entries": 0,
       "words": 0,
       "indexing_ms": 0.04,
-      "first_query_ms": 0.44,
-      "mean_ms": 1.71,
-      "p95_ms": 5.22
+      "first_query_ms": 0.34,
+      "mean_ms": 3.21,
+      "p95_ms": 10.04
     },
     {
       "entries": 10000,
       "words": 10000,
-      "indexing_ms": 8.73,
-      "first_query_ms": 22.44,
-      "mean_ms": 2.05,
-      "p95_ms": 5.47
+      "indexing_ms": 20.38,
+      "first_query_ms": 33.17,
+      "mean_ms": 3.96,
+      "p95_ms": 10.38
     },
     {
       "entries": 50000,
       "words": 50000,
-      "indexing_ms": 48.84,
-      "first_query_ms": 27.85,
-      "mean_ms": 4.56,
-      "p95_ms": 8.89
+      "indexing_ms": 114.88,
+      "first_query_ms": 40.51,
+      "mean_ms": 8.59,
+      "p95_ms": 16.87
     },
     {
       "entries": 150000,
-      "words": 60000,
-      "indexing_ms": 75.28,
-      "first_query_ms": 29.17,
-      "mean_ms": 5.26,
-      "p95_ms": 9.41
+      "words": 60045,
+      "indexing_ms": 175.76,
+      "first_query_ms": 48.5,
+      "mean_ms": 10.77,
+      "p95_ms": 18.62
     }
   ]
 }

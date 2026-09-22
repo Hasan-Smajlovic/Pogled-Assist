@@ -472,7 +472,7 @@
         <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
         <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
         <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
-        <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model.</li>
+        <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
         <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
         <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. Pomjeranje na drugi cilj poništava oba tajmera. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
@@ -539,7 +539,7 @@
         ['O', 'P', 'R', 'S', 'Š'], ['T', 'U', 'V', 'Z', 'Ž']
       ];
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
-      const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO'];
+      const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
       const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
       const GAZE_FILL_MS = 500;
@@ -590,9 +590,15 @@
         handleAction(button.dataset.action, button.dataset.value);
       });
       message.addEventListener('input', () => {
-        if (autoSpace && message.value.length === lastText.length + 1 && message.value.startsWith(lastText) && /[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
-        const start = message.selectionStart;
-        const end = message.selectionEnd;
+        const appended = message.value.length === lastText.length + 1 && message.value.startsWith(lastText);
+        const boundary = appended && /[.?]$/.test(message.value);
+        const duplicateSpace = appended && /[.?] $/.test(lastText) && /\s$/.test(message.value);
+        if (autoSpace && appended && /[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
+        if (boundary) message.value += ' ';
+        if (duplicateSpace) message.value = lastText;
+        const moveToEnd = boundary || duplicateSpace;
+        const start = moveToEnd ? message.value.length : message.selectionStart;
+        const end = moveToEnd ? message.value.length : message.selectionEnd;
         message.value = message.value.toLocaleUpperCase('bs');
         message.setSelectionRange(start, end);
         undoWord = null; autoSpace = false; renderPredictions(); updateSave();
@@ -902,9 +908,11 @@
       }
 
       function append(value) {
+        if (value === ' ' && /[.?] $/.test(message.value)) return;
         if (autoSpace && /^[.,?!]$/.test(value)) message.value = message.value.slice(0, -1);
         undoWord = null; autoSpace = false;
         message.value += value.toLocaleUpperCase('bs');
+        if (/^[.?]$/.test(value)) message.value += ' ';
         message.scrollLeft = message.scrollWidth;
         renderPredictions();
         updateSave();

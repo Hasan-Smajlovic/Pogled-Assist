@@ -15,7 +15,7 @@
     "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
     "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
     "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
-    "preparation_sha256": "514de6401bd2f20d7baa170af3712aa9d4b85904803ffac09acc6ffea96802cf",
+    "preparation_sha256": "fa858196b6d411412b189147e9d21b31069444e8c886187a8cc2a6b3bd5036b2",
     "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
     "sample": {
       "records_scanned": 2538848,
@@ -86,18 +86,155 @@
     },
     "compressed_bytes": 1358833
   },
+  "model_layers": [
+    {
+      "version": 1,
+      "model_id": "bs-classla-2.0-conversation-4-v60000-ffb09b61638b",
+      "source": "CLASSLA-web.bs 2.0",
+      "source_url": "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11",
+      "source_license": "CC0-1.0",
+      "source_md5": "f92e72f4fe08362a1297f311ac20ad33",
+      "source_sha256": "2b8e8e853e6ca974ef64072b9367d2aa935584c0fcc6e132a965747215af2ada",
+      "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
+      "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
+      "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
+      "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
+      "preparation_sha256": "fa858196b6d411412b189147e9d21b31069444e8c886187a8cc2a6b3bd5036b2",
+      "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+      "sample": {
+        "records_scanned": 2538848,
+        "documents": 20924,
+        "tokens": 5482578,
+        "domains": 1635,
+        "genres": {
+          "News": 3000,
+          "Opinion/Argumentation": 4919,
+          "Information/Explanation": 4968,
+          "Instruction": 3024,
+          "Prose/Lyrical": 1330,
+          "Forum": 3683
+        },
+        "id_hash_modulus": 20,
+        "per_domain_limit": 240,
+        "news_limit": 3000
+      },
+      "supplement": {
+        "rows": 640,
+        "categories": {
+          "care": 62,
+          "comfort": 45,
+          "conversation": 108,
+          "emergency": 35,
+          "family_social": 40,
+          "food_drink": 62,
+          "greetings": 24,
+          "health": 66,
+          "humour": 26,
+          "memories": 31,
+          "needs": 100,
+          "opinions": 41
+        },
+        "weighted_rows": {
+          "care": 496,
+          "comfort": 315,
+          "conversation": 372,
+          "emergency": 350,
+          "family_social": 120,
+          "food_drink": 372,
+          "greetings": 72,
+          "health": 528,
+          "humour": 52,
+          "memories": 62,
+          "needs": 708,
+          "opinions": 88
+        },
+        "starters": 70
+      },
+      "configuration": {
+        "maximum_vocabulary": 60000,
+        "minimum_word_count": 5,
+        "minimum_ngram_count": 3,
+        "per_context_limit": 32,
+        "per_ngram_order_limit": 160000,
+        "supplement_multiplier": 40,
+        "starter_multiplier": 200,
+        "protect_reviewed_ngrams": true,
+        "spelling_scope": "reviewed replacements in web data only",
+        "spelling_replacements": 90
+      },
+      "counts": {
+        "words": 60000,
+        "bigrams": 125899,
+        "trigrams": 104965,
+        "protected_ngrams": 3515
+      },
+      "compressed_bytes": 1358833
+    },
+    {
+      "version": 1,
+      "model_id": "bs-islamic-reviewed-1-286a103a6519",
+      "source": "Reviewed synthetic Bosnian Islamic terminology and conversation phrases",
+      "text_origin": "Project-authored examples; reference pages were used for terminology only",
+      "source_references": [
+        {
+          "title": "Islam.ba - platforma Islamske zajednice u Bosni i Hercegovini",
+          "url": "https://www.islam.ba/platforma"
+        },
+        {
+          "title": "Islam.ba - kratki rječnik islamskih termina",
+          "url": "https://www.islam.ba/teme/tekst/kratki-rjecnik-pojmovnik-islamskih-termina"
+        }
+      ],
+      "supplement_sha256": "bfee0ed0c5e551824e228d36795294047298a792b55de4b587891d5edb1b4c6d",
+      "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
+      "preparation_sha256": "b449994cad6e342df7a095fd0ee84e8f4434d6809725ed8d9cde42b16fc9d045",
+      "model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
+      "supplement": {
+        "rows": 180,
+        "categories": {
+          "biography": 10,
+          "community": 26,
+          "greetings": 15,
+          "quran_hadith": 26,
+          "ramadan_bayram": 24,
+          "scholarship": 27,
+          "values": 20,
+          "worship": 32
+        },
+        "weighted_rows": {
+          "biography": 76,
+          "community": 191,
+          "greetings": 120,
+          "quran_hadith": 205,
+          "ramadan_bayram": 184,
+          "scholarship": 184,
+          "values": 146,
+          "worship": 240
+        }
+      },
+      "configuration": {
+        "domain_boost": 5
+      },
+      "counts": {
+        "words": 406,
+        "bigrams": 0,
+        "trigrams": 506
+      },
+      "compressed_bytes": 4945
+    }
+  ],
   "environment": {
-    "platform": "macOS-27.0-arm64-arm-64bit",
-    "python": "3.10.21"
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14"
   },
   "profile": "empty per message",
   "assumption": "ideal exact beneficial selection; no intentional mistakes",
   "ranking": {
     "method": "adaptive context interpolation",
     "context_discount": 10.0,
-    "implementation_sha256": "1ab4cd5fd42e3df5ebcacde9f0023d113a19d86b79af5b3e107548d2a6f26187",
-    "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
-    "evaluator_sha256": "f474aa2deb3a740d487abfdd5f98248742a7d71d75f4f605743788854883ec79"
+    "implementation_sha256": "8491e9e76b337bf8fd4be9c967c9ba835e19418368f2af2bb1a060cfd35a8b35",
+    "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
+    "evaluator_sha256": "cce5fb17a2250ba5517e3aa2486b979f6372a67f9efcbc51800149510b1ebd0b"
   },
   "metric_notes": {
     "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
@@ -105,22 +242,22 @@
     "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
     "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending."
   },
-  "loading_ms": 607.92,
+  "loading_ms": 1600.0,
   "latency": {
     "frequency": {
-      "mean_ms": 0.72,
-      "p95_ms": 2.58,
-      "max_ms": 6.3
+      "mean_ms": 1.38,
+      "p95_ms": 5.62,
+      "max_ms": 13.02
     },
     "contextual": {
-      "mean_ms": 0.83,
-      "p95_ms": 3.49,
-      "max_ms": 9.68
+      "mean_ms": 1.58,
+      "p95_ms": 6.53,
+      "max_ms": 17.59
     }
   },
   "totals": {
     "keyboard": {
-      "activations": 2272,
+      "activations": 2312,
       "letters": 992,
       "suggestion_selections": 0,
       "same_slot_departures": 0,
@@ -141,7 +278,7 @@
       "prediction_selections": 0
     },
     "frequency": {
-      "activations": 1338,
+      "activations": 1378,
       "letters": 507,
       "suggestion_selections": 192,
       "same_slot_departures": 1,
@@ -160,7 +297,7 @@
       "completion_top_five_hits": 186,
       "completion_selections": 175,
       "prediction_selections": 17,
-      "activation_reduction_percent": 41.11,
+      "activation_reduction_percent": 40.4,
       "sentence_start_top_one_percent": 0.0,
       "sentence_start_top_five_percent": 2.5,
       "next_word_top_one_percent": 0.6,
@@ -169,7 +306,7 @@
       "completion_top_five_percent": 36.69
     },
     "contextual": {
-      "activations": 1002,
+      "activations": 1042,
       "letters": 338,
       "suggestion_selections": 195,
       "same_slot_departures": 27,
@@ -188,7 +325,7 @@
       "completion_top_five_hits": 126,
       "completion_selections": 118,
       "prediction_selections": 77,
-      "activation_reduction_percent": 55.9,
+      "activation_reduction_percent": 54.93,
       "sentence_start_top_one_percent": 0.0,
       "sentence_start_top_five_percent": 7.5,
       "next_word_top_one_percent": 27.98,
@@ -199,34 +336,34 @@
   },
   "categories": {
     "needs": {
-      "keyboard": 397,
-      "frequency": 235,
-      "contextual": 193,
-      "contextual_reduction_percent": 51.39
+      "keyboard": 405,
+      "frequency": 241,
+      "contextual": 201,
+      "contextual_reduction_percent": 50.37
     },
     "conversation": {
-      "keyboard": 340,
-      "frequency": 210,
-      "contextual": 142,
-      "contextual_reduction_percent": 58.24
+      "keyboard": 348,
+      "frequency": 218,
+      "contextual": 150,
+      "contextual_reduction_percent": 56.9
     },
     "humour": {
-      "keyboard": 500,
-      "frequency": 293,
-      "contextual": 237,
-      "contextual_reduction_percent": 52.6
+      "keyboard": 508,
+      "frequency": 301,
+      "contextual": 245,
+      "contextual_reduction_percent": 51.77
     },
     "memories": {
-      "keyboard": 559,
-      "frequency": 334,
-      "contextual": 218,
-      "contextual_reduction_percent": 61.0
+      "keyboard": 567,
+      "frequency": 344,
+      "contextual": 226,
+      "contextual_reduction_percent": 60.14
     },
     "opinions": {
-      "keyboard": 476,
-      "frequency": 266,
-      "contextual": 212,
-      "contextual_reduction_percent": 55.46
+      "keyboard": 484,
+      "frequency": 274,
+      "contextual": 220,
+      "contextual_reduction_percent": 54.55
     }
   },
   "miss_reasons": {
@@ -239,7 +376,7 @@
       "id": "d01",
       "category": "needs",
       "keyboard": {
-        "activations": 35,
+        "activations": 36,
         "letters": 15,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -260,7 +397,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 16,
+        "activations": 17,
         "letters": 5,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -281,7 +418,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 16,
+        "activations": 17,
         "letters": 5,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -330,7 +467,7 @@
             "BITI",
             "JOŠ",
             "MALO",
-            "DA"
+            "SLUŠATI"
           ]
         },
         {
@@ -355,7 +492,7 @@
       "id": "d02",
       "category": "needs",
       "keyboard": {
-        "activations": 45,
+        "activations": 46,
         "letters": 19,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -376,12 +513,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 24,
-        "letters": 8,
+        "activations": 23,
+        "letters": 7,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
         "top_five_hits": 5,
-        "queries": 13,
+        "queries": 12,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -390,14 +527,14 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 8,
-        "completion_top_one_hits": 1,
+        "completion_queries": 7,
+        "completion_top_one_hits": 0,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 14,
+        "activations": 15,
         "letters": 3,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -455,7 +592,7 @@
       "id": "d03",
       "category": "needs",
       "keyboard": {
-        "activations": 54,
+        "activations": 55,
         "letters": 24,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -476,7 +613,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 31,
+        "activations": 32,
         "letters": 12,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -497,7 +634,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 23,
+        "activations": 24,
         "letters": 8,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -571,7 +708,7 @@
       "id": "d04",
       "category": "needs",
       "keyboard": {
-        "activations": 52,
+        "activations": 53,
         "letters": 22,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -592,7 +729,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 31,
+        "activations": 32,
         "letters": 11,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -613,7 +750,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 19,
+        "activations": 20,
         "letters": 5,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -688,7 +825,7 @@
       "id": "d05",
       "category": "needs",
       "keyboard": {
-        "activations": 63,
+        "activations": 64,
         "letters": 28,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -709,7 +846,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 38,
+        "activations": 39,
         "letters": 15,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -730,7 +867,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 38,
+        "activations": 39,
         "letters": 15,
         "suggestion_selections": 4,
         "same_slot_departures": 1,
@@ -820,7 +957,7 @@
       "id": "d06",
       "category": "needs",
       "keyboard": {
-        "activations": 40,
+        "activations": 41,
         "letters": 17,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -841,7 +978,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 27,
+        "activations": 28,
         "letters": 10,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -862,7 +999,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 25,
+        "activations": 26,
         "letters": 9,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -936,7 +1073,7 @@
       "id": "d07",
       "category": "needs",
       "keyboard": {
-        "activations": 42,
+        "activations": 43,
         "letters": 18,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -957,7 +1094,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 21,
+        "activations": 22,
         "letters": 7,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -978,7 +1115,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 11,
+        "activations": 12,
         "letters": 2,
         "suggestion_selections": 4,
         "same_slot_departures": 1,
@@ -1036,7 +1173,7 @@
       "id": "d08",
       "category": "needs",
       "keyboard": {
-        "activations": 66,
+        "activations": 67,
         "letters": 30,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1057,7 +1194,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 47,
+        "activations": 48,
         "letters": 20,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1078,7 +1215,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 47,
+        "activations": 48,
         "letters": 20,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1168,7 +1305,7 @@
       "id": "d09",
       "category": "conversation",
       "keyboard": {
-        "activations": 33,
+        "activations": 34,
         "letters": 14,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1189,7 +1326,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 22,
+        "activations": 23,
         "letters": 8,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -1210,7 +1347,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 16,
+        "activations": 17,
         "letters": 5,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -1268,7 +1405,7 @@
       "id": "d10",
       "category": "conversation",
       "keyboard": {
-        "activations": 49,
+        "activations": 50,
         "letters": 21,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1289,7 +1426,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 26,
+        "activations": 27,
         "letters": 9,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -1310,7 +1447,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 20,
+        "activations": 21,
         "letters": 6,
         "suggestion_selections": 5,
         "same_slot_departures": 1,
@@ -1400,7 +1537,7 @@
       "id": "d11",
       "category": "conversation",
       "keyboard": {
-        "activations": 48,
+        "activations": 49,
         "letters": 20,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1421,7 +1558,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 29,
+        "activations": 30,
         "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -1442,7 +1579,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 13,
+        "activations": 14,
         "letters": 2,
         "suggestion_selections": 6,
         "same_slot_departures": 3,
@@ -1484,7 +1621,7 @@
       "id": "d12",
       "category": "conversation",
       "keyboard": {
-        "activations": 35,
+        "activations": 36,
         "letters": 15,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1505,7 +1642,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 18,
+        "activations": 19,
         "letters": 6,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -1526,7 +1663,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 14,
+        "activations": 15,
         "letters": 4,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -1584,7 +1721,7 @@
       "id": "d13",
       "category": "conversation",
       "keyboard": {
-        "activations": 47,
+        "activations": 48,
         "letters": 20,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1605,7 +1742,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 26,
+        "activations": 27,
         "letters": 9,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1626,7 +1763,7 @@
         "prediction_selections": 2
       },
       "contextual": {
-        "activations": 18,
+        "activations": 19,
         "letters": 5,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -1684,7 +1821,7 @@
       "id": "d14",
       "category": "conversation",
       "keyboard": {
-        "activations": 47,
+        "activations": 48,
         "letters": 20,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1705,7 +1842,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 40,
+        "activations": 41,
         "letters": 16,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1726,7 +1863,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 24,
+        "activations": 25,
         "letters": 8,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1816,7 +1953,7 @@
       "id": "d15",
       "category": "conversation",
       "keyboard": {
-        "activations": 41,
+        "activations": 42,
         "letters": 17,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1837,7 +1974,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 20,
+        "activations": 21,
         "letters": 6,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -1858,7 +1995,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 10,
+        "activations": 11,
         "letters": 1,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -1901,7 +2038,7 @@
       "id": "d16",
       "category": "conversation",
       "keyboard": {
-        "activations": 40,
+        "activations": 41,
         "letters": 17,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -1922,7 +2059,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 29,
+        "activations": 30,
         "letters": 11,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -1943,7 +2080,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 27,
+        "activations": 28,
         "letters": 10,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -2001,7 +2138,7 @@
       "id": "d17",
       "category": "humour",
       "keyboard": {
-        "activations": 73,
+        "activations": 74,
         "letters": 32,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2022,7 +2159,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 36,
+        "activations": 37,
         "letters": 13,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
@@ -2043,7 +2180,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 16,
+        "activations": 17,
         "letters": 3,
         "suggestion_selections": 7,
         "same_slot_departures": 3,
@@ -2085,7 +2222,7 @@
       "id": "d18",
       "category": "humour",
       "keyboard": {
-        "activations": 54,
+        "activations": 55,
         "letters": 24,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2106,7 +2243,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 42,
+        "activations": 43,
         "letters": 18,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -2127,7 +2264,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 44,
+        "activations": 45,
         "letters": 19,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -2176,7 +2313,7 @@
             "JASTUK",
             "PUT",
             "JE",
-            "NAČIN"
+            "AJET"
           ]
         },
         {
@@ -2217,7 +2354,7 @@
       "id": "d19",
       "category": "humour",
       "keyboard": {
-        "activations": 68,
+        "activations": 69,
         "letters": 30,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2238,7 +2375,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 41,
+        "activations": 42,
         "letters": 16,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -2259,7 +2396,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 29,
+        "activations": 30,
         "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 2,
@@ -2333,7 +2470,7 @@
       "id": "d20",
       "category": "humour",
       "keyboard": {
-        "activations": 69,
+        "activations": 70,
         "letters": 30,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2354,7 +2491,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 38,
+        "activations": 39,
         "letters": 14,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
@@ -2375,7 +2512,7 @@
         "prediction_selections": 2
       },
       "contextual": {
-        "activations": 34,
+        "activations": 35,
         "letters": 12,
         "suggestion_selections": 7,
         "same_slot_departures": 1,
@@ -2465,7 +2602,7 @@
       "id": "d21",
       "category": "humour",
       "keyboard": {
-        "activations": 59,
+        "activations": 60,
         "letters": 26,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2486,7 +2623,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 28,
+        "activations": 29,
         "letters": 10,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -2507,7 +2644,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 18,
+        "activations": 19,
         "letters": 5,
         "suggestion_selections": 4,
         "same_slot_departures": 1,
@@ -2597,7 +2734,7 @@
       "id": "d22",
       "category": "humour",
       "keyboard": {
-        "activations": 58,
+        "activations": 59,
         "letters": 25,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2618,7 +2755,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 37,
+        "activations": 38,
         "letters": 14,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -2639,7 +2776,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 29,
+        "activations": 30,
         "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -2729,7 +2866,7 @@
       "id": "d23",
       "category": "humour",
       "keyboard": {
-        "activations": 58,
+        "activations": 59,
         "letters": 25,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2750,7 +2887,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 31,
+        "activations": 32,
         "letters": 11,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
@@ -2771,7 +2908,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 27,
+        "activations": 28,
         "letters": 9,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -2846,7 +2983,7 @@
       "id": "d24",
       "category": "humour",
       "keyboard": {
-        "activations": 61,
+        "activations": 62,
         "letters": 27,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -2867,7 +3004,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 40,
+        "activations": 41,
         "letters": 16,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -2888,7 +3025,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 40,
+        "activations": 41,
         "letters": 16,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -2994,7 +3131,7 @@
       "id": "d25",
       "category": "memories",
       "keyboard": {
-        "activations": 69,
+        "activations": 70,
         "letters": 30,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3015,12 +3152,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 46,
-        "letters": 18,
+        "activations": 49,
+        "letters": 19,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 25,
+        "queries": 26,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -3029,14 +3166,14 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 18,
-        "completion_top_one_hits": 2,
+        "completion_queries": 19,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 7,
         "completion_selections": 6,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 16,
+        "activations": 17,
         "letters": 3,
         "suggestion_selections": 7,
         "same_slot_departures": 2,
@@ -3110,7 +3247,7 @@
       "id": "d26",
       "category": "memories",
       "keyboard": {
-        "activations": 52,
+        "activations": 53,
         "letters": 22,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3131,7 +3268,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 34,
+        "activations": 35,
         "letters": 13,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -3152,7 +3289,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 22,
+        "activations": 23,
         "letters": 7,
         "suggestion_selections": 4,
         "same_slot_departures": 3,
@@ -3210,7 +3347,7 @@
       "id": "d27",
       "category": "memories",
       "keyboard": {
-        "activations": 67,
+        "activations": 68,
         "letters": 29,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3231,7 +3368,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 38,
+        "activations": 39,
         "letters": 14,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
@@ -3252,7 +3389,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 28,
+        "activations": 29,
         "letters": 9,
         "suggestion_selections": 6,
         "same_slot_departures": 3,
@@ -3342,7 +3479,7 @@
       "id": "d28",
       "category": "memories",
       "keyboard": {
-        "activations": 63,
+        "activations": 64,
         "letters": 28,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3363,7 +3500,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 36,
+        "activations": 37,
         "letters": 14,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -3384,7 +3521,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 18,
+        "activations": 19,
         "letters": 5,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -3442,7 +3579,7 @@
       "id": "d29",
       "category": "memories",
       "keyboard": {
-        "activations": 75,
+        "activations": 76,
         "letters": 33,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3463,7 +3600,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 48,
+        "activations": 49,
         "letters": 19,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
@@ -3484,7 +3621,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 48,
+        "activations": 49,
         "letters": 19,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -3622,7 +3759,7 @@
       "id": "d30",
       "category": "memories",
       "keyboard": {
-        "activations": 90,
+        "activations": 91,
         "letters": 40,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3643,7 +3780,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 51,
+        "activations": 52,
         "letters": 20,
         "suggestion_selections": 8,
         "same_slot_departures": 0,
@@ -3664,7 +3801,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 25,
+        "activations": 26,
         "letters": 7,
         "suggestion_selections": 8,
         "same_slot_departures": 1,
@@ -3770,7 +3907,7 @@
       "id": "d31",
       "category": "memories",
       "keyboard": {
-        "activations": 79,
+        "activations": 80,
         "letters": 36,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3791,7 +3928,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 46,
+        "activations": 47,
         "letters": 19,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -3812,7 +3949,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 34,
+        "activations": 35,
         "letters": 13,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -3902,7 +4039,7 @@
       "id": "d32",
       "category": "memories",
       "keyboard": {
-        "activations": 64,
+        "activations": 65,
         "letters": 28,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -3923,7 +4060,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 35,
+        "activations": 36,
         "letters": 13,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -3944,7 +4081,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 27,
+        "activations": 28,
         "letters": 9,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
@@ -4018,7 +4155,7 @@
       "id": "d33",
       "category": "opinions",
       "keyboard": {
-        "activations": 70,
+        "activations": 71,
         "letters": 31,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4039,7 +4176,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 29,
+        "activations": 30,
         "letters": 10,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -4060,7 +4197,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 21,
+        "activations": 22,
         "letters": 6,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
@@ -4150,7 +4287,7 @@
       "id": "d34",
       "category": "opinions",
       "keyboard": {
-        "activations": 47,
+        "activations": 48,
         "letters": 20,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4171,7 +4308,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 40,
+        "activations": 41,
         "letters": 16,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -4192,7 +4329,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 40,
+        "activations": 41,
         "letters": 16,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -4298,7 +4435,7 @@
       "id": "d35",
       "category": "opinions",
       "keyboard": {
-        "activations": 60,
+        "activations": 61,
         "letters": 26,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4319,7 +4456,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 27,
+        "activations": 28,
         "letters": 9,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
@@ -4340,7 +4477,7 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 17,
+        "activations": 18,
         "letters": 4,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
@@ -4414,7 +4551,7 @@
       "id": "d36",
       "category": "opinions",
       "keyboard": {
-        "activations": 67,
+        "activations": 68,
         "letters": 30,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4435,7 +4572,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 32,
+        "activations": 33,
         "letters": 12,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -4456,7 +4593,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 26,
+        "activations": 27,
         "letters": 9,
         "suggestion_selections": 5,
         "same_slot_departures": 1,
@@ -4546,7 +4683,7 @@
       "id": "d37",
       "category": "opinions",
       "keyboard": {
-        "activations": 65,
+        "activations": 66,
         "letters": 29,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4567,7 +4704,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 30,
+        "activations": 31,
         "letters": 11,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -4588,7 +4725,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 28,
+        "activations": 29,
         "letters": 10,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
@@ -4694,7 +4831,7 @@
       "id": "d38",
       "category": "opinions",
       "keyboard": {
-        "activations": 52,
+        "activations": 53,
         "letters": 23,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4715,7 +4852,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 33,
+        "activations": 34,
         "letters": 13,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -4736,7 +4873,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 23,
+        "activations": 24,
         "letters": 8,
         "suggestion_selections": 4,
         "same_slot_departures": 1,
@@ -4794,7 +4931,7 @@
       "id": "d39",
       "category": "opinions",
       "keyboard": {
-        "activations": 46,
+        "activations": 47,
         "letters": 20,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4815,7 +4952,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 30,
+        "activations": 31,
         "letters": 12,
         "suggestion_selections": 2,
         "same_slot_departures": 0,
@@ -4836,7 +4973,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 25,
+        "activations": 26,
         "letters": 9,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
@@ -4885,7 +5022,7 @@
             "BITI",
             "JOŠ",
             "MALO",
-            "DA"
+            "SLUŠATI"
           ]
         },
         {
@@ -4926,7 +5063,7 @@
       "id": "d40",
       "category": "opinions",
       "keyboard": {
-        "activations": 69,
+        "activations": 70,
         "letters": 31,
         "suggestion_selections": 0,
         "same_slot_departures": 0,
@@ -4947,7 +5084,7 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 45,
+        "activations": 46,
         "letters": 19,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
@@ -4968,7 +5105,7 @@
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 32,
+        "activations": 33,
         "letters": 12,
         "suggestion_selections": 5,
         "same_slot_departures": 0,

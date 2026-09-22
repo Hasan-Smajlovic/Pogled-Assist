@@ -17,6 +17,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gaze_mouse.suggestion_model import (
+    ISLAMIC_MODEL_METADATA_PATH,
     MODEL_METADATA_PATH,
     MODEL_PATH,
     WordModel,
@@ -26,6 +27,11 @@ from gaze_mouse.suggestion_model import (
 from gaze_mouse.suggestion_text import START, insert_word, words
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "speech_suggestions"
+
+
+def fixture_sha256(path: Path) -> str:
+    """Hash repository fixtures consistently across LF and CRLF checkouts."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def letters(word: str) -> list[str]:
@@ -74,15 +80,27 @@ def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> 
                 composed = composed[:-1]
                 activations += 1
             automatic_space = False
-        for character in value:
+        index = 0
+        while index < len(value):
+            character = value[index]
             if character == " ":
                 activations += 1
             elif character in ".?":
                 activations += 3
+                composed += f"{character} "
+                if index + 1 < len(value) and value[index + 1] == " ":
+                    index += 1
+                else:
+                    composed = composed[:-1]
+                    activations += 1
+                last_slot = None
+                index += 1
+                continue
             else:
                 raise ValueError(f"Unsupported baseline symbol: {character!r}")
             composed += character
             last_slot = None
+            index += 1
 
     for token in words(text):
         separator(text[offset : token.start])
@@ -146,10 +164,11 @@ def evaluate(
     cases_path: Path | None = None,
     expected_sha256: str | None = None,
 ) -> dict:
+    bundled_cases = cases_path is None
     if cases_path is None:
         frozen = json.loads((FIXTURES / "frozen.json").read_text())
         for name, digest in frozen["sha256"].items():
-            if hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() != digest:
+            if fixture_sha256(FIXTURES / name) != digest:
                 raise ValueError(f"Frozen evaluation file changed: {name}")
         cases_path = FIXTURES / f"{dataset}.tsv"
         expected_sha256 = frozen["sha256"][cases_path.name]
@@ -157,7 +176,11 @@ def evaluate(
         raise ValueError("External messages require their previously frozen SHA-256")
     else:
         dataset = "external"
-    digest = hashlib.sha256(cases_path.read_bytes()).hexdigest()
+    digest = (
+        fixture_sha256(cases_path)
+        if bundled_cases
+        else hashlib.sha256(cases_path.read_bytes()).hexdigest()
+    )
     if digest != expected_sha256:
         raise ValueError("Evaluation messages do not match their frozen SHA-256")
     with cases_path.open(encoding="utf-8", newline="") as stream:
@@ -218,12 +241,16 @@ def evaluate(
         values["contextual_reduction_percent"] = round(
             100 * (1 - values["contextual"] / values["keyboard"]), 2
         )
+    model_metadata = [json.loads(metadata_path.read_text(encoding="utf-8"))]
+    if model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH:
+        model_metadata.append(json.loads(ISLAMIC_MODEL_METADATA_PATH.read_text(encoding="utf-8")))
     return {
         "dataset": dataset,
         "messages": len(cases),
         "dataset_sha256": digest,
         "independence": "Not established by this script; external authorship and a preselected model are required.",
-        "model": json.loads(metadata_path.read_text(encoding="utf-8")),
+        "model": model_metadata[0],
+        "model_layers": model_metadata,
         "environment": {"platform": platform.platform(), "python": platform.python_version()},
         "profile": "empty per message",
         "assumption": "ideal exact beneficial selection; no intentional mistakes",

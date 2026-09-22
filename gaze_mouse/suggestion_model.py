@@ -17,6 +17,8 @@ from .suggestion_text import START, index_key, prefix_pattern, query, valid_word
 MODEL_VERSION = 1
 MODEL_PATH = Path(__file__).resolve().parent / "assets" / "bosnian-model.json.gz"
 MODEL_METADATA_PATH = MODEL_PATH.with_name("bosnian-model.meta.json")
+ISLAMIC_MODEL_PATH = MODEL_PATH.with_name("bosnian-islamic-model.json.gz")
+ISLAMIC_MODEL_METADATA_PATH = MODEL_PATH.with_name("bosnian-islamic-model.meta.json")
 
 
 class WordModel:
@@ -157,7 +159,7 @@ class WordModel:
         return weights
 
 
-def load_model_from_paths(model_path: Path, metadata_path: Path) -> WordModel:
+def load_counts_from_paths(model_path: Path, metadata_path: Path) -> Counter[tuple[str, ...]]:
     """Load and validate a prepared model from explicit paths."""
     data = model_path.read_bytes()
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -169,7 +171,11 @@ def load_model_from_paths(model_path: Path, metadata_path: Path) -> WordModel:
     rows = payload.get("counts")
     if not rows:
         raise ValueError("Empty prediction model")
-    return WordModel(_validated_counts(rows))
+    return Counter(dict(_validated_counts(rows)))
+
+
+def load_model_from_paths(model_path: Path, metadata_path: Path) -> WordModel:
+    return WordModel(load_counts_from_paths(model_path, metadata_path))
 
 
 def _validated_counts(rows: Iterable[tuple[str, int]]) -> Iterable[tuple[tuple[str, ...], int]]:
@@ -187,4 +193,6 @@ def _validated_counts(rows: Iterable[tuple[str, int]]) -> Iterable[tuple[tuple[s
 
 @lru_cache(maxsize=1)
 def load_model() -> WordModel:
-    return load_model_from_paths(MODEL_PATH, MODEL_METADATA_PATH)
+    counts = load_counts_from_paths(MODEL_PATH, MODEL_METADATA_PATH)
+    counts.update(load_counts_from_paths(ISLAMIC_MODEL_PATH, ISLAMIC_MODEL_METADATA_PATH))
+    return WordModel(counts)

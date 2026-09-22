@@ -1653,6 +1653,8 @@ class SpeechWindow(QWidget):
             if selection_start >= 0:
                 self._input.setSelection(selection_start, selection_length)
             else:
+                if corrected == f"{text} ":
+                    cursor_position += 1
                 self._input.setCursorPosition(min(cursor_position, _utf16_length(corrected)))
             self._updating_input = False
         self._suggestions.persist()

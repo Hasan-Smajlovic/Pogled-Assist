@@ -114,7 +114,11 @@ def benchmark(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
-    parser.add_argument("--supplement", type=Path, default=Path("language/bs/conversation.tsv"))
+    parser.add_argument(
+        "--supplement",
+        type=Path,
+        default=Path("language/bs/model/core/conversation.tsv"),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--vocabularies", type=int, nargs="+", default=[20_000, 40_000, 60_000])

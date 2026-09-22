@@ -270,6 +270,8 @@ def test_package_smoke_loads_the_bundled_suggestion_model(monkeypatch, tmp_path)
     assert "suggestions_loaded=True" in contents
     assert "bosnian-model.json.gz exists=True" in contents
     assert "bosnian-model.meta.json exists=True" in contents
+    assert "bosnian-islamic-model.json.gz exists=True" in contents
+    assert "bosnian-islamic-model.meta.json exists=True" in contents
 
 
 def test_windows_package_declares_the_bundled_suggestion_files():
@@ -277,7 +279,12 @@ def test_windows_package_declares_the_bundled_suggestion_files():
     spec = (root / "packaging" / "windows" / "PogledAssist.spec").read_text(encoding="utf-8")
     build = (root / "scripts" / "build_windows_package.ps1").read_text(encoding="utf-8")
 
-    for name in ("bosnian-model.json.gz", "bosnian-model.meta.json"):
+    for name in (
+        "bosnian-model.json.gz",
+        "bosnian-model.meta.json",
+        "bosnian-islamic-model.json.gz",
+        "bosnian-islamic-model.meta.json",
+    ):
         assert name in spec
         assert name in build
 

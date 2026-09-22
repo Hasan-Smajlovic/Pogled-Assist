@@ -8,7 +8,10 @@ from dataclasses import dataclass
 
 START = "<s>"
 LETTERS = frozenset("abcčćdđefghijklmnoprsštuvzž")
-WORD = re.compile(r"[^\W\d_][^\W\d_\u0300-\u036f]*(?:[\u0300-\u036f]+[^\W\d_]*)*", re.UNICODE)
+BASE_LETTER = r"[^\W\d_]"
+COMBINING_MARKS = r"[\u0300-\u036f]*"
+WORD_PART = rf"{BASE_LETTER}{COMBINING_MARKS}(?:{BASE_LETTER}{COMBINING_MARKS})*"
+WORD = re.compile(rf"{WORD_PART}(?:['\u2019]{WORD_PART})?", re.UNICODE)
 BOUNDARY = re.compile(r"[.?!\n]")
 
 
@@ -28,11 +31,16 @@ class Word:
 
 
 def spelling(value: str) -> str:
-    return unicodedata.normalize("NFC", value).lower()
+    return unicodedata.normalize("NFC", value).lower().replace("\u2019", "'")
 
 
 def valid_word(value: str) -> bool:
-    return 0 < len(value) <= 32 and all(letter in LETTERS for letter in value)
+    parts = value.split("'")
+    return (
+        0 < len(value) <= 32
+        and 1 <= len(parts) <= 2
+        and all(part and all(letter in LETTERS for letter in part) for part in parts)
+    )
 
 
 def words(text: str) -> list[Word]:
@@ -79,11 +87,16 @@ def insert_word(text: str, candidate: str) -> str:
 
 
 def index_key(value: str) -> str:
-    return spelling(value).translate(str.maketrans("čćđšž", "ccdsz")).replace("dj", "d")
+    return (
+        spelling(value)
+        .replace("'", "")
+        .translate(str.maketrans("čćđšž", "ccdsz"))
+        .replace("dj", "d")
+    )
 
 
 def prefix_pattern(prefix: str) -> re.Pattern[str]:
-    value = spelling(prefix)
+    value = spelling(prefix).replace("'", "")
     pattern = []
     index = 0
     while index < len(value):
@@ -97,4 +110,4 @@ def prefix_pattern(prefix: str) -> re.Pattern[str]:
                 )
             )
             index += 1
-    return re.compile("^" + "".join(pattern))
+    return re.compile("^" + "'?".join(pattern))

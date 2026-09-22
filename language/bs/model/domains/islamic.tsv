@@ -1,0 +1,181 @@
+category	weight	text
+greetings	9	Selam alejkum.
+greetings	9	Alejkumu selam.
+greetings	9	Allah razi olsun.
+greetings	9	Allah kabul olsun.
+greetings	8	Neka te Allah nagradi.
+greetings	8	Neka vam Allah podari svako dobro.
+greetings	8	Elhamdulillah, dobro sam.
+greetings	8	Mašallah, baš lijepo.
+greetings	8	Inšallah, vidimo se uskoro.
+greetings	8	Ako Bog da, bit će dobro.
+greetings	7	Amin, da nam Allah ukabuli.
+greetings	8	Bajram šerif mubarek olsun.
+greetings	6	Bajram barećula.
+greetings	8	Hvala Allahu na svemu.
+greetings	7	Bismillah, možemo početi.
+worship	9	Želim klanjati namaz.
+worship	9	Želim klanjati sjedeći.
+worship	9	Pomozi mi da uzmem abdest.
+worship	9	Želim uzeti abdest.
+worship	8	Donesi mi posudu za abdest.
+worship	9	Okreni me prema kibli.
+worship	9	Donesi mi serdžadu.
+worship	8	Namjesti mi serdžadu.
+worship	8	Donesi mi tespih.
+worship	8	Želim proučiti dovu.
+worship	8	Prouči dovu za zdravlje.
+worship	8	Sjeti me se u dovi.
+worship	8	Molim Allaha za zdravlje.
+worship	8	Neka nam Allah podari sabur.
+worship	7	Nijjet je važan za ibadet.
+worship	7	Ibadet treba činiti iskreno.
+worship	7	Abdest je priprema za namaz.
+worship	7	Je li nastupio sabah?
+worship	7	Kada je podne namaz?
+worship	7	Kada je ikindija?
+worship	7	Koliko je ostalo do akšama?
+worship	7	Je li vrijeme za jaciju?
+worship	7	Danas je džuma.
+worship	7	Kada je džuma namaz?
+worship	7	Čujem ezan iz džamije.
+worship	7	Mujezin uči ezan.
+worship	7	Ikamet je proučen.
+worship	6	Ovaj namaz ima četiri rekata.
+worship	6	Spusti me na sedždu.
+worship	6	Pomozi mi da sjednem za namaz.
+worship	6	Vrijeme namaza piše na vaktiji.
+worship	7	Donesi mi vaktiju.
+quran_hadith	10	Donesi mi Kur'an.
+quran_hadith	10	Želim čitati Kur'an.
+quran_hadith	10	Želim slušati učenje Kur'ana.
+quran_hadith	9	Otvori Kur'an.
+quran_hadith	9	Otvori suru Jasin.
+quran_hadith	9	Prouči suru Jasin.
+quran_hadith	9	Prouči Fatihu.
+quran_hadith	9	Pročitaj mi ovaj ajet.
+quran_hadith	9	Pročitaj mi prijevod ajeta.
+quran_hadith	8	Koji je ovo ajet?
+quran_hadith	8	Na kojoj je stranici ova sura?
+quran_hadith	8	Ovaj ajet govori o saburu.
+quran_hadith	8	Tefsir pojašnjava značenje ajeta.
+quran_hadith	7	Pogledaj šta kaže tefsir.
+quran_hadith	7	Želim pročitati tefsir.
+quran_hadith	7	Pročitaj komentar ovog hadisa.
+quran_hadith	7	Ovo je vjerodostojan hadis.
+quran_hadith	7	Kur'an i sunnet su izvori vjere.
+quran_hadith	7	Treba provjeriti predaju hadisa.
+quran_hadith	7	Tedžvid je važan pri učenju Kur'ana.
+quran_hadith	7	Pravilno izgovori svaki harf.
+quran_hadith	7	Želim završiti hatmu.
+quran_hadith	7	Koji džuz danas učimo?
+quran_hadith	7	Donesi mi mushaf.
+quran_hadith	6	Kiraet zahtijeva pažljivo učenje.
+quran_hadith	6	Hafiz uči Kur'an napamet.
+ramadan_bayram	9	Počinje mjesec ramazan.
+ramadan_bayram	9	Ramazan je mubarek mjesec.
+ramadan_bayram	9	Kada je iftar?
+ramadan_bayram	9	Vrijeme je za iftar.
+ramadan_bayram	9	Kada je sehur?
+ramadan_bayram	8	Probudi me za sehur.
+ramadan_bayram	8	Postim danas.
+ramadan_bayram	8	Želim postiti sutra.
+ramadan_bayram	8	Kada počinje teravija?
+ramadan_bayram	8	Želim slušati mukabelu.
+ramadan_bayram	8	Kada je mukabela?
+ramadan_bayram	7	Treba dati zekat.
+ramadan_bayram	7	Želim dati sadaku.
+ramadan_bayram	7	Podijeli sadaku potrebnima.
+ramadan_bayram	7	Jesmo li dali vitre?
+ramadan_bayram	8	Kada je Ramazanski bajram?
+ramadan_bayram	8	Kada je Kurban bajram?
+ramadan_bayram	8	Pripremamo se za Bajram.
+ramadan_bayram	7	Kurban se dijeli komšijama.
+ramadan_bayram	7	Želim obaviti hadž.
+ramadan_bayram	7	Želim obaviti umru.
+ramadan_bayram	6	Hadžije su stigle na Arefat.
+ramadan_bayram	6	Tavaf se obavlja oko Kabe.
+ramadan_bayram	6	Za hadž se oblači ihram.
+community	9	Želim otići u džamiju.
+community	9	Kako je naš džemat?
+community	9	Džemat mi mnogo nedostaje.
+community	8	Nazovi imama.
+community	8	Pozdravi efendiju.
+community	8	Ko je danas imam?
+community	8	Ko je danas mujezin?
+community	8	Želim poslušati hutbu.
+community	8	Uključi prijenos hutbe.
+community	8	Ko drži današnju hutbu?
+community	7	Hutba se drži sa minbera.
+community	7	Imam stoji u mihrabu.
+community	7	Djeca danas idu u mekteb.
+community	7	Muallim predaje u mektebu.
+community	7	Kada počinje mevlud?
+community	7	Želim prisustvovati mevludu.
+community	7	Kada je dženaza?
+community	7	Klanjat će se dženaza.
+community	7	Želim otići na mezarje.
+community	7	Prouči Fatihu pred njegovu dušu.
+community	7	Neka mu Allah podari rahmet.
+community	7	Rahmet mu duši.
+community	6	Otišao je na ahiret.
+community	6	Vakuf služi cijeloj zajednici.
+community	6	Ovo je vakufska imovina.
+community	6	Vakif je ostavio trajno dobro.
+scholarship	8	Ovo pitanje pripada fikhu.
+scholarship	8	Hanefijski mezheb ima jasan stav.
+scholarship	8	Treba pitati učenog alima.
+scholarship	8	Pročitaj fetvu o ovom pitanju.
+scholarship	7	Akaid govori o temeljima vjerovanja.
+scholarship	7	Ahlak se pokazuje dobrim djelima.
+scholarship	7	Fikh uređuje praktične vjerske propise.
+scholarship	7	Tefsir tumači značenje Kur'ana.
+scholarship	7	Hadis prenosi riječi i djela Poslanika.
+scholarship	7	Sunnet je praksa Allahovog Poslanika.
+scholarship	7	Ovo je farz.
+scholarship	7	Ovo je vadžib.
+scholarship	7	Ovo je sunnet.
+scholarship	7	Ovo je mustehab.
+scholarship	7	Ovo je halal.
+scholarship	7	Ovo je haram.
+scholarship	6	Ovo djelo je mekruh.
+scholarship	6	Ova stvar je mubah.
+scholarship	7	Šerijat čuva prava i obaveze ljudi.
+scholarship	7	Vjera se temelji na imanu i dobrim djelima.
+scholarship	6	Tevhid je temelj islamskog vjerovanja.
+scholarship	6	Ihsan znači činiti dobro na najljepši način.
+scholarship	6	Ulema je o tome mnogo pisala.
+scholarship	6	Muftija je održao predavanje.
+scholarship	6	Poznajem tog hafiza.
+scholarship	6	Želim razgovarati o islamskoj historiji.
+scholarship	6	Bosanska tradicija islama je dragocjena.
+values	8	Vjera nas uči strpljenju.
+values	8	Sabur je važan.
+values	8	Treba činiti dobro.
+values	8	Čovjek treba čuvati emanet.
+values	8	Oprosti mi i halal mi.
+values	8	Halal ti bilo.
+values	7	Je li ovo halal?
+values	7	Treba se kloniti harama.
+values	7	Dova daje nadu.
+values	7	Zikr smiruje srce.
+values	7	Često činim istigfar.
+values	7	Treba učiniti tevbu.
+values	7	Dunjaluk je prolazan.
+values	7	Ahiret je vječan.
+values	7	Džennet je nagrada za vjernike.
+values	7	Molimo Allaha da nas sačuva džehennema.
+values	7	Bereket je u poštenom radu.
+values	7	Milostinja pomaže onima kojima je potrebna.
+values	7	Komšija ima pravo na našu pažnju.
+values	7	Lijepa riječ je sadaka.
+biography	8	Radio sam kao imam.
+biography	8	Držao sam hutbu petkom.
+biography	8	Predavao sam u mektebu.
+biography	8	Sjećam se dana u medresi.
+biography	8	Medresa je bila važan dio mog života.
+biography	8	Studirao sam islamske nauke u Sarajevu.
+biography	7	Često sam razgovarao sa džematlijama.
+biography	7	Pomagao sam ljudima savjetom i dovom.
+biography	7	Volio sam pripremati hutbe.
+biography	7	Rado se sjećam svojih profesora.
