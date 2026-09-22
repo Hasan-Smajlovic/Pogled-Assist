@@ -4,7 +4,7 @@ Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into
 pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard,
 and a compact controller panel.
 
-[Download a Windows release](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases)
+[Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
 
 ## Features
 
@@ -24,7 +24,7 @@ and a compact controller panel.
 ### Windows release
 
 Download the versioned ZIP and matching `.sha256` file from
-[GitHub Releases](https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases).
+[GitHub Releases](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases).
 Verify the checksum, extract the ZIP, then run:
 
 ```powershell
