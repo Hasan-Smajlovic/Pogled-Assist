@@ -6,14 +6,14 @@ param(
     [switch]$NoPause,
     [switch]$NoElevation,
     [int]$WaitForProcessId = 0,
-    [string]$ReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
+    [string]$ReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/Pogled-Assist/releases/latest"
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$OfficialReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
-$OfficialReleaseAssetRoot = "https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/download"
+$OfficialReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/Pogled-Assist/releases/latest"
+$OfficialReleaseAssetRoot = "https://github.com/Hasan-Smajlovic/Pogled-Assist/releases/download"
 $UpdaterPath = $PSCommandPath
 $script:ExitCode = 0
 $script:ElevationRequested = $false
@@ -417,7 +417,7 @@ function Get-LatestStableRelease {
         $expectedArtifactUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$artifactName"
         $expectedChecksumUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$checksumName"
         if ($artifactUrl -ne $expectedArtifactUrl -or $checksumUrl -ne $expectedChecksumUrl) {
-            throw "Stable release assets did not point to the official Hasan-Smajlovic/TobiiEyeTrackerTool release."
+            throw "Stable release assets did not point to the official Hasan-Smajlovic/Pogled-Assist release."
         }
     }
 

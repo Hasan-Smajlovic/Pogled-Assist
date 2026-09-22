@@ -54,7 +54,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 The updater reads the installed `VERSION` and calls GitHub's latest stable
-release endpoint for `Hasan-Smajlovic/TobiiEyeTrackerTool`. It accepts only a
+release endpoint for `Hasan-Smajlovic/Pogled-Assist`. It accepts only a
 stable `v<major>.<minor>.<patch>` tag and the exact
 `PogledAssist-v<version>-windows-x64.zip` and matching `.sha256` assets from
 that repository. It verifies the checksum and package `VERSION` before invoking

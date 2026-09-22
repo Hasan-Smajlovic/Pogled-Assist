@@ -136,7 +136,7 @@ loads that model and computes an offline prediction. The release package contain
 its own installer and launcher and installs under `C:\PogledAssist`.
 
 `update_windows.ps1` reads the installed version, resolves the latest stable
-release from `Hasan-Smajlovic/TobiiEyeTrackerTool`, downloads the exact Windows
+release from `Hasan-Smajlovic/Pogled-Assist`, downloads the exact Windows
 ZIP and checksum assets, and verifies them before invoking the package installer.
 The first packaged installer migrates an older source layout. The installer
 stages and smoke-tests the new package, carries persistent data and external

@@ -1,7 +1,7 @@
 # Contributing to Pogled Assist
 
 This document defines how changes move from an issue to a release in
-`Hasan-Smajlovic/TobiiEyeTrackerTool`.
+`Hasan-Smajlovic/Pogled-Assist`.
 
 ## Long-lived branches
 
@@ -39,7 +39,7 @@ docs/14-development-workflow
 
 Before creating any normal pull request, explicitly verify all four values:
 
-- Base repository: `Hasan-Smajlovic/TobiiEyeTrackerTool`
+- Base repository: `Hasan-Smajlovic/Pogled-Assist`
 - Base branch: `development`
 - Compare repository: the repository that contains the topic branch
 - Compare branch: the topic branch
