@@ -20,7 +20,30 @@ REQUIRED_FILES = (
     ".github/ISSUE_TEMPLATE/feature_request.md",
     ".github/ISSUE_TEMPLATE/maintenance_task.md",
     ".github/ISSUE_TEMPLATE/config.yml",
+    ".agents/skills/security-review/SKILL.md",
+    ".agents/skills/shipping-a-change/SKILL.md",
 )
+
+AGENT_GUIDANCE = (
+    "AGENTS.md",
+    ".agents/skills/*/SKILL.md",
+)
+
+# Runtime folders such as data/ and logs/ exist only on an installed machine,
+# so inline code under them is not checked.
+PATH_ROOTS = {
+    ".agents",
+    ".github",
+    "assets",
+    "docs",
+    "gaze_mouse",
+    "language",
+    "packaging",
+    "scripts",
+    "tests",
+}
+ROOT_FILE_SUFFIXES = {".ini", ".md", ".psd1", ".ps1", ".py", ".toml", ".txt"}
+ROOT_FILE_NAMES = {".gitattributes", ".gitignore", "VERSION"}
 
 REQUIRED_TEMPLATE_SECTIONS = {
     ".github/pull_request_template.md": {
@@ -61,6 +84,7 @@ REQUIRED_TEMPLATE_SECTIONS = {
 
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)\n]+)\)")
 LEVEL_TWO_HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+INLINE_CODE = re.compile(r"`([^`\n]+)`")
 
 
 def test_required_guides_and_templates_exist() -> None:
@@ -69,11 +93,22 @@ def test_required_guides_and_templates_exist() -> None:
     assert not missing, "Missing required repository files:\n" + "\n".join(missing)
 
 
+def test_agent_guidance_names_existing_paths() -> None:
+    missing: list[str] = []
+
+    for document in _agent_guidance():
+        for token in INLINE_CODE.findall(document.read_text(encoding="utf-8")):
+            if _is_repo_path(token) and not _path_exists(token):
+                missing.append(f"{document.relative_to(REPO_ROOT)}: {token}")
+
+    assert not missing, "Agent guidance names missing paths:\n" + "\n".join(missing)
+
+
 def test_local_markdown_links_resolve() -> None:
     documents = [
-        REPO_ROOT / "AGENTS.md",
         REPO_ROOT / "README.md",
         REPO_ROOT / "CONTRIBUTING.md",
+        *_agent_guidance(),
         *sorted((REPO_ROOT / "docs").rglob("*.md")),
     ]
     broken_links: list[str] = []
@@ -115,3 +150,21 @@ def test_blank_issues_are_disabled() -> None:
     config = (REPO_ROOT / ".github/ISSUE_TEMPLATE/config.yml").read_text(encoding="utf-8")
 
     assert re.search(r"^blank_issues_enabled:\s*false\s*$", config, re.MULTILINE)
+
+
+def _agent_guidance() -> list[Path]:
+    return sorted(path for pattern in AGENT_GUIDANCE for path in REPO_ROOT.glob(pattern))
+
+
+def _is_repo_path(token: str) -> bool:
+    if any(character.isspace() for character in token) or "\\" in token:
+        return False
+    if "/" in token:
+        return token.split("/", 1)[0] in PATH_ROOTS
+    return token in ROOT_FILE_NAMES or Path(token).suffix in ROOT_FILE_SUFFIXES
+
+
+def _path_exists(token: str) -> bool:
+    if any(character in token for character in "*?["):
+        return any(REPO_ROOT.glob(token))
+    return (REPO_ROOT / token).exists()

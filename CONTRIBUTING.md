@@ -122,6 +122,9 @@ Use Conventional Commit-style titles:
 
 When a normal pull request is squash-merged into `development`, its title becomes
 the squash commit title and its description becomes the squash commit body.
+The repository has no `CHANGELOG.md`. The release workflow generates each
+release's notes from merged pull request titles, so a title is also the
+changelog entry users read.
 Feature-branch work-in-progress commits may be imperfect because they are
 squashed, but they must remain understandable and must never contain secrets.
 
