@@ -60,6 +60,7 @@ if tool == "git":
 
 if arguments[:2] == ["release", "view"]:
     if state.get("release") is None:
+        print("release not found", file=sys.stderr)
         raise SystemExit(finish(1))
     raise SystemExit(finish(output=release_json()))
 

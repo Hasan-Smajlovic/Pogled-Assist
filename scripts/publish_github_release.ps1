@@ -9,17 +9,48 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Invoke-NativeCommand {
+    param(
+        [string]$Command,
+        [string[]]$Arguments
+    )
+
+    # Windows PowerShell turns native stderr into a terminating error while
+    # ErrorActionPreference is Stop. gh writes "release not found" there when
+    # this version has not been published yet.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $exitCode = 1
+    $output = @()
+    try {
+        $output = @(& $Command @Arguments 2>&1)
+        if (Test-Path -Path "variable:LASTEXITCODE") {
+            $exitCode = $LASTEXITCODE
+        }
+        $output = @($output | ForEach-Object { "$_" })
+    } catch {
+        $output = @("$_")
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return [PSCustomObject]@{
+        ExitCode = $exitCode
+        Output = @($output)
+    }
+}
+
 function Invoke-CheckedCommand {
     param(
         [string]$Command,
         [string[]]$Arguments
     )
 
-    $output = & $Command @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Command failed with exit code $LASTEXITCODE`: $($output -join [Environment]::NewLine)"
+    $result = Invoke-NativeCommand -Command $Command -Arguments $Arguments
+    if ($result.ExitCode -ne 0) {
+        throw "$Command failed with exit code $($result.ExitCode): $($result.Output -join [Environment]::NewLine)"
     }
-    return @($output)
+    return @($result.Output)
 }
 
 if ([string]::IsNullOrWhiteSpace($Repository)) {
@@ -48,10 +79,13 @@ $Hash = (Get-FileHash -LiteralPath $ResolvedArtifactPath -Algorithm SHA256).Hash
 Set-Content -LiteralPath $ChecksumPath -Value "$Hash  $($Artifact.Name)" -Encoding ascii
 $ChecksumName = [IO.Path]::GetFileName($ChecksumPath)
 
-$remoteTagLines = @(& git ls-remote --tags origin "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>&1)
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not inspect remote tag $Tag`: $($remoteTagLines -join [Environment]::NewLine)"
+$remoteTag = Invoke-NativeCommand -Command "git" -Arguments @(
+    "ls-remote", "--tags", "origin", "refs/tags/$Tag", "refs/tags/$Tag^{}"
+)
+if ($remoteTag.ExitCode -ne 0) {
+    throw "Could not inspect remote tag $Tag`: $($remoteTag.Output -join [Environment]::NewLine)"
 }
+$remoteTagLines = $remoteTag.Output
 
 $remoteTagSha = $null
 foreach ($line in $remoteTagLines) {
@@ -68,9 +102,17 @@ if ($null -ne $remoteTagSha -and $remoteTagSha.ToLowerInvariant() -ne $CommitSha
     throw "Immutable tag $Tag already points to $remoteTagSha instead of $CommitSha. Bump VERSION before releasing another master commit."
 }
 
-$releaseJson = & gh release view $Tag --repo $Repository --json isDraft,targetCommitish,assets 2>$null
-$releaseExists = $LASTEXITCODE -eq 0
-$release = if ($releaseExists) { $releaseJson | ConvertFrom-Json } else { $null }
+$releaseView = Invoke-NativeCommand -Command "gh" -Arguments @(
+    "release", "view", $Tag,
+    "--repo", $Repository,
+    "--json", "isDraft,targetCommitish,assets"
+)
+$releaseExists = $releaseView.ExitCode -eq 0
+$release = if ($releaseExists) {
+    ($releaseView.Output -join [Environment]::NewLine) | ConvertFrom-Json
+} else {
+    $null
+}
 
 if ($releaseExists -and -not $release.isDraft) {
     if ($null -eq $remoteTagSha) {
