@@ -8,10 +8,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
-TASK_NAME = "Tobii Gaze Mouse"
+TASK_NAME = "Pogled Assist"
 LAUNCHER_SCRIPT_NAME = "start_gaze_mouse.ps1"
 
 
@@ -57,7 +56,7 @@ def set_windows_startup_enabled(
         return StartupTaskResult(
             enabled=False,
             success=False,
-            message="Windows startup can only be changed on Windows.",
+            message="Pokretanje uz Windows može se mijenjati samo na Windowsu.",
         )
 
     script = (
@@ -72,16 +71,19 @@ def set_windows_startup_enabled(
         return StartupTaskResult(
             enabled=is_windows_startup_enabled(),
             success=False,
-            message=f"Windows startup update failed: {exc}",
+            message="Ažuriranje pokretanja uz Windows nije uspjelo.",
         )
 
     actual_enabled = is_windows_startup_enabled()
 
     if completed.returncode == 0:
         if enabled:
-            message = "Windows startup enabled. The app will run as Administrator after logon."
+            message = (
+                "Pokretanje uz Windows je uključeno. Aplikacija će se nakon prijave "
+                "pokrenuti kao administrator."
+            )
         else:
-            message = "Windows startup disabled. Start the app manually when needed."
+            message = "Pokretanje uz Windows je isključeno. Po potrebi ručno pokrenite aplikaciju."
         logger.info(message)
         return StartupTaskResult(enabled=actual_enabled, success=True, message=message)
 
@@ -90,11 +92,19 @@ def set_windows_startup_enabled(
     return StartupTaskResult(
         enabled=actual_enabled,
         success=False,
-        message=f"Windows startup update failed: {message}",
+        message="Ažuriranje pokretanja uz Windows nije uspjelo.",
     )
 
 
 def _launcher_script_path() -> Path:
+    return launcher_script_path()
+
+
+def launcher_script_path() -> Path:
+    """Return the launcher beside the source tree or frozen executable."""
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / LAUNCHER_SCRIPT_NAME
     return Path(__file__).resolve().parents[1] / LAUNCHER_SCRIPT_NAME
 
 
@@ -139,7 +149,7 @@ def _enable_script(launcher_path: Path, *, show_launcher_window: bool) -> str:
     launcher = _ps_quote(str(launcher_path))
     window_style = "" if show_launcher_window else "-WindowStyle Hidden "
     description = _ps_quote(
-        "Starts Tobii Gaze Mouse at Windows logon with highest available privileges."
+        "Starts Pogled Assist at Windows logon with highest available privileges."
     )
     return f"""
 $ErrorActionPreference = 'Stop'
@@ -186,8 +196,6 @@ def _ps_quote(value: str) -> str:
 
 def _completed_output(completed: subprocess.CompletedProcess[str]) -> str:
     output = "\n".join(
-        part.strip()
-        for part in (completed.stdout, completed.stderr)
-        if part and part.strip()
+        part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip()
     )
     return output.strip()

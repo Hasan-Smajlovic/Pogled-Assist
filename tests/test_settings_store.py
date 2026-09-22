@@ -38,6 +38,7 @@ def test_load_coerces_and_clamps_each_setting(monkeypatch, tmp_path):
             {
                 "gaze": {
                     "smoothing": "2.5",
+                    "selection_pause_ms": 5000,
                     "dwell_ms": "25",
                     "dwell_radius_px": 999,
                     "click_cooldown_ms": None,
@@ -66,6 +67,7 @@ def test_load_coerces_and_clamps_each_setting(monkeypatch, tmp_path):
     gaze, speech = load_app_settings()
 
     assert gaze.smoothing == 1.0
+    assert gaze.selection_pause_ms == 2000
     assert gaze.dwell_ms == 150
     assert gaze.dwell_radius_px == 160
     assert gaze.click_cooldown_ms == GazeSettings().click_cooldown_ms
@@ -86,7 +88,7 @@ def test_load_coerces_and_clamps_each_setting(monkeypatch, tmp_path):
 
 def test_save_round_trips_utf8_settings_and_cleans_temp_file(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
-    gaze = GazeSettings(dwell_ms=750, move_mouse=False)
+    gaze = GazeSettings(selection_pause_ms=650, dwell_ms=750, move_mouse=False)
     speech = SpeechSettings(language="bs-Latn", letters_per_group=6)
 
     save_app_settings(gaze, speech)
@@ -95,6 +97,7 @@ def test_save_round_trips_utf8_settings_and_cleans_temp_file(monkeypatch, tmp_pa
     assert not path.with_suffix(".json.tmp").exists()
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["version"] == 1
+    assert payload["gaze"]["selection_pause_ms"] == 650
     assert payload["gaze"]["dwell_ms"] == 750
     assert payload["speech"]["language"] == "bs-Latn"
     assert load_app_settings() == (gaze, speech)
@@ -102,7 +105,9 @@ def test_save_round_trips_utf8_settings_and_cleans_temp_file(monkeypatch, tmp_pa
 
 def test_save_failure_does_not_escape(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
-    monkeypatch.setattr(type(path), "write_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("full")))
+    monkeypatch.setattr(
+        type(path), "write_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("full"))
+    )
 
     save_app_settings(GazeSettings(), SpeechSettings())
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
-
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ def _monitor_rect_for_window(hwnd: int):
     from ctypes import wintypes
 
     class MONITORINFO(ctypes.Structure):
-        _fields_ = [
+        _fields_: ClassVar[list[tuple[str, type]]] = [
             ("cbSize", wintypes.DWORD),
             ("rcMonitor", RECT),
             ("rcWork", RECT),

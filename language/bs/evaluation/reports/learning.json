@@ -1,0 +1,1255 @@
+{
+  "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+  "islamic_model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
+  "scenarios_sha256": "f66daf0313ccb5a2f9e3beea3977030cacaa7a91c9491aca4870e4feebd7a2ca",
+  "implementation_sha256": "8491e9e76b337bf8fd4be9c967c9ba835e19418368f2af2bb1a060cfd35a8b35",
+  "ranking": {
+    "context_discount": 10.0,
+    "personal_context_discount": 2.5,
+    "personal_context_blend": 2.0
+  },
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14"
+  },
+  "scope": "Synthetic development scenarios, not blind validation or Windows UI latency. Each use is a separate submitted message.",
+  "quality": {
+    "criteria": {
+      "target_visible_after_one_use": true,
+      "target_first_after_three_uses": true,
+      "unrelated_top_five_hit_preserved": true
+    },
+    "failures": {
+      "not_visible_after_one_use": [],
+      "not_first_after_three_uses": [],
+      "control_hit_lost": []
+    },
+    "passed": true
+  },
+  "scenarios": [
+    {
+      "id": "water",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO",
+            "SLUŠATI"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "VODU",
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "VODU",
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "VODU",
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "tea",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "RAZGOVARAO",
+            "ODMORIO",
+            "VODU",
+            "ČAJ",
+            "KAFU"
+          ],
+          "target_rank": 4,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ČAJ",
+            "RAZGOVARAO",
+            "ODMORIO",
+            "VODU",
+            "KAFU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ČAJ",
+            "RAZGOVARAO",
+            "ODMORIO",
+            "VODU",
+            "KAFU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ČAJ",
+            "RAZGOVARAO",
+            "ODMORIO",
+            "VODU",
+            "KAFU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "phone",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "target_rank": 3,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "TELEFON",
+            "JASTUK",
+            "LIJEK",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "TELEFON",
+            "JASTUK",
+            "LIJEK",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "TELEFON",
+            "JASTUK",
+            "LIJEK",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "personal_word",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "NEKOGA",
+            "HITNU",
+            "I",
+            "JE",
+            "U"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ZVRKOVIĆA",
+            "NEKOGA",
+            "HITNU",
+            "I",
+            "JE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ZVRKOVIĆA",
+            "NEKOGA",
+            "HITNU",
+            "POZOVI",
+            "I"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ZVRKOVIĆA",
+            "NEKOGA",
+            "HITNU",
+            "POZOVI",
+            "I"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "starter",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ZDRAVO",
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ZDRAVO",
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ZDRAVO",
+            "SVIMA",
+            "SELAM",
+            "JA",
+            "KAKO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "inflection",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE",
+            "ŠOLJU"
+          ],
+          "target_rank": 5,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ŠOLJU",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ŠOLJU",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ŠOLJU",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "medicine",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "INHALATOR",
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "INHALATOR",
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "INHALATOR",
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "family_name",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "DOKTORA",
+            "ME",
+            "IMAMA",
+            "I",
+            "JE"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "DOKTORA",
+            "HADŽIĆA",
+            "ME",
+            "IMAMA",
+            "I"
+          ],
+          "target_rank": 2,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "HADŽIĆA",
+            "DOKTORA",
+            "ME",
+            "IMAMA",
+            "NAZOVI"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "HADŽIĆA",
+            "DOKTORA",
+            "ME",
+            "IMAMA",
+            "NAZOVI"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "preference",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "SLUŠAO",
+            "RAZGOVARALA",
+            "OSTAO",
+            "IZAŠAO",
+            "I"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "SUPU",
+            "SLUŠAO",
+            "RAZGOVARALA",
+            "OSTAO",
+            "IZAŠAO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "SUPU",
+            "SLUŠAO",
+            "RAZGOVARALA",
+            "OSTAO",
+            "IZAŠAO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "SUPU",
+            "SLUŠAO",
+            "RAZGOVARALA",
+            "OSTAO",
+            "IZAŠAO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "colloquial",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "DA",
+            "PRIZNATI",
+            "REĆI",
+            "SE",
+            "JOŠ"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ZAVRŠIT",
+            "DA",
+            "PRIZNATI",
+            "REĆI",
+            "SE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ZAVRŠIT",
+            "DA",
+            "PRIZNATI",
+            "REĆI",
+            "SE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ZAVRŠIT",
+            "PRIZNATI",
+            "DA",
+            "REĆI",
+            "POSAO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "JASTUK",
+            "LIJEK",
+            "TELEFON",
+            "NAOČALE",
+            "DEKU"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "two_word_context",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO",
+            "DA"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "RAZGOVARATI",
+            "NEŠTO",
+            "BITI",
+            "JOŠ",
+            "MALO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "RAZGOVARATI",
+            "NEŠTO",
+            "BITI",
+            "DA",
+            "JOŠ"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "RAZGOVARATI",
+            "NEŠTO",
+            "ŽELIM",
+            "DA",
+            "DANAS"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "case_insensitive",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "KADA",
+            "TE",
+            "DA",
+            "MIRNU",
+            "SVOJU"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "KADA",
+            "BUREK",
+            "TE",
+            "DA",
+            "MIRNU"
+          ],
+          "target_rank": 2,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "BUREK",
+            "KADA",
+            "TE",
+            "DA",
+            "MIRNU"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "BUREK",
+            "KADA",
+            "TE",
+            "VOLIM",
+            "DA"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KAŠIKA",
+            "SLAMKA",
+            "VODE",
+            "POMOĆ",
+            "TELEFON"
+          ],
+          "control_rank": 4,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "sentence_starter",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE",
+            "HVALA"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "LAKU",
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "LAKU",
+            "SELAM",
+            "JA",
+            "KAKO",
+            "MOŽE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "LAKU",
+            "NOĆ",
+            "SELAM",
+            "JA",
+            "KAKO"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "SE",
+            "GOVORITI",
+            "DISATI",
+            "PROGUTATI",
+            "ZASPATI"
+          ],
+          "control_rank": 3,
+          "control_lost_hit": false
+        }
+      ]
+    },
+    {
+      "id": "rare_diacritic",
+      "checkpoints": [
+        {
+          "uses": 0,
+          "candidates": [
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE",
+            "ŠOLJU"
+          ],
+          "target_rank": null,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 1,
+          "candidates": [
+            "ĆEBE",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 3,
+          "candidates": [
+            "ĆEBE",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        },
+        {
+          "uses": 10,
+          "candidates": [
+            "ĆEBE",
+            "JASTUK",
+            "TELEFON",
+            "NAOČALE",
+            "VODE"
+          ],
+          "target_rank": 1,
+          "control_candidates": [
+            "KADA",
+            "GLAVA",
+            "STOMAK",
+            "GRLO",
+            "RUKA"
+          ],
+          "control_rank": 2,
+          "control_lost_hit": false
+        }
+      ]
+    }
+  ],
+  "stress": [
+    {
+      "entries": 0,
+      "words": 0,
+      "indexing_ms": 0.04,
+      "first_query_ms": 0.34,
+      "mean_ms": 3.21,
+      "p95_ms": 10.04
+    },
+    {
+      "entries": 10000,
+      "words": 10000,
+      "indexing_ms": 20.38,
+      "first_query_ms": 33.17,
+      "mean_ms": 3.96,
+      "p95_ms": 10.38
+    },
+    {
+      "entries": 50000,
+      "words": 50000,
+      "indexing_ms": 114.88,
+      "first_query_ms": 40.51,
+      "mean_ms": 8.59,
+      "p95_ms": 16.87
+    },
+    {
+      "entries": 150000,
+      "words": 60045,
+      "indexing_ms": 175.76,
+      "first_query_ms": 48.5,
+      "mean_ms": 10.77,
+      "p95_ms": 18.62
+    }
+  ]
+}

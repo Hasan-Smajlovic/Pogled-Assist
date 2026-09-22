@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
+from gaze_mouse import tobii_stream_engine_bridge_backend as bridge_backend
 from gaze_mouse.appbar import (
     ABE_BOTTOM,
     ABE_LEFT,
@@ -21,6 +22,7 @@ from gaze_mouse.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialM
 from gaze_mouse.quick_action_zoom import _centered_square, _square_around
 from gaze_mouse.tobii_calibration import _looks_like_uri, _target_score, _unique_paths
 from gaze_mouse.tobii_stream_engine import (
+    APP_ROOT_ENV,
     _decode_char_array,
     _device_create_arg_counts,
     _stream_engine_candidates,
@@ -106,11 +108,11 @@ def test_radial_menu_maps_each_direction_to_an_action(qapp):
 @pytest.mark.parametrize(
     ("label", "expected"),
     [
-        ("Double click", "Double click"),
-        ("Double left click", "Double left c"),
-        ("Quick action", "Quick action"),
-        ("Zoom target", "Zoom target"),
-        ("Settings", "Settings"),
+        ("Dvostruki klik", "Dvostruki"),
+        ("Dvostruki lijevi klik", "Dvostruki"),
+        ("Brza radnja", "Brza radnja"),
+        ("Cilj uvećanja", "Cilj uvećanja"),
+        ("Postavke", "Postavke"),
     ],
 )
 def test_interaction_labels_are_compact(label, expected):
@@ -171,6 +173,16 @@ def test_stream_engine_candidates_honor_configured_path(monkeypatch, tmp_path):
     assert candidates[:2] == [first, second]
 
 
+def test_stream_engine_candidates_use_packaged_app_root(monkeypatch, tmp_path):
+    bundled_dll = tmp_path / "tools" / "tobii" / "tobii_stream_engine.dll"
+    bundled_dll.parent.mkdir(parents=True)
+    bundled_dll.touch()
+    monkeypatch.delenv("TOBII_STREAM_ENGINE_DLL", raising=False)
+    monkeypatch.setenv(APP_ROOT_ENV, str(tmp_path))
+
+    assert bundled_dll in _stream_engine_candidates()
+
+
 def test_stream_engine_argument_order_and_decode(monkeypatch):
     monkeypatch.delenv("TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS", raising=False)
     assert _device_create_arg_counts() == ["4", "3"]
@@ -186,12 +198,39 @@ def test_bridge_pythonpath_prepends_project_path():
     assert _prepend_pythonpath("project", "existing") == f"project{os.pathsep}existing"
 
 
+def test_bridge_python_discovery_prefers_configured_runtime(monkeypatch, tmp_path):
+    configured = tmp_path / "python.exe"
+    configured.touch()
+    monkeypatch.setenv(bridge_backend.X86_PYTHON_ENV, str(configured))
+    monkeypatch.setattr(bridge_backend, "_py_launcher_candidates", lambda: ["launcher-python"])
+    monkeypatch.setattr(bridge_backend, "_common_python_candidates", lambda: ["common-python"])
+    checked = []
+    monkeypatch.setattr(
+        bridge_backend,
+        "_is_x86_python",
+        lambda candidate: checked.append(candidate) or candidate == str(configured),
+    )
+
+    assert bridge_backend._find_x86_python() == str(configured)
+    assert checked == [str(configured)]
+
+
+def test_bridge_python_discovery_reports_missing_runtime(monkeypatch):
+    monkeypatch.delenv(bridge_backend.X86_PYTHON_ENV, raising=False)
+    monkeypatch.setattr(bridge_backend, "_py_launcher_candidates", lambda: ["launcher-python"])
+    monkeypatch.setattr(bridge_backend, "_common_python_candidates", lambda: ["common-python"])
+    monkeypatch.setattr(bridge_backend, "_is_x86_python", lambda _candidate: False)
+
+    with pytest.raises(bridge_backend.TobiiStreamEngineBridgeError, match=r"32-bit Python 3\.10"):
+        bridge_backend._find_x86_python()
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
-        ("Tracking with Tobii Eye Tracker 4C.", "green"),
-        ("Trying Stream Engine.", "yellow"),
-        ("Tracker not found", "red"),
+        ("Praćenje je aktivno putem uređaja Tobii Eye Tracker 4C.", "green"),
+        ("Pokušavam Stream Engine.", "yellow"),
+        ("Uređaj nije pronađen", "red"),
         ("idle", "yellow"),
     ],
 )

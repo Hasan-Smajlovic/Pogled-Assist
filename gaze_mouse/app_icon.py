@@ -9,7 +9,6 @@ from PySide6.QtGui import QIcon
 
 from .logging_setup import get_project_root
 
-
 APP_ICON_RELATIVE_PATH = Path("assets") / "icon.png"
 
 

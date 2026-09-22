@@ -32,7 +32,7 @@ def _feedback_timer(widget: QWidget) -> QTimer:
     timer = QTimer(widget)
     timer.setInterval(180)
     timer.timeout.connect(lambda target=widget: _toggle_pulse(target))
-    setattr(widget, "_gaze_feedback_timer", timer)
+    widget._gaze_feedback_timer = timer
     return timer
 
 

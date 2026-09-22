@@ -7,11 +7,11 @@ import ctypes
 import logging
 import math
 import os
+import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ DLL_NAMES = (
 )
 
 DLL_ENV = "TOBII_STREAM_ENGINE_DLL"
+APP_ROOT_ENV = "POGLED_ASSIST_APP_ROOT"
 DEVICE_CREATE_ARG_ENV = "TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS"
 FIELD_OF_USE_INTERACTIVE = 0
 
@@ -295,7 +296,9 @@ class TobiiStreamEngineBackend:
                 version.build,
             )
         else:
-            logger.warning("Could not read Tobii Stream Engine API version: %s", self._error(status))
+            logger.warning(
+                "Could not read Tobii Stream Engine API version: %s", self._error(status)
+            )
 
     def _create_api(self) -> None:
         assert self._lib is not None
@@ -322,7 +325,9 @@ class TobiiStreamEngineBackend:
 
         logger.info("Tobii Stream Engine device URLs found: %s", urls)
         if not urls:
-            raise TobiiStreamEngineError("No Stream Engine compatible Tobii device URLs were found.")
+            raise TobiiStreamEngineError(
+                "No Stream Engine compatible Tobii device URLs were found."
+            )
 
         return urls[0]
 
@@ -354,7 +359,9 @@ class TobiiStreamEngineBackend:
                 return
 
             errors.append(f"{arg_count} args: {self._error(status)}")
-            logger.warning("tobii_device_create with %s arguments failed: %s", arg_count, self._error(status))
+            logger.warning(
+                "tobii_device_create with %s arguments failed: %s", arg_count, self._error(status)
+            )
 
         raise TobiiStreamEngineError(f"tobii_device_create failed: {'; '.join(errors)}")
 
@@ -511,7 +518,9 @@ class TobiiStreamEngineBackend:
         self._gaze_receiver = GazePointReceiver(receive_gaze)
         status = self._lib.tobii_gaze_point_subscribe(self._device, self._gaze_receiver, None)
         if status != TOBII_ERROR_NO_ERROR:
-            raise TobiiStreamEngineError(f"tobii_gaze_point_subscribe failed: {self._error(status)}")
+            raise TobiiStreamEngineError(
+                f"tobii_gaze_point_subscribe failed: {self._error(status)}"
+            )
 
     def _start_pump_thread(self) -> None:
         self._thread = threading.Thread(
@@ -587,7 +596,13 @@ def _stream_engine_candidates() -> list[Path]:
         else:
             candidates.append(configured_path)
 
-    app_root = Path(__file__).resolve().parents[1]
+    configured_app_root = os.environ.get(APP_ROOT_ENV, "").strip()
+    if configured_app_root:
+        app_root = Path(configured_app_root)
+    elif getattr(sys, "frozen", False):
+        app_root = Path(sys.executable).resolve().parent
+    else:
+        app_root = Path(__file__).resolve().parents[1]
     search_roots = [
         app_root,
         app_root / "tools",

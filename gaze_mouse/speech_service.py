@@ -11,6 +11,7 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .tobii_stream_engine import APP_ROOT_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,8 @@ BOSNIAN_LANGUAGE = "bs"
 VOICE_PRESET_DEFAULT = "default"
 VOICE_PRESET_HUMAN_LIKE = "human_like"
 VOICE_PRESETS: tuple[tuple[str, str], ...] = (
-    (VOICE_PRESET_DEFAULT, "Default"),
-    (VOICE_PRESET_HUMAN_LIKE, "Human like"),
+    (VOICE_PRESET_DEFAULT, "Standardni"),
+    (VOICE_PRESET_HUMAN_LIKE, "Prirodni"),
 )
 VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
 EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
@@ -126,10 +127,17 @@ class SpeechService:
             "--text",
             text,
         ]
-        return self._start_process(command, "edge-playback")
+        environment = _environment_with_executable_directory(self._edge_playback_executable)
+        return self._start_process(command, "edge-playback", environment=environment)
 
-    def _start_process(self, command: list[str], engine_name: str) -> bool:
-        logger.info("Starting speech command (%s): %s", engine_name, command[:-1] + ["<text>"])
+    def _start_process(
+        self,
+        command: list[str],
+        engine_name: str,
+        *,
+        environment: dict[str, str] | None = None,
+    ) -> bool:
+        logger.info("Starting speech command (%s): %s", engine_name, [*command[:-1], "<text>"])
 
         startupinfo = None
         creationflags = 0
@@ -149,6 +157,7 @@ class SpeechService:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=environment,
             )
         except Exception:
             logger.exception("Failed to start %s.", engine_name)
@@ -204,6 +213,16 @@ class SpeechService:
             logger.warning("Speech process stderr: %s", stderr.strip())
 
 
+def _environment_with_executable_directory(executable: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    path_key = next((key for key in environment if key.casefold() == "path"), "PATH")
+    current_path = environment.get(path_key, "")
+    environment[path_key] = os.pathsep.join(
+        part for part in (str(executable.parent), current_path) if part
+    )
+    return environment
+
+
 def find_espeak_ng() -> Path | None:
     candidates = list(_candidate_paths())
     for candidate in candidates:
@@ -237,8 +256,8 @@ def _candidate_paths() -> list[Path]:
     if path_match:
         candidates.append(Path(path_match))
 
-    project_root = Path(__file__).resolve().parents[1]
-    tools_root = project_root / "tools" / "espeak-ng"
+    app_root = _application_root()
+    tools_root = app_root / "tools" / "espeak-ng"
     if tools_root.exists():
         candidates.extend(sorted(tools_root.rglob("espeak-ng.exe")))
 
@@ -291,12 +310,12 @@ def _edge_playback_candidate_paths() -> list[Path]:
         ]
     )
 
-    project_root = Path(__file__).resolve().parents[1]
+    app_root = _application_root()
     candidates.extend(
         [
-            project_root / ".venv" / "Scripts" / "edge-playback.exe",
-            project_root / ".venv" / "Scripts" / "edge-playback",
-            project_root / ".venv" / "bin" / "edge-playback",
+            app_root / ".venv" / "Scripts" / "edge-playback.exe",
+            app_root / ".venv" / "Scripts" / "edge-playback",
+            app_root / ".venv" / "bin" / "edge-playback",
         ]
     )
 
@@ -309,6 +328,15 @@ def _edge_playback_candidate_paths() -> list[Path]:
             deduped.append(candidate)
 
     return deduped
+
+
+def _application_root() -> Path:
+    configured = os.environ.get(APP_ROOT_ENV, "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
 def _is_valid_espeak_ng(path: Path) -> bool:
@@ -348,8 +376,7 @@ def _has_bosnian_voice(path: Path) -> bool:
             result = subprocess.run(
                 [str(path), *arguments],
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 check=False,
                 timeout=5,
                 text=True,

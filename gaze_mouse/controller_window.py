@@ -27,7 +27,6 @@ from .speech_service import SpeechSettings
 from .speech_window import BOSNIAN_LETTERS
 from .windows_input import WindowsInputController
 
-
 logger = logging.getLogger(__name__)
 
 CONTROLLER_WINDOW_ACTION_PREFIX = "controller_window:"
@@ -52,12 +51,12 @@ KEYBOARD_TAB_NUMPAD = "numpad"
 KEYBOARD_TAB_SYMBOLS = "symbols"
 
 GENERAL_ACTIONS = (
-    ("left_click", "Left Click", "fa5s.mouse-pointer"),
-    ("right_click", "Right Click", "fa5s.mouse"),
-    ("double_left_click", "Double Left Click", "fa5s.hand-pointer"),
-    ("enter", "ENTER", "fa5s.level-down-alt"),
-    ("scroll_up", "Scroll Up", "fa5s.arrow-up"),
-    ("scroll_down", "Scroll Down", "fa5s.arrow-down"),
+    ("left_click", "Lijevi klik", "fa5s.mouse-pointer"),
+    ("right_click", "Desni klik", "fa5s.mouse"),
+    ("double_left_click", "Dvostruki klik", "fa5s.hand-pointer"),
+    ("enter", "Potvrdi", "fa5s.level-down-alt"),
+    ("scroll_up", "Pomjeri gore", "fa5s.arrow-up"),
+    ("scroll_down", "Pomjeri dolje", "fa5s.arrow-down"),
 )
 
 
@@ -68,6 +67,8 @@ class ControllerWindow(QWidget):
     status_changed = Signal(str)
     speech_requested = Signal()
     gaze_settings_changed = Signal(object)
+    interaction_context_changed = Signal()
+    mouse_action_started = Signal()
 
     def __init__(
         self,
@@ -77,7 +78,7 @@ class ControllerWindow(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("controllerWindow")
-        self.setWindowTitle("Controler")
+        self.setWindowTitle("Upravljač")
         self.setWindowFlags(_controller_window_flags())
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.NoFocus)
@@ -201,10 +202,8 @@ class ControllerWindow(QWidget):
             top_left = button.mapToGlobal(QPoint(0, 0))
             rect = QRect(top_left, button.size())
             if rect.contains(point):
-                self._set_gaze_target_action(action)
                 return action
 
-        self._set_gaze_target_action(None)
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
@@ -235,6 +234,9 @@ class ControllerWindow(QWidget):
 
     def cancel_gaze_interaction(self) -> None:
         self._set_gaze_target_action(None)
+
+    def set_gaze_target_action(self, action: str | None) -> None:
+        self._set_gaze_target_action(action)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Controller sidebar close event received.")
@@ -320,10 +322,10 @@ class ControllerWindow(QWidget):
         tab_row.setSpacing(8)
         self._tab_buttons: dict[str, QToolButton] = {}
         for tab, label in (
-            (TAB_GENERAL, "General"),
-            (TAB_KEYBOARD, "Keyboard"),
-            (TAB_SPEECH, "Speech"),
-            (TAB_SETTINGS, "Settings"),
+            (TAB_GENERAL, "Opće"),
+            (TAB_KEYBOARD, "Tastatura"),
+            (TAB_SPEECH, "Govor"),
+            (TAB_SETTINGS, "Postavke"),
         ):
             button = self._make_button(
                 label,
@@ -516,9 +518,9 @@ class ControllerWindow(QWidget):
         self._keyboard_tab_buttons = {}
         for index, (tab, label) in enumerate(
             (
-                (KEYBOARD_TAB_LETTERS, "Letters"),
-                (KEYBOARD_TAB_NUMPAD, "Numpad"),
-                (KEYBOARD_TAB_SYMBOLS, "Symbols"),
+                (KEYBOARD_TAB_LETTERS, "Slova"),
+                (KEYBOARD_TAB_NUMPAD, "Brojevi"),
+                (KEYBOARD_TAB_SYMBOLS, "Znakovi"),
             )
         ):
             button = self._make_button(
@@ -535,7 +537,7 @@ class ControllerWindow(QWidget):
 
     def _add_keyboard_utility_row(self, row: int, *, groups_visible: bool) -> None:
         groups_button = self._make_button(
-            "Groups",
+            "Grupe",
             self._action("keyboard_groups"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
@@ -543,14 +545,14 @@ class ControllerWindow(QWidget):
         )
         groups_button.setVisible(groups_visible)
         space_button = self._make_button(
-            "Space",
+            "Razmak",
             self._action("keyboard_space"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=True,
         )
         backspace_button = self._make_button(
-            "Backspace",
+            "Obriši",
             self._action("keyboard_backspace"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
@@ -661,7 +663,7 @@ class ControllerWindow(QWidget):
             self._toggle_gaze_cursor()
 
     def _type_key_label(self, label: str) -> None:
-        if label == "Enter":
+        if label == "Potvrdi":
             self._press_key("enter")
         else:
             self._type_text(label)
@@ -669,41 +671,42 @@ class ControllerWindow(QWidget):
     def _type_text(self, text: str) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Controller keyboard input is unavailable.")
+            self._emit_status("Unos putem tastature nije dostupan.")
             return
 
         try:
             self._restore_target_window()
             self._input.type_text(text)
-            self._emit_status(f"Typed {text!r}.")
-        except Exception as exc:
+            self._emit_status(f"Uneseno je {text!r}.")
+        except Exception:
             logger.exception("Controller keyboard text input failed.")
-            self._emit_status(f"Keyboard input failed: {exc}")
+            self._emit_status("Unos putem tastature nije uspio.")
 
     def _press_key(self, key: str) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Controller keyboard input is unavailable.")
+            self._emit_status("Unos putem tastature nije dostupan.")
             return
 
         try:
             self._restore_target_window()
             self._input.press_key(key)
-            self._emit_status(f"Pressed {key}.")
-        except Exception as exc:
+            key_name = {"backspace": "brisanje", "enter": "potvrda"}.get(key, key)
+            self._emit_status(f"Pritisnuta je tipka za {key_name}.")
+        except Exception:
             logger.exception("Controller keyboard key press failed.")
-            self._emit_status(f"Keyboard key failed: {exc}")
+            self._emit_status("Pritisak tipke nije uspio.")
 
     def _click_current(self, button: str, *, clicks: int, source: str) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Controller input is unavailable.")
+            self._emit_status("Upravljanje nije dostupno.")
             return
 
         try:
             target = self._click_target_for_source(source)
             if source == "mouse" and target is None:
-                self._emit_status("No external cursor target recorded yet.")
+                self._emit_status("Još nije zabilježen cilj pokazivača izvan aplikacije.")
                 return
 
             if target is None:
@@ -716,11 +719,12 @@ class ControllerWindow(QWidget):
                     clicks=clicks,
                     interval=0.04,
                 )
-            label = "Double left click" if clicks > 1 else f"{button.title()} click"
-            self._emit_status(f"{label} sent.")
-        except Exception as exc:
+            labels = {"left": "Lijevi klik", "right": "Desni klik"}
+            label = "Dvostruki lijevi klik" if clicks > 1 else labels.get(button, "Klik")
+            self._emit_status(f"{label} je poslan.")
+        except Exception:
             logger.exception("Controller click failed.")
-            self._emit_status(f"Controller click failed: {exc}")
+            self._emit_status("Klik nije uspio.")
 
     def _click_target_for_source(self, source: str) -> tuple[int, int] | None:
         if source == "mouse":
@@ -732,46 +736,46 @@ class ControllerWindow(QWidget):
     def _press_enter(self) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Controller input is unavailable.")
+            self._emit_status("Upravljanje nije dostupno.")
             return
 
         try:
             self._restore_target_window()
             self._input.press_key("enter")
-            self._emit_status("ENTER sent.")
-        except Exception as exc:
+            self._emit_status("Tipka za potvrdu je poslana.")
+        except Exception:
             logger.exception("Controller ENTER failed.")
-            self._emit_status(f"ENTER failed: {exc}")
+            self._emit_status("Slanje tipke za potvrdu nije uspjelo.")
 
     def _scroll(self, units: int) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Controller input is unavailable.")
+            self._emit_status("Upravljanje nije dostupno.")
             return
 
         try:
             self._input.scroll(units)
-            direction = "up" if units > 0 else "down"
-            self._emit_status(f"Scroll {direction} sent.")
-        except Exception as exc:
+            direction = "gore" if units > 0 else "dolje"
+            self._emit_status(f"Pomjeranje {direction} je poslano.")
+        except Exception:
             logger.exception("Controller scroll failed.")
-            self._emit_status(f"Scroll failed: {exc}")
+            self._emit_status("Pomjeranje nije uspjelo.")
 
     def _toggle_precision_zoom(self) -> None:
         enabled = not self._gaze_settings.use_precision_zoom
         self._gaze_settings = replace(self._gaze_settings, use_precision_zoom=enabled)
         self._sync_settings_buttons()
         self.gaze_settings_changed.emit(replace(self._gaze_settings))
-        state = "enabled" if enabled else "disabled"
-        self._emit_status(f"Gaze focus mode {state}.")
+        state = "uključeno" if enabled else "isključeno"
+        self._emit_status(f"Precizno uvećanje je {state}.")
 
     def _toggle_gaze_cursor(self) -> None:
         enabled = not self._gaze_settings.show_gaze_bubble
         self._gaze_settings = replace(self._gaze_settings, show_gaze_bubble=enabled)
         self._sync_settings_buttons()
         self.gaze_settings_changed.emit(replace(self._gaze_settings))
-        state = "enabled" if enabled else "disabled"
-        self._emit_status(f"Gaze cursor {state}.")
+        state = "uključena" if enabled else "isključena"
+        self._emit_status(f"Oznaka pogleda je {state}.")
 
     def _ensure_input_controller(self) -> None:
         if self._input is not None:
@@ -779,9 +783,9 @@ class ControllerWindow(QWidget):
 
         try:
             self._input = WindowsInputController()
-        except Exception as exc:
+        except Exception:
             logger.exception("Could not initialize controller input backend.")
-            self._emit_status(f"Controller input unavailable: {exc}")
+            self._emit_status("Upravljanje nije dostupno.")
 
     def _emit_status(self, text: str) -> None:
         logger.info("Controller sidebar status: %s", text)
@@ -816,7 +820,9 @@ class ControllerWindow(QWidget):
             return False
 
         if not self._input.is_window(self._target_window):
-            logger.warning("Controller target window is no longer valid: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Controller target window is no longer valid: hwnd=%s.", self._target_window
+            )
             self._target_window = None
             return False
 
@@ -827,7 +833,9 @@ class ControllerWindow(QWidget):
         if restored:
             time.sleep(0.01)
         else:
-            logger.warning("Could not restore controller target window: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Could not restore controller target window: hwnd=%s.", self._target_window
+            )
         return restored
 
     def _make_button(
@@ -856,6 +864,7 @@ class ControllerWindow(QWidget):
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
+        button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(
             lambda _checked=False, item=action: self._trigger_action(
                 item,
@@ -869,6 +878,7 @@ class ControllerWindow(QWidget):
 
     def _clear_dynamic_buttons(self) -> None:
         self._set_gaze_target_action(None)
+        self.interaction_context_changed.emit()
         for action in self._dynamic_actions:
             self._action_buttons.pop(action, None)
         self._dynamic_actions.clear()
@@ -906,7 +916,7 @@ class ControllerWindow(QWidget):
             precision.setChecked(self._gaze_settings.use_precision_zoom)
             precision.setText(
                 _checkbox_text(
-                    "Gaze focus mode",
+                    "Precizno uvećanje",
                     self._gaze_settings.use_precision_zoom,
                 )
             )
@@ -916,7 +926,7 @@ class ControllerWindow(QWidget):
             cursor.setChecked(self._gaze_settings.show_gaze_bubble)
             cursor.setText(
                 _checkbox_text(
-                    "Gaze cursor",
+                    "Oznaka pogleda",
                     self._gaze_settings.show_gaze_bubble,
                 )
             )
@@ -983,13 +993,13 @@ class ControllerWindow(QWidget):
     def _register_appbar(self) -> None:
         if self._full_height:
             self._appbar.unregister()
-            self._emit_status("Controller panel using full screen height.")
+            self._emit_status("Upravljač koristi punu visinu ekrana.")
             return
 
         if self._appbar.register(int(self.winId()), self.width(), edge=ABE_RIGHT):
-            self._emit_status("Controller panel reserved right work area.")
+            self._emit_status("Upravljač je zauzeo desni dio radne površine.")
         elif sys.platform == "win32":
-            self._emit_status("Controller panel shown without AppBar reservation.")
+            self._emit_status("Upravljač je prikazan bez rezervacije radne površine.")
 
 
 def _checkbox_text(label: str, checked: bool) -> str:

@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from PySide6.QtCore import QObject, QPoint, Signal
 from PySide6.QtGui import QGuiApplication
 
+from .gaze_selection import DEFAULT_SELECTION_PAUSE_MS, GazeSelectionTimer
 from .windows_input import WindowsInputController
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ MOUSE_ERROR_LOG_INTERVAL_MS = 1000
 @dataclass
 class GazeSettings:
     smoothing: float = 1.0
+    selection_pause_ms: int = DEFAULT_SELECTION_PAUSE_MS
     dwell_ms: int = 500
     dwell_radius_px: int = 48
     click_cooldown_ms: int = 350
@@ -76,6 +77,8 @@ class GazeMouseController(QObject):
         toolbar_action_center: Callable[[str, QPoint], QPoint | None],
         toolbar_contains: Callable[[QPoint], bool],
         parent: QObject | None = None,
+        *,
+        pointer_movement_enabled: bool = True,
     ) -> None:
         super().__init__(parent)
         self.settings = GazeSettings()
@@ -84,15 +87,15 @@ class GazeMouseController(QObject):
         self._toolbar_action_at = toolbar_action_at
         self._toolbar_action_center = toolbar_action_center
         self._toolbar_contains = toolbar_contains
+        self._pointer_movement_enabled = pointer_movement_enabled
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
         self._toolbar_gaze_target: str | None = None
-        self._toolbar_candidate: str | None = None
-        self._toolbar_started_ms = 0.0
+        self._toolbar_selection = GazeSelectionTimer()
         self._target_anchor: QPoint | None = None
-        self._target_started_ms = 0.0
+        self._target_selection = GazeSelectionTimer()
         self._quick_anchor: GazeScreenPoint | None = None
-        self._quick_started_ms = 0.0
+        self._quick_selection = GazeSelectionTimer()
         self._quick_target: GazeScreenPoint | None = None
         self._quick_menu_open = False
         self._click_zoom_open = False
@@ -115,14 +118,14 @@ class GazeMouseController(QObject):
             rect = self._input.primary_screen_rect()
             self._physical_screen_rect = (rect.left, rect.top, rect.width, rect.height)
             self._logical_screen_rect = _read_primary_screen_geometry()
-        except Exception as exc:
+        except Exception:
             logger.exception("Windows input backend failed.")
-            self.status_changed.emit(f"Mouse movement is disabled: {exc}")
+            self.status_changed.emit("Pomjeranje pokazivača nije dostupno.")
             return
 
         logger.info("Mouse controller ready with Windows user32 input backend.")
         self._log_screen_mapping()
-        self.status_changed.emit("Mouse control ready.")
+        self.status_changed.emit("Upravljanje pokazivačem je spremno.")
 
     def set_mode(self, mode: str | None) -> None:
         if mode is not None and mode not in CLICK_ACTIONS:
@@ -143,13 +146,13 @@ class GazeMouseController(QObject):
         logger.info("Mouse action mode changed to: %s", mode or "none")
 
         if mode == LEFT_CLICK:
-            self.status_changed.emit("Left click armed. Look at the target.")
+            self.status_changed.emit("Lijevi klik je spreman. Pogledajte željeni cilj.")
         elif mode == RIGHT_CLICK:
-            self.status_changed.emit("Right click armed. Look at the target.")
+            self.status_changed.emit("Desni klik je spreman. Pogledajte željeni cilj.")
         elif mode == DOUBLE_LEFT_CLICK:
-            self.status_changed.emit("Double click armed. Look at the target.")
+            self.status_changed.emit("Dvostruki klik je spreman. Pogledajte željeni cilj.")
         else:
-            self.status_changed.emit("No click action armed.")
+            self.status_changed.emit("Nijedna radnja klika nije odabrana.")
 
     def set_quick_actions_enabled(self, enabled: bool) -> None:
         if self.quick_actions_enabled == enabled:
@@ -159,10 +162,10 @@ class GazeMouseController(QObject):
         self._reset_quick_dwell()
         if enabled:
             self.set_mode(None)
-            self.status_changed.emit("Quick actions enabled. Look at a target.")
+            self.status_changed.emit("Brze radnje su uključene. Pogledajte željeni cilj.")
         else:
             self.cancel_quick_action_menu()
-            self.status_changed.emit("Quick actions disabled.")
+            self.status_changed.emit("Brze radnje su isključene.")
 
         self.quick_actions_mode_changed.emit(enabled)
         logger.info("Quick actions mode changed to: %s", enabled)
@@ -170,7 +173,7 @@ class GazeMouseController(QObject):
     def execute_quick_action(self, action: str) -> None:
         if action not in CLICK_ACTIONS:
             self.cancel_quick_action_menu()
-            self.status_changed.emit("Quick action cancelled.")
+            self.status_changed.emit("Brza radnja je otkazana.")
             return
 
         target = self._quick_target
@@ -179,13 +182,13 @@ class GazeMouseController(QObject):
         self._reset_quick_dwell()
         if target is None:
             logger.warning("Quick action %s ignored because no target is stored.", action)
-            self.status_changed.emit("Quick action skipped: no target.")
+            self.status_changed.emit("Brza radnja je preskočena jer cilj nije odabran.")
             return
 
         now_ms = time.monotonic() * 1000
         if now_ms - self._last_click_ms < self.settings.click_cooldown_ms:
             logger.info("Quick action skipped during click cooldown.")
-            self.status_changed.emit("Quick action skipped during repeat delay.")
+            self.status_changed.emit("Brza radnja je preskočena tokom pauze između radnji.")
             return
 
         self._last_click_ms = now_ms
@@ -217,12 +220,24 @@ class GazeMouseController(QObject):
         self._quick_target = None
         self._reset_quick_dwell()
 
+    def cancel_toolbar_interaction(self, *, require_leave: bool = False) -> None:
+        self._toolbar_selection.cancel(require_leave=require_leave)
+        self._cancel_interaction("toolbar")
+        self._set_toolbar_gaze_target(None)
+
+    def cancel_gaze_interactions_for_mouse(self) -> None:
+        self.cancel_toolbar_interaction(require_leave=True)
+        self._target_selection.cancel(require_leave=True)
+        self._quick_selection.cancel(require_leave=True)
+        self._cancel_interaction("target")
+        self._cancel_interaction("quick")
+
     def execute_zoomed_click(self, logical: QPoint) -> None:
         mode = self._pending_zoom_click_mode
         if mode not in CLICK_ACTIONS:
             logger.warning("Zoomed click ignored because no click mode is pending.")
             self._cancel_zoomed_click_state()
-            self.status_changed.emit("Zoomed click skipped: no action is pending.")
+            self.status_changed.emit("Uvećani klik je preskočen jer nema odabrane radnje.")
             return
 
         target = self._screen_point_from_logical(logical)
@@ -247,7 +262,7 @@ class GazeMouseController(QObject):
         if reset_mode:
             self.set_mode(None)
         if had_pending:
-            self.status_changed.emit("Zoomed click cancelled.")
+            self.status_changed.emit("Uvećani klik je otkazan.")
 
     def update_settings(self, settings: GazeSettings) -> None:
         self.settings = settings
@@ -256,7 +271,7 @@ class GazeMouseController(QObject):
         if not self.settings.use_precision_zoom:
             self._cancel_zoomed_click_state()
         logger.info("Gaze mouse settings updated: %s", settings)
-        self.status_changed.emit("Settings updated.")
+        self.status_changed.emit("Postavke su ažurirane.")
 
     def handle_eye_status(self, left_open: bool, right_open: bool) -> None:
         both_open = bool(left_open) and bool(right_open)
@@ -266,7 +281,7 @@ class GazeMouseController(QObject):
         self._both_eyes_open = both_open
         if both_open:
             logger.info("Both eyes are open; gaze control is active.")
-            self.status_changed.emit("Both eyes detected.")
+            self.status_changed.emit("Oba oka su prepoznata.")
             return
 
         logger.info(
@@ -276,13 +291,15 @@ class GazeMouseController(QObject):
         )
         self._smooth_physical_point = None
         self._last_cursor_point = None
-        self._reset_toolbar_dwell()
-        self._reset_target_dwell()
+        self._pause_toolbar_dwell()
+        self._pause_target_dwell()
         self._cancel_zoomed_click_state()
         self._native_menu_click_pending = False
-        self.cancel_quick_action_menu()
+        self._quick_menu_open = False
+        self._quick_target = None
+        self._pause_quick_dwell()
         self._set_toolbar_gaze_target(None)
-        self.status_changed.emit("Gaze paused: both eyes must be open.")
+        self.status_changed.emit("Upravljanje pogledom je pauzirano: oba oka moraju biti otvorena.")
 
     def handle_gaze(self, normalized_x: float, normalized_y: float, _timestamp: object) -> None:
         if not self._both_eyes_open:
@@ -297,11 +314,15 @@ class GazeMouseController(QObject):
 
         self.gaze_position_changed.emit(point.logical)
 
-        if quick_menu_was_open or self._quick_menu_open or click_zoom_was_open or self._click_zoom_open:
+        if (
+            quick_menu_was_open
+            or self._quick_menu_open
+            or click_zoom_was_open
+            or self._click_zoom_open
+        ):
             return
 
         toolbar_action = self._toolbar_action_at(point.logical)
-        self._set_toolbar_gaze_target(toolbar_action)
         pointer_over_app_ui = toolbar_action is not None or self._toolbar_contains(point.logical)
 
         if not pointer_over_app_ui:
@@ -310,12 +331,17 @@ class GazeMouseController(QObject):
         if now_ms < self._pause_until_ms:
             if toolbar_action is None:
                 self._reset_toolbar_dwell()
+            else:
+                self._cancel_interaction("toolbar")
+                self._set_toolbar_gaze_target(None)
             return
 
         if toolbar_action is not None:
             self._reset_target_dwell()
             self._reset_quick_dwell()
-            target_center = self._toolbar_action_center(toolbar_action, point.logical) or point.logical
+            target_center = (
+                self._toolbar_action_center(toolbar_action, point.logical) or point.logical
+            )
             self._handle_toolbar_dwell(toolbar_action, target_center, now_ms)
             return
 
@@ -339,13 +365,15 @@ class GazeMouseController(QObject):
         x = _clamp(normalized_x, 0.0, 1.0)
         y = _clamp(normalized_y, 0.0, 1.0)
         logical = QPoint(
-            int(round(logical_left + x * max(1, logical_width - 1))),
-            int(round(logical_top + y * max(1, logical_height - 1))),
+            round(logical_left + x * max(1, logical_width - 1)),
+            round(logical_top + y * max(1, logical_height - 1)),
         )
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         physical = QPoint(
-            int(round(physical_left + x * max(1, physical_width - 1))),
-            int(round(physical_top + y * max(1, physical_height - 1))),
+            round(physical_left + x * max(1, physical_width - 1)),
+            round(physical_top + y * max(1, physical_height - 1)),
         )
         return GazeScreenPoint(logical=logical, physical=physical)
 
@@ -357,14 +385,18 @@ class GazeMouseController(QObject):
 
         old = self._smooth_physical_point
         smoothed = QPoint(
-            int(round(old.x() + (raw_point.x() - old.x()) * alpha)),
-            int(round(old.y() + (raw_point.y() - old.y()) * alpha)),
+            round(old.x() + (raw_point.x() - old.x()) * alpha),
+            round(old.y() + (raw_point.y() - old.y()) * alpha),
         )
         self._smooth_physical_point = smoothed
         return smoothed
 
     def _move_cursor(self, point: QPoint) -> None:
-        if not self.settings.move_mouse or self._input is None:
+        if (
+            not self._pointer_movement_enabled
+            or not self.settings.move_mouse
+            or self._input is None
+        ):
             return
 
         if (
@@ -382,31 +414,32 @@ class GazeMouseController(QObject):
             if now_ms - self._last_mouse_error_ms >= MOUSE_ERROR_LOG_INTERVAL_MS:
                 self._last_mouse_error_ms = now_ms
                 logger.exception("Mouse move failed.")
-                self.status_changed.emit(f"Mouse move failed: {exc}")
+                self.status_changed.emit("Pomjeranje pokazivača nije uspjelo.")
             else:
                 logger.debug("Mouse move failed during rate-limit window: %s", exc)
 
     def _handle_toolbar_dwell(self, action: str, center: QPoint, now_ms: float) -> None:
-        if action != self._toolbar_candidate:
-            self._toolbar_candidate = action
-            self._toolbar_started_ms = now_ms
-            self._emit_interaction_progress("toolbar", center, 0.0, _action_label(action))
+        update = self._toolbar_selection.update(
+            action,
+            now_ms,
+            pause_ms=self.settings.selection_pause_ms,
+            dwell_ms=self.settings.dwell_ms,
+        )
+        if update.progress is None:
+            self._cancel_interaction("toolbar")
+            self._set_toolbar_gaze_target(None)
             return
 
-        progress = _clamp(
-            (now_ms - self._toolbar_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
-        )
-        self._emit_interaction_progress("toolbar", center, progress, _action_label(action))
+        self._set_toolbar_gaze_target(action)
+        self._emit_interaction_progress("toolbar", center, update.progress, _action_label(action))
 
-        ready = now_ms - self._toolbar_started_ms >= self.settings.dwell_ms
         cooled = now_ms - self._last_toolbar_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
             self._last_toolbar_ms = now_ms
             self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
+            self._toolbar_selection.complete()
             self._finish_interaction("toolbar", center, _action_label(action))
-            self._reset_toolbar_dwell()
+            self._set_toolbar_gaze_target(None)
             logger.info("Toolbar dwell action fired: %s", action)
             self.toolbar_action_requested.emit(action)
 
@@ -420,32 +453,46 @@ class GazeMouseController(QObject):
             or _distance(self._target_anchor, point.logical) > self.settings.dwell_radius_px
         ):
             self._target_anchor = point.logical
-            self._target_started_ms = now_ms
-            self._emit_interaction_progress("target", self._target_anchor, 0.0, _action_label(self.active_mode))
+            self._target_selection.update(
+                "desktop-target",
+                now_ms,
+                pause_ms=self.settings.selection_pause_ms,
+                dwell_ms=self.settings.dwell_ms,
+                restart=True,
+            )
+            self._cancel_interaction("target")
             return
 
-        progress = _clamp(
-            (now_ms - self._target_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
+        update = self._target_selection.update(
+            "desktop-target",
+            now_ms,
+            pause_ms=self.settings.selection_pause_ms,
+            dwell_ms=self.settings.dwell_ms,
         )
-        self._emit_interaction_progress("target", self._target_anchor, progress, _action_label(self.active_mode))
+        if update.progress is None:
+            self._cancel_interaction("target")
+            return
 
-        ready = now_ms - self._target_started_ms >= self.settings.dwell_ms
+        self._emit_interaction_progress(
+            "target", self._target_anchor, update.progress, _action_label(self.active_mode)
+        )
+
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
+            self._target_selection.complete()
             use_precision_zoom = (
-                self.settings.use_precision_zoom
-                and not self._native_menu_click_pending
+                self.settings.use_precision_zoom and not self._native_menu_click_pending
             )
             if use_precision_zoom:
                 self._pending_zoom_click_mode = self.active_mode
                 self._click_zoom_open = True
                 self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
-                self._finish_interaction("target", self._target_anchor, _action_label(self.active_mode))
+                self._finish_interaction(
+                    "target", self._target_anchor, _action_label(self.active_mode)
+                )
                 self.click_zoom_requested.emit(QPoint(self._target_anchor))
                 self._reset_target_dwell()
-                self.status_changed.emit("Click zoom opened.")
+                self.status_changed.emit("Otvoreno je precizno uvećanje za klik.")
                 return
 
             self._last_click_ms = now_ms
@@ -458,29 +505,46 @@ class GazeMouseController(QObject):
             or _distance(self._quick_anchor.logical, point.logical) > self.settings.dwell_radius_px
         ):
             self._quick_anchor = point
-            self._quick_started_ms = now_ms
-            self._emit_interaction_progress("quick", point.logical, 0.0, "Quick")
+            self._quick_selection.update(
+                "quick-target",
+                now_ms,
+                pause_ms=self.settings.selection_pause_ms,
+                dwell_ms=self.settings.dwell_ms,
+                restart=True,
+            )
+            self._cancel_interaction("quick")
             return
 
-        progress = _clamp(
-            (now_ms - self._quick_started_ms) / max(1, self.settings.dwell_ms),
-            0.0,
-            1.0,
+        update = self._quick_selection.update(
+            "quick-target",
+            now_ms,
+            pause_ms=self.settings.selection_pause_ms,
+            dwell_ms=self.settings.dwell_ms,
         )
-        self._emit_interaction_progress("quick", self._quick_anchor.logical, progress, "Quick")
+        if update.progress is None:
+            self._cancel_interaction("quick")
+            return
 
-        ready = now_ms - self._quick_started_ms >= self.settings.dwell_ms
+        self._emit_interaction_progress(
+            "quick", self._quick_anchor.logical, update.progress, "Brza radnja"
+        )
+
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
-        if ready and cooled:
+        if update.ready and cooled:
+            self._quick_selection.complete()
             self._quick_target = self._quick_anchor
             self._quick_menu_open = True
-            self._finish_interaction("quick", self._quick_anchor.logical, "Quick")
+            self._finish_interaction("quick", self._quick_anchor.logical, "Brza radnja")
             if self.settings.use_precision_zoom:
                 self.quick_action_zoom_requested.emit(QPoint(self._quick_anchor.logical))
             else:
                 self.quick_action_menu_requested.emit(QPoint(self._quick_anchor.logical))
             self._reset_quick_dwell()
-            status = "Quick zoom opened." if self.settings.use_precision_zoom else "Quick action menu opened."
+            status = (
+                "Otvoreno je precizno uvećanje za brzu radnju."
+                if self.settings.use_precision_zoom
+                else "Otvoren je izbornik brzih radnji."
+            )
             self.status_changed.emit(status)
 
     def _fire_click(
@@ -493,7 +557,7 @@ class GazeMouseController(QObject):
     ) -> None:
         if self._input is None:
             logger.warning("Click skipped because Windows input backend is unavailable.")
-            self.status_changed.emit("Click skipped because mouse control is unavailable.")
+            self.status_changed.emit("Klik je preskočen jer upravljanje pokazivačem nije dostupno.")
             self._cancel_interaction(interaction_source)
             return
 
@@ -511,10 +575,12 @@ class GazeMouseController(QObject):
             elif mode == RIGHT_CLICK:
                 self._input.click(point.physical.x(), point.physical.y(), button="right")
             elif mode == DOUBLE_LEFT_CLICK:
-                self._input.click(point.physical.x(), point.physical.y(), button="left", clicks=2, interval=0.04)
-        except Exception as exc:
+                self._input.click(
+                    point.physical.x(), point.physical.y(), button="left", clicks=2, interval=0.04
+                )
+        except Exception:
             logger.exception("Click action failed.")
-            self.status_changed.emit(f"Click failed: {exc}")
+            self.status_changed.emit("Klik nije uspio.")
             self._cancel_interaction(interaction_source)
             return
 
@@ -524,7 +590,7 @@ class GazeMouseController(QObject):
             self._native_menu_click_pending = True
             self.set_mode(LEFT_CLICK)
             self.status_changed.emit(
-                "Right click opened menu. Left click armed for menu selection."
+                "Desni klik je otvorio izbornik. Lijevi klik je spreman za odabir."
             )
             return
 
@@ -533,9 +599,14 @@ class GazeMouseController(QObject):
             self.set_mode(None)
 
     def _reset_toolbar_dwell(self) -> None:
+        self._toolbar_selection.cancel()
         self._cancel_interaction("toolbar")
-        self._toolbar_candidate = None
-        self._toolbar_started_ms = 0.0
+        self._set_toolbar_gaze_target(None)
+
+    def _pause_toolbar_dwell(self) -> None:
+        self._toolbar_selection.pause()
+        self._cancel_interaction("toolbar")
+        self._set_toolbar_gaze_target(None)
 
     def _set_toolbar_gaze_target(self, action: str | None) -> None:
         if action == self._toolbar_gaze_target:
@@ -545,14 +616,24 @@ class GazeMouseController(QObject):
         self.toolbar_gaze_target_changed.emit(action)
 
     def _reset_target_dwell(self) -> None:
+        self._target_selection.cancel()
         self._cancel_interaction("target")
         self._target_anchor = None
-        self._target_started_ms = 0.0
+
+    def _pause_target_dwell(self) -> None:
+        self._target_selection.pause()
+        self._cancel_interaction("target")
+        self._target_anchor = None
 
     def _reset_quick_dwell(self) -> None:
+        self._quick_selection.cancel()
         self._cancel_interaction("quick")
         self._quick_anchor = None
-        self._quick_started_ms = 0.0
+
+    def _pause_quick_dwell(self) -> None:
+        self._quick_selection.pause()
+        self._cancel_interaction("quick")
+        self._quick_anchor = None
 
     def _cancel_zoomed_click_state(self) -> None:
         self._click_zoom_open = False
@@ -602,16 +683,20 @@ class GazeMouseController(QObject):
         logical_y = max(logical_top, min(logical_bottom, logical.y()))
         x_ratio = (logical_x - logical_left) / max(1, logical_width - 1)
         y_ratio = (logical_y - logical_top) / max(1, logical_height - 1)
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         physical = QPoint(
-            int(round(physical_left + x_ratio * max(1, physical_width - 1))),
-            int(round(physical_top + y_ratio * max(1, physical_height - 1))),
+            round(physical_left + x_ratio * max(1, physical_width - 1)),
+            round(physical_top + y_ratio * max(1, physical_height - 1)),
         )
         return GazeScreenPoint(logical=QPoint(logical_x, logical_y), physical=physical)
 
     def _log_screen_mapping(self) -> None:
         logical_left, logical_top, logical_width, logical_height = self._logical_screen_geometry()
-        physical_left, physical_top, physical_width, physical_height = self._physical_screen_geometry()
+        physical_left, physical_top, physical_width, physical_height = (
+            self._physical_screen_geometry()
+        )
         logger.info(
             "Gaze screen mapping: logical=%s,%s %sx%s physical=%s,%s %sx%s.",
             logical_left,
@@ -641,17 +726,17 @@ def _read_primary_screen_geometry() -> tuple[int, int, int, int]:
 
 def _action_label(action: str | None) -> str:
     labels = {
-        LEFT_CLICK: "Left click",
-        RIGHT_CLICK: "Right click",
-        DOUBLE_LEFT_CLICK: "Double click",
-        SPEECH: "Speech",
-        KEYBOARD: "Keyboard",
-        CONTROLLER: "Controler",
-        SETTINGS: "Settings",
-        HIDE_HOTBAR: "Hide",
-        SHOW_HOTBAR: "Show",
-        QUICK_ACTIONS: "Quick",
+        LEFT_CLICK: "Lijevi klik",
+        RIGHT_CLICK: "Desni klik",
+        DOUBLE_LEFT_CLICK: "Dvostruki klik",
+        SPEECH: "Govor",
+        KEYBOARD: "Tastatura",
+        CONTROLLER: "Upravljač",
+        SETTINGS: "Postavke",
+        HIDE_HOTBAR: "Sakrij",
+        SHOW_HOTBAR: "Prikaži",
+        QUICK_ACTIONS: "Brza radnja",
     }
     if action is None:
-        return "Select"
-    return labels.get(action, "Select")
+        return "Odaberi"
+    return labels.get(action, "Odaberi")

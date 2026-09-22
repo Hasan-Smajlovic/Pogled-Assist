@@ -8,10 +8,10 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import Any
 
+from .gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PAUSE_MS
 from .logging_setup import get_project_root
 from .mouse_controller import GazeSettings
 from .speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
-
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,11 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
     return replace(
         settings,
         smoothing=_clamp_float(settings.smoothing, 0.05, 1.0),
+        selection_pause_ms=_clamp_int(
+            settings.selection_pause_ms,
+            MIN_SELECTION_PAUSE_MS,
+            MAX_SELECTION_PAUSE_MS,
+        ),
         dwell_ms=_clamp_int(settings.dwell_ms, 150, 5000),
         dwell_radius_px=_clamp_int(settings.dwell_radius_px, 10, 160),
         click_cooldown_ms=_clamp_int(settings.click_cooldown_ms, 100, 5000),

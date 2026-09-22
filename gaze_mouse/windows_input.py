@@ -7,8 +7,8 @@ import logging
 import os
 import sys
 import time
-from dataclasses import dataclass
 from ctypes import wintypes
+from dataclasses import dataclass
 
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
@@ -152,8 +152,7 @@ class WindowsInputController:
         inputs: list[_INPUT] = []
         inputs.extend(_keyboard_input(key_code, 0, 0) for key_code in key_codes)
         inputs.extend(
-            _keyboard_input(key_code, 0, KEYEVENTF_KEYUP)
-            for key_code in reversed(key_codes)
+            _keyboard_input(key_code, 0, KEYEVENTF_KEYUP) for key_code in reversed(key_codes)
         )
         self._send_keyboard_inputs(*inputs)
 
@@ -311,13 +310,12 @@ class WindowsInputController:
         inputs.append(_keyboard_input(vk, 0, 0))
         inputs.append(_keyboard_input(vk, 0, KEYEVENTF_KEYUP))
         inputs.extend(
-            _keyboard_input(modifier, 0, KEYEVENTF_KEYUP)
-            for modifier in reversed(modifiers)
+            _keyboard_input(modifier, 0, KEYEVENTF_KEYUP) for modifier in reversed(modifiers)
         )
         self._send_keyboard_inputs(*inputs)
         return True
 
-    def _send_keyboard_inputs(self, *items: "_INPUT") -> None:
+    def _send_keyboard_inputs(self, *items: _INPUT) -> None:
         inputs = (_INPUT * len(items))(*items)
         sent = self._user32.SendInput(
             len(inputs),
@@ -331,9 +329,7 @@ class WindowsInputController:
         current_thread = int(self._kernel32.GetCurrentThreadId())
         target_thread = self._window_thread_id(hwnd)
         foreground = self.foreground_window()
-        foreground_thread = (
-            self._window_thread_id(wintypes.HWND(foreground)) if foreground else 0
-        )
+        foreground_thread = self._window_thread_id(wintypes.HWND(foreground)) if foreground else 0
 
         attached_target = False
         attached_foreground = False
@@ -472,7 +468,4 @@ def _keyboard_input(vk_code: int, scan_code: int, flags: int) -> _INPUT:
 
 def _utf16_code_units(character: str) -> list[int]:
     encoded = character.encode("utf-16-le")
-    return [
-        encoded[index] | (encoded[index + 1] << 8)
-        for index in range(0, len(encoded), 2)
-    ]
+    return [encoded[index] | (encoded[index + 1] << 8) for index in range(0, len(encoded), 2)]

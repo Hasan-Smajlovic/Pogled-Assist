@@ -10,8 +10,13 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from .gaze_selection import (
+    DEFAULT_SELECTION_PAUSE_MS,
+    MAX_SELECTION_PAUSE_MS,
+    MIN_SELECTION_PAUSE_MS,
+    GazeSelectionTimer,
+)
 from .windows_z_order import force_window_topmost
-
 
 logger = logging.getLogger(__name__)
 TOPMOST_REFRESH_INTERVAL_MS = 33
@@ -27,7 +32,6 @@ class QuickActionZoomWindow(QWidget):
 
     SOURCE_SIZE = 180
     DISPLAY_SIZE = 540
-    OPEN_GAZE_GRACE_MS = 220
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -36,17 +40,17 @@ class QuickActionZoomWindow(QWidget):
         self._display_rect = QRect()
         self._pixmap = QPixmap()
         self._candidate_anchor: QPoint | None = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
         self._candidate_local: QPoint | None = None
+        self._selection_timer = GazeSelectionTimer()
+        self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
-        self._opened_ms = 0.0
         self._selection_emitted = False
         self._phase = 0.0
         self._last_topmost_ms = 0.0
 
-        self.setWindowTitle("Quick Action Zoom")
+        self.setWindowTitle("Precizno uvećanje")
         self.setWindowFlags(_overlay_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
@@ -57,7 +61,11 @@ class QuickActionZoomWindow(QWidget):
         self._timer.setInterval(33)
         self._timer.timeout.connect(self._tick)
 
-    def set_selection_settings(self, *, dwell_ms: int, radius_px: int) -> None:
+    def set_selection_settings(self, *, pause_ms: int, dwell_ms: int, radius_px: int) -> None:
+        self._selection_pause_ms = max(
+            MIN_SELECTION_PAUSE_MS,
+            min(MAX_SELECTION_PAUSE_MS, int(pause_ms)),
+        )
         self._selection_dwell_ms = max(150, min(5000, int(dwell_ms)))
         self._selection_radius_px = max(16, min(160, int(radius_px)))
 
@@ -76,10 +84,9 @@ class QuickActionZoomWindow(QWidget):
         )
         self.setGeometry(geometry)
         self._candidate_anchor = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
         self._candidate_local = None
-        self._opened_ms = time.monotonic() * 1000
+        self._selection_timer.cancel()
         self._selection_emitted = False
         self._timer.start()
         self.show()
@@ -102,9 +109,9 @@ class QuickActionZoomWindow(QWidget):
     def close_zoom(self) -> None:
         self._timer.stop()
         self._candidate_anchor = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
         self._candidate_local = None
+        self._selection_timer.cancel()
         self._selection_emitted = False
         self._last_topmost_ms = 0.0
         self.hide()
@@ -115,9 +122,6 @@ class QuickActionZoomWindow(QWidget):
             return
 
         now_ms = time.monotonic() * 1000
-        if now_ms - self._opened_ms < self.OPEN_GAZE_GRACE_MS:
-            return
-
         local = QPoint(
             point.x() - self._screen_geometry.left(),
             point.y() - self._screen_geometry.top(),
@@ -133,21 +137,37 @@ class QuickActionZoomWindow(QWidget):
         ):
             self._candidate_anchor = QPoint(point)
             self._candidate_local = QPoint(local)
-            self._candidate_started_ms = now_ms
             self._candidate_progress = 0.0
-            self.selection_progress_changed.emit(QPoint(point), 0.0, "Zoom target")
+            self._selection_timer.update(
+                "zoom-target",
+                now_ms,
+                pause_ms=self._selection_pause_ms,
+                dwell_ms=self._selection_dwell_ms,
+                restart=True,
+            )
             self.update()
             return
 
         self._candidate_local = QPoint(local)
-        self._candidate_progress = min(
-            1.0,
-            (now_ms - self._candidate_started_ms) / max(1, self._selection_dwell_ms),
+        update = self._selection_timer.update(
+            "zoom-target",
+            now_ms,
+            pause_ms=self._selection_pause_ms,
+            dwell_ms=self._selection_dwell_ms,
         )
-        self.selection_progress_changed.emit(QPoint(point), self._candidate_progress, "Zoom target")
+        if update.progress is None:
+            self._candidate_progress = 0.0
+            self.update()
+            return
 
-        if self._candidate_progress >= 1.0:
+        self._candidate_progress = update.progress
+        self.selection_progress_changed.emit(
+            QPoint(point), self._candidate_progress, "Cilj uvećanja"
+        )
+
+        if update.ready:
             selected = self._map_display_to_screen(local)
+            self._selection_timer.complete()
             self._selection_emitted = True
             logger.info(
                 "Quick action zoom selected: display=%s,%s screen=%s,%s.",
@@ -162,6 +182,7 @@ class QuickActionZoomWindow(QWidget):
         self.update()
 
     def mousePressEvent(self, event) -> None:
+        self._reset_gaze_candidate(notify=True, require_leave=True)
         local = event.position().toPoint() if hasattr(event, "position") else event.pos()
         if self._display_rect.contains(local):
             selected = self._map_display_to_screen(local)
@@ -238,17 +259,17 @@ class QuickActionZoomWindow(QWidget):
     def _map_display_to_screen(self, local: QPoint) -> QPoint:
         x_ratio = (local.x() - self._display_rect.left()) / max(1, self._display_rect.width() - 1)
         y_ratio = (local.y() - self._display_rect.top()) / max(1, self._display_rect.height() - 1)
-        x = int(round(self._source_rect.left() + x_ratio * max(1, self._source_rect.width() - 1)))
-        y = int(round(self._source_rect.top() + y_ratio * max(1, self._source_rect.height() - 1)))
+        x = round(self._source_rect.left() + x_ratio * max(1, self._source_rect.width() - 1))
+        y = round(self._source_rect.top() + y_ratio * max(1, self._source_rect.height() - 1))
         return QPoint(
             max(self._source_rect.left(), min(self._source_rect.right(), x)),
             max(self._source_rect.top(), min(self._source_rect.bottom(), y)),
         )
 
-    def _reset_gaze_candidate(self, *, notify: bool) -> None:
+    def _reset_gaze_candidate(self, *, notify: bool, require_leave: bool = False) -> None:
         had_candidate = self._candidate_anchor is not None
+        self._selection_timer.cancel(require_leave=require_leave)
         self._candidate_anchor = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
         self._candidate_local = None
         if notify and had_candidate:

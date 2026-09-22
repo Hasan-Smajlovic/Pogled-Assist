@@ -55,7 +55,7 @@ function Write-ErrorLog {
 }
 
 function Get-DefaultInstallRoot {
-    return "C:\TobiiExec"
+    return "C:\PogledAssist"
 }
 
 function Test-AppRoot {
@@ -71,7 +71,7 @@ function Test-AppRoot {
 }
 
 function Resolve-AppRoot {
-    Write-Step "Finding installed Tobii Gaze Mouse"
+    Write-Step "Finding installed Pogled Assist"
 
     $candidates = @()
     if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
@@ -185,8 +185,8 @@ function Get-LauncherWindowVisible {
     param([string]$AppRoot = "")
 
     $candidates = @()
-    if (-not [string]::IsNullOrWhiteSpace($env:TOBII_GAZE_MOUSE_LOG_ROOT)) {
-        $candidates += Join-Path $env:TOBII_GAZE_MOUSE_LOG_ROOT "data\app_settings.json"
+    if (-not [string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_LOG_ROOT)) {
+        $candidates += Join-Path $env:POGLED_ASSIST_LOG_ROOT "data\app_settings.json"
     }
     if (-not [string]::IsNullOrWhiteSpace($AppRoot)) {
         $sourceRoot = Get-InstallSourceRoot -AppRoot $AppRoot
@@ -276,12 +276,12 @@ function Get-ShowLauncherWindow {
 
 function Sync-ConsoleWindowVisibility {
     try {
-        if ($null -eq ("TobiiGazeMouseConsoleWindow" -as [type])) {
+        if ($null -eq ("PogledAssistConsoleWindow" -as [type])) {
             Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-public static class TobiiGazeMouseConsoleWindow
+public static class PogledAssistConsoleWindow
 {
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetConsoleWindow();
@@ -292,16 +292,17 @@ public static class TobiiGazeMouseConsoleWindow
 "@
         }
 
-        $hwnd = [TobiiGazeMouseConsoleWindow]::GetConsoleWindow()
+        $hwnd = [PogledAssistConsoleWindow]::GetConsoleWindow()
         if ($hwnd -ne [IntPtr]::Zero) {
             $showWindowCommand = 0
             if (Get-ShowLauncherWindow) {
                 $showWindowCommand = 5
             }
 
-            [TobiiGazeMouseConsoleWindow]::ShowWindow($hwnd, $showWindowCommand) | Out-Null
+            [PogledAssistConsoleWindow]::ShowWindow($hwnd, $showWindowCommand) | Out-Null
         }
     } catch {
+        Write-Verbose "Could not update the launcher window state: $($_.Exception.Message)"
     }
 }
 
@@ -385,12 +386,12 @@ function Convert-PngToShortcutIcon {
 
     try {
         Add-Type -AssemblyName System.Drawing
-        if ($null -eq ("TobiiGazeMouseIconInterop" -as [type])) {
+        if ($null -eq ("PogledAssistIconInterop" -as [type])) {
             Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-public static class TobiiGazeMouseIconInterop
+public static class PogledAssistIconInterop
 {
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool DestroyIcon(IntPtr hIcon);
@@ -427,8 +428,8 @@ public static class TobiiGazeMouseIconInterop
         if ($null -ne $icon) {
             $icon.Dispose()
         }
-        if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("TobiiGazeMouseIconInterop" -as [type])) {
-            [TobiiGazeMouseIconInterop]::DestroyIcon($hIcon) | Out-Null
+        if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("PogledAssistIconInterop" -as [type])) {
+            [PogledAssistIconInterop]::DestroyIcon($hIcon) | Out-Null
         }
         if ($null -ne $graphics) {
             $graphics.Dispose()
@@ -540,7 +541,7 @@ function New-DesktopShortcut {
         throw "PowerShell launcher script was not found for shortcut creation."
     }
 
-    $shortcutPath = Join-Path $desktopPath "Tobii Gaze Mouse.lnk"
+    $shortcutPath = Join-Path $desktopPath "Pogled Assist.lnk"
     $showLauncherWindow = Get-LauncherWindowVisible -AppRoot $AppRoot
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
@@ -549,7 +550,7 @@ function New-DesktopShortcut {
         -LauncherPath $launcherPath `
         -ShowWindow $showLauncherWindow
     $shortcut.WorkingDirectory = $AppRoot
-    $shortcut.Description = "Launch Tobii Gaze Mouse"
+    $shortcut.Description = "Launch Pogled Assist"
     $iconLocation = Resolve-ShortcutIconLocation -AppRoot $AppRoot
     if (-not [string]::IsNullOrWhiteSpace($iconLocation)) {
         $shortcut.IconLocation = $iconLocation
@@ -681,8 +682,8 @@ function Get-Python310X86 {
     Write-Step "Finding 32-bit Python for Tobii bridge"
 
     $candidates = @()
-    if (-not [string]::IsNullOrWhiteSpace($env:TOBII_GAZE_MOUSE_X86_PYTHON)) {
-        $candidates += $env:TOBII_GAZE_MOUSE_X86_PYTHON
+    if (-not [string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_X86_PYTHON)) {
+        $candidates += $env:POGLED_ASSIST_X86_PYTHON
     }
 
     $installInfoPath = Join-Path $AppRoot "install_info.json"
@@ -740,7 +741,7 @@ function Start-GazeMouse {
         [string]$ResolvedLogRoot
     )
 
-    Write-Step "Starting Tobii Gaze Mouse"
+    Write-Step "Starting Pogled Assist"
 
     $pythonPath = Join-Path $AppRoot ".venv\Scripts\python.exe"
     $appPath = Join-Path $AppRoot "run_gaze_mouse.py"
@@ -774,13 +775,13 @@ function Start-GazeMouse {
 
     $x86Python = Get-Python310X86 -AppRoot $AppRoot
     if ($null -ne $x86Python) {
-        $env:TOBII_GAZE_MOUSE_X86_PYTHON = $x86Python
+        $env:POGLED_ASSIST_X86_PYTHON = $x86Python
     }
 
     Write-Info "Python: $pythonPath"
-    Write-Info "Tobii bridge 32-bit Python: $env:TOBII_GAZE_MOUSE_X86_PYTHON"
+    Write-Info "Tobii bridge 32-bit Python: $env:POGLED_ASSIST_X86_PYTHON"
     Write-Info "App: $appPath"
-    $env:TOBII_GAZE_MOUSE_LOG_ROOT = $ResolvedLogRoot
+    $env:POGLED_ASSIST_LOG_ROOT = $ResolvedLogRoot
     $runtimeLogPath = Join-Path (Join-Path $ResolvedLogRoot "logs") "latest.txt"
     Write-Info "Runtime latest log: $runtimeLogPath"
     Set-Location $AppRoot
@@ -792,10 +793,10 @@ function Start-GazeMouse {
     }
 
     if ($exitCode -ne 0) {
-        throw "Tobii Gaze Mouse exited with code $exitCode. Check $runtimeLogPath for details."
+        throw "Pogled Assist exited with code $exitCode. Check $runtimeLogPath for details."
     }
 
-    Write-Success "Tobii Gaze Mouse exited normally."
+    Write-Success "Pogled Assist exited normally."
 }
 
 function Wait-BeforeExit {
@@ -813,14 +814,14 @@ function Wait-BeforeExit {
 try {
     $script:ShowLauncherWindow = Get-LauncherWindowVisible
     Sync-ConsoleWindowVisibility
-    Write-Step "Tobii Gaze Mouse launcher"
+    Write-Step "Pogled Assist launcher"
     Write-Info "Launcher script: $ScriptPath"
     Ensure-Administrator
 
     $appRoot = Resolve-AppRoot
     $resolvedLogRoot = Resolve-LogRoot -AppRoot $appRoot
     Start-LauncherTranscript -ResolvedLogRoot $resolvedLogRoot
-    Write-Step "Tobii Gaze Mouse launcher"
+    Write-Step "Pogled Assist launcher"
     Write-Info "Launcher script: $ScriptPath"
     Write-Info "Install folder: $appRoot"
     Write-Info "Log root: $resolvedLogRoot"

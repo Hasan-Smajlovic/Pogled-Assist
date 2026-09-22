@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QWidget
 
 from .windows_z_order import force_window_topmost
 
-
 logger = logging.getLogger(__name__)
 
 GWL_EXSTYLE = -20
@@ -43,7 +42,7 @@ class GazeBubbleWindow(QWidget):
         self._topmost_timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
         self._topmost_timer.timeout.connect(self._refresh_windows_topmost)
 
-        self.setWindowTitle("Gaze Bubble")
+        self.setWindowTitle("Oznaka pogleda")
         self.setWindowFlags(_bubble_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
@@ -111,9 +110,8 @@ class GazeBubbleWindow(QWidget):
         if self._last_moved_point is None:
             return True
 
-        distance = (
-            abs(point.x() - self._last_moved_point.x())
-            + abs(point.y() - self._last_moved_point.y())
+        distance = abs(point.x() - self._last_moved_point.x()) + abs(
+            point.y() - self._last_moved_point.y()
         )
         if distance >= MIN_MOVE_DISTANCE_PX:
             return True

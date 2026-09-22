@@ -25,7 +25,6 @@ from .speech_service import SpeechSettings
 from .speech_window import BOSNIAN_LETTERS
 from .windows_input import WindowsInputController
 
-
 logger = logging.getLogger(__name__)
 
 KEYBOARD_WINDOW_ACTION_PREFIX = "keyboard_window:"
@@ -53,7 +52,7 @@ NUMPAD_KEYS = [
     "3",
     "0",
     ".",
-    "Enter",
+    "Potvrdi",
     "+",
     "-",
     "*",
@@ -102,6 +101,8 @@ class KeyboardWindow(QWidget):
 
     closed = Signal()
     status_changed = Signal(str)
+    interaction_context_changed = Signal()
+    mouse_action_started = Signal()
 
     def __init__(
         self,
@@ -110,7 +111,7 @@ class KeyboardWindow(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("keyboardWindow")
-        self.setWindowTitle("Keyboard")
+        self.setWindowTitle("Tastatura")
         self.setWindowFlags(_keyboard_window_flags())
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.NoFocus)
@@ -210,10 +211,8 @@ class KeyboardWindow(QWidget):
             top_left = button.mapToGlobal(QPoint(0, 0))
             rect = QRect(top_left, button.size())
             if rect.contains(point):
-                self._set_gaze_target_action(action)
                 return action
 
-        self._set_gaze_target_action(None)
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
@@ -244,6 +243,9 @@ class KeyboardWindow(QWidget):
 
     def cancel_gaze_interaction(self) -> None:
         self._set_gaze_target_action(None)
+
+    def set_gaze_target_action(self, action: str | None) -> None:
+        self._set_gaze_target_action(action)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Keyboard sidebar close event received.")
@@ -313,9 +315,9 @@ class KeyboardWindow(QWidget):
         tab_row.setSpacing(8)
         self._tab_buttons: dict[str, QToolButton] = {}
         for tab, label in (
-            (TAB_LETTERS, "Letters"),
-            (TAB_NUMPAD, "Numpad"),
-            (TAB_SYMBOLS, "Symbols"),
+            (TAB_LETTERS, "Slova"),
+            (TAB_NUMPAD, "Brojevi"),
+            (TAB_SYMBOLS, "Znakovi"),
         ):
             button = self._make_button(
                 label,
@@ -339,21 +341,21 @@ class KeyboardWindow(QWidget):
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(8)
         self._groups_button = self._make_button(
-            "Groups",
+            "Grupe",
             self._action("groups"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=False,
         )
         self._space_button = self._make_button(
-            "Space",
+            "Razmak",
             self._action("space"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=False,
         )
         self._backspace_button = self._make_button(
-            "Backspace",
+            "Obriši",
             self._action("backspace"),
             "utilityButton",
             minimum_height=UTILITY_MIN_HEIGHT,
@@ -425,7 +427,9 @@ class KeyboardWindow(QWidget):
     def _show_symbol_group(self, group_index: int) -> None:
         self._show_key_group(TAB_SYMBOLS, self._symbol_groups, group_index, "symbol")
 
-    def _show_group_buttons(self, groups: list[list[str]], action_prefix: str, columns: int) -> None:
+    def _show_group_buttons(
+        self, groups: list[list[str]], action_prefix: str, columns: int
+    ) -> None:
         self._clear_dynamic_buttons()
         self._sync_tabs()
         self._groups_button.setVisible(False)
@@ -497,20 +501,16 @@ class KeyboardWindow(QWidget):
         elif command.startswith("symbol_group:"):
             self._show_symbol_group(int(command.split(":", 1)[1]))
         elif command.startswith("numpad:"):
-            key = self._numpad_groups[self._active_group_index or 0][
-                int(command.split(":", 1)[1])
-            ]
+            key = self._numpad_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
             self._type_key_label(key)
             self._show_numpad()
         elif command.startswith("symbol:"):
-            key = self._symbol_groups[self._active_group_index or 0][
-                int(command.split(":", 1)[1])
-            ]
+            key = self._symbol_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
             self._type_text(key)
             self._show_symbols()
 
     def _type_key_label(self, label: str) -> None:
-        if label == "Enter":
+        if label == "Potvrdi":
             self._press_key("enter")
         else:
             self._type_text(label)
@@ -518,30 +518,31 @@ class KeyboardWindow(QWidget):
     def _type_text(self, text: str) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Keyboard input is unavailable.")
+            self._emit_status("Unos putem tastature nije dostupan.")
             return
 
         try:
             self._restore_target_window()
             self._input.type_text(text)
-            self._emit_status(f"Typed {text!r}.")
-        except Exception as exc:
+            self._emit_status(f"Uneseno je {text!r}.")
+        except Exception:
             logger.exception("Keyboard text input failed.")
-            self._emit_status(f"Keyboard input failed: {exc}")
+            self._emit_status("Unos putem tastature nije uspio.")
 
     def _press_key(self, key: str) -> None:
         self._ensure_input_controller()
         if self._input is None:
-            self._emit_status("Keyboard input is unavailable.")
+            self._emit_status("Unos putem tastature nije dostupan.")
             return
 
         try:
             self._restore_target_window()
             self._input.press_key(key)
-            self._emit_status(f"Pressed {key}.")
-        except Exception as exc:
+            key_name = {"backspace": "brisanje", "enter": "potvrda"}.get(key, key)
+            self._emit_status(f"Pritisnuta je tipka za {key_name}.")
+        except Exception:
             logger.exception("Keyboard key press failed.")
-            self._emit_status(f"Keyboard key failed: {exc}")
+            self._emit_status("Pritisak tipke nije uspio.")
 
     def _ensure_input_controller(self) -> None:
         if self._input is not None:
@@ -549,9 +550,9 @@ class KeyboardWindow(QWidget):
 
         try:
             self._input = WindowsInputController()
-        except Exception as exc:
+        except Exception:
             logger.exception("Could not initialize keyboard input backend.")
-            self._emit_status(f"Keyboard input unavailable: {exc}")
+            self._emit_status("Unos putem tastature nije dostupan.")
 
     def _emit_status(self, text: str) -> None:
         logger.info("Keyboard sidebar status: %s", text)
@@ -586,7 +587,9 @@ class KeyboardWindow(QWidget):
             return False
 
         if not self._input.is_window(self._target_window):
-            logger.warning("Keyboard target window is no longer valid: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Keyboard target window is no longer valid: hwnd=%s.", self._target_window
+            )
             self._target_window = None
             return False
 
@@ -597,7 +600,9 @@ class KeyboardWindow(QWidget):
         if restored:
             time.sleep(0.01)
         else:
-            logger.warning("Could not restore keyboard target window: hwnd=%s.", self._target_window)
+            logger.warning(
+                "Could not restore keyboard target window: hwnd=%s.", self._target_window
+            )
         return restored
 
     def _make_button(
@@ -619,6 +624,7 @@ class KeyboardWindow(QWidget):
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
+        button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(lambda _checked=False, item=action: self._trigger_action(item))
         self._action_buttons[action] = button
         if dynamic:
@@ -627,6 +633,7 @@ class KeyboardWindow(QWidget):
 
     def _clear_dynamic_buttons(self) -> None:
         self._set_gaze_target_action(None)
+        self.interaction_context_changed.emit()
         for action in self._dynamic_actions:
             self._action_buttons.pop(action, None)
         self._dynamic_actions.clear()
@@ -706,13 +713,13 @@ class KeyboardWindow(QWidget):
     def _register_appbar(self) -> None:
         if self._full_height:
             self._appbar.unregister()
-            self._emit_status("Keyboard panel using full screen height.")
+            self._emit_status("Tastatura koristi punu visinu ekrana.")
             return
 
         if self._appbar.register(int(self.winId()), self.width(), edge=ABE_RIGHT):
-            self._emit_status("Keyboard panel reserved right work area.")
+            self._emit_status("Tastatura je zauzela desni dio radne površine.")
         elif sys.platform == "win32":
-            self._emit_status("Keyboard panel shown without AppBar reservation.")
+            self._emit_status("Tastatura je prikazana bez rezervacije radne površine.")
 
 
 def _group_letters(letters: list[str], letters_per_group: int) -> list[list[str]]:

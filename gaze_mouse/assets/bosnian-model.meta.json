@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "model_id": "bs-classla-2.0-conversation-4-v60000-ffb09b61638b",
+  "source": "CLASSLA-web.bs 2.0",
+  "source_url": "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11",
+  "source_license": "CC0-1.0",
+  "source_md5": "f92e72f4fe08362a1297f311ac20ad33",
+  "source_sha256": "2b8e8e853e6ca974ef64072b9367d2aa935584c0fcc6e132a965747215af2ada",
+  "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
+  "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
+  "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
+  "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
+  "preparation_sha256": "fa858196b6d411412b189147e9d21b31069444e8c886187a8cc2a6b3bd5036b2",
+  "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+  "sample": {
+    "records_scanned": 2538848,
+    "documents": 20924,
+    "tokens": 5482578,
+    "domains": 1635,
+    "genres": {
+      "News": 3000,
+      "Opinion/Argumentation": 4919,
+      "Information/Explanation": 4968,
+      "Instruction": 3024,
+      "Prose/Lyrical": 1330,
+      "Forum": 3683
+    },
+    "id_hash_modulus": 20,
+    "per_domain_limit": 240,
+    "news_limit": 3000
+  },
+  "supplement": {
+    "rows": 640,
+    "categories": {
+      "care": 62,
+      "comfort": 45,
+      "conversation": 108,
+      "emergency": 35,
+      "family_social": 40,
+      "food_drink": 62,
+      "greetings": 24,
+      "health": 66,
+      "humour": 26,
+      "memories": 31,
+      "needs": 100,
+      "opinions": 41
+    },
+    "weighted_rows": {
+      "care": 496,
+      "comfort": 315,
+      "conversation": 372,
+      "emergency": 350,
+      "family_social": 120,
+      "food_drink": 372,
+      "greetings": 72,
+      "health": 528,
+      "humour": 52,
+      "memories": 62,
+      "needs": 708,
+      "opinions": 88
+    },
+    "starters": 70
+  },
+  "configuration": {
+    "maximum_vocabulary": 60000,
+    "minimum_word_count": 5,
+    "minimum_ngram_count": 3,
+    "per_context_limit": 32,
+    "per_ngram_order_limit": 160000,
+    "supplement_multiplier": 40,
+    "starter_multiplier": 200,
+    "protect_reviewed_ngrams": true,
+    "spelling_scope": "reviewed replacements in web data only",
+    "spelling_replacements": 90
+  },
+  "counts": {
+    "words": 60000,
+    "bigrams": 125899,
+    "trigrams": 104965,
+    "protected_ngrams": 3515
+  },
+  "compressed_bytes": 1358833
+}

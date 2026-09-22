@@ -35,7 +35,7 @@ def test_tracker_choice_prefers_4c_and_builds_readable_labels():
 
     assert _choose_tracker((generic, tracker_4c)) is tracker_4c
     assert _tracker_label(tracker_4c) == "Eye Tracker 4C ABC"
-    assert _tracker_label(SimpleNamespace()) == "Tobii eye tracker"
+    assert _tracker_label(SimpleNamespace()) == "Tobii uređaj za praćenje pogleda"
 
 
 @pytest.mark.parametrize(
@@ -101,3 +101,64 @@ def test_provider_stops_emitting_when_either_eye_is_invalid(qapp):
 
     assert eyes == [(True, False)]
     assert gaze == []
+
+
+def test_provider_tries_backends_in_order_without_scheduling_retry(qapp, monkeypatch):
+    provider = TobiiGazeProvider()
+    provider._start_requested = True
+    attempts = []
+    monkeypatch.setattr(
+        provider,
+        "_start_with_tobii_research",
+        lambda: attempts.append("tobii-research") or False,
+    )
+    monkeypatch.setattr(
+        provider,
+        "_start_with_stream_engine",
+        lambda: attempts.append("stream-engine") or True,
+    )
+
+    provider._attempt_start()
+
+    assert attempts == ["tobii-research", "stream-engine"]
+    assert not provider._retry_timer.isActive()
+
+
+def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkeypatch):
+    provider = TobiiGazeProvider()
+    provider._start_requested = True
+    statuses = []
+    provider.status_changed.connect(statuses.append)
+    monkeypatch.setattr(provider, "_start_with_tobii_research", lambda: False)
+    monkeypatch.setattr(provider, "_start_with_stream_engine", lambda: False)
+
+    provider._attempt_start()
+
+    assert provider._retry_timer.isActive()
+    assert statuses[-1] == "Tobii uređaj nije pronađen. Pokušavam ponovo."
+    provider.stop()
+
+
+def test_provider_stop_closes_active_stream_engine_backend(qapp):
+    class FakeBackend:
+        stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    provider = TobiiGazeProvider()
+    backend = FakeBackend()
+    provider._stream_engine = backend
+    provider._running = True
+    provider._start_requested = True
+    provider._emit_timer.start()
+    provider._retry_timer.start(1000)
+
+    provider.stop()
+
+    assert backend.stopped is True
+    assert provider._stream_engine is None
+    assert provider._running is False
+    assert provider._start_requested is False
+    assert not provider._emit_timer.isActive()
+    assert not provider._retry_timer.isActive()

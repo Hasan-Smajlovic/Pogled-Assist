@@ -5,6 +5,7 @@ __pycache__/
 
 # Python virtual environments
 .venv/
+.dev-tools/
 venv/
 env/
 ENV/
@@ -17,6 +18,7 @@ ENV/
 .coverage
 .coverage.*
 coverage.xml
+coverage.json
 htmlcov/
 
 # Build, packaging, and bundled app outputs
@@ -25,6 +27,7 @@ dist/
 *.egg-info/
 .eggs/
 *.spec
+!packaging/windows/PogledAssist.spec
 *.manifest
 *.pyd
 *.dll
@@ -67,5 +70,4 @@ Thumbs.db
 Desktop.ini
 
 # Codex/agent runtime metadata mounted into the workspace
-.agents/
 .codex/

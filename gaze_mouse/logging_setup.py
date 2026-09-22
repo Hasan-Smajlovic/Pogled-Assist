@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
 import shutil
 import sys
-import json
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 
-
 LOGGER_NAME = "gaze_mouse"
 LOG_DIR_NAME = "logs"
 LATEST_LOG_NAME = "latest.txt"
-LOG_ROOT_ENV = "TOBII_GAZE_MOUSE_LOG_ROOT"
+LOG_ROOT_ENV = "POGLED_ASSIST_LOG_ROOT"
 SETTINGS_FILE = "app_settings.json"
 
 _qt_message_handler = None
@@ -36,11 +35,18 @@ class StreamToLogger:
         self._level = level
         self._fallback_stream = fallback_stream
         self._buffer = ""
+        self._in_write = False
 
     def write(self, message: object) -> int:
         text = str(message)
         if not text:
             return 0
+
+        if self._in_write:
+            if self._fallback_stream is not None:
+                with suppress(Exception):
+                    return self._fallback_stream.write(text)
+            return len(text)
 
         self._buffer += text
         while "\n" in self._buffer:
@@ -50,18 +56,25 @@ class StreamToLogger:
         return len(text)
 
     def flush(self) -> None:
+        if self._in_write:
+            return
         if self._buffer:
             self._write_line(self._buffer)
             self._buffer = ""
+        if self._fallback_stream is not None:
+            with suppress(Exception):
+                self._fallback_stream.flush()
 
     def isatty(self) -> bool:
         return False
 
     def fileno(self) -> int:
         try:
-            return self._fallback_stream.fileno()
+            if self._fallback_stream is not None:
+                return self._fallback_stream.fileno()
         except Exception:
-            return -1
+            pass
+        return -1
 
     @property
     def encoding(self) -> str:
@@ -78,8 +91,13 @@ class StreamToLogger:
         self.flush()
 
     def _write_line(self, line: str) -> None:
-        if line.strip():
+        if not line.strip() or self._in_write:
+            return
+        self._in_write = True
+        try:
             self._logger.log(self._level, line.rstrip())
+        finally:
+            self._in_write = False
 
 
 def setup_application_logging() -> Path:
@@ -122,13 +140,14 @@ def set_application_logging_enabled(enabled: bool) -> Path:
     file_handler = logging.FileHandler(latest_log, mode="w", encoding="utf-8")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
-
-    console_handler = logging.StreamHandler(sys.__stdout__)
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
-
     root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+
+    console_stream = sys.__stdout__ if sys.__stdout__ is not None else sys.__stderr__
+    if console_stream is not None:
+        console_handler = logging.StreamHandler(console_stream)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(logging.INFO)
+        root_logger.addHandler(console_handler)
 
     logging.captureWarnings(True)
     sys.excepthook = _log_unhandled_exception

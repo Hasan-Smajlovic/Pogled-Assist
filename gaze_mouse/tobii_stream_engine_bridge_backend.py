@@ -9,17 +9,22 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
-
 
 logger = logging.getLogger(__name__)
 
-X86_PYTHON_ENV = "TOBII_GAZE_MOUSE_X86_PYTHON"
+X86_PYTHON_ENV = "POGLED_ASSIST_X86_PYTHON"
 START_TIMEOUT_SECONDS = 12.0
 
 GazeCallback = Callable[[float, float, int], None]
 EyeStatusCallback = Callable[[bool, bool, int], None]
+
+
+def bridge_script_path() -> Path:
+    """Return the bridge source used by the external 32-bit Python runtime."""
+
+    return Path(__file__).with_name("tobii_stream_engine_bridge.py")
 
 
 class TobiiStreamEngineBridgeError(RuntimeError):
@@ -56,7 +61,7 @@ class TobiiStreamEngineBridgeBackend:
 
     def start(self) -> None:
         self._python_path = _find_x86_python()
-        script_path = Path(__file__).with_name("tobii_stream_engine_bridge.py")
+        script_path = bridge_script_path()
         app_root = Path(__file__).resolve().parents[1]
         command = [
             self._python_path,
@@ -285,18 +290,22 @@ def _common_python_candidates() -> list[str]:
     candidates: list[str] = []
     home = Path.home()
 
-    local_app_data = os.environ.get("LocalAppData", "").strip()
+    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
     if local_app_data:
         candidates.extend(
             [
                 str(Path(local_app_data) / "Programs" / "Python" / "Python310-32" / "python.exe"),
-                str(Path(local_app_data) / "Programs" / "Python" / "Python310-32bit" / "python.exe"),
+                str(
+                    Path(local_app_data) / "Programs" / "Python" / "Python310-32bit" / "python.exe"
+                ),
             ]
         )
 
-    candidates.append(str(home / "AppData" / "Local" / "Programs" / "Python" / "Python310-32" / "python.exe"))
+    candidates.append(
+        str(home / "AppData" / "Local" / "Programs" / "Python" / "Python310-32" / "python.exe")
+    )
 
-    program_files_x86 = os.environ.get("ProgramFiles(x86)", "").strip()
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)", "").strip()
     if program_files_x86:
         candidates.extend(
             [

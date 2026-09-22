@@ -37,7 +37,7 @@ $EspeakNgPackageId = "eSpeak-NG.eSpeak-NG"
 $EspeakNgInstallerFileName = "espeak-ng.msi"
 $EspeakNgInstallerUrl = "https://github.com/espeak-ng/espeak-ng/releases/download/$EspeakNgVersion/$EspeakNgInstallerFileName"
 $InstallInfoFileName = "install_info.json"
-$FixedInstallRoot = "C:\TobiiExec"
+$FixedInstallRoot = "C:\PogledAssist"
 $EdgeTtsVoice = "bs-BA-GoranNeural"
 $EdgeTtsRate = "-10%"
 $EdgeTtsPitch = "-2Hz"
@@ -173,6 +173,7 @@ function Invoke-NativeCommandWithTimeout {
             try {
                 $process.Kill()
             } catch {
+                Write-Verbose "Could not stop timed-out process for $Label`: $($_.Exception.Message)"
             }
             throw "$Label timed out after $TimeoutSeconds seconds."
         }
@@ -842,7 +843,7 @@ function Confirm-DownloadedFile {
 function Install-Python310FromOfficialInstaller {
     Write-Step "Installing Python $PythonInstallerVersion with official Python.org installer"
 
-    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "TobiiGazeMouseSetup"
+    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "PogledAssistSetup"
     $installerPath = Join-Path $downloadDir $PythonInstallerFileName
     Download-FileWithPowerShell `
         -Url $PythonInstallerUrl `
@@ -997,9 +998,9 @@ function Test-Python310X86Executable {
 function Get-Python310X86 {
     Write-Step "Finding 32-bit Python 3.10 for Tobii bridge"
 
-    if (-not [string]::IsNullOrWhiteSpace($env:TOBII_GAZE_MOUSE_X86_PYTHON)) {
-        Write-Info "Checking TOBII_GAZE_MOUSE_X86_PYTHON: $env:TOBII_GAZE_MOUSE_X86_PYTHON"
-        $resolvedEnvPath = Test-Python310X86Executable -PythonPath $env:TOBII_GAZE_MOUSE_X86_PYTHON
+    if (-not [string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_X86_PYTHON)) {
+        Write-Info "Checking POGLED_ASSIST_X86_PYTHON: $env:POGLED_ASSIST_X86_PYTHON"
+        $resolvedEnvPath = Test-Python310X86Executable -PythonPath $env:POGLED_ASSIST_X86_PYTHON
         if ($null -ne $resolvedEnvPath) {
             Write-Success "Found 32-bit Python 3.10 from environment: $resolvedEnvPath"
             return $resolvedEnvPath
@@ -1063,7 +1064,7 @@ function Get-PythonX86InstallTargetDir {
 function Install-Python310X86FromOfficialInstaller {
     Write-Step "Installing 32-bit Python $PythonInstallerVersion for Tobii bridge"
 
-    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "TobiiGazeMouseSetup"
+    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "PogledAssistSetup"
     $installerPath = Join-Path $downloadDir $PythonX86InstallerFileName
     Download-FileWithPowerShell `
         -Url $PythonX86InstallerUrl `
@@ -1278,7 +1279,7 @@ function Install-EspeakNgWithWinget {
 function Install-EspeakNgFromMsi {
     Write-Step "Installing eSpeak NG $EspeakNgVersion from MSI"
 
-    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "TobiiGazeMouseSetup"
+    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "PogledAssistSetup"
     $installerPath = Join-Path $downloadDir $EspeakNgInstallerFileName
     Download-FileWithPowerShell `
         -Url $EspeakNgInstallerUrl `
@@ -1621,12 +1622,12 @@ function New-LauncherScripts {
         "set ""PATH=$venvScripts;%PATH%""",
         "set ""ESPEAK_NG_EXE=$EspeakExe""",
         "set ""EDGE_PLAYBACK_EXE=$EdgePlaybackExe""",
-        "set ""TOBII_GAZE_MOUSE_X86_PYTHON=$X86Python""",
+        "set ""POGLED_ASSIST_X86_PYTHON=$X86Python""",
         """$VenvPython"" ""%~dp0run_gaze_mouse.py""",
         "set EXITCODE=%ERRORLEVEL%",
         "if not ""%EXITCODE%""==""0"" (",
         "  echo.",
-        "  echo Tobii Gaze Mouse exited with code %EXITCODE%.",
+        "  echo Pogled Assist exited with code %EXITCODE%.",
         "  echo Check logs\latest.txt for details.",
         "  pause",
         ")",
@@ -1646,7 +1647,7 @@ function New-LauncherScripts {
         '$env:PATH = $VenvScripts + [IO.Path]::PathSeparator + $env:PATH',
         '$env:ESPEAK_NG_EXE = "' + $EspeakExe.Replace('"', '""') + '"',
         '$env:EDGE_PLAYBACK_EXE = "' + $EdgePlaybackExe.Replace('"', '""') + '"',
-        '$env:TOBII_GAZE_MOUSE_X86_PYTHON = "' + $X86Python.Replace('"', '""') + '"',
+        '$env:POGLED_ASSIST_X86_PYTHON = "' + $X86Python.Replace('"', '""') + '"',
         '& $Python $App',
         'exit $LASTEXITCODE'
     )
@@ -1779,12 +1780,12 @@ function Convert-PngToShortcutIcon {
 
     try {
         Add-Type -AssemblyName System.Drawing
-        if ($null -eq ("TobiiGazeMouseIconInterop" -as [type])) {
+        if ($null -eq ("PogledAssistIconInterop" -as [type])) {
             Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-public static class TobiiGazeMouseIconInterop
+public static class PogledAssistIconInterop
 {
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool DestroyIcon(IntPtr hIcon);
@@ -1821,8 +1822,8 @@ public static class TobiiGazeMouseIconInterop
         if ($null -ne $icon) {
             $icon.Dispose()
         }
-        if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("TobiiGazeMouseIconInterop" -as [type])) {
-            [TobiiGazeMouseIconInterop]::DestroyIcon($hIcon) | Out-Null
+        if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("PogledAssistIconInterop" -as [type])) {
+            [PogledAssistIconInterop]::DestroyIcon($hIcon) | Out-Null
         }
         if ($null -ne $graphics) {
             $graphics.Dispose()
@@ -1847,7 +1848,7 @@ function New-DesktopShortcut {
             throw "Desktop folder path could not be resolved."
         }
 
-        $shortcutPath = Join-Path $desktopPath "Tobii Gaze Mouse.lnk"
+        $shortcutPath = Join-Path $desktopPath "Pogled Assist.lnk"
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
         if ([IO.Path]::GetExtension($TargetPath) -ieq ".ps1") {
@@ -1858,7 +1859,7 @@ function New-DesktopShortcut {
             $shortcut.Arguments = ""
         }
         $shortcut.WorkingDirectory = $RepoRoot
-        $shortcut.Description = "Launch Tobii Gaze Mouse"
+        $shortcut.Description = "Launch Pogled Assist"
         $iconLocation = Resolve-ShortcutIconLocation
         if (-not [string]::IsNullOrWhiteSpace($iconLocation)) {
             $shortcut.IconLocation = $iconLocation
@@ -1918,7 +1919,7 @@ try {
     Start-SetupTranscript
     Initialize-WorkingRoot
     Write-InstallInfo
-    Write-Step "Starting Tobii Gaze Mouse setup"
+    Write-Step "Starting Pogled Assist setup"
     Write-Info "Source root: $SourceRoot"
     Write-Info "Repository root: $RepoRoot"
     Write-Info "Virtual environment path: $VenvPath"
@@ -1930,7 +1931,7 @@ try {
     Write-Success "Using Python 3.10 executable: $pythonExe"
     $x86PythonExe = Resolve-OrInstallPython310X86
     if (-not [string]::IsNullOrWhiteSpace($x86PythonExe)) {
-        $env:TOBII_GAZE_MOUSE_X86_PYTHON = $x86PythonExe
+        $env:POGLED_ASSIST_X86_PYTHON = $x86PythonExe
         Update-InstallInfoBridgePython -X86Python $x86PythonExe
         Write-Success "Using 32-bit Python 3.10 bridge executable: $x86PythonExe"
     } else {
@@ -1955,7 +1956,7 @@ try {
     Show-FinalInstructions -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
 
     if ($Launch) {
-        Write-Step "Launching Tobii Gaze Mouse"
+        Write-Step "Launching Pogled Assist"
         Invoke-NativeCommand `
             -Label "Starting application" `
             -FilePath $venvPython `

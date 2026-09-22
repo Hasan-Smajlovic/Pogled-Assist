@@ -11,9 +11,14 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QStyle, QWidget
 
+from .gaze_selection import (
+    DEFAULT_SELECTION_PAUSE_MS,
+    MAX_SELECTION_PAUSE_MS,
+    MIN_SELECTION_PAUSE_MS,
+    GazeSelectionTimer,
+)
 from .mouse_controller import DOUBLE_LEFT_CLICK, LEFT_CLICK, RIGHT_CLICK
 from .windows_z_order import force_window_topmost
-
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +76,6 @@ class QuickActionRadialMenu(QWidget):
 
     MENU_RADIUS = 124
     INNER_RADIUS = 54
-    OPEN_GAZE_GRACE_MS = 180
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -80,17 +84,17 @@ class QuickActionRadialMenu(QWidget):
         self._candidate_action: str | None = None
         self._candidate_anchor: QPoint | None = None
         self._selected_action: str | None = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
+        self._selection_timer = GazeSelectionTimer()
+        self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
-        self._opened_ms = 0.0
         self._selection_emitted = False
         self._phase = 0.0
         self._last_topmost_ms = 0.0
         self._icons = {sector.action: self._icon(sector) for sector in SECTORS}
 
-        self.setWindowTitle("Quick Actions")
+        self.setWindowTitle("Brze radnje")
         self.setWindowFlags(_overlay_window_flags())
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
@@ -104,7 +108,11 @@ class QuickActionRadialMenu(QWidget):
     def set_selection_dwell_ms(self, dwell_ms: int) -> None:
         self._selection_dwell_ms = max(150, min(5000, int(dwell_ms)))
 
-    def set_selection_settings(self, *, dwell_ms: int, radius_px: int) -> None:
+    def set_selection_settings(self, *, pause_ms: int, dwell_ms: int, radius_px: int) -> None:
+        self._selection_pause_ms = max(
+            MIN_SELECTION_PAUSE_MS,
+            min(MAX_SELECTION_PAUSE_MS, int(pause_ms)),
+        )
         self.set_selection_dwell_ms(dwell_ms)
         self._selection_radius_px = max(16, min(160, int(radius_px)))
 
@@ -122,9 +130,8 @@ class QuickActionRadialMenu(QWidget):
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
-        self._opened_ms = time.monotonic() * 1000
+        self._selection_timer.cancel()
         self._selection_emitted = False
         self._timer.start()
         self.show()
@@ -136,8 +143,8 @@ class QuickActionRadialMenu(QWidget):
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
+        self._selection_timer.cancel()
         self._selection_emitted = False
         self._last_topmost_ms = 0.0
         self._timer.stop()
@@ -149,16 +156,12 @@ class QuickActionRadialMenu(QWidget):
             return
 
         now_ms = time.monotonic() * 1000
-        if now_ms - self._opened_ms < self.OPEN_GAZE_GRACE_MS:
-            return
-
         action = self._action_for_global_point(point)
         if action is None:
             self._reset_gaze_candidate(notify=True)
             self.update()
             return
 
-        self._selected_action = action
         if (
             action != self._candidate_action
             or self._candidate_anchor is None
@@ -166,27 +169,40 @@ class QuickActionRadialMenu(QWidget):
         ):
             self._candidate_action = action
             self._candidate_anchor = QPoint(point)
-            self._candidate_started_ms = now_ms
             self._candidate_progress = 0.0
-            self.selection_progress_changed.emit(
-                self._selection_center_global(action),
-                0.0,
-                _action_label(action),
+            self._selected_action = None
+            self._selection_timer.update(
+                action,
+                now_ms,
+                pause_ms=self._selection_pause_ms,
+                dwell_ms=self._selection_dwell_ms,
+                restart=True,
             )
             self.update()
             return
 
-        self._candidate_progress = min(
-            1.0,
-            (now_ms - self._candidate_started_ms) / max(1, self._selection_dwell_ms),
+        update = self._selection_timer.update(
+            action,
+            now_ms,
+            pause_ms=self._selection_pause_ms,
+            dwell_ms=self._selection_dwell_ms,
         )
+        if update.progress is None:
+            self._selected_action = None
+            self._candidate_progress = 0.0
+            self.update()
+            return
+
+        self._selected_action = action
+        self._candidate_progress = update.progress
         self.selection_progress_changed.emit(
             self._selection_center_global(action),
             self._candidate_progress,
             _action_label(action),
         )
 
-        if self._candidate_progress >= 1.0:
+        if update.ready:
+            self._selection_timer.complete()
             self._selection_emitted = True
             logger.info("Quick action radial gaze selected: %s", action)
             self.action_selected.emit(action)
@@ -195,6 +211,7 @@ class QuickActionRadialMenu(QWidget):
         self.update()
 
     def mousePressEvent(self, event) -> None:
+        self._reset_gaze_candidate(notify=True, require_leave=True)
         local_point = event.position().toPoint() if hasattr(event, "position") else event.pos()
         action = self._action_for_global_point(self.mapToGlobal(local_point), allow_center=True)
         if action is not None:
@@ -230,7 +247,11 @@ class QuickActionRadialMenu(QWidget):
             color = QColor(sector.color)
             color.setAlpha(186 if selected else 118)
             painter.setBrush(color)
-            painter.drawPolygon(_sector_polygon(center, radius, sector.center_degrees - 45, sector.center_degrees + 45))
+            painter.drawPolygon(
+                _sector_polygon(
+                    center, radius, sector.center_degrees - 45, sector.center_degrees + 45
+                )
+            )
 
             if selected:
                 painter.setPen(QPen(QColor(255, 255, 255, 220), 4 + int(2 * pulse)))
@@ -238,7 +259,7 @@ class QuickActionRadialMenu(QWidget):
                 painter.drawArc(
                     QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2),
                     int((360 - (sector.center_degrees + 45)) * 16),
-                    int(90 * 16),
+                    90 * 16,
                 )
                 painter.setPen(Qt.NoPen)
 
@@ -302,12 +323,12 @@ class QuickActionRadialMenu(QWidget):
             return DOUBLE_LEFT_CLICK
         return CANCEL_QUICK_ACTION
 
-    def _reset_gaze_candidate(self, *, notify: bool) -> None:
+    def _reset_gaze_candidate(self, *, notify: bool, require_leave: bool = False) -> None:
         had_candidate = self._candidate_action is not None
+        self._selection_timer.cancel(require_leave=require_leave)
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None
-        self._candidate_started_ms = 0.0
         self._candidate_progress = 0.0
         if notify and had_candidate:
             self.selection_cancelled.emit()
@@ -319,8 +340,8 @@ class QuickActionRadialMenu(QWidget):
 
         radians = math.radians(sector.center_degrees)
         return QPoint(
-            int(round(self._center_global.x() + math.cos(radians) * self.MENU_RADIUS * 0.58)),
-            int(round(self._center_global.y() + math.sin(radians) * self.MENU_RADIUS * 0.58)),
+            round(self._center_global.x() + math.cos(radians) * self.MENU_RADIUS * 0.58),
+            round(self._center_global.y() + math.sin(radians) * self.MENU_RADIUS * 0.58),
         )
 
     def _icon(self, sector: QuickActionSector) -> QIcon:
@@ -330,18 +351,24 @@ class QuickActionRadialMenu(QWidget):
             color = "#ffffff" if sector.action != CANCEL_QUICK_ACTION else "#fff1f2"
             return qta.icon(sector.icon_name, color=color)
         except Exception:
-            logger.exception("Could not load quick action icon %s; using fallback.", sector.icon_name)
+            logger.exception(
+                "Could not load quick action icon %s; using fallback.", sector.icon_name
+            )
             return self.style().standardIcon(sector.fallback)
 
 
-def _sector_polygon(center: QPoint, radius: int, start_degrees: float, end_degrees: float) -> QPolygonF:
+def _sector_polygon(
+    center: QPoint, radius: int, start_degrees: float, end_degrees: float
+) -> QPolygonF:
     path = QPainterPath()
     path.moveTo(center)
     steps = 18
     for index in range(steps + 1):
         degrees = start_degrees + (end_degrees - start_degrees) * index / steps
         radians = math.radians(degrees)
-        path.lineTo(center.x() + math.cos(radians) * radius, center.y() + math.sin(radians) * radius)
+        path.lineTo(
+            center.x() + math.cos(radians) * radius, center.y() + math.sin(radians) * radius
+        )
     path.closeSubpath()
     return path.toFillPolygon()
 
@@ -349,8 +376,8 @@ def _sector_polygon(center: QPoint, radius: int, start_degrees: float, end_degre
 def _icon_rect(center: QPoint, degrees: float, radius: int) -> QRect:
     radians = math.radians(degrees)
     icon_center = QPoint(
-        int(round(center.x() + math.cos(radians) * radius * 0.58)),
-        int(round(center.y() + math.sin(radians) * radius * 0.58)),
+        round(center.x() + math.cos(radians) * radius * 0.58),
+        round(center.y() + math.sin(radians) * radius * 0.58),
     )
     size = 38
     return QRect(icon_center.x() - size // 2, icon_center.y() - size // 2, size, size)
@@ -362,12 +389,12 @@ def _distance(first: QPoint, second: QPoint) -> float:
 
 def _action_label(action: str) -> str:
     labels = {
-        LEFT_CLICK: "Left click",
-        RIGHT_CLICK: "Right click",
-        DOUBLE_LEFT_CLICK: "Double click",
-        CANCEL_QUICK_ACTION: "Cancel",
+        LEFT_CLICK: "Lijevi klik",
+        RIGHT_CLICK: "Desni klik",
+        DOUBLE_LEFT_CLICK: "Dvostruki klik",
+        CANCEL_QUICK_ACTION: "Odustani",
     }
-    return labels.get(action, "Quick")
+    return labels.get(action, "Brza radnja")
 
 
 def _overlay_window_flags() -> Qt.WindowFlags:

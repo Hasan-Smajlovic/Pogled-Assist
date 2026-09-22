@@ -3,15 +3,18 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from pathlib import Path
 
 import pytest
 
+import gaze_mouse.main as main_module
 from gaze_mouse import (
     app_icon,
     dpi,
     logging_setup,
     tobii_stream_engine_bridge,
     windows_keyboard,
+    windows_startup,
 )
 
 
@@ -54,7 +57,11 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
             calls.append(("fallback", None))
 
     monkeypatch.setattr(dpi.sys, "platform", "win32")
-    monkeypatch.setattr("ctypes.windll", type("Windll", (), {"shcore": Shcore(), "user32": User32()})(), raising=False)
+    monkeypatch.setattr(
+        "ctypes.windll",
+        type("Windll", (), {"shcore": Shcore(), "user32": User32()})(),
+        raising=False,
+    )
     dpi.enable_windows_dpi_awareness()
     assert calls == [("modern", 2)]
 
@@ -64,7 +71,11 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
         def SetProcessDpiAwareness(self, _value):
             raise OSError("unsupported")
 
-    monkeypatch.setattr("ctypes.windll", type("Windll", (), {"shcore": BrokenShcore(), "user32": User32()})(), raising=False)
+    monkeypatch.setattr(
+        "ctypes.windll",
+        type("Windll", (), {"shcore": BrokenShcore(), "user32": User32()})(),
+        raising=False,
+    )
     dpi.enable_windows_dpi_awareness()
     assert calls == [("fallback", None)]
 
@@ -144,7 +155,12 @@ def test_bridge_emit_helpers_write_json(capsys):
 
     lines = capsys.readouterr().out.splitlines()
     assert json.loads(lines[0]) == {"type": "gaze", "x": 0.25, "y": 0.75, "timestamp": 10}
-    assert json.loads(lines[1]) == {"type": "eyes", "left_open": True, "right_open": False, "timestamp": 11}
+    assert json.loads(lines[1]) == {
+        "type": "eyes",
+        "left_open": True,
+        "right_open": False,
+        "timestamp": 11,
+    }
 
 
 def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
@@ -157,10 +173,13 @@ def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
     }
 
 
-def test_main_builds_and_runs_application(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("arguments", "simulate_gaze"),
+    [([], False), ([main_module.MOUSE_GAZE_SIMULATION_ARG], True)],
+)
+def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simulate_gaze):
     import PySide6.QtWidgets
 
-    from gaze_mouse import main as main_module
     from gaze_mouse import toolbar
 
     calls = []
@@ -191,21 +210,137 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path):
             return test_app
 
     class FakeWindow:
+        def __init__(self, *, simulate_gaze=False):
+            calls.append(("simulate_gaze", simulate_gaze))
+
         def setWindowIcon(self, _icon):
             calls.append(("window_icon", True))
 
         def show(self):
             calls.append(("show", True))
 
-    monkeypatch.setattr(main_module, "setup_application_logging", lambda: calls.append(("logging", True)))
-    monkeypatch.setattr(main_module, "enable_windows_dpi_awareness", lambda: calls.append(("dpi", True)))
-    monkeypatch.setattr(main_module, "install_qt_message_handler", lambda: calls.append(("qt_logging", True)))
+    monkeypatch.setattr(
+        main_module, "setup_application_logging", lambda: calls.append(("logging", True))
+    )
+    monkeypatch.setattr(
+        main_module, "enable_windows_dpi_awareness", lambda: calls.append(("dpi", True))
+    )
+    monkeypatch.setattr(
+        main_module, "install_qt_message_handler", lambda: calls.append(("qt_logging", True))
+    )
     monkeypatch.setattr(PySide6.QtWidgets, "QApplication", FakeApp)
     monkeypatch.setattr(app_icon, "load_app_icon", FakeIcon)
     monkeypatch.setattr(app_icon, "app_icon_path", lambda: tmp_path / "icon.png")
     monkeypatch.setattr(toolbar, "HotbarWindow", FakeWindow)
+    monkeypatch.setattr(main_module.sys, "argv", ["run_gaze_mouse.py", *arguments])
 
     assert main_module.main() == 17
     assert ("show", True) in calls
-    assert ("name", "Tobii Gaze Mouse") in calls
-    assert ("org", "PieLabs") in calls
+    assert ("name", "Pogled Assist") in calls
+    assert ("org", "Pogled Assist") in calls
+    assert ("simulate_gaze", simulate_gaze) in calls
+
+
+def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):
+    monkeypatch.setattr(main_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        main_module.sys,
+        "argv",
+        ["PogledAssist.exe", main_module.MOUSE_GAZE_SIMULATION_ARG],
+    )
+
+    assert main_module.main() == 2
+    assert "only from a development checkout" in capsys.readouterr().out
+
+
+def test_frozen_startup_launcher_is_next_to_executable(monkeypatch, tmp_path):
+    executable = tmp_path / "PogledAssist.exe"
+    monkeypatch.setattr(windows_startup.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(windows_startup.sys, "executable", str(executable))
+
+    assert windows_startup.launcher_script_path() == tmp_path / "start_gaze_mouse.ps1"
+
+
+def test_package_smoke_loads_the_bundled_suggestion_model(monkeypatch, tmp_path):
+    report = tmp_path / "smoke.txt"
+    monkeypatch.setenv(main_module.PACKAGE_SMOKE_REPORT_ENV, str(report))
+
+    assert main_module.package_smoke_test() == 0
+    contents = report.read_text(encoding="utf-8")
+    assert "suggestions_loaded=True" in contents
+    assert "bosnian-model.json.gz exists=True" in contents
+    assert "bosnian-model.meta.json exists=True" in contents
+    assert "bosnian-islamic-model.json.gz exists=True" in contents
+    assert "bosnian-islamic-model.meta.json exists=True" in contents
+
+
+def test_windows_package_declares_the_bundled_suggestion_files():
+    root = Path(__file__).resolve().parents[1]
+    spec = (root / "packaging" / "windows" / "PogledAssist.spec").read_text(encoding="utf-8")
+    build = (root / "scripts" / "build_windows_package.ps1").read_text(encoding="utf-8")
+
+    for name in (
+        "bosnian-model.json.gz",
+        "bosnian-model.meta.json",
+        "bosnian-islamic-model.json.gz",
+        "bosnian-islamic-model.meta.json",
+    ):
+        assert name in spec
+        assert name in build
+
+
+def test_main_routes_package_smoke_test_without_starting_gui(monkeypatch):
+    monkeypatch.setattr(main_module.sys, "argv", ["PogledAssist.exe", "--package-smoke-test"])
+    monkeypatch.setattr(main_module, "package_smoke_test", lambda: 23)
+
+    assert main_module.main() == 23
+
+
+def test_source_tree_passes_package_smoke_test():
+    assert main_module.package_smoke_test() == 0
+
+
+def test_setup_application_logging_handles_missing_standard_streams(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "__stdout__", None)
+    monkeypatch.setattr(sys, "__stderr__", None)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(logging_setup, "get_project_root", lambda: tmp_path)
+
+    try:
+        latest_log = logging_setup.setup_application_logging()
+        root_logger = logging.getLogger()
+        stream_handlers = [
+            handler
+            for handler in root_logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+        assert not stream_handlers
+
+        print("hello from stdout")
+        sys.stderr.write("hello from stderr\n")
+        logging.shutdown()
+
+        content = latest_log.read_text(encoding="utf-8")
+        assert "Logging initialized." in content
+        assert "hello from stdout" in content
+        assert "hello from stderr" in content
+    finally:
+        logging_setup._restore_standard_streams()
+        logging_setup._clear_root_handlers()
+
+
+def test_stream_to_logger_reentrancy_protection():
+    calls = []
+
+    class ReentrantLogger:
+        def log(self, level, message):
+            calls.append((level, message))
+            stream.write("recursive message\n")
+
+    logger = ReentrantLogger()
+    stream = logging_setup.StreamToLogger(logger, logging.INFO, fallback_stream=None)
+    stream.write("initial message\n")
+
+    assert calls == [(logging.INFO, "initial message")]
