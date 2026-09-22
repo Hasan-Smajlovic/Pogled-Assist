@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Installation and usage guide
-    url: https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/blob/development/docs/USER_GUIDE.md
+    url: https://github.com/Hasan-Smajlovic/Pogled-Assist/blob/development/docs/USER_GUIDE.md
     about: Read the supported setup and usage steps before reporting a problem.

@@ -9,7 +9,7 @@ description: Security and privacy rules specific to Pogled Assist - release upda
 
 - **GitHub Releases to the installed app.** `gaze_mouse/release_update.py` and
   `update_windows.ps1` accept only the latest stable release of
-  `Hasan-Smajlovic/TobiiEyeTrackerTool` and its exact ZIP and `.sha256`
+  `Hasan-Smajlovic/Pogled-Assist` and its exact ZIP and `.sha256`
   assets. The package installer they start requests Administrator access.
   [docs/WINDOWS_RELEASE.md](../../../docs/WINDOWS_RELEASE.md#update-an-installed-release)
   owns the full update behavior.

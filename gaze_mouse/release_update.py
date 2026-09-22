@@ -19,8 +19,8 @@ from PySide6.QtCore import QObject, Signal
 
 from .logging_setup import get_project_root
 
-RELEASE_API_URL = "https://api.github.com/repos/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/latest"
-RELEASE_DOWNLOAD_ROOT = "https://github.com/Hasan-Smajlovic/TobiiEyeTrackerTool/releases/download"
+RELEASE_API_URL = "https://api.github.com/repos/Hasan-Smajlovic/Pogled-Assist/releases/latest"
+RELEASE_DOWNLOAD_ROOT = "https://github.com/Hasan-Smajlovic/Pogled-Assist/releases/download"
 UPDATE_CHECK_TIMEOUT_SECONDS = 10
 _STABLE_VERSION_PATTERN = re.compile(
     r"^(?:v)?(?P<major>0|[1-9][0-9]*)\."
