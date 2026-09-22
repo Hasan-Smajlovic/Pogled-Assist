@@ -14,7 +14,7 @@
     }
   ],
   "supplement_sha256": "bfee0ed0c5e551824e228d36795294047298a792b55de4b587891d5edb1b4c6d",
-  "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
+  "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
   "preparation_sha256": "b449994cad6e342df7a095fd0ee84e8f4434d6809725ed8d9cde42b16fc9d045",
   "model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
   "supplement": {

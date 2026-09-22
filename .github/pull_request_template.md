@@ -36,6 +36,7 @@ remaining uncertainty. Write None only when there is none. -->
 - [ ] The diff contains only work needed for the linked issue.
 - [ ] Existing user behavior is unchanged or the intended change is documented.
 - [ ] New behavior has tests in the existing pytest suite where practical.
-- [ ] Speech UI changes update the HTML design reference first, or this pull request explains why the reference is unaffected.
+- [ ] Visible UI changes update the HTML design reference first, or this pull request explains why the reference is unaffected.
+- [ ] Every row of the maintenance matrix in `AGENTS.md` that matches a changed path is updated.
 - [ ] Hardware-only claims are separated from software-only verification.
 - [ ] No prompt history, secrets, personal data, or generated runtime data is included.
