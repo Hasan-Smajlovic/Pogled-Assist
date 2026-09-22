@@ -71,7 +71,13 @@ def package_smoke_test() -> int:
     try:
         from .app_icon import app_icon_path
         from .settings_window import _checkbox_x_image_url
-        from .suggestion_model import MODEL_METADATA_PATH, MODEL_PATH, load_model
+        from .suggestion_model import (
+            ISLAMIC_MODEL_METADATA_PATH,
+            ISLAMIC_MODEL_PATH,
+            MODEL_METADATA_PATH,
+            MODEL_PATH,
+            load_model,
+        )
         from .tobii_stream_engine_bridge_backend import bridge_script_path
         from .toolbar import HotbarWindow
         from .windows_startup import launcher_script_path
@@ -81,12 +87,15 @@ def package_smoke_test() -> int:
             Path(_checkbox_x_image_url()),
             MODEL_PATH,
             MODEL_METADATA_PATH,
+            ISLAMIC_MODEL_PATH,
+            ISLAMIC_MODEL_METADATA_PATH,
             bridge_script_path(),
             launcher_script_path(),
         )
         imports_loaded = HotbarWindow is not None
         path_results = [(path, bool(path and path.is_file())) for path in required_paths]
-        suggestions_loaded = "ŽELIM" in load_model().predict("žel")
+        model = load_model()
+        suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
         return 1

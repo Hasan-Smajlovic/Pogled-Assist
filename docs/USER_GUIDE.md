@@ -79,7 +79,15 @@ is away from the end, or a category name is being entered.
 `Poništi riječ` restores the exact text from before the most recent suggestion.
 It remains available until the text is otherwise edited, even after `Izgovori`.
 If `.`, `,`, `?`, or `!` is entered immediately after a suggestion, the keyboard
-removes only the space it added and places the punctuation after the word.
+removes only the space it added and places the punctuation after the word. A
+period or question mark then adds one space automatically, so the next sentence
+can begin without selecting `Razmak`.
+
+The offline dictionary also includes reviewed Bosnian Islamic terminology and
+common phrases for worship, Qur'an and hadith, Ramadan and Bajram, mosque and
+community life, Islamic scholarship, and the user's experience as an imam. For
+example, typing `KUR` offers `KUR'AN`, while phrases such as `POMOZI MI DA UZMEM`
+can offer `ABDEST`. Personal learning continues to adapt these results locally.
 
 The same suggestions are available while adding a phrase or category answer.
 That editor has its own undo state and cannot replace the saved conversation

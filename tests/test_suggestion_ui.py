@@ -148,7 +148,7 @@ def test_suggestions_complete_words_handle_punctuation_and_follow_the_caret(
     assert window._undo_word_button.isEnabled()
 
     window._append_text(".")
-    assert window._input.text() == "ŽELIM VODU."
+    assert window._input.text() == "ŽELIM VODU. "
     assert not window._undo_word_button.isEnabled()
     qtbot.waitUntil(lambda: any(button.isEnabled() for button in window._prediction_buttons))
 
@@ -161,6 +161,27 @@ def test_suggestions_complete_words_handle_punctuation_and_follow_the_caret(
     window._input.deselect()
     window._input.setText("qwert")
     assert all(not button.isEnabled() for button in window._prediction_buttons)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("punctuation", [".", "?"])
+def test_sentence_boundary_adds_space_and_keeps_physical_typing_after_it(
+    qtbot, suggestion_service_factory, punctuation
+):
+    service = suggestion_service_factory(conversation_model())
+    window = SpeechWindow(FakeSpeech(), library_store=FakeLibraryStore(), suggestions=service)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setFocus()
+    window._input.setText("HVALA")
+
+    qtbot.keyClicks(window._input, punctuation)
+
+    assert window._input.text() == f"HVALA{punctuation} "
+    assert window._input.cursorPosition() == len(window._input.text())
+
+    qtbot.keyClicks(window._input, "a")
+    assert window._input.text() == f"HVALA{punctuation} A"
 
 
 @pytest.mark.e2e

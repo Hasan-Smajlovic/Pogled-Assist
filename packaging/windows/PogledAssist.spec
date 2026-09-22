@@ -17,6 +17,14 @@ datas = [
         str(repo_root / "gaze_mouse" / "assets" / "bosnian-model.meta.json"),
         "gaze_mouse/assets",
     ),
+    (
+        str(repo_root / "gaze_mouse" / "assets" / "bosnian-islamic-model.json.gz"),
+        "gaze_mouse/assets",
+    ),
+    (
+        str(repo_root / "gaze_mouse" / "assets" / "bosnian-islamic-model.meta.json"),
+        "gaze_mouse/assets",
+    ),
     (str(repo_root / "gaze_mouse" / "__init__.py"), "gaze_mouse"),
     (str(repo_root / "gaze_mouse" / "tobii_stream_engine.py"), "gaze_mouse"),
     (str(repo_root / "gaze_mouse" / "tobii_stream_engine_bridge.py"), "gaze_mouse"),

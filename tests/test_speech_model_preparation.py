@@ -10,6 +10,7 @@ from gaze_mouse.suggestion_model import WordModel, load_model_from_paths
 from gaze_mouse.suggestion_text import START, words
 from scripts.benchmark_speech_models import choose_candidate
 from scripts.compare_speech_ranking import FixedWeightModel, sparse_context_check
+from scripts.prepare_islamic_model import load_rows as load_islamic_rows
 from scripts.prepare_speech_model import (
     PreparedCounts,
     load_spelling,
@@ -21,7 +22,7 @@ from scripts.prepare_speech_model import (
 
 def test_curated_starters_survive_context_and_global_pruning(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
-    with (root / "language/bs/starters.tsv").open(encoding="utf-8") as stream:
+    with (root / "language/bs/model/core/starters.tsv").open(encoding="utf-8") as stream:
         starters = {
             row["word"]: int(row["weight"]) * 200 for row in csv.DictReader(stream, delimiter="\t")
         }
@@ -79,11 +80,17 @@ def test_model_metadata_path_follows_variant_name():
         metadata_path(Path("candidate.json"))
 
 
-def test_conversation_supplement_is_separate_from_evaluation_fixtures():
+def test_reviewed_supplements_are_separate_from_evaluation_fixtures():
     root = Path(__file__).resolve().parents[1]
-    supplement, _details = load_supplement(root / "language" / "bs" / "conversation.tsv")
+    supplement, _details = load_supplement(
+        root / "language" / "bs" / "model" / "core" / "conversation.tsv"
+    )
+    islamic, _islamic_details = load_islamic_rows(
+        root / "language" / "bs" / "model" / "domains" / "islamic.tsv"
+    )
     supplement_text = {
-        " ".join(token.text for token in words(text)) for text, _weight, _ in supplement
+        " ".join(token.text for token in words(text))
+        for text, _weight, _ in [*supplement, *islamic]
     }
     fixtures = root / "tests" / "fixtures" / "speech_suggestions"
 

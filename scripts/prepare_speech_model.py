@@ -463,7 +463,11 @@ def build(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
-    parser.add_argument("--supplement", type=Path, default=Path("language/bs/conversation.tsv"))
+    parser.add_argument(
+        "--supplement",
+        type=Path,
+        default=Path("language/bs/model/core/conversation.tsv"),
+    )
     parser.add_argument(
         "--output", type=Path, default=Path("gaze_mouse/assets/bosnian-model.json.gz")
     )

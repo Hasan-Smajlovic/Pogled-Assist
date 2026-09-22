@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "model_id": "bs-islamic-reviewed-1-286a103a6519",
+  "source": "Reviewed synthetic Bosnian Islamic terminology and conversation phrases",
+  "text_origin": "Project-authored examples; reference pages were used for terminology only",
+  "source_references": [
+    {
+      "title": "Islam.ba - platforma Islamske zajednice u Bosni i Hercegovini",
+      "url": "https://www.islam.ba/platforma"
+    },
+    {
+      "title": "Islam.ba - kratki rječnik islamskih termina",
+      "url": "https://www.islam.ba/teme/tekst/kratki-rjecnik-pojmovnik-islamskih-termina"
+    }
+  ],
+  "supplement_sha256": "bfee0ed0c5e551824e228d36795294047298a792b55de4b587891d5edb1b4c6d",
+  "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
+  "preparation_sha256": "b449994cad6e342df7a095fd0ee84e8f4434d6809725ed8d9cde42b16fc9d045",
+  "model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
+  "supplement": {
+    "rows": 180,
+    "categories": {
+      "biography": 10,
+      "community": 26,
+      "greetings": 15,
+      "quran_hadith": 26,
+      "ramadan_bayram": 24,
+      "scholarship": 27,
+      "values": 20,
+      "worship": 32
+    },
+    "weighted_rows": {
+      "biography": 76,
+      "community": 191,
+      "greetings": 120,
+      "quran_hadith": 205,
+      "ramadan_bayram": 184,
+      "scholarship": 184,
+      "values": 146,
+      "worship": 240
+    }
+  },
+  "configuration": {
+    "domain_boost": 5
+  },
+  "counts": {
+    "words": 406,
+    "bigrams": 0,
+    "trigrams": 506
+  },
+  "compressed_bytes": 4945
+}

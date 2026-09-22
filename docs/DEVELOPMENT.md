@@ -39,8 +39,8 @@ components.
 Reproduce the frozen Bosnian suggestion measurements from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset development --output language\bs\evaluation-development.json
-.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation-heldout.json
+.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset development --output language\bs\evaluation\reports\development.json
+.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
 ```
 
 The development set is available for model decisions. Do not tune from the
@@ -58,9 +58,9 @@ When changing the prepared language data, compare the supported vocabulary
 sizes in one corpus pass before rebuilding the bundled model:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\model-benchmark.json
+.\.venv\Scripts\python.exe scripts\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\benchmarks\model.json
 .\.venv\Scripts\python.exe scripts\prepare_speech_model.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz
-.\.venv\Scripts\python.exe scripts\compare_speech_ranking.py --output language\bs\ranking-benchmark.json
+.\.venv\Scripts\python.exe scripts\compare_speech_ranking.py --output language\bs\benchmarks\ranking.json
 ```
 
 The ranking comparison holds language data fixed and compares the original fixed
@@ -76,7 +76,8 @@ by setup or included in a release. Its source URL and integrity hashes are in th
 bundled model metadata. Candidate selection uses only the development set; run
 the held-out evaluation once after the model choice is fixed.
 
-`conversation.tsv`, `starters.tsv`, and `spelling.tsv` are build inputs, not files
+`language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv`
+are build inputs, not files
 loaded by the installed application. Rebuild the bundled model after changing
 them or the preparation script. Spelling replacements apply only to web training
 data; personal spelling and typed text are preserved. The vocabulary budget
@@ -84,6 +85,21 @@ reserves space for reviewed words, and reviewed word combinations survive the
 web-only pruning limits. Run the commands above to refresh the generated model,
 metadata, and comparison reports before review. An old report does not validate
 a model with a different checksum.
+
+The reviewed Islamic terminology is a separate offline layer, so it can be
+rebuilt without downloading the 2.63 GB CLASSLA archive:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_islamic_model.py
+```
+
+`language\bs\model\domains\islamic.tsv` contains project-authored examples informed by the
+terminology of the Islamic Community in Bosnia and Herzegovina. The generated
+`bosnian-islamic-model.json.gz` and metadata are packaged beside the general
+model and merged in memory at startup. Rebuild the layer after changing its TSV,
+tokenisation, or preparation script, then run both frozen evaluations and the
+focused suggestion tests. Do not copy articles, sermons, private correspondence,
+or a user's messages into the repository.
 
 The evaluation report includes each exact-word miss before typing, classified
 as missing vocabulary, missing context, or a word ranked below the five visible
@@ -93,10 +109,10 @@ as activation counts when choosing the next data change.
 Measure personal learning and large synthetic profiles separately:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation-learning.json
+.\.venv\Scripts\python.exe scripts\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation\reports\learning.json
 ```
 
-This uses synthetic scenarios from `language/bs/learning.tsv`, with separate
+This uses synthetic scenarios from `language/bs/evaluation/learning.tsv`, with separate
 profiles and checkpoints after zero, one, three, and ten message uses. It also
 records unrelated control predictions and exits unsuccessfully if a target is
 not visible after one use, not first after three uses, or displaces an unrelated

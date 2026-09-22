@@ -8,6 +8,8 @@ from collections import Counter
 import pytest
 
 from gaze_mouse.suggestion_model import (
+    ISLAMIC_MODEL_METADATA_PATH,
+    ISLAMIC_MODEL_PATH,
     MODEL_METADATA_PATH,
     MODEL_PATH,
     WordModel,
@@ -86,6 +88,14 @@ def test_decomposed_unicode_matches_without_rewriting_surrounding_text():
     assert insert_word("Želim c\u030caj", "čaja") == "Želim ČAJA "
 
 
+def test_quran_apostrophe_is_one_word_and_can_be_completed_without_typing_the_mark():
+    model = WordModel({("kur'an",): 10})
+
+    assert words("Čitam Kur\u2019an.")[1].text == "kur'an"
+    assert model.predict("kuran") == ["KUR'AN"]
+    assert insert_word("Čitam kur", "kur'an") == "Čitam KUR'AN "
+
+
 def test_longer_context_changes_prediction_and_unknown_prefix_is_empty():
     model = WordModel({("voda",): 100, ("piti",): 1, ("želim", "piti"): 20})
     assert model.predict("želim ")[0] == "PITI"
@@ -111,7 +121,7 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
     assert metadata["source"] == "CLASSLA-web.bs 2.0"
     assert metadata["source_license"] == "CC0-1.0"
     assert metadata["counts"]["words"] == 60_000
-    with (root / "language/bs/conversation.tsv").open(encoding="utf-8") as stream:
+    with (root / "language/bs/model/core/conversation.tsv").open(encoding="utf-8") as stream:
         assert metadata["supplement"]["rows"] == sum(
             1 for _ in csv.DictReader(stream, delimiter="\t")
         )
@@ -121,18 +131,22 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
         == metadata["preparation_sha256"]
     )
     assert (
-        hashlib.sha256((root / "language" / "bs" / "conversation.tsv").read_bytes()).hexdigest()
+        hashlib.sha256(
+            (root / "language" / "bs" / "model" / "core" / "conversation.tsv").read_bytes()
+        ).hexdigest()
         == metadata["supplement_sha256"]
     )
     assert (
-        hashlib.sha256((root / "language" / "bs" / "starters.tsv").read_bytes()).hexdigest()
+        hashlib.sha256(
+            (root / "language" / "bs" / "model" / "core" / "starters.tsv").read_bytes()
+        ).hexdigest()
         == metadata["starters_sha256"]
     )
     assert (
-        hashlib.sha256((root / "language/bs/spelling.tsv").read_bytes()).hexdigest()
+        hashlib.sha256((root / "language/bs/model/core/spelling.tsv").read_bytes()).hexdigest()
         == metadata["spelling_sha256"]
     )
-    with (root / "language/bs/spelling.tsv").open(encoding="utf-8") as stream:
+    with (root / "language/bs/model/core/spelling.tsv").open(encoding="utf-8") as stream:
         assert metadata["configuration"]["spelling_replacements"] == sum(
             1 for _ in csv.DictReader(stream, delimiter="\t")
         )
@@ -140,10 +154,37 @@ def test_bundled_model_has_verified_metadata_and_useful_offline_results(monkeypa
     assert load_model().predict("")[:5] == ["SELAM", "JA", "KAKO", "MOŽE", "HVALA"]
 
 
+def test_bundled_islamic_model_has_verified_inputs_and_domain_predictions():
+    metadata = json.loads(ISLAMIC_MODEL_METADATA_PATH.read_text(encoding="utf-8"))
+    root = MODEL_PATH.parents[2]
+
+    assert metadata["supplement"]["rows"] >= 150
+    assert metadata["counts"]["words"] >= 300
+    assert hashlib.sha256(ISLAMIC_MODEL_PATH.read_bytes()).hexdigest() == metadata["model_sha256"]
+    assert (
+        hashlib.sha256((root / "language/bs/model/domains/islamic.tsv").read_bytes()).hexdigest()
+        == metadata["supplement_sha256"]
+    )
+    assert (
+        hashlib.sha256((root / "scripts/prepare_islamic_model.py").read_bytes()).hexdigest()
+        == metadata["preparation_sha256"]
+    )
+    assert (
+        hashlib.sha256((root / "gaze_mouse/suggestion_text.py").read_bytes()).hexdigest()
+        == metadata["tokenizer_sha256"]
+    )
+
+    model = load_model()
+    assert "KUR'AN" in model.predict("KUR")
+    assert "ABDEST" in model.predict("POMOZI MI DA UZMEM ")
+    assert "JASIN" in model.predict("OTVORI SURU ")
+    assert "DŽUMA" in model.predict("DANAS JE ")
+
+
 def test_bundled_model_corrects_reviewed_spellings_without_folding_ambiguous_words():
     vocabulary = load_model().vocabulary
     root = MODEL_PATH.parents[2]
-    with (root / "language/bs/spelling.tsv").open(encoding="utf-8") as stream:
+    with (root / "language/bs/model/core/spelling.tsv").open(encoding="utf-8") as stream:
         replacements = list(csv.DictReader(stream, delimiter="\t"))
 
     assert all(row["variant"] not in vocabulary for row in replacements)
@@ -169,7 +210,7 @@ def test_bundled_model_corrects_reviewed_spellings_without_folding_ambiguous_wor
 def test_bundled_model_preserves_starters_and_basic_needs():
     model = load_model()
     root = MODEL_PATH.parents[2]
-    with (root / "language/bs/starters.tsv").open(encoding="utf-8") as stream:
+    with (root / "language/bs/model/core/starters.tsv").open(encoding="utf-8") as stream:
         starters = {row["word"] for row in csv.DictReader(stream, delimiter="\t")}
     assert set(model.contexts[(START,)]) == starters
     assert {"VODE", "POMOĆ"} <= set(model.predict("TREBA MI "))
@@ -208,3 +249,14 @@ def test_evaluation_separates_starters_next_words_and_completions():
     assert result["prediction_selections"] == 2
     assert result["completion_selections"] == 1
     assert result["activations"] == 12
+
+
+def test_frozen_fixture_hash_is_stable_across_windows_line_endings(tmp_path):
+    from scripts.evaluate_speech_model import fixture_sha256
+
+    fixture = tmp_path / "cases.tsv"
+    fixture.write_bytes(b"id\ttext\r\n1\tmessage\r\n")
+    windows_digest = fixture_sha256(fixture)
+    fixture.write_bytes(b"id\ttext\n1\tmessage\n")
+
+    assert fixture_sha256(fixture) == windows_digest

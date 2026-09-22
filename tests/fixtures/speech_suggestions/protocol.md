@@ -23,10 +23,11 @@ The deterministic suggestion policy checks the five candidates before each word
 and after each successive letter. Select the intended exact word as soon as it
 is offered and doing so saves activations compared with completing it manually.
 Count the inserted space and its removal before punctuation under the actual
-editing rules. No unsolicited space is required at message end. Count any final
-space deletion if needed to reproduce the exact target. Report letters entered,
-button activations, selections, and top-five availability separately. Exact-word
-availability does not treat a different inflection as a hit.
+editing rules. A period or question mark inserts one following space
+automatically. Reuse that separator when the target continues, and count one
+final Backspace if the exact target ends at that punctuation. Report letters
+entered, button activations, selections, and top-five availability separately.
+Exact-word availability does not treat a different inflection as a hit.
 
 All three paths type the same punctuation. The policy makes no intentional wrong
 selections, so its correction and undo counts are zero, explicitly reported as

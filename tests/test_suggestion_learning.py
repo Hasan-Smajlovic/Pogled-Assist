@@ -97,22 +97,34 @@ def test_punctuation_only_removes_automatic_space_and_keeps_word_learning():
     store = LearningStore()
     composition = Composition(store)
     composition.select("hvala")
-    assert composition.edit("HVALA .") == "HVALA."
+    assert composition.edit("HVALA .") == "HVALA. "
     assert composition.undo is None
     assert store.snapshot()[("hvala",)] == 1
     assert composition.select("molim") == "HVALA. MOLIM "
-    assert composition.undo_selection() == "HVALA."
+    assert composition.undo_selection() == "HVALA. "
     composition.edit("HVALA  ")
-    assert composition.edit("HVALA  .") == "HVALA  ."
+    assert composition.edit("HVALA  .") == "HVALA  . "
 
 
-@pytest.mark.parametrize("punctuation", [".", ",", "?", "!"])
-def test_each_supported_punctuation_removes_only_the_automatic_space(punctuation):
+@pytest.mark.parametrize(
+    ("punctuation", "result"),
+    [(".", "HVALA. "), (",", "HVALA,"), ("?", "HVALA? "), ("!", "HVALA!")],
+)
+def test_each_supported_punctuation_removes_only_the_automatic_space(punctuation, result):
     composition = Composition(LearningStore())
     composition.select("hvala")
 
-    assert composition.edit(f"HVALA {punctuation}") == f"HVALA{punctuation}"
+    assert composition.edit(f"HVALA {punctuation}") == result
     assert composition.undo is None
+
+
+@pytest.mark.parametrize("punctuation", [".", "?"])
+def test_sentence_ending_punctuation_adds_one_space_without_a_suggestion(punctuation):
+    composition = Composition(LearningStore())
+    composition.edit("HVALA")
+
+    assert composition.edit(f"HVALA{punctuation}") == f"HVALA{punctuation} "
+    assert composition.edit(f"HVALA{punctuation}  ") == f"HVALA{punctuation} "
 
 
 def test_undo_has_one_step_and_keeps_previous_selected_word():

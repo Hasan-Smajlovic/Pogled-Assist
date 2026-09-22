@@ -125,6 +125,8 @@ $requiredFiles = @(
     "_internal\assets\icon.png",
     "_internal\gaze_mouse\assets\bosnian-model.json.gz",
     "_internal\gaze_mouse\assets\bosnian-model.meta.json",
+    "_internal\gaze_mouse\assets\bosnian-islamic-model.json.gz",
+    "_internal\gaze_mouse\assets\bosnian-islamic-model.meta.json",
     "_internal\gaze_mouse\assets\checkbox_x.svg",
     "_internal\gaze_mouse\__init__.py",
     "_internal\gaze_mouse\tobii_stream_engine.py",

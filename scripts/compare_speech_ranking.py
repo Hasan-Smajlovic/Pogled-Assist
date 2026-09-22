@@ -16,12 +16,14 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gaze_mouse.suggestion_model import (
+    ISLAMIC_MODEL_PATH,
     MODEL_METADATA_PATH,
     MODEL_PATH,
     WordModel,
+    load_model,
     load_model_from_paths,
 )
-from scripts.evaluate_speech_model import FIXTURES, simulate
+from scripts.evaluate_speech_model import FIXTURES, fixture_sha256, simulate
 
 
 class FixedWeightModel(WordModel):
@@ -59,13 +61,14 @@ def sparse_context_check(model: WordModel) -> dict:
 
 def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> dict:
     source = FIXTURES / "development.tsv"
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    digest = fixture_sha256(source)
     frozen = json.loads((FIXTURES / "frozen.json").read_text())
     if digest != frozen["sha256"][source.name]:
         raise ValueError("Frozen development messages changed")
     with source.open(encoding="utf-8") as stream:
         cases = list(csv.DictReader(stream, delimiter="\t"))
-    model = load_model_from_paths(model_path, metadata_path)
+    bundled = model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH
+    model = load_model() if bundled else load_model_from_paths(model_path, metadata_path)
     control = FixedWeightModel(
         ((*context, word), count)
         for context, rows in model.contexts.items()
@@ -123,6 +126,9 @@ def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> di
         "dataset": "development",
         "dataset_sha256": digest,
         "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
+        "islamic_model_sha256": (
+            hashlib.sha256(ISLAMIC_MODEL_PATH.read_bytes()).hexdigest() if bundled else None
+        ),
         "implementation_sha256": hashlib.sha256(
             (MODEL_PATH.parents[1] / "suggestion_model.py").read_bytes()
         ).hexdigest(),

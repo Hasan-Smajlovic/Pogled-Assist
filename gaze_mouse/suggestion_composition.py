@@ -38,12 +38,24 @@ class Composition:
         if text == self.text:
             return text
         if (
+            len(text) == len(self.text) + 1
+            and text.startswith(self.text)
+            and text[-1].isspace()
+            and self.text.endswith((". ", "? "))
+        ):
+            return self.text
+        appended_sentence_boundary = (
+            len(text) == len(self.text) + 1 and text.startswith(self.text) and text[-1] in ".?"
+        )
+        if (
             self.automatic_space == self.text
             and len(text) == len(self.text) + 1
             and text.startswith(self.text)
             and text[-1] in ".,?!"
         ):
             text = self.text[:-1] + text[-1]
+        if appended_sentence_boundary:
+            text += " "
         self.undo = None
         self.automatic_space = None
         tokens = words(text)
