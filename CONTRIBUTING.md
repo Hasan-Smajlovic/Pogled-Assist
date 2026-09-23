@@ -156,34 +156,56 @@ rulesets apply to everyone and have no bypass actors.
 ## Merge strategy
 
 - Normal topic branch to `development`: squash merge only.
-- `development` to `master`: merge commit only.
+- `release/v<version>` to `master`: merge commit only.
 - Hotfix branch to `master`: merge commit only.
 - Delete a merged topic branch after a successful merge.
 - Never delete `development` or `master`.
 - Do not use rebase merge.
 - Do not use auto-merge or a merge queue.
 
-Release merges use merge commits so `development` remains an ancestor of
-`master`. This keeps later release pull requests clean and prevents already
-released commits from appearing again.
+The release branch starts at the latest `master` and merges `development`
+into it. The final release PR also uses a merge commit, so `development`
+remains an ancestor of `master`. The release branch can contain merge commits;
+`development` stays linear.
 
 ## Release process
 
 1. Confirm that all intended changes have already been merged into `development`.
-2. Decide the next Semantic Versioning number and write it without the `v` prefix
-   in `VERSION` as part of the release pull request.
-3. Until the project declares a stable public version, use `v0.MINOR.PATCH`,
-   starting with `v0.1.0` unless Hasan selects another initial version.
-4. Open a release pull request from `development` to `master`.
-5. Summarize the included changes, identify the version, link relevant issues and
-   pull requests, list verification, and document known limitations.
-6. Obtain one approval and resolve every review conversation.
+2. Decide the next Semantic Versioning number. Until the project declares a
+   stable public version, use `v0.MINOR.PATCH`. The number must be newer than
+   `master`'s `VERSION` and its tag must not already exist.
+3. On GitHub, run **Actions > Release > Run workflow** from `master` and enter
+   the version without `v`. The workflow creates `release/v<version>` from the
+   latest `master`, merges `development` into it, commits the new `VERSION`,
+   and opens a draft pull request to `master`. It never updates either
+   protected branch. If it stops after pushing the branch, rerun the same
+   version to open the missing PR. A stale branch requires manual review.
+4. Review and complete the draft PR: summarize the changes, link relevant
+   issues and pull requests, list verification, and document known limitations.
+   The automated text marks manual checks Not run until their results are added.
+5. Approve the PR's CI run if GitHub requests it, then mark the PR ready for
+   review after the required checks and applicable manual validation.
+6. Obtain one independent approval and resolve every review conversation.
 7. Hasan merges the release pull request with a merge commit.
 8. The release workflow builds the exact merged `master` commit and creates the
    immutable version tag, release artifact, release notes, and checksum.
 9. A failed release workflow must not create a partial or duplicate release.
    Rerun the failed workflow for the same commit. If the version tag belongs to a
    different commit, bump `VERSION` in a new reviewed pull request.
+
+The manual workflow must first reach the default `master` branch before
+GitHub can show its **Run workflow** button. For the first release using this
+process, prepare a release branch from the latest `master` manually, merge
+`development` into that branch, commit the new `VERSION`, and open a reviewed
+PR to `master`. Do not use **Update branch** on a direct
+`development`-to-`master` PR: it tries to add a merge commit to the protected
+linear `development` branch.
+
+The repository owner must enable **Settings > Actions > General > Allow GitHub
+Actions to create and approve pull requests** for the preparation workflow's
+`GITHUB_TOKEN` to open the draft. That setting does not let the workflow
+approve its own PR. A PR opened by `GITHUB_TOKEN` may show **Approve workflows
+to run** before CI starts. Keep the independent review and required checks.
 
 ## Hotfix process
 
