@@ -21,7 +21,7 @@ concurrency:
 jobs:
   prepare:
     name: prepare-release-pr
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && github.repository == 'Hasan-Smajlovic/TobiiEyeTrackerTool'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && github.repository == 'Hasan-Smajlovic/Pogled-Assist'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -57,7 +57,7 @@ jobs:
 
   release:
     name: release
-    if: github.event_name == 'push' && github.repository == 'Hasan-Smajlovic/TobiiEyeTrackerTool'
+    if: github.event_name == 'push' && github.repository == 'Hasan-Smajlovic/Pogled-Assist'
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
