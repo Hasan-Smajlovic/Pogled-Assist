@@ -46,7 +46,7 @@ jobs:
 
       - name: Check GitHub Actions workflows
         shell: powershell
-        run: .\scripts\check_github_actions.ps1 -Install
+        run: .\scripts\checks\check_github_actions.ps1 -Install
 
       - name: Check Python source
         run: python -m ruff check .
@@ -55,31 +55,31 @@ jobs:
         run: python -m ruff format --check .
 
       - name: Compile Python source
-        run: python -B -m compileall -q gaze_mouse scripts tests run_gaze_mouse.py
+        run: python -B -m compileall -q pogled_assist scripts tests run_gaze_mouse.py
 
       - name: Check PowerShell source
         shell: powershell
-        run: .\scripts\check_powershell.ps1 -RequireAnalyzer
+        run: .\scripts\checks\check_powershell.ps1 -RequireAnalyzer
 
       - name: Run automated tests without Tobii hardware
         shell: powershell
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -B -m pytest -p no:cacheprovider `
-            --cov=gaze_mouse `
+            --cov=pogled_assist `
             --cov-report=term-missing:skip-covered
 
       - name: Build and smoke-test the exact merged commit
         id: build
         shell: powershell
-        run: .\scripts\build_windows_package.ps1 -PythonPath python
+        run: .\scripts\release\build_windows_package.ps1 -PythonPath python
 
       - name: Publish one versioned release with checksum
         shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .\scripts\publish_github_release.ps1 `
+          .\scripts\release\publish_github_release.ps1 `
             -ArtifactPath "${{ steps.build.outputs.artifact_path }}" `
             -Repository "${{ github.repository }}" `
             -CommitSha "${{ github.sha }}"

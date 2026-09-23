@@ -389,7 +389,7 @@ function Copy-ProjectToLocalInstallRoot {
         "update_windows.ps1",
         "assets",
         "tools",
-        "gaze_mouse"
+        "pogled_assist"
     )
 
     foreach ($relativePath in $itemsToCopy) {
@@ -412,6 +412,34 @@ function Copy-ProjectToLocalInstallRoot {
         }
 
         Write-Info "Copied $relativePath"
+    }
+
+    $legacyPackagePath = Join-Path $TargetPath "gaze_mouse"
+    $newPackageMarker = Join-Path $TargetPath "pogled_assist\__init__.py"
+    if ((Test-Path -LiteralPath (Join-Path $legacyPackagePath "__init__.py") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $legacyPackagePath "main.py") -PathType Leaf) -and
+        (Test-Path -LiteralPath $newPackageMarker -PathType Leaf)) {
+        $targetFullPath = [IO.Path]::GetFullPath($TargetPath).TrimEnd("\")
+        $legacyFullPath = [IO.Path]::GetFullPath($legacyPackagePath)
+        if (-not $legacyFullPath.StartsWith($targetFullPath + "\", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Legacy package path must stay inside the install folder: $legacyFullPath"
+        }
+
+        $legacyPackage = Get-Item -LiteralPath $legacyPackagePath -Force
+        $hasUserData = (Test-Path -LiteralPath (Join-Path $legacyPackagePath "data")) -or
+            (Test-Path -LiteralPath (Join-Path $legacyPackagePath "logs"))
+        if ($hasUserData -or
+            ($legacyPackage.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            @(Get-ChildItem -LiteralPath $legacyPackagePath -Recurse -Force -Attributes ReparsePoint).Count -gt 0) {
+            Write-WarningLog "Leaving legacy gaze_mouse folder because it contains user data or links: $legacyPackagePath"
+        } else {
+            try {
+                Remove-Item -LiteralPath $legacyPackagePath -Recurse -Force -ErrorAction Stop
+                Write-Info "Removed the old gaze_mouse package from the source installation."
+            } catch {
+                Write-WarningLog "Could not remove the old gaze_mouse package: $($_.Exception.Message)"
+            }
+        }
     }
 
     Write-Success "Project files copied to local install folder."
@@ -615,29 +643,55 @@ function Assert-RepositoryFiles {
         "start_gaze_mouse.ps1",
         "update_windows.ps1",
         "assets\icon.png",
-        "gaze_mouse\app_icon.py",
-        "gaze_mouse\logging_setup.py",
-        "gaze_mouse\gaze_bubble.py",
-        "gaze_mouse\gaze_feedback.py",
-        "gaze_mouse\interaction_overlay.py",
-        "gaze_mouse\keyboard_window.py",
-        "gaze_mouse\quick_action_menu.py",
-        "gaze_mouse\quick_action_zoom.py",
-        "gaze_mouse\settings_store.py",
-        "gaze_mouse\settings_window.py",
-        "gaze_mouse\speech_service.py",
-        "gaze_mouse\speech_window.py",
-        "gaze_mouse\tobii_calibration.py",
-        "gaze_mouse\tobii_stream_engine.py",
-        "gaze_mouse\tobii_stream_engine_bridge.py",
-        "gaze_mouse\tobii_stream_engine_bridge_backend.py",
-        "gaze_mouse\windows_keyboard.py",
-        "gaze_mouse\windows_startup.py",
-        "gaze_mouse\windows_z_order.py",
-        "gaze_mouse\main.py",
-        "gaze_mouse\toolbar.py",
-        "gaze_mouse\gaze_provider.py",
-        "gaze_mouse\mouse_controller.py"
+        "pogled_assist\__init__.py",
+        "pogled_assist\app_icon.py",
+        "pogled_assist\logging_setup.py",
+        "pogled_assist\release_update.py",
+        "pogled_assist\settings_store.py",
+        "pogled_assist\main.py",
+        "pogled_assist\toolbar.py",
+        "pogled_assist\assets\checkbox_x.svg",
+        "pogled_assist\assets\bosnian-model.json.gz",
+        "pogled_assist\assets\bosnian-model.meta.json",
+        "pogled_assist\assets\bosnian-islamic-model.json.gz",
+        "pogled_assist\assets\bosnian-islamic-model.meta.json",
+        "pogled_assist\tracking\__init__.py",
+        "pogled_assist\tracking\gaze_provider.py",
+        "pogled_assist\tracking\mouse_gaze_provider.py",
+        "pogled_assist\tracking\tobii_calibration.py",
+        "pogled_assist\tracking\tobii_stream_engine.py",
+        "pogled_assist\tracking\tobii_stream_engine_bridge.py",
+        "pogled_assist\tracking\tobii_stream_engine_bridge_backend.py",
+        "pogled_assist\interaction\__init__.py",
+        "pogled_assist\interaction\gaze_selection.py",
+        "pogled_assist\interaction\mouse_controller.py",
+        "pogled_assist\ui\__init__.py",
+        "pogled_assist\ui\controller_window.py",
+        "pogled_assist\ui\gaze_bubble.py",
+        "pogled_assist\ui\gaze_feedback.py",
+        "pogled_assist\ui\interaction_overlay.py",
+        "pogled_assist\ui\keyboard_window.py",
+        "pogled_assist\ui\quick_action_menu.py",
+        "pogled_assist\ui\quick_action_zoom.py",
+        "pogled_assist\ui\settings_window.py",
+        "pogled_assist\ui\speech_window.py",
+        "pogled_assist\speech\__init__.py",
+        "pogled_assist\speech\alarm_sound.py",
+        "pogled_assist\speech\speech_library.py",
+        "pogled_assist\speech\speech_service.py",
+        "pogled_assist\suggestions\__init__.py",
+        "pogled_assist\suggestions\composition.py",
+        "pogled_assist\suggestions\learning.py",
+        "pogled_assist\suggestions\model.py",
+        "pogled_assist\suggestions\service.py",
+        "pogled_assist\suggestions\text.py",
+        "pogled_assist\windows\__init__.py",
+        "pogled_assist\windows\appbar.py",
+        "pogled_assist\windows\dpi.py",
+        "pogled_assist\windows\windows_input.py",
+        "pogled_assist\windows\windows_keyboard.py",
+        "pogled_assist\windows\windows_startup.py",
+        "pogled_assist\windows\windows_z_order.py"
     )
 
     foreach ($relativePath in $requiredFiles) {

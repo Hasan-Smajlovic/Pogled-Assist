@@ -5,7 +5,7 @@
   "independence": "Not established by this script; external authorship and a preselected model are required.",
   "model": {
     "version": 1,
-    "model_id": "bs-classla-2.0-conversation-4-v60000-ffb09b61638b",
+    "model_id": "bs-classla-2.0-conversation-4-v60000-0d37f1b2c1b0",
     "source": "CLASSLA-web.bs 2.0",
     "source_url": "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11",
     "source_license": "CC0-1.0",
@@ -14,13 +14,13 @@
     "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
     "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
     "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
-    "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
-    "preparation_sha256": "fa858196b6d411412b189147e9d21b31069444e8c886187a8cc2a6b3bd5036b2",
-    "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+    "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+    "preparation_sha256": "0880ae30aabd0434edc36c5303993a5cd5e3299e7daf11d2683a40b93483a20c",
+    "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
     "sample": {
       "records_scanned": 2538848,
       "documents": 20924,
-      "tokens": 5482578,
+      "tokens": 5481816,
       "domains": 1635,
       "genres": {
         "News": 3000,
@@ -80,16 +80,16 @@
     },
     "counts": {
       "words": 60000,
-      "bigrams": 125899,
-      "trigrams": 104965,
+      "bigrams": 125869,
+      "trigrams": 104877,
       "protected_ngrams": 3515
     },
-    "compressed_bytes": 1358833
+    "compressed_bytes": 1358568
   },
   "model_layers": [
     {
       "version": 1,
-      "model_id": "bs-classla-2.0-conversation-4-v60000-ffb09b61638b",
+      "model_id": "bs-classla-2.0-conversation-4-v60000-0d37f1b2c1b0",
       "source": "CLASSLA-web.bs 2.0",
       "source_url": "https://www.clarin.si/repository/xmlui/bitstream/handle/11356/2079/CLASSLA-web.bs.2.0.jsonl.gz?isAllowed=y&sequence=11",
       "source_license": "CC0-1.0",
@@ -98,13 +98,13 @@
       "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
       "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
       "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
-      "tokenizer_sha256": "bd31441a0e48d1f22acd438d0639528bdb275ffd67f3900379793019b11f54fa",
-      "preparation_sha256": "fa858196b6d411412b189147e9d21b31069444e8c886187a8cc2a6b3bd5036b2",
-      "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+      "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+      "preparation_sha256": "0880ae30aabd0434edc36c5303993a5cd5e3299e7daf11d2683a40b93483a20c",
+      "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
       "sample": {
         "records_scanned": 2538848,
         "documents": 20924,
-        "tokens": 5482578,
+        "tokens": 5481816,
         "domains": 1635,
         "genres": {
           "News": 3000,
@@ -164,11 +164,11 @@
       },
       "counts": {
         "words": 60000,
-        "bigrams": 125899,
-        "trigrams": 104965,
+        "bigrams": 125869,
+        "trigrams": 104877,
         "protected_ngrams": 3515
       },
-      "compressed_bytes": 1358833
+      "compressed_bytes": 1358568
     },
     {
       "version": 1,
@@ -186,8 +186,8 @@
         }
       ],
       "supplement_sha256": "bfee0ed0c5e551824e228d36795294047298a792b55de4b587891d5edb1b4c6d",
-      "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
-      "preparation_sha256": "b449994cad6e342df7a095fd0ee84e8f4434d6809725ed8d9cde42b16fc9d045",
+      "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+      "preparation_sha256": "fcb1d384462d8e6924a2ea87d5f42a7a71eb3df3987d92f0da6eff0c391928e2",
       "model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
       "supplement": {
         "rows": 180,
@@ -224,17 +224,17 @@
     }
   ],
   "environment": {
-    "platform": "Windows-11-10.0.26200-SP0",
-    "python": "3.12.14"
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.10.11"
   },
   "profile": "empty per message",
   "assumption": "ideal exact beneficial selection; no intentional mistakes",
   "ranking": {
     "method": "adaptive context interpolation",
     "context_discount": 10.0,
-    "implementation_sha256": "8491e9e76b337bf8fd4be9c967c9ba835e19418368f2af2bb1a060cfd35a8b35",
-    "tokenizer_sha256": "7e5de0c55c718867edffecbb1ac4da5009d7097d91e60a1f66918c756f9a5880",
-    "evaluator_sha256": "cce5fb17a2250ba5517e3aa2486b979f6372a67f9efcbc51800149510b1ebd0b"
+    "implementation_sha256": "b2d4da014a8f2dd34e88b5878340b35d6c990298cdf5322222dc4b434fee8384",
+    "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+    "evaluator_sha256": "92defe50db9289e217c6684128ac9f54e3a6176087875b6c15f28ad5d0ee3cfb"
   },
   "metric_notes": {
     "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
@@ -242,17 +242,17 @@
     "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
     "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending."
   },
-  "loading_ms": 1600.0,
+  "loading_ms": 1472.59,
   "latency": {
     "frequency": {
-      "mean_ms": 1.38,
-      "p95_ms": 5.62,
-      "max_ms": 13.02
+      "mean_ms": 1.24,
+      "p95_ms": 4.64,
+      "max_ms": 12.69
     },
     "contextual": {
-      "mean_ms": 1.58,
-      "p95_ms": 6.53,
-      "max_ms": 17.59
+      "mean_ms": 1.4,
+      "p95_ms": 6.11,
+      "max_ms": 15.96
     }
   },
   "totals": {

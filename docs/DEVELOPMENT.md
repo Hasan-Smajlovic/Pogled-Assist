@@ -1,6 +1,6 @@
 # Development guide
 
-This project runs on Windows and Python 3.10.
+Development and release checks run on Windows x64 with Python 3.10.
 
 ## First setup
 
@@ -14,7 +14,14 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 Setup creates `.venv`, installs the application, test and packaging dependencies,
 and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored
 `.dev-tools` directory. It does not install Tobii software or change the
-system-wide Python environment.
+system-wide Python environment. The `.venv` always uses Python 3.10.
+If `.venv` points to a removed or unsupported interpreter, setup moves it to
+`.dev-tools\venv-backups` before creating a fresh one. To use a specific
+installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup.
+
+`tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same
+interpreter is used for development, Tobii Pro discovery, automated checks,
+and Windows packaging.
 
 ## Command reference
 
@@ -36,11 +43,23 @@ components.
 | `.\dev.ps1 check` | Not required | Lint, tests, coverage, package build, and frozen executable smoke test |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
 
+The supporting scripts are grouped by purpose: `scripts/checks/` validates
+source and workflows, `scripts/release/` builds and publishes releases,
+`scripts/ui/` renders the UI gallery, and `scripts/speech_suggestions/`
+prepares and evaluates Bosnian prediction models.
+
+Before running the model commands below in Windows PowerShell, use UTF-8 for
+Python's output so printed Bosnian text works with older console encodings:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+```
+
 Reproduce the frozen Bosnian suggestion measurements from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset development --output language\bs\evaluation\reports\development.json
-.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset development --output language\bs\evaluation\reports\development.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
 ```
 
 The development set is available for model decisions. Do not tune from the
@@ -58,9 +77,9 @@ When changing the prepared language data, compare the supported vocabulary
 sizes in one corpus pass before rebuilding the bundled model:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\benchmarks\model.json
-.\.venv\Scripts\python.exe scripts\prepare_speech_model.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz
-.\.venv\Scripts\python.exe scripts\compare_speech_ranking.py --output language\bs\benchmarks\ranking.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\benchmarks\model.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\prepare_speech_model.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz
+.\.venv\Scripts\python.exe scripts\speech_suggestions\compare_speech_ranking.py --output language\bs\benchmarks\ranking.json
 ```
 
 The ranking comparison holds language data fixed and compares the original fixed
@@ -75,6 +94,10 @@ The verified CLASSLA archive is a local development input and is not downloaded
 by setup or included in a release. Its source URL and integrity hashes are in the
 bundled model metadata. Candidate selection uses only the development set; run
 the held-out evaluation once after the model choice is fixed.
+The bundled general model was rebuilt from the verified archive with the current
+preparation script and tokenizer. Its source and code checksums are recorded in
+the [model metadata](../pogled_assist/assets/bosnian-model.meta.json). Keep the
+archive outside the repository's tracked files for future rebuilds.
 
 `language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv`
 are build inputs, not files
@@ -90,7 +113,7 @@ The reviewed Islamic terminology is a separate offline layer, so it can be
 rebuilt without downloading the 2.63 GB CLASSLA archive:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\prepare_islamic_model.py
+.\.venv\Scripts\python.exe scripts\speech_suggestions\prepare_islamic_model.py
 ```
 
 `language\bs\model\domains\islamic.tsv` contains project-authored examples informed by the
@@ -109,7 +132,7 @@ as activation counts when choosing the next data change.
 Measure personal learning and large synthetic profiles separately:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation\reports\learning.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation\reports\learning.json
 ```
 
 This uses synthetic scenarios from `language/bs/evaluation/learning.tsv`, with separate
@@ -128,7 +151,7 @@ keyboard protocol. Keep those messages out of preparation and tuning. After
 selecting the candidate, evaluate that exact file:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_speech_model.py --cases C:\Temp\speech-evaluation.tsv --expected-sha256 "<previously-frozen-sha256>" --output .dev-tools\speech-external-evaluation.json
+.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --cases C:\Temp\speech-evaluation.tsv --expected-sha256 "<previously-frozen-sha256>" --output .dev-tools\speech-external-evaluation.json
 ```
 
 The script verifies the supplied checksum and reports miss diagnostics. It does
@@ -136,13 +159,19 @@ not certify independent authorship or freeze a set retroactively. Do not add
 private conversations to the repository. Existing regression fixtures remain
 unchanged.
 
-Use `.\dev.ps1 check` before pushing a pull request. It runs the same three
-categories enforced by the required PR checks.
+## Verification before a pull request
 
-Documentation-only work still runs `check` to confirm the runtime baseline. Its
-links and commands also need a manual documentation review. If a required device
+Use `.\dev.ps1 check` before pushing a pull request. It runs with Python 3.10
+and covers the same three categories enforced by the required `code-quality`,
+`tests`, and `windows-package` pull request checks.
+
+Documentation-only work also runs these checks to confirm the runtime baseline.
+Its links and commands need a manual documentation review. If a required device
 check cannot run, record it as not run. Never infer a hardware result from a
 mocked test or a package smoke test.
+
+If a local check fails, use the [local checks troubleshooting guide](DEVELOPMENT_TROUBLESHOOTING.md)
+to identify common Windows and pytest causes.
 
 ## Test strategy
 
@@ -160,6 +189,12 @@ The suite uses five layers:
    links, and the minimum sections agents need for issues and pull requests.
 5. Manual Tobii checks verify the device runtime, calibration, gaze quality,
    AppBar behavior, clicks, and speech on the target machine.
+
+Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`,
+`tests/suggestions/`, `tests/ui/`, `tests/release/`, and `tests/tooling/`.
+Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
+data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from
+the repository root; pytest discovers all of these folders through `tests/`.
 
 Coverage is a regression floor, not a quality score. The initial floor is 60
 percent because hardware DLL calls and Windows shell behavior cannot run safely
@@ -206,6 +241,9 @@ is the design source of truth for the visible Pogled Assist interface. The
 historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
+It currently has main views for Speech and Settings. Hotbar, standalone
+Keyboard and Controller, and gaze overlays do not yet have their own main
+views there. Add the relevant view before changing one of those surfaces.
 
 Every change to visible layout, copy, control sizes, states, or interaction flow
 must update the matching HTML reference in the same pull request. Update and
@@ -230,6 +268,7 @@ The command renders:
 - Hotbar
 - General, gaze, speech, and learned-word Settings surfaces
 - Speech keyboard, categories, answers, saved phrases, and shared editor
+- Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
 

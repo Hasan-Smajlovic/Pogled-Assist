@@ -5,7 +5,9 @@ This document defines how changes move from an issue to a release in
 
 ## Long-lived branches
 
-- `development` is the default branch and the integration branch for normal work.
+- `development` is the integration branch for normal work. Check GitHub for the
+  current default branch; that setting can differ from the integration branch.
+  GitHub reported `master` as the default on 23 September 2026.
 - `master` contains release history and urgent hotfixes only.
 - Do not develop directly on either long-lived branch.
 - Every change to `development` or `master` must go through a pull request.
@@ -49,10 +51,9 @@ Confirm the base repository and base branch before creating the pull request.
 Feature, fix, documentation, refactor, test, build, CI, and chore pull requests
 all target `development`.
 
-GitHub's generic compare page may still select the upstream
-`thePi314/TobiiEyeTrackerTool:master` branch as the base. This behavior was
-observed after `development` became the fork's default branch, so the four values
-above must always be checked manually.
+GitHub's generic compare page may select the upstream
+`thePi314/TobiiEyeTrackerTool:master` branch as the base. Check all four values
+manually, regardless of the current default-branch setting.
 
 ## Writing issues for coding agents
 
@@ -89,14 +90,20 @@ Use the project status to show whether an agent can act on the issue:
 
 ## Issue linking and pull request contents
 
-Every normal pull request must link its issue with:
+Every normal pull request must reference its issue. Check the current default
+branch with `gh repo view Hasan-Smajlovic/Pogled-Assist --json defaultBranchRef`
+before choosing the reference. When `development` is the default branch, use:
 
 ```text
 Closes #<issue-number>
 ```
 
-Because `development` is the default branch, merging a normal pull request with
-this keyword closes the linked issue.
+When another branch is the default, use `Refs #<issue-number>` in a normal pull
+request to `development`. GitHub does not apply closing keywords in pull requests
+to a non-default branch ([GitHub's issue-linking rules](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+Close the issue explicitly when the agreed work is
+complete, or use a closing reference in a later pull request to the default
+branch. Do not change the normal pull request destination just to close an issue.
 
 The pull request describes the resulting diff, not the original plan. Use the
 repository template to record the outcome, material changes, compatibility
@@ -244,7 +251,7 @@ rulesets have no bypass actors.
 
 ## CI and required checks
 
-Pull requests targeting `development` or `master` run these stable checks:
+Pull requests targeting `development` or `master` run these checks:
 
 - `code-quality`: Ruff lint and format checks, Python bytecode compilation,
   PowerShell parsing, and focused PSScriptAnalyzer rules.
@@ -253,9 +260,11 @@ Pull requests targeting `development` or `master` run these stable checks:
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable
   and isolated installer smoke tests.
 
-Both branch rulesets require all three names. The release workflow repeats the
-checks after a merge to `master`; it is not a pull request check and must not be
-selected as a required status check.
+The active branch rulesets, checked on 23 September 2026, require
+`code-quality`, `tests`, and `windows-package`. Verify the live rulesets before
+relying on this list. The release workflow repeats the checks after a merge to
+`master`; it is not a pull request check and must not be selected as a required
+status check.
 
 Release automation creates tags and GitHub Releases from the exact merged
 `master` commit without pushing directly to `master`. It therefore does not need

@@ -3,7 +3,7 @@
 import os
 import sys
 
-from gaze_mouse.main import PACKAGE_SMOKE_TEST_ARG, main
+from pogled_assist.main import PACKAGE_SMOKE_TEST_ARG, main
 
 if __name__ == "__main__":
     exit_code = main()

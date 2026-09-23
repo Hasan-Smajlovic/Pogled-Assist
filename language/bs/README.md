@@ -2,7 +2,7 @@
 
 This directory keeps editable model inputs separate from evaluation data and
 generated reports. The installed application does not load these files. It uses
-the prepared models under `gaze_mouse/assets`.
+the prepared models under `pogled_assist/assets`.
 
 ## Model inputs
 
@@ -17,6 +17,11 @@ the prepared models under `gaze_mouse/assets`.
 
 These TSV files are maintained by hand. Rebuild the corresponding prepared
 model and rerun its tests and evaluations after changing one of them.
+
+The bundled general model was rebuilt from the verified CLASSLA archive with
+the current preparation script and tokenizer. Its metadata records the archive,
+input, script, tokenizer, and model checksums. The Islamic model uses the same
+current tokenizer.
 
 ## Evaluation
 
