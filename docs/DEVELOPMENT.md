@@ -68,6 +68,9 @@ held-out result. The scoring contract and frozen hashes are under
 
 The original held-out messages have now been inspected in repeated reviews;
 keep their frozen text as a regression set, not a fresh blind quality estimate.
+The frozen fixture protocol records the rules used for the first comparison;
+its instruction to withhold those messages no longer describes their current
+status.
 An independently authored and reviewed set, withheld until model selection is
 complete, is still needed for that claim. Reports separate sentence starters,
 exact next-word hits before the first letter, and completion queries along the
@@ -100,10 +103,10 @@ the [model metadata](../pogled_assist/assets/bosnian-model.meta.json). Keep the
 archive outside the repository's tracked files for future rebuilds.
 
 `language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv`
-are build inputs, not files
-loaded by the installed application. Rebuild the bundled model after changing
-them or the preparation script. Spelling replacements apply only to web training
-data; personal spelling and typed text are preserved. The vocabulary budget
+are build inputs that the installed application does not load. Rebuild the
+bundled model after changing them or the preparation script. Spelling
+replacements apply only to web training data; personal spelling and typed text
+are preserved. The vocabulary budget
 reserves space for reviewed words, and reviewed word combinations survive the
 web-only pruning limits. Run the commands above to refresh the generated model,
 metadata, and comparison reports before review. An old report does not validate
@@ -287,6 +290,8 @@ On a normal development machine, verify:
 - The hotbar spans the primary screen and does not cover maximized windows.
 - Hide and Show restore the Windows work area.
 - Settings, Speech, Keyboard, and Controller open at the expected size.
+- The Controller Speech tab, hidden hotbar, Quick actions, precision zoom, and
+  gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
 - Settings survive an application restart.
 - Logs appear under `logs` only when logging is enabled.

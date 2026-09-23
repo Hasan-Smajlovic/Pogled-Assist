@@ -122,6 +122,7 @@ the [development guide](docs/DEVELOPMENT.md).
 | Use and troubleshoot the application | [User guide](docs/USER_GUIDE.md) |
 | Understand the runtime and compatibility baseline | [Architecture](docs/ARCHITECTURE.md) |
 | Understand Bosnian word completion, prediction, and its verification | [Speech suggestions](docs/features/speech-suggestions.md) |
+| Find instructions for coding agents and files that change together | [Agent guide](AGENTS.md) |
 | Set up development and run checks | [Development guide](docs/DEVELOPMENT.md) |
 | Troubleshoot local development checks | [Development troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
 | Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |

@@ -205,49 +205,23 @@ while ensuring the fix remains part of future releases.
 
 ## Repository protection
 
-The active `Protect development` ruleset targets only `development` and has no
-bypass actors. It enforces:
+The active `Protect development` and `Protect master releases` rulesets each
+target only their named branch. Both block deletion and force-pushes and require
+a pull request, one approving review, dismissal of stale approvals after new
+commits, resolved review conversations, and successful `code-quality`, `tests`,
+and `windows-package` checks on an up-to-date branch. GitHub's secure default
+also requires an extra human approval for unattributed Copilot changes.
 
-- Restricted deletions
-- Blocked force-pushes
-- Linear history
-- A pull request before merging
-- One approving review
-- Dismissal of stale approvals when new commits are pushed
-- Resolution of all review conversations
-- Successful `code-quality`, `tests`, and `windows-package` checks on an
-  up-to-date branch
-- Squash as the only allowed merge method
-- GitHub's secure default requiring an extra human approval for unattributed
-  Copilot changes
+| Branch | History and allowed merge method |
+| --- | --- |
+| `development` | Linear history; squash merge only |
+| `master` | Merge commit only; linear history is not required |
 
-It does not require Code Owner review, approval of the most recent reviewable push,
-signed commits, or deployments. It does not restrict branch creation or contain a
-separate update restriction.
-
-The active `Protect master releases` ruleset targets only `master` and has no
-bypass actors. It enforces:
-
-- Restricted deletions
-- Blocked force-pushes
-- A pull request before merging
-- One approving review
-- Dismissal of stale approvals when new commits are pushed
-- Resolution of all review conversations
-- Successful `code-quality`, `tests`, and `windows-package` checks on an
-  up-to-date branch
-- Merge commit as the only allowed merge method
-- GitHub's secure default requiring an extra human approval for unattributed
-  Copilot changes
-
-It does not require linear history, Code Owner review, approval of the most recent
-reviewable push, signed commits, or deployments. It does not restrict branch
-creation or contain a separate update restriction.
-
-The former `Maintainer merge control` ruleset is disabled and has no effect on
-either branch. This allows collaborators with write or administrator permission
-to merge after the applicable quality rules are satisfied. The two active quality
-rulesets have no bypass actors.
+Neither ruleset has bypass actors or requires Code Owner review, approval of the
+most recent reviewable push, signed commits, or deployments. Neither restricts
+branch creation or has a separate update restriction. The former `Maintainer
+merge control` ruleset is disabled, so collaborators with write or administrator
+permission may merge after the active rules are satisfied.
 
 ## CI and required checks
 

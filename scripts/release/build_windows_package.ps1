@@ -71,7 +71,6 @@ function Invoke-IsolatedInstaller {
         return [PSCustomObject]@{
             ExitCode = $exitCode
             Output = $output -join [Environment]::NewLine
-            NormalizedOutput = (($output -join " ") -replace "\s+", " ").Trim()
         }
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -180,7 +179,7 @@ try {
 
 Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
 
-Compress-Archive -LiteralPath $PackageRoot -DestinationPath $ArtifactPath -CompressionLevel Optimal
+& (Join-Path $PSScriptRoot "compress_package.ps1") -PackageRoot $PackageRoot -ArtifactPath $ArtifactPath
 
 if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf)) {
     throw "Windows package was not created: $ArtifactPath"
@@ -234,12 +233,9 @@ try {
     try {
         Start-Sleep -Milliseconds 500
         $runningSourceResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
-        if ($runningSourceResult.ExitCode -eq 0) {
-            throw "Installer did not reject a running source application."
-        }
-        if ($runningSourceResult.NormalizedOutput -notlike "*Close Pogled Assist before installing*") {
-            throw "Installer failed for an unexpected reason while the source application was running."
-        }
+        & (Join-Path $PSScriptRoot "check_running_app_rejection.ps1") `
+            -ExitCode $runningSourceResult.ExitCode `
+            -InstallerOutput $runningSourceResult.Output
     } finally {
         if (-not $sourceProcess.HasExited) {
             Stop-Process -Id $sourceProcess.Id -Force -ErrorAction SilentlyContinue

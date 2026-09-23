@@ -32,5 +32,6 @@ match the current prepared models and frozen test fixtures.
 ## Benchmarks
 
 The JSON files under `benchmarks` are generated model-selection and ranking
-reports. Regenerate them with the commands documented in
-`docs/DEVELOPMENT.md`; do not edit their measured results by hand.
+reports. Regenerate them with the commands in the
+[development guide](../../docs/DEVELOPMENT.md#command-reference); do not edit
+their measured results by hand.

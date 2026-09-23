@@ -17,6 +17,9 @@ constraint for every change.
   releases.
 - [docs/WINDOWS_RELEASE.md](docs/WINDOWS_RELEASE.md) covers packaging,
   installation, rollback, and clean-machine validation.
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) describes the controls and settings
+  people use. [Speech suggestions](docs/features/speech-suggestions.md) defines
+  that feature's behavior and acceptance criteria.
 
 ## Change rules
 
@@ -95,10 +98,8 @@ checklist in the development guide whenever runtime behavior changes.
 
 ## Never merges without a human
 
-A person has to have **read this diff** before it lands. Telling an agent "merge
-it when you're done" is approving a goal, not this change, so it does not count
-for anything on this list. Everywhere else it counts fine, which is the point of
-having a list.
+For the paths below, a human must read the final diff before merge. A general
+instruction to "merge when you're done" does not count as review of that diff.
 
 - Any change under `.github/workflows/` or `packaging/windows/`, or to
   `scripts/release/build_windows_package.ps1`, `scripts/release/publish_github_release.ps1`, or
