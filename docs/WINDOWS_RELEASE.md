@@ -140,6 +140,13 @@ and computes a word completion from that model.
 
 ## Automated release
 
+After normal changes have reached `development`, use the manual **Release**
+workflow on `master` with a new version number. It prepares
+`release/v<version>` from the latest `master`, merges `development`, updates
+`VERSION`, and opens a draft release PR. Complete its verification and review
+before merging with a merge commit. The full branch and first-run procedure is
+in [CONTRIBUTING.md](../CONTRIBUTING.md#release-process).
+
 Pull requests targeting `development` or `master` run:
 
 - `code-quality`
