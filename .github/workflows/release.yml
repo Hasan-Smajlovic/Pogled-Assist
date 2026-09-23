@@ -4,20 +4,64 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version without the v prefix, for example 0.2.0"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-master
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: prepare-release-pr
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && github.repository == 'Hasan-Smajlovic/TobiiEyeTrackerTool'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out master with release history
+        uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Prepare a release branch from the latest master and development
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python scripts/release/prepare_release.py "$RELEASE_VERSION" --body-file "$RUNNER_TEMP/release-pr-body.md"
+
+      - name: Open or show the draft release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          branch="release/v$RELEASE_VERSION"
+          url=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base master --head "$branch" --json url --jq '.[0].url // empty')
+          if [ -z "$url" ]; then
+            url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base master --head "$branch" --draft --title "Release v$RELEASE_VERSION" --body-file "$RUNNER_TEMP/release-pr-body.md")
+          fi
+          echo "Draft release PR: $url" >> "$GITHUB_STEP_SUMMARY"
+
   release:
     name: release
-    if: github.repository == 'Hasan-Smajlovic/Pogled-Assist'
+    if: github.event_name == 'push' && github.repository == 'Hasan-Smajlovic/TobiiEyeTrackerTool'
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - name: Check out the merged master commit
         uses: actions/checkout@v5

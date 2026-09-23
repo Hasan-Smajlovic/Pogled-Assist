@@ -41,8 +41,11 @@ description: Security and privacy rules specific to Pogled Assist - release upda
 - Keep `C:\TobiiExec` rejected by `packaging/windows/install_windows.ps1` and
   `update_windows.ps1`.
 - Keep `.github/workflows/ci.yml` on `pull_request` with `contents: read`.
-  Only `.github/workflows/release.yml`, triggered by a push to `master`, gets
-  `contents: write`.
+  Only the release job in `.github/workflows/release.yml`, triggered by a push
+  to `master`, gets `contents: write` for publishing. Its manual
+  release-preparation job gets `contents: write` and `pull-requests: write`
+  only to create `release/v<version>` and a draft PR. Do not execute code
+  merged from `development` while that job has a write token.
 - Commit only synthetic or project-authored text under `language/` and
   `tests/fixtures/`, as the language data rules in
   [docs/DEVELOPMENT.md](../../../docs/DEVELOPMENT.md) require.
@@ -57,5 +60,6 @@ description: Security and privacy rules specific to Pogled Assist - release upda
   as run or Not run.
 - Speech or logging change: no new `logger` call formats message text, phrase
   text, or suggestion input.
-- Workflow change: `permissions` did not widen, no `pull_request_target`
-  trigger was added, and `scripts/checks/check_github_actions.ps1` passes.
+- Workflow change: elevated permissions remain limited to the two release
+  jobs, no `pull_request_target` trigger was added, and
+  `scripts/checks/check_github_actions.ps1` passes.
