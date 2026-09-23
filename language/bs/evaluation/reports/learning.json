@@ -1,16 +1,16 @@
 {
-  "model_sha256": "ffb09b61638bb73fee5a84d21218ca28bbdfcc302a7c2c4ca9cf7f96ac00589e",
+  "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
   "islamic_model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
   "scenarios_sha256": "f66daf0313ccb5a2f9e3beea3977030cacaa7a91c9491aca4870e4feebd7a2ca",
-  "implementation_sha256": "8491e9e76b337bf8fd4be9c967c9ba835e19418368f2af2bb1a060cfd35a8b35",
+  "implementation_sha256": "b2d4da014a8f2dd34e88b5878340b35d6c990298cdf5322222dc4b434fee8384",
   "ranking": {
     "context_discount": 10.0,
     "personal_context_discount": 2.5,
     "personal_context_blend": 2.0
   },
   "environment": {
-    "platform": "Windows-11-10.0.26200-SP0",
-    "python": "3.12.14"
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.10.11"
   },
   "scope": "Synthetic development scenarios, not blind validation or Windows UI latency. Each use is a separate submitted message.",
   "quality": {
@@ -1222,34 +1222,34 @@
     {
       "entries": 0,
       "words": 0,
-      "indexing_ms": 0.04,
-      "first_query_ms": 0.34,
-      "mean_ms": 3.21,
-      "p95_ms": 10.04
+      "indexing_ms": 0.05,
+      "first_query_ms": 0.35,
+      "mean_ms": 2.91,
+      "p95_ms": 8.59
     },
     {
       "entries": 10000,
       "words": 10000,
-      "indexing_ms": 20.38,
-      "first_query_ms": 33.17,
-      "mean_ms": 3.96,
-      "p95_ms": 10.38
+      "indexing_ms": 17.61,
+      "first_query_ms": 36.52,
+      "mean_ms": 3.89,
+      "p95_ms": 9.83
     },
     {
       "entries": 50000,
       "words": 50000,
-      "indexing_ms": 114.88,
-      "first_query_ms": 40.51,
-      "mean_ms": 8.59,
-      "p95_ms": 16.87
+      "indexing_ms": 105.05,
+      "first_query_ms": 47.89,
+      "mean_ms": 8.88,
+      "p95_ms": 16.67
     },
     {
       "entries": 150000,
-      "words": 60045,
-      "indexing_ms": 175.76,
-      "first_query_ms": 48.5,
-      "mean_ms": 10.77,
-      "p95_ms": 18.62
+      "words": 60043,
+      "indexing_ms": 162.62,
+      "first_query_ms": 55.78,
+      "mean_ms": 10.54,
+      "p95_ms": 18.4
     }
   ]
 }

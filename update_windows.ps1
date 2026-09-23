@@ -268,12 +268,16 @@ function Get-InstalledRelease {
 
     $sourceMarkers = @(
         (Join-Path $InstallRoot "setup_windows.ps1"),
-        (Join-Path $InstallRoot "run_gaze_mouse.py"),
-        (Join-Path $InstallRoot "gaze_mouse")
+        (Join-Path $InstallRoot "run_gaze_mouse.py")
     )
+    $hasSourcePackage = @(
+        "gaze_mouse", "pogled_assist" | Where-Object {
+            Test-Path -LiteralPath (Join-Path $InstallRoot $_) -PathType Container
+        }
+    ).Count -gt 0
     $isSourceInstallation = @(
         $sourceMarkers | Where-Object { Test-Path -LiteralPath $_ }
-    ).Count -eq $sourceMarkers.Count
+    ).Count -eq $sourceMarkers.Count -and $hasSourcePackage
 
     $versionPath = Join-Path $InstallRoot "VERSION"
     if (-not (Test-Path -LiteralPath $versionPath -PathType Leaf)) {

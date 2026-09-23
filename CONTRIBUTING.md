@@ -5,7 +5,9 @@ This document defines how changes move from an issue to a release in
 
 ## Long-lived branches
 
-- `development` is the default branch and the integration branch for normal work.
+- `development` is the integration branch for normal work. Check GitHub for the
+  current default branch; that setting can differ from the integration branch.
+  GitHub reported `master` as the default on 23 September 2026.
 - `master` contains release history and urgent hotfixes only.
 - Do not develop directly on either long-lived branch.
 - Every change to `development` or `master` must go through a pull request.
@@ -49,10 +51,9 @@ Confirm the base repository and base branch before creating the pull request.
 Feature, fix, documentation, refactor, test, build, CI, and chore pull requests
 all target `development`.
 
-GitHub's generic compare page may still select the upstream
-`thePi314/TobiiEyeTrackerTool:master` branch as the base. This behavior was
-observed after `development` became the fork's default branch, so the four values
-above must always be checked manually.
+GitHub's generic compare page may select the upstream
+`thePi314/TobiiEyeTrackerTool:master` branch as the base. Check all four values
+manually, regardless of the current default-branch setting.
 
 ## Writing issues for coding agents
 
@@ -89,14 +90,20 @@ Use the project status to show whether an agent can act on the issue:
 
 ## Issue linking and pull request contents
 
-Every normal pull request must link its issue with:
+Every normal pull request must reference its issue. Check the current default
+branch with `gh repo view Hasan-Smajlovic/Pogled-Assist --json defaultBranchRef`
+before choosing the reference. When `development` is the default branch, use:
 
 ```text
 Closes #<issue-number>
 ```
 
-Because `development` is the default branch, merging a normal pull request with
-this keyword closes the linked issue.
+When another branch is the default, use `Refs #<issue-number>` in a normal pull
+request to `development`. GitHub does not apply closing keywords in pull requests
+to a non-default branch ([GitHub's issue-linking rules](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+Close the issue explicitly when the agreed work is
+complete, or use a closing reference in a later pull request to the default
+branch. Do not change the normal pull request destination just to close an issue.
 
 The pull request describes the resulting diff, not the original plan. Use the
 repository template to record the outcome, material changes, compatibility
@@ -198,53 +205,27 @@ while ensuring the fix remains part of future releases.
 
 ## Repository protection
 
-The active `Protect development` ruleset targets only `development` and has no
-bypass actors. It enforces:
+The active `Protect development` and `Protect master releases` rulesets each
+target only their named branch. Both block deletion and force-pushes and require
+a pull request, one approving review, dismissal of stale approvals after new
+commits, resolved review conversations, and successful `code-quality`, `tests`,
+and `windows-package` checks on an up-to-date branch. GitHub's secure default
+also requires an extra human approval for unattributed Copilot changes.
 
-- Restricted deletions
-- Blocked force-pushes
-- Linear history
-- A pull request before merging
-- One approving review
-- Dismissal of stale approvals when new commits are pushed
-- Resolution of all review conversations
-- Successful `code-quality`, `tests`, and `windows-package` checks on an
-  up-to-date branch
-- Squash as the only allowed merge method
-- GitHub's secure default requiring an extra human approval for unattributed
-  Copilot changes
+| Branch | History and allowed merge method |
+| --- | --- |
+| `development` | Linear history; squash merge only |
+| `master` | Merge commit only; linear history is not required |
 
-It does not require Code Owner review, approval of the most recent reviewable push,
-signed commits, or deployments. It does not restrict branch creation or contain a
-separate update restriction.
-
-The active `Protect master releases` ruleset targets only `master` and has no
-bypass actors. It enforces:
-
-- Restricted deletions
-- Blocked force-pushes
-- A pull request before merging
-- One approving review
-- Dismissal of stale approvals when new commits are pushed
-- Resolution of all review conversations
-- Successful `code-quality`, `tests`, and `windows-package` checks on an
-  up-to-date branch
-- Merge commit as the only allowed merge method
-- GitHub's secure default requiring an extra human approval for unattributed
-  Copilot changes
-
-It does not require linear history, Code Owner review, approval of the most recent
-reviewable push, signed commits, or deployments. It does not restrict branch
-creation or contain a separate update restriction.
-
-The former `Maintainer merge control` ruleset is disabled and has no effect on
-either branch. This allows collaborators with write or administrator permission
-to merge after the applicable quality rules are satisfied. The two active quality
-rulesets have no bypass actors.
+Neither ruleset has bypass actors or requires Code Owner review, approval of the
+most recent reviewable push, signed commits, or deployments. Neither restricts
+branch creation or has a separate update restriction. The former `Maintainer
+merge control` ruleset is disabled, so collaborators with write or administrator
+permission may merge after the active rules are satisfied.
 
 ## CI and required checks
 
-Pull requests targeting `development` or `master` run these stable checks:
+Pull requests targeting `development` or `master` run these checks:
 
 - `code-quality`: Ruff lint and format checks, Python bytecode compilation,
   PowerShell parsing, and focused PSScriptAnalyzer rules.
@@ -253,9 +234,11 @@ Pull requests targeting `development` or `master` run these stable checks:
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable
   and isolated installer smoke tests.
 
-Both branch rulesets require all three names. The release workflow repeats the
-checks after a merge to `master`; it is not a pull request check and must not be
-selected as a required status check.
+The active branch rulesets, checked on 23 September 2026, require
+`code-quality`, `tests`, and `windows-package`. Verify the live rulesets before
+relying on this list. The release workflow repeats the checks after a merge to
+`master`; it is not a pull request check and must not be selected as a required
+status check.
 
 Release automation creates tags and GitHub Releases from the exact merged
 `master` commit without pushing directly to `master`. It therefore does not need

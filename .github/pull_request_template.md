@@ -4,9 +4,9 @@
 
 ## Linked issue
 
-<!-- Use Closes #<number> for a normal topic branch. -->
-
-Closes #
+<!-- Check the current default branch. Use Closes #<number> when development is
+the default; otherwise use Refs #<number> for a normal PR to development.
+See CONTRIBUTING.md#issue-linking-and-pull-request-contents. -->
 
 ## Changes
 

@@ -8,7 +8,7 @@ on-screen controls while keeping all settings and phrases on the local machine.
 
 ```text
 run_gaze_mouse.py
-  -> gaze_mouse.main
+  -> pogled_assist.main
   -> QApplication
   -> HotbarWindow
        -> TobiiGazeProvider
@@ -26,26 +26,29 @@ run_gaze_mouse.py
        -> WindowsAppBar
 ```
 
-`gaze_mouse/main.py` enables Windows DPI awareness, configures logging, creates
+`pogled_assist/main.py` enables Windows DPI awareness, configures logging, creates
 the Qt application, and shows `HotbarWindow`. The hotbar is the composition root:
 it creates the runtime services, connects their Qt signals, starts them after the
 window appears, and stops child windows, Tobii backends, speech, overlays, and the
 AppBar reservation during shutdown.
 
+The Python package is named `pogled_assist`. The existing `run_gaze_mouse.py`
+and `start_gaze_mouse.ps1` entry points keep their names so source installations
+and shortcuts continue to launch after an update.
+
 ## Component map
 
 | Area | Main files | Responsibility |
 | --- | --- | --- |
-| Entry points | `run_gaze_mouse.py`, `gaze_mouse/main.py` | Source and packaged startup, Qt setup, package smoke test |
-| Runtime composition | `gaze_mouse/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
-| Gaze acquisition | `gaze_mouse/gaze_provider.py`, `gaze_mouse/mouse_gaze_provider.py`, `gaze_mouse/tobii_stream_engine*.py` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge |
-| Gaze interaction | `gaze_mouse/mouse_controller.py`, `gaze_mouse/gaze_selection.py` | Coordinate mapping, smoothing, shared selection timing, click and Quick action requests |
-| Windows integration | `gaze_mouse/windows_input.py`, `gaze_mouse/appbar.py`, `gaze_mouse/windows_*.py` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
-| User surfaces | `gaze_mouse/*_window.py`, `gaze_mouse/quick_action_*.py` | Settings, speech, keyboard, controller, radial menu, precision zoom |
-| Feedback | `gaze_mouse/gaze_bubble.py`, `gaze_mouse/interaction_overlay.py`, `gaze_mouse/gaze_feedback.py` | Gaze position and dwell progress shown without taking focus |
-| Speech | `gaze_mouse/speech_service.py`, `gaze_mouse/speech_window.py`, `gaze_mouse/speech_library.py`, `gaze_mouse/alarm_sound.py` | eSpeak NG and Edge playback, text entry, saved categories, answers and phrases, and the repeating local alarm |
-| Suggestions | `gaze_mouse/suggestion_*.py`, `gaze_mouse/assets/bosnian-*-model.*` | Offline Bosnian tokenisation, general and reviewed Islamic vocabulary layers, completion and next-word ranking, input-scoped undo, and reversible personal learning |
-| Persistent data | `gaze_mouse/settings_store.py`, `gaze_mouse/suggestion_learning.py`, `gaze_mouse/logging_setup.py` | Settings, phrase and personal-learning data, logs, safe defaults, and atomic writes |
+| Entry points | `run_gaze_mouse.py`, `pogled_assist/main.py` | Source and packaged startup, Qt setup, package smoke test |
+| Runtime composition | `pogled_assist/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
+| Gaze acquisition | `pogled_assist/tracking/` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge, calibration |
+| Gaze interaction | `pogled_assist/interaction/` | Coordinate mapping, smoothing, shared selection timing, click and Quick action requests |
+| Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
+| User surfaces | `pogled_assist/ui/` | Settings, speech, keyboard, controller, radial menu, precision zoom, gaze feedback |
+| Speech | `pogled_assist/speech/` | eSpeak NG and Edge playback, saved categories, answers and phrases, and the repeating local alarm |
+| Suggestions | `pogled_assist/suggestions/`, `pogled_assist/assets/bosnian-*-model.*` | Offline Bosnian tokenisation, general and reviewed Islamic vocabulary layers, completion and next-word ranking, input-scoped undo, and reversible personal learning |
+| Persistent data | `pogled_assist/settings_store.py`, `pogled_assist/suggestions/learning.py`, `pogled_assist/speech/speech_library.py`, `pogled_assist/logging_setup.py` | Settings, phrase and personal-learning data, logs, safe defaults, and atomic writes |
 | Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, verified release update, package build, install, release |
 | Verification | `dev.ps1`, `tests/`, `.github/workflows/` | Local checks, simulated hardware inputs, UI flows, CI, release checks |
 

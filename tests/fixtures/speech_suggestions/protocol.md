@@ -42,4 +42,4 @@ in separate scenarios, never by replaying the held-out set into personal counts.
 Report aggregate and per-category activation reductions against the grouped
 keyboard. The acceptance target is at least 20% aggregate reduction. Latency on
 Mac is development evidence only; reference-device acceptance is owned by the
-[feature specification](../../../docs/SPEECH_SUGGESTIONS.md).
+[feature specification](../../../docs/features/speech-suggestions.md).

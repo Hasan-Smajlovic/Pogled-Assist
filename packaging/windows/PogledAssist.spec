@@ -8,26 +8,33 @@ tobii_datas, tobii_binaries, tobii_hidden_imports = collect_all("tobiiresearch")
 
 datas = [
     (str(repo_root / "assets" / "icon.png"), "assets"),
-    (str(repo_root / "gaze_mouse" / "assets" / "checkbox_x.svg"), "gaze_mouse/assets"),
+    (str(repo_root / "pogled_assist" / "assets" / "checkbox_x.svg"), "pogled_assist/assets"),
     (
-        str(repo_root / "gaze_mouse" / "assets" / "bosnian-model.json.gz"),
-        "gaze_mouse/assets",
+        str(repo_root / "pogled_assist" / "assets" / "bosnian-model.json.gz"),
+        "pogled_assist/assets",
     ),
     (
-        str(repo_root / "gaze_mouse" / "assets" / "bosnian-model.meta.json"),
-        "gaze_mouse/assets",
+        str(repo_root / "pogled_assist" / "assets" / "bosnian-model.meta.json"),
+        "pogled_assist/assets",
     ),
     (
-        str(repo_root / "gaze_mouse" / "assets" / "bosnian-islamic-model.json.gz"),
-        "gaze_mouse/assets",
+        str(repo_root / "pogled_assist" / "assets" / "bosnian-islamic-model.json.gz"),
+        "pogled_assist/assets",
     ),
     (
-        str(repo_root / "gaze_mouse" / "assets" / "bosnian-islamic-model.meta.json"),
-        "gaze_mouse/assets",
+        str(repo_root / "pogled_assist" / "assets" / "bosnian-islamic-model.meta.json"),
+        "pogled_assist/assets",
     ),
-    (str(repo_root / "gaze_mouse" / "__init__.py"), "gaze_mouse"),
-    (str(repo_root / "gaze_mouse" / "tobii_stream_engine.py"), "gaze_mouse"),
-    (str(repo_root / "gaze_mouse" / "tobii_stream_engine_bridge.py"), "gaze_mouse"),
+    (str(repo_root / "pogled_assist" / "__init__.py"), "pogled_assist"),
+    (str(repo_root / "pogled_assist" / "tracking" / "__init__.py"), "pogled_assist/tracking"),
+    (
+        str(repo_root / "pogled_assist" / "tracking" / "tobii_stream_engine.py"),
+        "pogled_assist/tracking",
+    ),
+    (
+        str(repo_root / "pogled_assist" / "tracking" / "tobii_stream_engine_bridge.py"),
+        "pogled_assist/tracking",
+    ),
 ]
 datas += collect_data_files("qtawesome")
 datas += tobii_datas
