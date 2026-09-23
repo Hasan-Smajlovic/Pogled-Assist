@@ -146,7 +146,9 @@ Pull requests targeting `development` or `master` run:
 - `tests`
 - `windows-package`
 
-The first two checks include Ruff formatting, focused PSScriptAnalyzer rules,
+The active branch rulesets, checked on 23 September 2026, require
+`code-quality`, `tests`, and `windows-package`. Verify live rulesets before a
+release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules,
 hardware-independent UI rendering, and the enforced Python coverage floor.
 
 After an approved merge to `master`, the release workflow checks out exactly

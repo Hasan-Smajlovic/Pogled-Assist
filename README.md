@@ -100,6 +100,10 @@ The repository uses one PowerShell entry point for setup and verification:
 .\dev.ps1 check
 ```
 
+Development uses Python 3.10 for the application, Tobii Pro SDK, automated
+checks, and Windows packaging. See the [development guide](docs/DEVELOPMENT.md)
+for repair of a stale `.venv` and interpreter selection.
+
 `check` runs code-quality checks, the hardware-independent test suite with
 coverage, and a clean Windows package build with frozen executable and isolated
 installer smoke tests. To inspect the UI without a tracker or speech engine, run:
@@ -117,8 +121,10 @@ the [development guide](docs/DEVELOPMENT.md).
 | --- | --- |
 | Use and troubleshoot the application | [User guide](docs/USER_GUIDE.md) |
 | Understand the runtime and compatibility baseline | [Architecture](docs/ARCHITECTURE.md) |
-| Understand Bosnian word completion, prediction, and its verification | [Speech suggestions](docs/SPEECH_SUGGESTIONS.md) |
+| Understand Bosnian word completion, prediction, and its verification | [Speech suggestions](docs/features/speech-suggestions.md) |
+| Find instructions for coding agents and files that change together | [Agent guide](AGENTS.md) |
 | Set up development and run checks | [Development guide](docs/DEVELOPMENT.md) |
+| Troubleshoot local development checks | [Development troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
 | Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
 

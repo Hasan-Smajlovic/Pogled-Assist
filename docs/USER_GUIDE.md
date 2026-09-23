@@ -135,19 +135,21 @@ General settings controls startup, logging, and whether the PowerShell launcher
 window stays visible. Start with Windows creates a per-user Scheduled Task that
 runs the launcher with administrator privileges.
 
-Gaze settings controls:
+Gaze settings uses these values:
 
-- Pause before gaze selection, defaulting to 500 ms and adjustable from 100 to 2000 ms
-- Progress-ring fill time after the gaze pause
-- Stable target radius
-- Delay between actions
-- Pointer smoothing
-- Pointer movement from gaze
-- Gaze bubble and action overlay visibility
-- Precision zoom
-- Tobii calibration launch
+| Setting | Default | Range |
+| --- | --- | --- |
+| Pause before gaze selection | 500 ms | 100 to 2000 ms |
+| Progress-ring fill time after the pause | 500 ms | 150 to 5000 ms |
+| Stable target radius | 48 px | 10 to 160 px |
+| Delay between actions | 350 ms | 100 to 5000 ms |
+| Pointer smoothing | 1.00 | 0.05 to 1.00 |
 
-Speech settings controls eSpeak speed, letters per group, and the voice preset.
+The same page controls pointer movement from gaze, gaze bubble and action overlay
+visibility, precision zoom, and Tobii calibration launch.
+
+Speech settings controls eSpeak speed (155 words per minute by default, 80 to
+320), letters per group (5 by default, 1 to 12), and the voice preset.
 `Naučene riječi` opens the personal vocabulary. Select one word and then
 `Zaboravi riječ` to remove its personal ranking contribution without changing
 messages, phrases, answers, or the bundled dictionary. If learning cannot be
