@@ -96,7 +96,7 @@ successfully saved. Category names are never learned.
 
 The controls on the right remain available while browsing or adding entries:
 
-- `Alarm` stops speech, repeats a local sound, and opens a dialog. Select
+- `Alarm` stops speech, repeats a distinct local emergency sound, and opens a dialog. Select
   `Zaustavi alarm` to silence it and return to the same Speech state.
 - `Sleep` stops speech and blacks out the display. Select `Nastavi` by gaze or
   mouse to restore the message, current list and page, and any unfinished entry.
