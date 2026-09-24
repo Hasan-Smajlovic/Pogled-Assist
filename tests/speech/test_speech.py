@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from pogled_assist.speech.alarm_sound import (
-    ALARM_FREQUENCY_HZ,
-    ALARM_TONE_DURATION_MS,
+    ALARM_SOUND_FILE,
     ALARM_UNAVAILABLE_MESSAGE,
     AlarmSound,
 )
@@ -38,38 +37,41 @@ from pogled_assist.tracking.tobii_stream_engine import APP_ROOT_ENV
 from pogled_assist.ui.speech_window import _group_letters
 
 
-def test_alarm_sound_repeats_in_background_until_stopped(qtbot):
-    first_tone = threading.Event()
+def test_alarm_sound_repeats_until_stopped(qtbot):
     calls = []
 
-    def beep(frequency, duration):
-        calls.append((frequency, duration))
-        first_tone.set()
+    def play_alarm():
+        calls.append("play")
 
-    alarm = AlarmSound(beep=beep)
+    def stop_alarm():
+        calls.append("stop")
+
+    alarm = AlarmSound(play_alarm=play_alarm, stop_alarm=stop_alarm)
 
     assert alarm.start() is True
-    assert first_tone.wait(timeout=1)
-    qtbot.waitUntil(lambda: alarm.is_playing)
+    assert alarm.is_playing is True
     alarm.stop()
 
-    assert calls[0] == (ALARM_FREQUENCY_HZ, ALARM_TONE_DURATION_MS)
+    assert calls == ["play", "stop"]
     assert alarm.is_playing is False
     assert alarm.last_error is None
+
+
+def test_alarm_uses_a_bundled_emergency_sound():
+    assert ALARM_SOUND_FILE.is_file()
 
 
 def test_alarm_sound_reports_playback_failure(qtbot):
     attempted = threading.Event()
 
-    def failing_beep(_frequency, _duration):
+    def failing_play_alarm():
         attempted.set()
         raise RuntimeError("audio device unavailable")
 
-    alarm = AlarmSound(beep=failing_beep)
+    alarm = AlarmSound(play_alarm=failing_play_alarm)
 
-    assert alarm.start() is True
+    assert alarm.start() is False
     assert attempted.wait(timeout=1)
-    qtbot.waitUntil(lambda: alarm.last_error is not None)
     alarm.stop()
 
     assert alarm.is_playing is False
