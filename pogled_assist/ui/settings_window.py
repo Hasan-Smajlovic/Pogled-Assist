@@ -403,7 +403,7 @@ class SettingsWindow(QWidget):
         )
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
+        root.setContentsMargins(16, 8, 16, 8)
         root.setSpacing(12)
 
         top_bar = QHBoxLayout()

@@ -105,7 +105,9 @@ manual recovery.
   install locations. Set `TOBII_STREAM_ENGINE_DLL` when the DLL is elsewhere.
 - 32-bit bridge: a 32-bit Tobii DLL cannot load in the packaged 64-bit process.
   Install 32-bit Python 3.10 and set `POGLED_ASSIST_X86_PYTHON` to its
-  `python.exe`. The package already contains the bridge source.
+  `python.exe`. An existing `TOBII_GAZE_MOUSE_X86_PYTHON` is accepted as a
+  fallback if it points to a valid 32-bit Python 3.10; the new setting takes
+  priority. The package already contains the bridge source.
 - Default speech: install eSpeak NG 1.52 with the Bosnian `bs` voice. Set
   `ESPEAK_NG_EXE` if `espeak-ng.exe` is outside the standard install folders.
 - Human-like speech: install the `edge-tts` package so `edge-playback.exe` is on

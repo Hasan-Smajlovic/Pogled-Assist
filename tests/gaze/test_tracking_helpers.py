@@ -84,8 +84,43 @@ def test_bridge_python_discovery_prefers_configured_runtime(monkeypatch, tmp_pat
     assert checked == [str(configured)]
 
 
+@pytest.mark.parametrize(
+    ("new_runtime", "valid_runtimes", "expected"),
+    [
+        ("", {"legacy-python"}, "legacy-python"),
+        ("new-python", {"new-python", "legacy-python"}, "new-python"),
+        ("invalid-new", {"legacy-python"}, "legacy-python"),
+    ],
+)
+def test_bridge_python_discovery_accepts_old_custom_path(
+    monkeypatch, new_runtime, valid_runtimes, expected
+):
+    monkeypatch.setenv("POGLED_ASSIST_X86_PYTHON", new_runtime)
+    monkeypatch.setenv("TOBII_GAZE_MOUSE_X86_PYTHON", "legacy-python")
+    monkeypatch.setattr(bridge_backend, "_py_launcher_candidates", lambda: [])
+    monkeypatch.setattr(bridge_backend, "_common_python_candidates", lambda: [])
+    monkeypatch.setattr(
+        bridge_backend, "_is_x86_python", lambda candidate: candidate in valid_runtimes
+    )
+
+    assert bridge_backend._find_x86_python() == expected
+
+
+def test_bridge_python_discovery_skips_invalid_old_custom_path(monkeypatch):
+    monkeypatch.delenv(bridge_backend.X86_PYTHON_ENV, raising=False)
+    monkeypatch.setenv(bridge_backend.LEGACY_X86_PYTHON_ENV, "invalid-legacy")
+    monkeypatch.setattr(bridge_backend, "_py_launcher_candidates", lambda: ["launcher-python"])
+    monkeypatch.setattr(bridge_backend, "_common_python_candidates", lambda: [])
+    monkeypatch.setattr(
+        bridge_backend, "_is_x86_python", lambda candidate: candidate == "launcher-python"
+    )
+
+    assert bridge_backend._find_x86_python() == "launcher-python"
+
+
 def test_bridge_python_discovery_reports_missing_runtime(monkeypatch):
     monkeypatch.delenv(bridge_backend.X86_PYTHON_ENV, raising=False)
+    monkeypatch.delenv("TOBII_GAZE_MOUSE_X86_PYTHON", raising=False)
     monkeypatch.setattr(bridge_backend, "_py_launcher_candidates", lambda: ["launcher-python"])
     monkeypatch.setattr(bridge_backend, "_common_python_candidates", lambda: ["common-python"])
     monkeypatch.setattr(bridge_backend, "_is_x86_python", lambda _candidate: False)
