@@ -6,3 +6,4 @@ pogled_assist/suggestions/model.py text eol=lf
 language/bs/**/*.tsv text eol=lf
 pogled_assist/assets/bosnian-model.json.gz binary
 pogled_assist/assets/bosnian-islamic-model.json.gz binary
+pogled_assist/assets/emergency_alarm.wav binary
