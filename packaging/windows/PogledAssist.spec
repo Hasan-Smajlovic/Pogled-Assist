@@ -8,6 +8,10 @@ tobii_datas, tobii_binaries, tobii_hidden_imports = collect_all("tobiiresearch")
 
 datas = [
     (str(repo_root / "assets" / "icon.png"), "assets"),
+    (
+        str(repo_root / "pogled_assist" / "assets" / "emergency_alarm.wav"),
+        "pogled_assist/assets",
+    ),
     (str(repo_root / "pogled_assist" / "assets" / "checkbox_x.svg"), "pogled_assist/assets"),
     (
         str(repo_root / "pogled_assist" / "assets" / "bosnian-model.json.gz"),
