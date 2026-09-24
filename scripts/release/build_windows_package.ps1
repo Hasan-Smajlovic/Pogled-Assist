@@ -127,6 +127,7 @@ $requiredFiles = @(
     "README.md",
     "VERSION",
     "_internal\assets\icon.png",
+    "_internal\pogled_assist\assets\emergency_alarm.wav",
     "_internal\pogled_assist\assets\bosnian-model.json.gz",
     "_internal\pogled_assist\assets\bosnian-model.meta.json",
     "_internal\pogled_assist\assets\bosnian-islamic-model.json.gz",
