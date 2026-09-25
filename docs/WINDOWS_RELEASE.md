@@ -68,6 +68,15 @@ updater reports a running process. Add `-Launch` to start the verified version
 after a successful update. Update details are appended to
 `C:\PogledAssist\update_windows.log`.
 
+Before updating, close File Explorer windows showing the installation folder or
+its subfolders. If another process still holds that folder open when the
+installer swaps directories, the installer makes a few short attempts and then
+stops with an instruction to close those windows and retry. An update started
+from the app keeps its console open on failure so the instruction remains
+visible. When the old directory could not be moved, the previous installation
+stays in place. If a later step fails, the installer restores the backup or
+keeps the transaction data for recovery if Windows also blocks the rollback.
+
 ## Upgrade a Pogled Assist source installation
 
 An existing Pogled Assist source installation uses its older updater, so it
@@ -184,6 +193,9 @@ Software-only checks on a clean Windows x64 environment:
   matches the latest stable release.
 - Confirm a deliberately invalid checksum leaves the older version unchanged.
 - Confirm an installed smoke-test failure restores the older version.
+- Hold the installation folder open in File Explorer during an update. Confirm
+  the updater reports which folder to close, leaves the older version and user
+  files intact, and succeeds after the Explorer window is closed and retried.
 - Confirm `data`, including `speech_learning.json`, `logs`, `install_info.json`,
   and existing root logs other than the appended `update_windows.log` are
   byte-for-byte unchanged after update and rollback tests.

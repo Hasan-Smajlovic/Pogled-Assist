@@ -131,7 +131,7 @@ def launch_release_update(
     try:
         subprocess.Popen(
             command,
-            cwd=root,
+            cwd=root.parent,
             close_fds=True,
             creationflags=creation_flags,
         )

@@ -45,6 +45,10 @@ if ($env:FAKE_INSTALLER_FAIL -eq "1") {
     Write-Error "Forced fake installer failure"
     exit 9
 }
+if ($env:FAKE_INSTALLER_BUSY -eq "1") {
+    Write-Error "The installation folder is in use" -ErrorAction Continue
+    exit 2
+}
 $preserved = @("data", "logs", "install_info.json")
 Get-ChildItem -LiteralPath $InstallRoot -Force | Where-Object {
     $_.Name -notin $preserved -and $_.Extension -ne ".log"
@@ -304,6 +308,23 @@ def test_installer_failure_leaves_previous_installation_usable(tmp_path):
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
     assert (install_root / "data" / "app_settings.json").is_file()
+
+
+def test_busy_install_folder_reports_action_and_keeps_previous_version(tmp_path):
+    install_root = _installed_app(tmp_path)
+    archive = _release_archive(tmp_path)
+    environment = _updater_environment(FAKE_INSTALLER_BUSY="1")
+
+    with _serve_release(archive) as (_server, release_url):
+        completed = _run_updater(install_root, release_url, environment=environment)
+
+    assert completed.returncode != 0
+    assert "Close File Explorer windows showing this folder" in (
+        completed.stdout + completed.stderr
+    )
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
+    assert (install_root / "old-app-file.txt").is_file()
+    assert not (install_root / "new-app-file.txt").exists()
 
 
 def test_up_to_date_installation_does_not_download_assets(tmp_path):
