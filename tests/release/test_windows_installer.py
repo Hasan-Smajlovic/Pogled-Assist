@@ -42,6 +42,7 @@ function Get-CimInstance {
 }
 
 & $InstallerPath -InstallRoot $InstallRoot -ExpectedVersion $ExpectedVersion -NoElevation -NoDesktopShortcut
+exit $LASTEXITCODE
 """
 
 SMOKE_APP_SOURCE = r"""
