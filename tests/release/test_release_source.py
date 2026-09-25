@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from pogled_assist import release_update
 from pogled_assist.release_update import (
     RELEASE_API_URL,
     RELEASE_DOWNLOAD_ROOT,
@@ -49,6 +50,25 @@ def test_official_release_rejects_assets_from_the_previous_repository_name() -> 
             _release_payload(previous_root),
             release_api_url=RELEASE_API_URL,
         )
+
+
+def test_in_app_updater_starts_outside_install_folder(tmp_path, monkeypatch) -> None:
+    install_root = tmp_path / "PogledAssist"
+    install_root.mkdir()
+    launched = {}
+    monkeypatch.setattr(release_update, "is_update_supported", lambda _root: True)
+    monkeypatch.setattr(release_update, "_powershell_executable", lambda: Path("powershell.exe"))
+
+    def capture_launch(command, **options):
+        launched["command"] = command
+        launched["options"] = options
+
+    monkeypatch.setattr(release_update.subprocess, "Popen", capture_launch)
+
+    release_update.launch_release_update(install_root, process_id=42)
+
+    assert launched["options"]["cwd"] == tmp_path
+    assert str(install_root / "update_windows.ps1") in launched["command"]
 
 
 def _release_payload(download_root: str) -> dict[str, object]:
