@@ -406,6 +406,14 @@ class SpeechWindow(QWidget):
                 font-size: 22px;
                 min-height: 120px;
             }
+            QDialog#speechDialog QPushButton#dialogCompactLetterButton {
+                font-size: 38px;
+                min-height: 100px;
+            }
+            QDialog#speechDialog QPushButton#dialogCompactBackButton {
+                font-size: 22px;
+                min-height: 100px;
+            }
             QDialog#speechDialog QPushButton#dialogConfirmButton {
                 background: #552326;
                 border-color: #94434a;
@@ -928,10 +936,12 @@ class SpeechWindow(QWidget):
     def _populate_letter_dialog(self, group_index: int) -> None:
         self._clear_letter_dialog()
         group = self._letter_groups[group_index]
-        self._letter_dialog_title.setText(f"Odaberite slovo: {' '.join(group)}")
+        self._letter_dialog_title.setText("Odaberite slovo")
         item_count = len(group) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
+        # Four rows of full-size buttons exceed a 720px display.
+        compact = rows >= 4
         for column in range(4):
             self._letter_grid.setColumnStretch(column, 1 if column < columns else 0)
         for row in range(5):
@@ -942,20 +952,20 @@ class SpeechWindow(QWidget):
             button = self._make_button(
                 letter,
                 action,
-                "dialogLetterButton",
+                "dialogCompactLetterButton" if compact else "dialogLetterButton",
                 parent=self._letter_dialog,
-                minimum_height=120,
+                minimum_height=100 if compact else 120,
             )
             self._letter_dialog_actions.add(action)
             self._letter_grid.addWidget(button, index // columns, index % columns)
 
         back_action = self._action("letters:close")
         back = self._make_button(
-            "Nazad na grupe",
+            "Nazad" if compact else "Nazad na grupe",
             back_action,
-            "dialogBackButton",
+            "dialogCompactBackButton" if compact else "dialogBackButton",
             parent=self._letter_dialog,
-            minimum_height=120,
+            minimum_height=100 if compact else 120,
         )
         self._letter_dialog_actions.add(back_action)
         back_index = len(group)
@@ -1148,6 +1158,8 @@ class SpeechWindow(QWidget):
         for row in range(KEY_GRID_MAX_ROWS):
             self._key_grid.setRowStretch(row, 0)
         rows = max(1, math.ceil(max(1, item_count) / max(1, columns)))
+        # Tighten gaps for five-row grids without shrinking gaze targets.
+        self._key_grid.setVerticalSpacing(6 if rows >= 5 else 10)
         for column in range(columns):
             self._key_grid.setColumnStretch(column, 1)
         for row in range(rows):

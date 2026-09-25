@@ -15,6 +15,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 X86_PYTHON_ENV = "POGLED_ASSIST_X86_PYTHON"
+LEGACY_X86_PYTHON_ENV = "TOBII_GAZE_MOUSE_X86_PYTHON"
 START_TIMEOUT_SECONDS = 12.0
 
 GazeCallback = Callable[[float, float, int], None]
@@ -243,10 +244,11 @@ class TobiiStreamEngineBridgeBackend:
 
 
 def _find_x86_python() -> str:
-    configured = os.environ.get(X86_PYTHON_ENV, "").strip()
     candidates: list[str] = []
-    if configured:
-        candidates.append(configured)
+    for name in (X86_PYTHON_ENV, LEGACY_X86_PYTHON_ENV):
+        configured = os.environ.get(name, "").strip()
+        if configured:
+            candidates.append(configured)
 
     candidates.extend(_py_launcher_candidates())
     candidates.extend(_common_python_candidates())

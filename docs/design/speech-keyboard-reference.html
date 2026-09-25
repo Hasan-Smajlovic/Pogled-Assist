@@ -125,6 +125,8 @@
     .view-header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 500; }
     .view-header button { min-width: 160px; min-height: 80px; font-size: 18px; flex: 0 1 165px; }
     .key-grid, .item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); flex: 1; gap: var(--gap); min-height: 0; }
+    .key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(72px, 1fr)); row-gap: 6px; }
+    .key-grid.dense button { min-height: 72px; }
     .group { font-size: clamp(22px, 2vw, 34px); letter-spacing: .05em; }
     .symbols { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); }
     .item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: clamp(18px, 1.65vw, 26px); }
@@ -150,7 +152,9 @@
     dialog::backdrop { background: #000c; }
     dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
     .letter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .letter-grid.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .letter-grid button { min-height: 120px; font-size: 38px; }
+    #letters-dialog.compact .letter-grid button { min-height: 118px; }
     .letter-grid .back { font-size: 22px; }
     .dialog-copy { margin: 0 0 32px; color: #dce6f3; font-size: 22px; line-height: 1.5; overflow-wrap: anywhere; }
     #confirm-dialog, #exit-dialog, #alarm-dialog { display: none; height: min(460px, calc(100dvh - 64px)); }
@@ -265,7 +269,7 @@
       button { min-height: 72px; }
       .word { min-height: 68px; }
       .key-grid, .item-grid { grid-template-rows: repeat(3, minmax(64px, 1fr)); }
-      .settings-screen { height: calc(100dvh - 16px); min-height: 620px; padding: 14px 18px 18px; }
+      .settings-screen { height: calc(100dvh - 16px); min-height: 620px; padding: 8px 16px; }
       .settings-nav button { min-height: 66px; }
       .settings-checkbox { min-height: 58px; padding: 10px 14px; }
       .update-card button { min-height: 58px; }
@@ -304,7 +308,7 @@
       #status { white-space: normal; }
       dialog { width: calc(100vw - 24px); padding: 16px; }
       dialog h2 { font-size: 23px; }
-      .letter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .letter-grid, .letter-grid.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .letter-grid button { min-height: 110px; }
       .confirm-actions { grid-template-columns: 1fr; gap: 24px; }
       .reference-switcher { right: 8px; bottom: 8px; }
@@ -327,6 +331,8 @@
   <nav class="reference-switcher" aria-label="Referentni prikaz">
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
     <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
+    <button id="single-letter-preview" type="button">1 slovo</button>
+    <button id="twelve-letters-preview" type="button">12 slova</button>
   </nav>
   <main id="speech-screen" class="speech-screen" aria-label="Pogled Assist govorna tastatura">
     <header class="topbar">
@@ -465,7 +471,8 @@
       <h2>Referenca interfejsa Pogled Assist</h2>
       <p>Interaktivna HTML referenca za buduće izmjene Python aplikacije. Tekst i raspored su na bosanskom jeziku. Prebacivač prikazuje govor i opće postavke.</p>
       <ul>
-        <li>Šest grupa ostaje na početnom ekranu. Grupa otvara prozor sa pet slova. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
+        <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
+        <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
         <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
         <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Sleep i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
@@ -538,6 +545,7 @@
         ['G', 'H', 'I', 'J', 'K'], ['L', 'LJ', 'M', 'N', 'NJ'],
         ['O', 'P', 'R', 'S', 'Š'], ['T', 'U', 'V', 'Z', 'Ž']
       ];
+      let activeGroups = GROUPS;
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
       const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
       const STORE_KEY = 'pogled-assist-design-v1';
@@ -576,8 +584,25 @@
       render();
 
       for (const button of document.querySelectorAll('[data-reference-view]')) {
-        button.addEventListener('click', () => showReferenceView(button.dataset.referenceView));
+        button.addEventListener('click', () => {
+          if (button.dataset.referenceView === 'speech') {
+            activeGroups = GROUPS;
+            switchView('keyboard');
+          }
+          showReferenceView(button.dataset.referenceView);
+        });
       }
+      $('single-letter-preview').addEventListener('click', () => {
+        showReferenceView('speech');
+        activeGroups = GROUPS.flat().map(letter => [letter]);
+        switchView('keyboard');
+      });
+      $('twelve-letters-preview').addEventListener('click', () => {
+        showReferenceView('speech');
+        activeGroups = GROUPS;
+        switchView('keyboard');
+        openLetters(0, 12);
+      });
       for (const button of document.querySelectorAll('[data-settings-action]')) {
         button.addEventListener('click', () => handleSettingsAction(button.dataset.settingsAction));
       }
@@ -727,12 +752,12 @@
         $('save').hidden = !editor;
         $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
         content.replaceChildren();
-        content.className = browsing ? 'item-grid' : symbols ? 'key-grid symbols' : 'key-grid';
+        content.className = browsing ? 'item-grid' : symbols ? 'key-grid symbols' : activeGroups.length >= 20 ? 'key-grid dense' : 'key-grid';
         if (browsing) renderItems();
         else {
           $('paging').hidden = true;
           if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
-          else GROUPS.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
+          else activeGroups.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
         }
         renderPredictions();
         updateSave();
@@ -789,12 +814,14 @@
         }
       }
 
-      function openLetters(index) {
-        const letters = GROUPS[index];
+      function openLetters(index, previewSize = 0) {
+        const letters = previewSize ? GROUPS.flat().slice(0, previewSize) : activeGroups[index];
         if (!letters) return;
-        $('letters-title').textContent = `Odaberite slovo: ${letters.join(' ')}`;
+        $('letters').classList.toggle('wide', letters.length >= 6);
+        $('letters-dialog').classList.toggle('compact', letters.length >= 12);
+        $('letters-title').textContent = 'Odaberite slovo';
         $('letters').replaceChildren(...letters.map(letter => makeButton(letter, 'letter', letter)));
-        $('letters').append(makeButton('Nazad na grupe', 'close-letters', '', 'back'));
+        $('letters').append(makeButton(letters.length >= 12 ? 'Nazad' : 'Nazad na grupe', 'close-letters', '', 'back'));
         openDialog($('letters-dialog'));
       }
 

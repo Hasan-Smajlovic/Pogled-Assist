@@ -1052,12 +1052,15 @@ function Test-Python310X86Executable {
 function Get-Python310X86 {
     Write-Step "Finding 32-bit Python 3.10 for Tobii bridge"
 
-    if (-not [string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_X86_PYTHON)) {
-        Write-Info "Checking POGLED_ASSIST_X86_PYTHON: $env:POGLED_ASSIST_X86_PYTHON"
-        $resolvedEnvPath = Test-Python310X86Executable -PythonPath $env:POGLED_ASSIST_X86_PYTHON
-        if ($null -ne $resolvedEnvPath) {
-            Write-Success "Found 32-bit Python 3.10 from environment: $resolvedEnvPath"
-            return $resolvedEnvPath
+    foreach ($envName in @("POGLED_ASSIST_X86_PYTHON", "TOBII_GAZE_MOUSE_X86_PYTHON")) {
+        $configuredPath = [Environment]::GetEnvironmentVariable($envName)
+        if (-not [string]::IsNullOrWhiteSpace($configuredPath)) {
+            Write-Info "Checking ${envName}: $configuredPath"
+            $resolvedEnvPath = Test-Python310X86Executable -PythonPath $configuredPath
+            if ($null -ne $resolvedEnvPath) {
+                Write-Success "Found 32-bit Python 3.10 from environment: $resolvedEnvPath"
+                return $resolvedEnvPath
+            }
         }
     }
 
