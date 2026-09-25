@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+from ctypes import wintypes
 from pathlib import Path
 
 import pytest
@@ -40,6 +42,7 @@ function Get-CimInstance {
 }
 
 & $InstallerPath -InstallRoot $InstallRoot -ExpectedVersion $ExpectedVersion -NoElevation -NoDesktopShortcut
+exit $LASTEXITCODE
 """
 
 SMOKE_APP_SOURCE = r"""
@@ -220,6 +223,27 @@ def _assert_output_contains(completed: subprocess.CompletedProcess[str], expecte
     ), completed.stdout + completed.stderr
 
 
+def _hold_directory(path: Path) -> tuple[object, int]:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = create_file(str(path), 1, 3, None, 3, 0x02000000, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return kernel32, handle
+
+
 def test_installer_swaps_verified_package_and_preserves_persistent_content(tmp_path):
     smoke_app = _compile_smoke_app(tmp_path)
     package = _release_package(tmp_path, smoke_app)
@@ -232,6 +256,32 @@ def test_installer_swaps_verified_package_and_preserves_persistent_content(tmp_p
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
     assert (install_root / "new-app-file.txt").is_file()
     assert not (install_root / "old-app-file.txt").exists()
+    assert _persistent_snapshot(install_root) == persistent_before
+    _assert_no_transaction_files(install_root)
+
+
+def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path):
+    smoke_app = _compile_smoke_app(tmp_path)
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    persistent_before = _persistent_snapshot(install_root)
+    kernel32, handle = _hold_directory(install_root)
+    try:
+        completed = _run_installer(package, install_root)
+    finally:
+        assert kernel32.CloseHandle(handle)
+
+    assert completed.returncode == 2, completed.stdout + completed.stderr
+    _assert_output_contains(completed, "Close File Explorer windows showing this folder")
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
+    assert (install_root / "old-app-file.txt").is_file()
+    assert not (install_root / "new-app-file.txt").exists()
+    assert _persistent_snapshot(install_root) == persistent_before
+    _assert_no_transaction_files(install_root)
+
+    retry = _run_installer(package, install_root)
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
     assert _persistent_snapshot(install_root) == persistent_before
     _assert_no_transaction_files(install_root)
 
@@ -311,6 +361,54 @@ def test_interrupted_directory_swap_is_recovered_before_next_attempt(tmp_path):
     _assert_output_contains(completed, "Restored the previous installation")
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
+    assert _persistent_snapshot(install_root) == persistent_before
+    _assert_no_transaction_files(install_root)
+
+
+def test_blocked_rollback_keeps_backup_and_never_runs_failed_version(tmp_path):
+    smoke_app = _compile_smoke_app(tmp_path)
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    persistent_before = _persistent_snapshot(install_root)
+    backup_root = install_root.parent / f".{install_root.name}.backup-interrupted"
+    staging_root = install_root.parent / f".{install_root.name}.install-interrupted"
+    transaction_path = install_root.parent / f".{install_root.name}.install-transaction.json"
+    install_root.rename(backup_root)
+    install_root.mkdir()
+    (install_root / "VERSION").write_text("0.2.0\n", encoding="utf-8")
+    (install_root / "new-app-file.txt").write_text("failed version\n", encoding="utf-8")
+    staging_root.mkdir()
+    transaction_path.write_text(
+        json.dumps(
+            {
+                "InstallRoot": str(install_root.resolve()),
+                "StagingRoot": str(staging_root.resolve()),
+                "BackupRoot": str(backup_root.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    kernel32, handle = _hold_directory(backup_root)
+    try:
+        blocked = _run_installer(package, install_root)
+    finally:
+        assert kernel32.CloseHandle(handle)
+
+    assert blocked.returncode != 0
+    _assert_output_contains(blocked, "Could not restore the previous installation")
+    assert not install_root.exists()
+    assert (backup_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
+    assert transaction_path.is_file()
+
+    retry = _run_installer(
+        package,
+        install_root,
+        environment=_installer_environment(FAKE_SMOKE_FAIL_ROOT="all"),
+    )
+    assert retry.returncode != 0
+    _assert_output_contains(retry, "Restored the previous installation")
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert _persistent_snapshot(install_root) == persistent_before
     _assert_no_transaction_files(install_root)
 

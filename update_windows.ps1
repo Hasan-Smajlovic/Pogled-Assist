@@ -126,7 +126,7 @@ function Ensure-Administrator {
     Start-Process `
         -FilePath (Get-PowerShellExecutable) `
         -ArgumentList ($arguments -join " ") `
-        -WorkingDirectory (Split-Path -Parent $UpdaterPath) `
+        -WorkingDirectory (Split-Path -Parent ([IO.Path]::GetFullPath($InstallRoot))) `
         -Verb RunAs | Out-Null
     $script:ElevationRequested = $true
     exit 0
@@ -237,7 +237,7 @@ function Remove-OperationRoot {
 }
 
 function Wait-BeforeExit {
-    if ($NoPause) {
+    if ($NoPause -and -not ($WaitForProcessId -gt 0 -and $script:ExitCode -ne 0)) {
         return
     }
 
@@ -537,6 +537,9 @@ function Invoke-ReleaseInstaller {
     Push-Location $script:OperationRoot
     try {
         & (Get-PowerShellExecutable) @arguments
+        if ($LASTEXITCODE -eq 2) {
+            throw "The installation folder $InstallRoot could not be moved. Close File Explorer windows showing this folder or its subfolders and other programs using it, then try the update again. The previous installation is unchanged."
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "The release installer failed with exit code $LASTEXITCODE."
         }
