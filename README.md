@@ -155,6 +155,10 @@ discovery when needed:
 | `ESPEAK_NG_EXE` | Full path to `espeak-ng.exe` |
 | `EDGE_PLAYBACK_EXE` | Full path to `edge-playback.exe` |
 
+An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the older app is also
+checked as a fallback when it points to a valid 32-bit Python 3.10. The new
+`POGLED_ASSIST_X86_PYTHON` setting takes priority.
+
 ## Data and logs
 
 User data is kept outside the packaged binaries so upgrades and rollbacks can

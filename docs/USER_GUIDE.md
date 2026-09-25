@@ -69,6 +69,10 @@ of answers, while `Fraze` contains standalone reusable text. Both lists support
 adding and deleting entries with the same grouped keyboard. The conversation
 message and all category, answer, and phrase content appear and are entered in
 uppercase. Text typed or pasted with lowercase letters is converted immediately.
+Settings can show 1 to 12 letters per group. When a group contains 12 letters,
+the letter dialog uses four columns and a shorter `Nazad` button so all choices
+fit at 1920×1080 with Windows scaling set to 150%. Selecting a letter returns
+to the groups as before.
 
 `Brzi izbor` shows up to five uppercase Bosnian suggestions. It completes the
 word at the end of the input or adds a next word followed by one space. The
@@ -191,6 +195,10 @@ DLL is probably 32-bit. Rerun source setup or configure a 32-bit Python 3.10 pat
 ```powershell
 $env:POGLED_ASSIST_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
 ```
+
+An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the previous app is also
+accepted when it points to a valid 32-bit Python 3.10. The new setting takes
+priority if both are present.
 
 If Stream Engine is installed outside a common location:
 

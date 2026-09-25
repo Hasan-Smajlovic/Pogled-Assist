@@ -451,6 +451,56 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot):
 
 
 @pytest.mark.e2e
+def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot):
+    window = SpeechWindow(FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"].click()
+    qtbot.waitUntil(lambda: window._active_dialog is window._letter_dialog)
+    dialog = window._letter_dialog
+    assert dialog.height() <= window.height() - 64
+    assert dialog.width() <= window.width() - 64
+
+    bounds = dialog.rect()
+    for action in window._letter_dialog_actions:
+        button = window._action_buttons[action]
+        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
+        assert bounds.contains(rect), action
+        assert button.width() >= 140, action
+        assert button.height() >= 110, action
+        assert window.action_at_global_point(button.mapToGlobal(button.rect().center())) == action
+
+    last_letter = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:11"
+    window.handle_gaze_action(last_letter)
+    qtbot.waitUntil(lambda: window._active_dialog is None)
+    assert window._input.text() == window._letter_groups[0][-1]
+
+
+@pytest.mark.e2e
+def test_single_letter_groups_fit_150_percent_display(qtbot):
+    window = SpeechWindow(FakeSpeech(), letters_per_group=1, library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    assert window.size().width() <= 1280
+    assert window.size().height() <= 720
+    bounds = QRect(0, 0, 1280, 720)
+    group_actions = [
+        f"{SPEECH_WINDOW_ACTION_PREFIX}group:{index}" for index in range(len(window._letter_groups))
+    ]
+    for action in (*group_actions, f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle"):
+        button = window._action_buttons[action]
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert bounds.contains(rect), action
+        assert button.height() >= 72, action
+
+
+@pytest.mark.e2e
 def test_speech_symbols_backspace_clear_and_play(qtbot):
     speech = FakeSpeech()
     window = SpeechWindow(speech, library_store=FakeLibraryStore())
@@ -739,6 +789,27 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     assert speech_updates[-1].speed == 320
     assert speech_updates[-1].letters_per_group == 12
     assert speech_updates[-1].voice_preset == "human_like"
+
+
+@pytest.mark.e2e
+def test_settings_fit_150_percent_display_with_calibration_visible(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    window._select_tab(1)
+
+    assert window.size().width() <= 1280
+    assert window.size().height() <= 720
+    bounds = QRect(0, 0, 1280, 720)
+    for button in (window._exit_button, window._gaze_tab_button, window._calibration_button):
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert bounds.contains(rect), button.text()
+        assert button.height() >= 58
 
 
 @pytest.mark.e2e
