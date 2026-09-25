@@ -14,6 +14,7 @@ $SourceRoot = Split-Path -Parent $PSCommandPath
 $InstallerPath = $PSCommandPath
 $script:InstallMutex = $null
 $script:InstallMutexAcquired = $false
+$script:InstallMoveFailed = $false
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -415,19 +416,19 @@ function Restore-PreviousInstallation {
     $failedPath = Join-Path `
         (Split-Path -Parent $InstallPath) `
         (".$InstallName.failed-{0}" -f [Guid]::NewGuid().ToString("N"))
-    $movedFailedInstall = $false
     if (Test-Path -LiteralPath $InstallPath) {
         Move-Item -LiteralPath $InstallPath -Destination $failedPath
-        $movedFailedInstall = $true
     }
 
     try {
         Move-Item -LiteralPath $BackupPath -Destination $InstallPath
     } catch {
-        if ($movedFailedInstall -and -not (Test-Path -LiteralPath $InstallPath)) {
-            Move-Item -LiteralPath $failedPath -Destination $InstallPath -ErrorAction SilentlyContinue
+        $failedFiles = if (Test-Path -LiteralPath $failedPath) {
+            "The failed installation remains at $failedPath. "
+        } else {
+            ""
         }
-        throw
+        throw "Could not restore the previous installation from $BackupPath. $failedFiles$($_.Exception.Message)"
     }
 
     Remove-OperationDirectory -Path $failedPath
@@ -543,7 +544,24 @@ function Invoke-TransactionalInstall {
         Assert-AppNotRunning -InstallRoot $Paths.Install
         $swapStarted = $true
         if ($hadExistingInstallation) {
-            Move-Item -LiteralPath $Paths.Install -Destination $backupRoot
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                try {
+                    [IO.Directory]::Move($Paths.Install, $backupRoot)
+                    break
+                } catch [IO.IOException] {
+                    if (
+                        -not (Test-Path -LiteralPath $Paths.Install -PathType Container) -or
+                        (Test-Path -LiteralPath $backupRoot)
+                    ) {
+                        throw
+                    }
+                    if ($attempt -eq 3) {
+                        $script:InstallMoveFailed = $true
+                        throw "Could not move the installation folder $($Paths.Install). Close File Explorer windows showing this folder or its subfolders and other programs using it, then try the update again. The previous installation is unchanged. Windows error: $($_.Exception.Message)"
+                    }
+                    Start-Sleep -Milliseconds 500
+                }
+            }
         }
         Move-Item -LiteralPath $stagingRoot -Destination $Paths.Install
 
@@ -568,10 +586,13 @@ function Invoke-TransactionalInstall {
                         -InstallPath $Paths.Install `
                         -BackupPath $backupRoot `
                         -InstallName $Paths.Name
+                } elseif ($hadExistingInstallation -and -not (Test-Path -LiteralPath $Paths.Install -PathType Container)) {
+                    throw "The previous installation is missing and no backup is available."
                 } elseif (-not $hadExistingInstallation) {
                     Remove-OperationDirectory -Path $Paths.Install
                 }
             } catch {
+                $script:InstallMoveFailed = $false
                 $keepRecoveryFiles = $true
                 throw "Installation failed: $($installError.Exception.Message) Automatic rollback also failed: $($_.Exception.Message) Recovery data remains at $transactionPath."
             }
@@ -674,8 +695,8 @@ try {
         Start-InstalledApplication -InstalledRoot $paths.Install
     }
 } catch {
-    $installerExitCode = 1
-    Write-Error "Installation failed: $($_.Exception.Message)"
+    $installerExitCode = if ($script:InstallMoveFailed) { 2 } else { 1 }
+    Write-Error "Installation failed: $($_.Exception.Message)" -ErrorAction Continue
 } finally {
     Exit-InstallLock
 }
