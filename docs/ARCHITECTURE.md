@@ -137,6 +137,13 @@ disk data.
 files, and versioned Bosnian model needed at runtime. The package smoke test
 loads that model and computes an offline prediction. The release package contains
 its own installer and launcher and installs under `C:\PogledAssist`.
+Release-owned speech executables live under `speech/`, with a private 32-bit
+Python bridge runtime under `runtime/`, separate from preserved user-provided
+`.venv` and `tools` components. The frozen smoke test verifies them without
+audio playback, tracker access, or network access. `--installation-check` opens
+a separate readiness summary without creating the hotbar or gaze services. See the
+[included speech tools](WINDOWS_RELEASE.md#included-speech-tools) for packaging,
+discovery, and installation behavior.
 
 `update_windows.ps1` reads the installed version, resolves the latest stable
 release from `Hasan-Smajlovic/Pogled-Assist`, downloads the exact Windows

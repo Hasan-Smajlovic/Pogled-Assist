@@ -3,6 +3,7 @@ param(
     [string]$InstallRoot = "C:\PogledAssist",
     [string]$ExpectedVersion = "",
     [switch]$NoDesktopShortcut,
+    [switch]$NoSetupWindow,
     [switch]$Launch,
     [switch]$NoElevation
 )
@@ -661,6 +662,9 @@ if (-not (Test-IsAdministrator) -and -not $NoElevation) {
     if ($NoDesktopShortcut) {
         $arguments += "-NoDesktopShortcut"
     }
+    if ($NoSetupWindow) {
+        $arguments += "-NoSetupWindow"
+    }
     if ($Launch) {
         $arguments += "-Launch"
     }
@@ -688,8 +692,20 @@ try {
     }
 
     Write-Host "Installed Pogled Assist v$($packageVersion.ToString(3)) to $($paths.Install)"
-    Write-Host "Tobii software, tracker calibration, eSpeak NG, optional edge-playback, and an optional 32-bit bridge runtime are not installed by this package."
-    Write-Host "See README.md in the installation folder for requirements and manual checks."
+    Write-Host "Speech tools and the 32-bit Tobii bridge runtime are included and verified."
+    Write-Host "Tobii device software and personal calibration still need to be configured."
+    Write-Host "Run PogledAssist.exe --installation-check to review readiness and setup actions."
+
+    if (-not $NoSetupWindow -and -not $NoDesktopShortcut) {
+        try {
+            Start-Process `
+                -FilePath (Join-Path $paths.Install "PogledAssist.exe") `
+                -ArgumentList "--installation-check" `
+                -WorkingDirectory $paths.Install | Out-Null
+        } catch {
+            Write-Warning "Installation succeeded, but the setup check could not be opened: $($_.Exception.Message)"
+        }
+    }
 
     if ($Launch) {
         Start-InstalledApplication -InstalledRoot $paths.Install

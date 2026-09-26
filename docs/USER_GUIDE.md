@@ -1,5 +1,22 @@
 # User guide
 
+## Installation readiness
+
+After installation, **Provjera instalacije** shows whether the speech tools and
+Tobii bridge are ready, whether Tobii software was found, and whether Windows
+recognizes a connected Tobii device. It does not verify gaze accuracy or finish
+personal calibration. Detection errors appear as **Nije provjereno**.
+
+The person setting up the computer can use **Preuzmi Tobii softver** to open the
+official download page, **Pokreni kalibraciju** to request calibration through
+installed Tobii software, and **Ponovi provjeru** after making changes. Nothing
+is downloaded or calibrated automatically. Use mouse or keyboard in this setup
+window; gaze tracking starts in the main application.
+
+You can close the summary and reopen it with
+`PogledAssist.exe --installation-check`. Standard speech is available offline;
+the natural voice still requires internet.
+
 Pogled Assist places a toolbar at the top of the primary Windows display. It
 can move the pointer from gaze, select its own controls by dwell, and perform a
 click after you hold your gaze on a stable target.

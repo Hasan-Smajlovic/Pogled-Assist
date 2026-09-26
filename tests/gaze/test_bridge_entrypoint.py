@@ -27,3 +27,16 @@ def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
         "type": "error",
         "message": "Tobii bridge must run with 32-bit Python.",
     }
+
+
+def test_bridge_check_validates_without_starting_tracker(monkeypatch, capsys):
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_pointer_size", lambda: 4)
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "version_info", (3, 10))
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "argv", ["bridge.py", "--check"])
+
+    def unexpected_tracking(*args):
+        raise AssertionError("Verification must not start a tracker")
+
+    monkeypatch.setattr(tobii_stream_engine_bridge, "TobiiStreamEngineBackend", unexpected_tracking)
+    assert tobii_stream_engine_bridge.main() == 0
+    assert json.loads(capsys.readouterr().out) == {"type": "checked", "python_bits": 32}

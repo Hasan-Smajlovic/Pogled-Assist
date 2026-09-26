@@ -244,7 +244,7 @@ is the design source of truth for the visible Pogled Assist interface. The
 historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
-It currently has main views for Speech and Settings. Hotbar, standalone
+It currently has main views for Speech, Settings, and the installation summary. Hotbar, standalone
 Keyboard and Controller, and gaze overlays do not yet have their own main
 views there. Add the relevant view before changing one of those surfaces.
 
@@ -274,6 +274,10 @@ The command renders:
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
+
+The separate installation summary is documented in the HTML reference and
+covered by UI interaction tests; it is not part of the 19-surface gallery.
+Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
 Look for clipped labels, overlapping controls, inconsistent spacing, low contrast,
@@ -344,6 +348,8 @@ The command uses the checked-in PyInstaller spec, verifies required assets,
 runs `--package-smoke-test` from the frozen executable, installs an extracted copy
 in an isolated directory, and writes the versioned ZIP under `dist`.
 
-The build does not prove that a physical Tobii device or external speech engine
-works. Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before
+The build includes and verifies the speech tools described in the
+[release guide](WINDOWS_RELEASE.md#included-speech-tools). It does not prove
+physical Tobii behavior, audio-device playback, or online voice availability.
+Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before
 approving a release.
