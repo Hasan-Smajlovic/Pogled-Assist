@@ -344,6 +344,8 @@ The command uses the checked-in PyInstaller spec, verifies required assets,
 runs `--package-smoke-test` from the frozen executable, installs an extracted copy
 in an isolated directory, and writes the versioned ZIP under `dist`.
 
-The build does not prove that a physical Tobii device or external speech engine
-works. Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before
+The build includes and verifies the speech tools described in the
+[release guide](WINDOWS_RELEASE.md#included-speech-tools). It does not prove
+physical Tobii behavior, audio-device playback, or online voice availability.
+Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before
 approving a release.

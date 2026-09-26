@@ -252,6 +252,8 @@ def _candidate_paths() -> list[Path]:
     if env_path:
         candidates.append(Path(env_path))
 
+    candidates.append(_application_root() / "speech" / "espeak-ng" / "espeak-ng.exe")
+
     path_match = shutil.which("espeak-ng") or shutil.which("espeak-ng.exe")
     if path_match:
         candidates.append(Path(path_match))
@@ -295,6 +297,8 @@ def _edge_playback_candidate_paths() -> list[Path]:
     env_path = os.environ.get("EDGE_PLAYBACK_EXE", "").strip()
     if env_path:
         candidates.append(Path(env_path))
+
+    candidates.append(_application_root() / "speech" / "edge" / "edge-playback.exe")
 
     for name in ("edge-playback", "edge-playback.exe"):
         path_match = shutil.which(name)

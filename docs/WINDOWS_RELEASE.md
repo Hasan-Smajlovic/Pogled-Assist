@@ -104,6 +104,27 @@ Do not manually delete hidden `.PogledAssist.install-*` or
 also fails, the error identifies the retained transaction marker and backup for
 manual recovery.
 
+## Included speech tools
+
+The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone
+`edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.2.8. Installation
+copies them under `speech/` along with their runtimes, licenses, and matching
+source archives. Users do not need to install Python, use pip, or adjust PATH.
+The portable ZIP also includes these tools. Standard speech works offline;
+natural speech uses Microsoft's online service and requires internet when used.
+
+The launcher and direct executable prefer these bundled tools over discovered
+system installations. Explicit `ESPEAK_NG_EXE` and `EDGE_PLAYBACK_EXE` overrides
+still take priority. Existing `.venv` and `tools` directories are preserved for
+compatibility; versioned files under `speech/` are replaced with each release.
+
+The installer verifies bundled speech during staging and after installation.
+It generates a short Bosnian WAV without playing sound and starts both Edge
+commands with `--help`, using no external speech installation or online service.
+A missing or broken bundled component fails verification and uses the existing
+installation rollback behavior. This does not prove online voice availability
+or audio-device playback; test those separately after installation.
+
 ## Components installed separately
 
 - Tobii runtime and calibration: install the official software appropriate for
@@ -117,15 +138,9 @@ manual recovery.
   `python.exe`. An existing `TOBII_GAZE_MOUSE_X86_PYTHON` is accepted as a
   fallback if it points to a valid 32-bit Python 3.10; the new setting takes
   priority. The package already contains the bridge source.
-- Default speech: install eSpeak NG 1.52 with the Bosnian `bs` voice. Set
-  `ESPEAK_NG_EXE` if `espeak-ng.exe` is outside the standard install folders.
-- Human-like speech: install the `edge-tts` package so `edge-playback.exe` is on
-  `PATH`, or set `EDGE_PLAYBACK_EXE` directly. This voice uses Microsoft's online
-  service and needs internet access at runtime.
 
 The application launches without these external components. Missing Tobii
-software disables gaze input while the provider retries. Missing speech tools
-disable their corresponding voice preset.
+software disables gaze input while the provider retries.
 
 ## Build locally
 
@@ -145,9 +160,15 @@ creates:
 dist\PogledAssist-v<version>-windows-x64.zip
 ```
 
-No physical tracker, Tobii runtime, eSpeak NG, or network speech service is used
-by the package smoke test. It also verifies the bundled Bosnian model checksum
-and computes a word completion from that model.
+The build downloads the pinned eSpeak MSI and source archives into
+`.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without
+installing it globally, and freezes both Edge commands with a shared Python
+runtime. The first build needs internet; cached assets are rechecked on every
+build. A checksum mismatch fails the build before extraction.
+
+No physical tracker, Tobii runtime, system speech installation, or network speech
+service is used by the package smoke test. It verifies bundled speech tools,
+the bundled Bosnian model checksum, and a word completion from that model.
 
 ## Automated release
 
@@ -201,6 +222,9 @@ Software-only checks on a clean Windows x64 environment:
   byte-for-byte unchanged after update and rollback tests.
 - Confirm any local `.venv` speech tools and `tools` bridge components remain
   available after source-install migration and release updates.
+- On a clean Windows machine without Python or external speech tools, install
+  the ZIP and verify Standard speech offline and Natural speech online. Also
+  repeat both voice tests when starting `PogledAssist.exe` directly.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
 - Disconnect networking before first Speech use and confirm `Brzi izbor` still

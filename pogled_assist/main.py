@@ -96,6 +96,10 @@ def package_smoke_test() -> int:
         path_results = [(path, bool(path and path.is_file())) for path in required_paths]
         model = load_model()
         suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
+        if getattr(sys, "frozen", False):
+            from .speech.bundle_check import verify_bundled_speech
+
+            verify_bundled_speech(Path(sys.executable).resolve().parent)
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
         return 1

@@ -85,6 +85,7 @@ $env:POGLED_ASSIST_APP_ROOT = $AppRoot
 
 if ([string]::IsNullOrWhiteSpace($env:ESPEAK_NG_EXE) -or -not (Test-Path -LiteralPath $env:ESPEAK_NG_EXE)) {
     $env:ESPEAK_NG_EXE = Find-FirstFile -Candidates @(
+        (Join-Path $AppRoot "speech\espeak-ng\espeak-ng.exe"),
         (Find-FirstRecursiveFile -Root (Join-Path $AppRoot "tools\espeak-ng") -Name "espeak-ng.exe"),
         (Join-Path $env:ProgramFiles "eSpeak NG\espeak-ng.exe"),
         (Join-Path $env:ProgramFiles "eSpeak NG\command_line\espeak-ng.exe"),
@@ -107,6 +108,7 @@ if ([string]::IsNullOrWhiteSpace($env:EDGE_PLAYBACK_EXE) -or -not (Test-Path -Li
     $edgePlayback = Get-Command "edge-playback.exe" -ErrorAction SilentlyContinue
     $edgePlaybackFromPath = if ($null -ne $edgePlayback) { $edgePlayback.Source } else { $null }
     $env:EDGE_PLAYBACK_EXE = Find-FirstFile -Candidates @(
+        (Join-Path $AppRoot "speech\edge\edge-playback.exe"),
         (Join-Path $AppRoot ".venv\Scripts\edge-playback.exe"),
         $edgePlaybackFromPath
     )
