@@ -28,6 +28,7 @@ dist/
 .eggs/
 *.spec
 !packaging/windows/PogledAssist.spec
+!packaging/windows/SpeechTools.spec
 *.manifest
 *.pyd
 *.dll
