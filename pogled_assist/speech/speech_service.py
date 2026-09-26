@@ -106,6 +106,9 @@ class SpeechService:
             str(settings.amplitude),
             text,
         ]
+        environment = _espeak_environment(self._executable)
+        if environment is not None:
+            return self._start_process(command, "espeak-ng", environment=environment)
         return self._start_process(command, "espeak-ng")
 
     def _speak_edge_playback(self, text: str) -> bool:
@@ -220,6 +223,16 @@ def _environment_with_executable_directory(executable: Path) -> dict[str, str]:
     environment[path_key] = os.pathsep.join(
         part for part in (str(executable.parent), current_path) if part
     )
+    return environment
+
+
+def _espeak_environment(executable: Path) -> dict[str, str] | None:
+    if not (executable.parent / "espeak-ng-data").is_dir():
+        return None
+    environment = _environment_with_executable_directory(executable)
+    # The Windows engine otherwise consults the MSI registry path, which is
+    # absent in portable/clean installs (including its --version command).
+    environment["ESPEAK_DATA_PATH"] = str(executable.parent)
     return environment
 
 
@@ -350,6 +363,7 @@ def _is_valid_espeak_ng(path: Path) -> bool:
     try:
         result = subprocess.run(
             [str(path), "--version"],
+            env=_espeak_environment(path),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -379,6 +393,7 @@ def _has_bosnian_voice(path: Path) -> bool:
         try:
             result = subprocess.run(
                 [str(path), *arguments],
+                env=_espeak_environment(path),
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 check=False,

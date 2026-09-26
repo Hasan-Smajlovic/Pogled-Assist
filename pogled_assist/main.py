@@ -15,6 +15,7 @@ from .windows.dpi import enable_windows_dpi_awareness
 PACKAGE_SMOKE_TEST_ARG = "--package-smoke-test"
 PACKAGE_SMOKE_REPORT_ENV = "POGLED_ASSIST_PACKAGE_SMOKE_REPORT"
 MOUSE_GAZE_SIMULATION_ARG = "--simulate-gaze"
+INSTALLATION_CHECK_ARG = "--installation-check"
 
 
 def main() -> int:
@@ -24,6 +25,11 @@ def main() -> int:
 
     if PACKAGE_SMOKE_TEST_ARG in sys.argv[1:]:
         return package_smoke_test()
+
+    if INSTALLATION_CHECK_ARG in sys.argv[1:]:
+        from .ui.installation_window import show_installation_check
+
+        return show_installation_check()
 
     simulate_gaze = MOUSE_GAZE_SIMULATION_ARG in sys.argv[1:]
     if simulate_gaze and frozen:
@@ -98,8 +104,10 @@ def package_smoke_test() -> int:
         suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
         if getattr(sys, "frozen", False):
             from .speech.bundle_check import verify_bundled_speech
+            from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
 
             verify_bundled_speech(Path(sys.executable).resolve().parent)
+            verify_bundled_bridge(Path(sys.executable).resolve().parent)
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
         return 1

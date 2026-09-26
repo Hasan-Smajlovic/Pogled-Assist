@@ -4,8 +4,8 @@ The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder
 application, an installer, a launcher, a release updater, this guide, and the
 release `VERSION`.
 The package includes Python, PySide6, QtAwesome resources, the app icon, the
-Settings checkbox asset, the Tobii Pro SDK Python package, and the source needed
-by the optional 32-bit Stream Engine bridge.
+Settings checkbox asset, the Tobii Pro SDK Python package, speech tools, and
+the isolated Python runtime and source for the 32-bit Stream Engine bridge.
 
 ## Install a release
 
@@ -127,20 +127,46 @@ or audio-device playback; test those separately after installation.
 
 ## Components installed separately
 
+The package includes the official Python 3.10.11 32-bit embeddable distribution
+under `runtime/python-x86/`, verified against its pinned SHA-256 at build time.
+Its isolated path file exposes only the bundled standard library and bridge
+sources under `_internal/`. No system Python, pip, PATH, or registry changes
+are needed. The bridge honors valid new and legacy explicit Python overrides,
+then tries the bundled runtime before system installations. Package verification
+runs its actual entry point with `--check` to verify architecture and imports
+without opening a tracker. `runtime/` is replaced transactionally with each
+release; existing user-owned `tools/` remains preserved.
+
 - Tobii runtime and calibration: install the official software appropriate for
   the tracker, connect the device, and complete calibration. The package cannot
   safely install or calibrate hardware.
 - Tobii Stream Engine: Tobii Eye Tracker 4C setups commonly obtain
   `tobii_stream_engine.dll` from Tobii Core or Game Hub. The app searches common
   install locations. Set `TOBII_STREAM_ENGINE_DLL` when the DLL is elsewhere.
-- 32-bit bridge: a 32-bit Tobii DLL cannot load in the packaged 64-bit process.
-  Install 32-bit Python 3.10 and set `POGLED_ASSIST_X86_PYTHON` to its
-  `python.exe`. An existing `TOBII_GAZE_MOUSE_X86_PYTHON` is accepted as a
-  fallback if it points to a valid 32-bit Python 3.10; the new setting takes
-  priority. The package already contains the bridge source.
 
 The application launches without these external components. Missing Tobii
 software disables gaze input while the provider retries.
+
+## Finish setup
+
+Normal interactive installation opens **Provjera instalacije**. It checks
+bundled speech, the 32-bit bridge, installed Tobii components, and present
+Windows Plug and Play devices named Tobii or EyeChip. Presence is an indication,
+not a gaze-stream test; detection errors are shown as unverified rather than
+reported as missing hardware. Calibration always requires confirmation in the
+Tobii software.
+
+The summary offers the official device-specific Tobii download page, calibration,
+and a repeat check. It does not silently download or install drivers and opens
+calibration only on request. The check runs in the background; closing while
+it is active waits for its bounded probes to finish. Local speech checks make
+no sound or online request. The setup person uses mouse or keyboard; this
+standalone summary does not start gaze tracking.
+
+Use `-NoSetupWindow` for unattended installation. `-NoDesktopShortcut` also
+suppresses the summary for existing automation. Missing Tobii software or a
+disconnected tracker does not undo an otherwise verified installation. Reopen
+the summary at any time with `PogledAssist.exe --installation-check`.
 
 ## Build locally
 
@@ -160,7 +186,7 @@ creates:
 dist\PogledAssist-v<version>-windows-x64.zip
 ```
 
-The build downloads the pinned eSpeak MSI and source archives into
+The build downloads the pinned eSpeak MSI, Python x86 ZIP, and source archives into
 `.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without
 installing it globally, and freezes both Edge commands with a shared Python
 runtime. The first build needs internet; cached assets are rechecked on every
@@ -225,6 +251,11 @@ Software-only checks on a clean Windows x64 environment:
 - On a clean Windows machine without Python or external speech tools, install
   the ZIP and verify Standard speech offline and Natural speech online. Also
   repeat both voice tests when starting `PogledAssist.exe` directly.
+- Confirm the bundled x86 bridge imports after installation into a path with
+  spaces, without a system Python or configured Python environment variables.
+- Confirm the setup summary distinguishes missing software, absent devices,
+  detection failures, and unverified calibration. Check its download and
+  calibration buttons and repeat check. Verify unattended installs show no UI.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
 - Disconnect networking before first Speech use and confirm `Brzi izbor` still

@@ -9,10 +9,13 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 from importlib.metadata import version
 from pathlib import Path
 
 EDGE_TTS_VERSION = "7.2.8"
+BRIDGE_PYTHON_URL = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-win32.zip"
+BRIDGE_PYTHON_SHA256 = "0987a9d85ccf1ba17c3dbdcadc39835f183843604da18c9af4bd677dc84adf7d"
 ESPEAK_MSI_URL = "https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-ng.msi"
 ESPEAK_MSI_SHA256 = "7f673c709ea5dd579d3b5ebb98688cc575328a6ab7438d2bc405b88cedaeafb9"
 SOURCE_ASSETS = (
@@ -99,9 +102,28 @@ def prepare_speech_bundle(destination: Path, cache: Path) -> None:
     )
 
 
+def prepare_bridge_bundle(destination: Path, cache: Path) -> None:
+    archive = checked_download(
+        BRIDGE_PYTHON_URL, cache / "python-3.10.11-embed-win32.zip", BRIDGE_PYTHON_SHA256
+    )
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive) as source:
+        for member in source.infolist():
+            if not (destination / member.filename).resolve().is_relative_to(destination.resolve()):
+                raise ValueError("Python archive contains an unsafe path")
+        source.extractall(destination)
+    # The embedded interpreter ignores PYTHONPATH. Explicitly expose only our
+    # packaged bridge sources; keep site packages and user Python paths disabled.
+    (destination / "python310._pth").write_text(
+        "python310.zip\n.\n../../_internal\n", encoding="utf-8"
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--bridge-destination", type=Path, required=True)
     arguments = parser.parse_args()
     prepare_speech_bundle(arguments.destination.resolve(), arguments.cache.resolve())
+    prepare_bridge_bundle(arguments.bridge_destination.resolve(), arguments.cache.resolve())

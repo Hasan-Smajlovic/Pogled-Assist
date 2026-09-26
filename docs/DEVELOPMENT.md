@@ -244,7 +244,7 @@ is the design source of truth for the visible Pogled Assist interface. The
 historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
-It currently has main views for Speech and Settings. Hotbar, standalone
+It currently has main views for Speech, Settings, and the installation summary. Hotbar, standalone
 Keyboard and Controller, and gaze overlays do not yet have their own main
 views there. Add the relevant view before changing one of those surfaces.
 
@@ -274,6 +274,10 @@ The command renders:
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
+
+The separate installation summary is documented in the HTML reference and
+covered by UI interaction tests; it is not part of the 19-surface gallery.
+Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
 Look for clipped labels, overlapping controls, inconsistent spacing, low contrast,

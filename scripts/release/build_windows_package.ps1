@@ -54,6 +54,7 @@ function Invoke-IsolatedInstaller {
         "-File", $InstallerPath,
         "-InstallRoot", $InstallRoot,
         "-NoDesktopShortcut",
+        "-NoSetupWindow",
         "-NoElevation"
     )
     $stderrPath = [IO.Path]::GetTempFileName()
@@ -122,6 +123,7 @@ foreach ($sourcePath in $packageFiles.Keys) {
 $SpeechRoot = Join-Path $PackageRoot "speech"
 & $PythonExecutable (Join-Path $PSScriptRoot "prepare_speech_bundle.py") `
     --destination $SpeechRoot `
+    --bridge-destination (Join-Path $PackageRoot "runtime\python-x86") `
     --cache (Join-Path $RepoRoot ".dev-tools\speech-cache")
 if ($LASTEXITCODE -ne 0) {
     throw "Preparing the bundled speech assets failed."
@@ -136,6 +138,11 @@ if ($LASTEXITCODE -ne 0) {
 
 $requiredFiles = @(
     "PogledAssist.exe",
+    "runtime\python-x86\python.exe",
+    "runtime\python-x86\python310.dll",
+    "runtime\python-x86\python310.zip",
+    "runtime\python-x86\python310._pth",
+    "runtime\python-x86\LICENSE.txt",
     "speech\espeak-ng\espeak-ng.exe",
     "speech\espeak-ng\libespeak-ng.dll",
     "speech\espeak-ng\espeak-ng-data\bs_dict",

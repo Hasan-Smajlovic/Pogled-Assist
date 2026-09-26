@@ -18,15 +18,15 @@ def verify_bundled_speech(root: Path) -> None:
     for key in list(environment):
         if key.casefold() == "path" or key.upper() == "ESPEAK_DATA_PATH":
             del environment[key]
-    windows = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    windows = Path(os.environ.get("SYSTEMROOT", r"C:\Windows"))
     environment["PATH"] = os.pathsep.join(map(str, (edge, windows / "System32", windows)))
+    environment["ESPEAK_DATA_PATH"] = str(espeak.parent)
 
     def run(executable: Path, *arguments: str) -> None:
         subprocess.run(
             [str(executable), *arguments],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=True,
             timeout=15,
             env=environment,

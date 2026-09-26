@@ -97,6 +97,7 @@ if ([string]::IsNullOrWhiteSpace($env:ESPEAK_NG_EXE) -or -not (Test-Path -Litera
 if ([string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_X86_PYTHON) -or -not (Test-Path -LiteralPath $env:POGLED_ASSIST_X86_PYTHON)) {
     $env:POGLED_ASSIST_X86_PYTHON = Find-FirstFile -Candidates @(
         $env:TOBII_GAZE_MOUSE_X86_PYTHON,
+        (Join-Path $AppRoot "runtime\python-x86\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python310-32\python.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Python\Python310-32bit\python.exe"),
         (Join-Path ${env:ProgramFiles(x86)} "Python310-32\python.exe"),

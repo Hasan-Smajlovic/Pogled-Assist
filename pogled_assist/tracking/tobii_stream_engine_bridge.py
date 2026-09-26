@@ -31,6 +31,13 @@ def main() -> int:
         _emit("error", message="Tobii bridge must run with 32-bit Python.")
         return 2
 
+    if "--check" in sys.argv[1:]:
+        if sys.version_info[:2] != (3, 10):
+            _emit("error", message="Tobii bridge requires Python 3.10.")
+            return 2
+        _emit("checked", python_bits=32)
+        return 0
+
     _install_signal_handlers()
     backend = TobiiStreamEngineBackend(_emit_gaze, _emit_eye_status)
     try:

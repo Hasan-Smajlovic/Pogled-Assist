@@ -57,7 +57,7 @@ def test_bundle_check_uses_local_bosnian_synthesis_and_both_edge_tools(monkeypat
     assert calls[0][0][1:3] == ["-v", "bs"]
     for command, options in calls:
         assert Path(command[0]).is_relative_to(tmp_path / "speech")
-        assert "ESPEAK_DATA_PATH" not in options["env"]
+        assert options["env"]["ESPEAK_DATA_PATH"] == str(tmp_path / "speech/espeak-ng")
         assert options["check"] is True
         assert options["timeout"] == 15
     assert all(command[1:] == ["--help"] for command, _ in calls[1:])
@@ -133,3 +133,25 @@ def test_download_checks_new_bytes_before_publishing_cache(monkeypatch, tmp_path
             bundler.checked_download("https://example.invalid/asset", asset, expected)
         assert not asset.exists()
     assert not asset.with_suffix(".msi.part").exists()
+
+
+def test_portable_espeak_probes_and_speech_use_bundled_data(monkeypatch, tmp_path):
+    executable = tmp_path / "speech/espeak-ng/espeak-ng.exe"
+    (executable.parent / "espeak-ng-data").mkdir(parents=True)
+    executable.touch()
+    calls = []
+
+    def run(command, **options):
+        calls.append(options)
+        return subprocess.CompletedProcess(command, 0, "5 bs M bosnian", "")
+
+    monkeypatch.setattr(speech_service.subprocess, "run", run)
+    monkeypatch.setenv("ESPEAK_DATA_PATH", str(tmp_path / "wrong-data"))
+    assert speech_service._is_valid_espeak_ng(executable)
+    assert all(call["env"]["ESPEAK_DATA_PATH"] == str(executable.parent) for call in calls)
+    monkeypatch.setattr(speech_service, "find_espeak_ng", lambda: executable)
+    monkeypatch.setattr(speech_service, "find_edge_playback", lambda: None)
+    service = speech_service.SpeechService()
+    monkeypatch.setattr(service, "_start_process", lambda *args, **kw: calls.append(kw) or True)
+    assert service.speak("Dobar dan")
+    assert calls[-1]["environment"]["ESPEAK_DATA_PATH"] == str(executable.parent)

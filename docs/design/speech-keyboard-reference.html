@@ -331,9 +331,26 @@
   <nav class="reference-switcher" aria-label="Referentni prikaz">
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
     <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
+    <button type="button" data-reference-view="installation" aria-pressed="false">Instalacija</button>
     <button id="single-letter-preview" type="button">1 slovo</button>
     <button id="twelve-letters-preview" type="button">12 slova</button>
   </nav>
+  <main id="installation-screen" aria-label="Provjera instalacije" hidden style="max-width:900px;margin:24px auto;padding:24px;background:#1c2029;border-radius:12px">
+    <h1>Provjera instalacije</h1>
+    <p>Provjerite spremnost programa i dovršite podešavanje Tobii uređaja.</p>
+    <p><strong>Govor — Spremno</strong><br>Standardni glas radi bez interneta. Prirodni glas zahtijeva internet.</p>
+    <p><strong>Tobii most — Spremno</strong><br>Uključeno je 32-bitno okruženje za povezivanje.</p>
+    <p><strong>Tobii softver — Potrebna instalacija</strong><br>Preuzmite službeni softver za svoj model uređaja.</p>
+    <p><strong>Tobii uređaj — Nije prepoznat</strong><br>Povežite uređaj, instalirajte drajvere i ponovite provjeru.</p>
+    <p><strong>Kalibracija — Potrebna provjera</strong><br>Pokrenite kalibraciju u Tobii softveru. Ova provjera ne potvrđuje praćenje pogleda.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button type="button" onclick="document.getElementById('installation-note').textContent='Otvara se službena Tobii stranica za izbor uređaja.'">Preuzmi Tobii softver</button>
+      <button type="button" disabled>Pokreni kalibraciju</button>
+      <button type="button" onclick="document.getElementById('installation-note').textContent='Provjeravam… Radnje su privremeno onemogućene. Ako se prozor zatvori tokom provjere, čeka se završetak.'">Ponovi provjeru</button>
+      <button type="button" onclick="document.getElementById('installation-note').textContent='Zatvara se provjera instalacije.'">Zatvori</button>
+    </div>
+    <p id="installation-note" role="status">Kalibracija je dostupna kada se pronađe Tobii softver. Greška provjere prikazuje se kao „Nije provjereno”, a ne kao odsutan uređaj.</p>
+  </main>
   <main id="speech-screen" class="speech-screen" aria-label="Pogled Assist govorna tastatura">
     <header class="topbar">
       <button class="warning" type="button" data-action="clear">Obriši</button>
@@ -667,8 +684,9 @@
 
       function showReferenceView(nextView) {
         const settingsVisible = nextView === 'settings';
-        $('speech-screen').hidden = settingsVisible;
+        $('speech-screen').hidden = nextView !== 'speech';
         $('settings-screen').hidden = !settingsVisible;
+        $('installation-screen').hidden = nextView !== 'installation';
         for (const button of document.querySelectorAll('[data-reference-view]')) {
           button.setAttribute('aria-pressed', String(button.dataset.referenceView === nextView));
         }
