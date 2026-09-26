@@ -69,6 +69,7 @@ if ($null -eq $finder -or $null -eq $discovery) { throw "Package x86 discovery w
 . ([scriptblock]::Create($finder.Extent.Text))
 
 $env:LOCALAPPDATA = $Root
+$AppRoot = $Root
 $env:ProgramFiles = $Root
 [Environment]::SetEnvironmentVariable("ProgramFiles(x86)", $Root)
 if ($NewPath -eq "NONE") {

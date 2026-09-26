@@ -260,6 +260,27 @@ def test_installer_swaps_verified_package_and_preserves_persistent_content(tmp_p
     _assert_no_transaction_files(install_root)
 
 
+def test_upgrade_replaces_bundled_speech_and_preserves_external_tools(tmp_path):
+    smoke_app = _compile_smoke_app(tmp_path)
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    persistent_before = _persistent_snapshot(install_root)
+    relative = Path("speech/edge/edge-playback.exe")
+    for root, value in ((package, b"new bundled tool"), (install_root, b"old bundled tool")):
+        (root / relative).parent.mkdir(parents=True)
+        (root / relative).write_bytes(value)
+    external = install_root / "tools/espeak-ng/espeak-ng.exe"
+    external.parent.mkdir(parents=True)
+    external.write_bytes(b"user provided tool")
+
+    completed = _run_installer(package, install_root)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert (install_root / relative).read_bytes() == b"new bundled tool"
+    assert external.read_bytes() == b"user provided tool"
+    assert _persistent_snapshot(install_root) == persistent_before
+
+
 def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path):
     smoke_app = _compile_smoke_app(tmp_path)
     package = _release_package(tmp_path, smoke_app)

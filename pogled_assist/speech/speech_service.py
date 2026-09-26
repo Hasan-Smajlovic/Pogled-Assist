@@ -106,6 +106,9 @@ class SpeechService:
             str(settings.amplitude),
             text,
         ]
+        environment = _espeak_environment(self._executable)
+        if environment is not None:
+            return self._start_process(command, "espeak-ng", environment=environment)
         return self._start_process(command, "espeak-ng")
 
     def _speak_edge_playback(self, text: str) -> bool:
@@ -223,6 +226,16 @@ def _environment_with_executable_directory(executable: Path) -> dict[str, str]:
     return environment
 
 
+def _espeak_environment(executable: Path) -> dict[str, str] | None:
+    if not (executable.parent / "espeak-ng-data").is_dir():
+        return None
+    environment = _environment_with_executable_directory(executable)
+    # The Windows engine otherwise consults the MSI registry path, which is
+    # absent in portable/clean installs (including its --version command).
+    environment["ESPEAK_DATA_PATH"] = str(executable.parent)
+    return environment
+
+
 def find_espeak_ng() -> Path | None:
     candidates = list(_candidate_paths())
     for candidate in candidates:
@@ -251,6 +264,8 @@ def _candidate_paths() -> list[Path]:
     env_path = os.environ.get("ESPEAK_NG_EXE", "").strip()
     if env_path:
         candidates.append(Path(env_path))
+
+    candidates.append(_application_root() / "speech" / "espeak-ng" / "espeak-ng.exe")
 
     path_match = shutil.which("espeak-ng") or shutil.which("espeak-ng.exe")
     if path_match:
@@ -295,6 +310,8 @@ def _edge_playback_candidate_paths() -> list[Path]:
     env_path = os.environ.get("EDGE_PLAYBACK_EXE", "").strip()
     if env_path:
         candidates.append(Path(env_path))
+
+    candidates.append(_application_root() / "speech" / "edge" / "edge-playback.exe")
 
     for name in ("edge-playback", "edge-playback.exe"):
         path_match = shutil.which(name)
@@ -346,6 +363,7 @@ def _is_valid_espeak_ng(path: Path) -> bool:
     try:
         result = subprocess.run(
             [str(path), "--version"],
+            env=_espeak_environment(path),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -375,6 +393,7 @@ def _has_bosnian_voice(path: Path) -> bool:
         try:
             result = subprocess.run(
                 [str(path), *arguments],
+                env=_espeak_environment(path),
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 check=False,

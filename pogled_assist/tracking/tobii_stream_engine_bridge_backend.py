@@ -12,6 +12,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from .tobii_stream_engine import APP_ROOT_ENV
+
 logger = logging.getLogger(__name__)
 
 X86_PYTHON_ENV = "POGLED_ASSIST_X86_PYTHON"
@@ -250,6 +252,7 @@ def _find_x86_python() -> str:
         if configured:
             candidates.append(configured)
 
+    candidates.append(str(bundled_x86_python()))
     candidates.extend(_py_launcher_candidates())
     candidates.extend(_common_python_candidates())
 
@@ -259,8 +262,35 @@ def _find_x86_python() -> str:
             return candidate
 
     raise TobiiStreamEngineBridgeError(
-        "32-bit Python 3.10 was not found. Rerun setup_windows.ps1 so it can install "
-        "the x86 Python bridge runtime for Tobii Eye Tracking Core Software."
+        "32-bit Python 3.10 was not found. Reinstall the release to restore its bundled "
+        "Tobii bridge runtime, or rerun setup_windows.ps1 for a source installation."
+    )
+
+
+def bundled_x86_python() -> Path:
+    configured = os.environ.get(APP_ROOT_ENV, "").strip()
+    if configured:
+        root = Path(configured)
+    elif getattr(sys, "frozen", False):
+        root = Path(sys.executable).resolve().parent
+    else:
+        root = Path(__file__).resolve().parents[2]
+    return root / "runtime" / "python-x86" / "python.exe"
+
+
+def verify_bundled_bridge(root: Path) -> None:
+    subprocess.run(
+        [
+            str(root / "runtime/python-x86/python.exe"),
+            "-I",
+            "-B",
+            str(root / "_internal/pogled_assist/tracking/tobii_stream_engine_bridge.py"),
+            "--check",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 

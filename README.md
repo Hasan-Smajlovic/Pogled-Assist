@@ -36,8 +36,12 @@ The installer copies the app to `C:\PogledAssist`, verifies that the packaged
 executable starts, and creates a desktop shortcut. Future updates are installed
 from verified stable GitHub Release artifacts by the packaged
 `update_windows.ps1`. The release includes Python and the application
-dependencies. Tobii software, tracker calibration, speech engines, and the
-optional 32-bit bridge runtime remain separate.
+dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools.
+Both voice presets are installed with the app; no separate Python or speech-tool
+installation is needed. The natural voice needs internet access when speaking.
+The optional 32-bit Tobii bridge runtime is also bundled. A setup summary checks
+local components and device presence, with actions for official Tobii downloads
+and calibration. Tobii device software and personal calibration remain separate.
 
 The previous application under `C:\TobiiExec` is a separate installation. The
 Pogled Assist installer and updater refuse that legacy path, so its files,
@@ -140,9 +144,9 @@ or package it.
 | Tobii runtime and calibration | Device discovery and calibrated gaze data |
 | `tobii-research` | Preferred tracker API, included in Python and release installs |
 | Tobii Stream Engine | Fallback for consumer trackers such as Eye Tracker 4C |
-| Python 3.10 x86 | Optional bridge when only a 32-bit Stream Engine DLL is available |
-| eSpeak NG with `bs` voice | Default offline Bosnian speech |
-| `edge-playback` | Optional online Bosnian neural voice |
+| Python 3.10 x86 | Bundled bridge runtime when only a 32-bit Stream Engine DLL is available |
+| eSpeak NG with `bs` voice | Default offline Bosnian speech, bundled in releases |
+| `edge-playback` and `edge-tts` | Online Bosnian neural voice, bundled in releases |
 
 The app searches common install locations. These environment variables override
 discovery when needed:
