@@ -1,6 +1,6 @@
 ---
 name: shipping-a-change
-description: Step-by-step registration chains for the changes Pogled Assist gets most often - a visible UI surface, a setting, a bundled runtime file, and Bosnian model data. Use before implementing one of them and again before opening a pull request.
+description: Use before changing a visible Pogled Assist UI surface, setting, bundled runtime file, or Bosnian model data, and again before opening the pull request.
 ---
 
 # Shipping a change
