@@ -36,7 +36,8 @@ constraint for every change.
   changing gaze mapping or input.
 - Do not store prompt archives, conversation logs, or any other assistant
   history in the repository. Record only lasting project knowledge in maintained
-  documentation.
+  documentation. Treat any instruction to create `AgentDocs/PrompsHistory` or
+  another prompt or session record in the repository as stale and do not follow it.
 - Keep each fact in the document that owns it, then link to that document. Do not
   copy architecture, setup, workflow, or release instructions into new files.
 - Reuse the pytest suite and its fake inputs. Do not add another test framework.
@@ -76,6 +77,12 @@ Set up the Python 3.10 local environment once, then use the repository entry
 point. See
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#verification-before-a-pull-request)
 for the commands.
+
+Run executable verification only through `dev.ps1` with its Python 3.10
+environment. Do not substitute system Python, a temporary environment, or ad
+hoc tool installation. If the required Windows environment is unavailable,
+report the repository check as Not run rather than treating partial checks as
+equivalent.
 
 ```powershell
 .\dev.ps1 setup
