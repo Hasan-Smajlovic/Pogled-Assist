@@ -84,6 +84,16 @@ Smoothing affects visible pointer movement. Click targeting uses the current gaz
 target so smoothing does not move the requested click away from the selected
 point.
 
+`GazeSelectionTimer` owns pause, dwell, and repeat blocking. The controller opts
+Speech controls into a bounded edge hold using their current visible, enabled
+button rectangles in logical coordinates. Other surfaces retain their existing
+selection rules. During an edge hold, neither elapsed outside time nor the
+interval back to the first returning sample advances selection. Feedback stays
+on the previous button, and a held update can never confirm it. Context changes
+and eye loss discard the hold along with pending progress. Speech also blocks a
+suggestion replaced beneath gaze; that rejection must not count as leaving its
+button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
+
 ## UI and service ownership
 
 `HotbarWindow` owns all long-lived services and top-level UI surfaces. It opens

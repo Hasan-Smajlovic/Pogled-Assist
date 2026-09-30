@@ -91,6 +91,15 @@ the letter dialog uses four columns and a shorter `Nazad` button so all choices
 fit at 1920×1080 with Windows scaling set to 150%. Selecting a letter returns
 to the groups as before.
 
+On Speech controls, a brief gaze movement just beyond a button edge freezes the
+pause or ring instead of clearing it. Returning within 120 ms resumes that
+progress. The button cannot activate while gaze is outside it. Moving farther
+away or staying outside longer starts a new selection. This applies to letter
+groups, letters, word suggestions, and `Izgovori`, as well as the other Speech
+controls. A brief edge movement does not unlock a button for repeat selection.
+Eye loss, mouse actions, changed views, and window resizing still cancel pending
+progress. A changed word suggestion requires looking away before selecting it.
+
 `Brzi izbor` shows up to five uppercase Bosnian suggestions. It completes the
 word at the end of the input or adds a next word followed by one space. The
 suggestions work without internet access, preserve the rest of the message, and

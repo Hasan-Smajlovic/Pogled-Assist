@@ -219,6 +219,7 @@ class SpeechWindow(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
+        self._context_changed()
         self._modal_backdrop.setGeometry(self.rect())
         if self._active_dialog is not None:
             if self._active_dialog is self._sleep_dialog:
@@ -247,16 +248,19 @@ class SpeechWindow(QWidget):
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
+        rect = self.action_bounds(action)
+        return rect.center() if rect is not None and rect.contains(point) else None
+
+    def action_bounds(self, action: str) -> QRect | None:
+        if not self.isVisible():
+            return None
         if self._active_dialog is not None and action not in self._dialog_actions:
             return None
         button = self._action_buttons.get(action)
         if button is None or not button.isVisible() or not button.isEnabled():
             return None
         top_left = button.mapToGlobal(QPoint(0, 0))
-        rect = QRect(top_left, button.size())
-        if not rect.contains(point):
-            return None
-        return rect.center()
+        return QRect(top_left, button.size())
 
     def contains_global_point(self, point: QPoint) -> bool:
         if not self.isVisible():

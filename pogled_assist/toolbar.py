@@ -116,6 +116,7 @@ class HotbarWindow(QWidget):
             self.contains_global_point,
             self,
             pointer_movement_enabled=not simulate_gaze,
+            toolbar_action_bounds=self.speech_action_bounds,
         )
         self._mouse.update_settings(self._initial_gaze_settings)
         self._gaze_bubble = GazeBubbleWindow()
@@ -223,6 +224,13 @@ class HotbarWindow(QWidget):
             return None
 
         return rect.center()
+
+    def speech_action_bounds(self, action: str) -> QRect | None:
+        if self._quick_zoom.isVisible() or self._quick_menu.isVisible():
+            return None
+        if self._speech_window is not None and self._speech_window.isVisible():
+            return self._speech_window.action_bounds(action)
+        return None
 
     def contains_global_point(self, point: QPoint) -> bool:
         if self._quick_zoom.isVisible():

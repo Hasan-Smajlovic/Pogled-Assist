@@ -498,7 +498,8 @@
         <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
         <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
         <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
-        <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. Pomjeranje na drugi cilj poništava oba tajmera. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga.</li>
+        <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak za manje od 120 ms nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
+        <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
         <li>Sleep zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
         <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
@@ -568,6 +569,8 @@
       const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
       const GAZE_FILL_MS = 500;
+      const GAZE_LEAVE_GRACE_MS = 120;
+      const GAZE_EDGE_MARGIN = 24;
       const PAGE_SIZE = 6;
       const $ = id => document.getElementById(id);
       const message = $('message');
@@ -588,6 +591,10 @@
       let gazeTarget = null;
       let gazeStart = 0;
       let gazeFrame = 0;
+      let gazeButton = null;
+      let gazePoint = null;
+      let gazeAwayStart = null;
+      let gazeLastSeen = 0;
       let clickFromGaze = false;
       let lastGazeClick = { target: null, time: 0 };
       let blockedGaze = null;
@@ -658,20 +665,17 @@
       document.addEventListener('pointermove', event => {
         if (event.pointerType === 'touch' || !$('gaze-demo').checked) return;
         const button = event.target.closest('button');
-        if (blockedGaze === button) return;
-        blockedGaze = null;
-        if (button === gazeTarget) return;
-        resetGaze();
-        if (!button || button.disabled) return;
-        gazeTarget = button;
-        gazeStart = performance.now();
-        gazeFrame = requestAnimationFrame(tickGaze);
+        gazeButton = button && !button.disabled ? button : null;
+        gazePoint = { x: event.clientX, y: event.clientY };
+        updateGazeTarget(performance.now());
+        if (!gazeFrame && (gazeTarget || gazeAwayStart !== null)) gazeFrame = requestAnimationFrame(tickGaze);
       });
       document.documentElement.addEventListener('pointerleave', resetGaze);
       document.addEventListener('pointerdown', resetGaze);
       document.addEventListener('visibilitychange', resetGaze);
       document.addEventListener('scroll', resetGaze, true);
       window.addEventListener('blur', resetGaze);
+      window.addEventListener('resize', resetGaze);
       $('gaze-demo').addEventListener('change', resetGaze);
       for (const dialog of document.querySelectorAll('dialog')) {
         dialog.addEventListener('cancel', event => {
@@ -1089,9 +1093,45 @@
         if ($('alarm-dialog').open) closeDialog($('alarm-dialog'));
       }
 
+      function updateGazeTarget(now) {
+        const candidate = gazeTarget || blockedGaze;
+        if (candidate?.isConnected && !candidate.disabled && candidate.getClientRects().length && gazePoint) {
+          const rect = candidate.getBoundingClientRect();
+          const margin = Math.min(GAZE_EDGE_MARGIN, rect.width / 4, rect.height / 4);
+          const near = gazePoint.x >= rect.left - margin && gazePoint.x <= rect.right + margin && gazePoint.y >= rect.top - margin && gazePoint.y <= rect.bottom + margin;
+          const speechControl = !$('speech-screen').hidden && candidate.hasAttribute('data-action');
+          if (gazeButton !== candidate && speechControl && near) {
+            gazeAwayStart ??= now;
+            if (now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) return;
+          } else if (gazeButton === candidate && gazeAwayStart !== null && now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) {
+            gazeStart += now - gazeLastSeen;
+            gazeAwayStart = null;
+            gazeLastSeen = now;
+            return;
+          }
+        }
+        if (gazeButton === gazeTarget && gazeAwayStart === null) return;
+        resetGaze();
+        if (gazeButton === blockedGaze) return;
+        blockedGaze = null;
+        if (!gazeButton?.isConnected || gazeButton.disabled || !gazeButton.getClientRects().length) return;
+        gazeTarget = gazeButton;
+        gazeStart = gazeLastSeen = now;
+      }
+
       function tickGaze(now) {
+        gazeFrame = 0;
+        updateGazeTarget(now);
+        if (gazeTarget === blockedGaze && gazeAwayStart === null) return;
+        // A completed button still needs departure checks while its ring is hidden.
+        if (!gazeTarget && gazeAwayStart !== null) {
+          gazeFrame = requestAnimationFrame(tickGaze);
+          return;
+        }
         if (!gazeTarget?.isConnected || gazeTarget.disabled || document.hidden) { resetGaze(); return; }
-        const elapsed = now - gazeStart;
+        const held = gazeAwayStart !== null;
+        if (!held) gazeLastSeen = now;
+        const elapsed = gazeLastSeen - gazeStart;
         if (elapsed >= GAZE_PAUSE_MS) {
           const rect = gazeTarget.getBoundingClientRect();
           (gazeTarget.closest('dialog') || document.body).append(ring);
@@ -1101,7 +1141,7 @@
           ring.hidden = false;
           gazeTarget.classList.add('gaze-target');
         }
-        if (elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
+        if (!held && elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
           const target = gazeTarget;
           blockedGaze = target;
           lastGazeClick = { target, time: now };
@@ -1117,6 +1157,8 @@
 
       function resetGaze() {
         cancelAnimationFrame(gazeFrame);
+        gazeFrame = 0;
+        gazeAwayStart = null;
         gazeTarget?.classList.remove('gaze-target');
         gazeTarget = null;
         ring.hidden = true;

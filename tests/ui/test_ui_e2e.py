@@ -1001,3 +1001,234 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     window._run_toolbar_action(SETTINGS, source="mouse")
     assert window._controller_window.isHidden()
     assert window._settings_window is not None and window._settings_window.isVisible()
+
+
+@pytest.fixture(params=[(1920, 1080), (1280, 720)])
+def speech_gaze(qtbot, monkeypatch, request):
+    from pogled_assist import toolbar
+    from scripts.ui.capture_ui import PreviewSuggestionService
+
+    monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
+    monkeypatch.setattr(toolbar, "SuggestionService", PreviewSuggestionService)
+    monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
+    monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
+    hotbar = toolbar.HotbarWindow(simulate_gaze=True)
+    qtbot.addWidget(hotbar)
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    width, height = request.param
+    window.setGeometry(0, 0, width, height)
+    qtbot.waitUntil(window.isVisible)
+    qtbot.wait(1)
+    controller = hotbar._mouse
+    controller._logical_screen_rect = (0, 0, width, height)
+    controller._physical_screen_rect = (0, 0, 1920, 1080)
+    controller.handle_eye_status(True, True)
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.interaction.mouse_controller.time.monotonic", lambda: now[0])
+    actions = []
+    progress = []
+    controller.toolbar_action_requested.connect(actions.append)
+    controller.interaction_progress_changed.connect(
+        lambda _point, value, _label: progress.append(value)
+    )
+
+    def feed(point, milliseconds):
+        now[0] = 10.0 + milliseconds / 1000
+        controller.handle_gaze(point.x() / (width - 1), point.y() / (height - 1), milliseconds)
+
+    return window, controller, hotbar._speech, feed, actions, progress
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("command", ["group:0", "letter:0:0", "suggestion:0", "play"])
+def test_speech_gaze_keeps_progress_through_brief_edge_excursion(speech_gaze, qtbot, command):
+    window, _controller, speech, feed, actions, progress = speech_gaze
+    window._input.setText("ŽELIM ")
+    if command.startswith("letter:"):
+        click_speech_action(qtbot, window, "group:0")
+    button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 4, button.height() // 2))
+    expected_word = button.text()
+
+    feed(center, 0)
+    feed(center, 800)
+    assert progress[-1] == pytest.approx(0.6)
+    feed(outside, 820)
+    feed(outside, 840)
+    feed(center, 860)
+    assert progress[-1] == pytest.approx(0.6)
+    feed(center, 1040)
+    assert actions == []
+    feed(center, 1061)
+
+    assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
+    if command == "letter:0:0":
+        assert window._input.text() == "ŽELIM A"
+    elif command == "suggestion:0":
+        assert window._input.text() == f"ŽELIM {expected_word} "
+    elif command == "play":
+        assert speech.requests[0][0] == "ŽELIM"
+    else:
+        assert window._active_dialog is window._letter_dialog
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("near_edge", [True, False])
+def test_speech_gaze_switches_letters_without_transferring_progress(speech_gaze, qtbot, near_edge):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    click_speech_action(qtbot, window, "group:0")
+    first = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"]
+    second = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:1"]
+    first_center = first.mapToGlobal(first.rect().center())
+    second_point = second.mapToGlobal(
+        QPoint(2, second.height() // 2) if near_edge else second.rect().center()
+    )
+    assert window.action_at_global_point(second_point) == f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:1"
+    feed(first_center, 0)
+    feed(first_center, 980)
+    feed(second_point, 1000)
+    feed(second_point, 1100)
+    assert actions == []
+    feed(second_point, 1121)
+    finish = 2122 if near_edge else 2001
+    feed(second_point, finish - 2)
+    assert actions == []
+    feed(second_point, finish)
+    assert window._input.text() == "B"
+    assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:1"]
+
+
+@pytest.mark.e2e
+def test_speech_gaze_can_return_from_neighbor_without_selecting_it(speech_gaze, qtbot):
+    window, _controller, _speech, feed, actions, progress = speech_gaze
+    click_speech_action(qtbot, window, "group:0")
+    first = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"]
+    second = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:1"]
+    center = first.mapToGlobal(first.rect().center())
+    neighbor = second.mapToGlobal(QPoint(2, second.height() // 2))
+    feed(center, 0)
+    feed(center, 980)
+    feed(neighbor, 1000)
+    feed(neighbor, 1060)
+    assert actions == []
+    assert progress[-1] == pytest.approx(0.96)
+    feed(center, 1080)
+    assert actions == []
+    feed(center, 1101)
+    assert window._input.text() == "A"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("cancel", ["eye_loss", "mouse", "resize", "disable"])
+def test_speech_gaze_discards_held_progress_when_context_is_lost(speech_gaze, qtbot, cancel):
+    window, controller, _speech, feed, actions, _progress = speech_gaze
+    button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 4, button.height() // 2))
+    feed(center, 0)
+    feed(center, 800)
+    feed(outside, 820)
+    if cancel == "eye_loss":
+        controller.handle_eye_status(True, False)
+        feed(center, 840)
+        controller.handle_eye_status(True, True)
+    elif cancel == "mouse":
+        click_speech_action(qtbot, window, "group:1")
+        click_speech_action(qtbot, window, "letters:close")
+    elif cancel == "resize":
+        window.resize(window.width() - 20, window.height())
+        qtbot.wait(1)
+    else:
+        button.setEnabled(False)
+        feed(center, 840)
+        button.setEnabled(True)
+    center = button.mapToGlobal(button.rect().center())
+    feed(center, 860)
+    feed(center, 1061)
+    assert actions == []
+    if cancel in {"mouse", "resize"}:
+        other = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:1"]
+        feed(other.mapToGlobal(other.rect().center()), 1080)
+        feed(center, 1100)
+    feed(center, 2101)
+    assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("during_hold", [False, True])
+def test_speech_gaze_changed_suggestion_requires_confirmed_departure(speech_gaze, during_hold):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    button = window._prediction_buttons[0]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 4, button.height() // 2))
+    feed(center, 0)
+    feed(center, 800)
+    if during_hold:
+        feed(outside, 820)
+    window._input.setText("ŽELIM ")
+    feed(center, 860)
+    feed(center, 2000)
+    assert actions == []
+    feed(outside, 2020)
+    feed(center, 2060)
+    feed(center, 3500)
+    assert actions == []
+    other = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+    feed(other.mapToGlobal(other.rect().center()), 3520)
+    feed(center, 3540)
+    feed(center, 4541)
+    assert window._input.text() == "ŽELIM VODU "
+
+
+@pytest.mark.e2e
+def test_speech_gaze_switch_during_cooldown_waits_before_starting_selection(speech_gaze):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    window._input.setText("ŽELIM ")
+    play = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}play"]
+    group = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+    play_center = play.mapToGlobal(play.rect().center())
+    group_center = group.mapToGlobal(group.rect().center())
+    feed(play_center, 0)
+    feed(play_center, 1001)
+    feed(group_center, 1020)
+    feed(group_center, 1340)
+    feed(group_center, 1360)
+    feed(group_center, 2359)
+    assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}play"]
+    assert window._active_dialog is None
+    feed(group_center, 2361)
+    assert actions == [
+        f"{SPEECH_WINDOW_ACTION_PREFIX}play",
+        f"{SPEECH_WINDOW_ACTION_PREFIX}group:0",
+    ]
+    assert window._active_dialog is window._letter_dialog
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("command", ["play", "suggestion:0"])
+def test_speech_gaze_edge_jitter_cannot_repeat_completed_action(speech_gaze, command):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    window._input.setText("ŽELIM ")
+    button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 4, button.height() // 2))
+    feed(center, 0)
+    feed(center, 1001)
+    assert len(actions) == 1
+    feed(outside, 1020)
+    feed(center, 1060)
+    feed(center, 2400)
+    feed(outside, 2420)
+    feed(center, 2460)
+    feed(center, 3800)
+    assert len(actions) == 1
+    feed(outside, 3820)
+    feed(outside, 3941)
+    feed(center, 3960)
+    feed(center, 4961)
+    assert len(actions) == 2

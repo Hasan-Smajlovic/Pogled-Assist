@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QPoint, Signal
+from PySide6.QtCore import QObject, QPoint, QRect, Signal
 from PySide6.QtGui import QGuiApplication
 
 from ..windows.windows_input import WindowsInputController
@@ -30,6 +30,8 @@ QUICK_ACTIONS = "quick_actions"
 CLICK_ACTIONS = {LEFT_CLICK, RIGHT_CLICK, DOUBLE_LEFT_CLICK}
 MIN_CURSOR_MOVE_DISTANCE_PX = 1.0
 MOUSE_ERROR_LOG_INTERVAL_MS = 1000
+TOOLBAR_EDGE_MARGIN_PX = 24
+TOOLBAR_LEAVE_GRACE_MS = 120
 
 
 @dataclass
@@ -79,6 +81,7 @@ class GazeMouseController(QObject):
         parent: QObject | None = None,
         *,
         pointer_movement_enabled: bool = True,
+        toolbar_action_bounds: Callable[[str], QRect | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings = GazeSettings()
@@ -87,6 +90,7 @@ class GazeMouseController(QObject):
         self._toolbar_action_at = toolbar_action_at
         self._toolbar_action_center = toolbar_action_center
         self._toolbar_contains = toolbar_contains
+        self._toolbar_action_bounds = toolbar_action_bounds
         self._pointer_movement_enabled = pointer_movement_enabled
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
@@ -324,25 +328,65 @@ class GazeMouseController(QObject):
 
         toolbar_action = self._toolbar_action_at(point.logical)
         pointer_over_app_ui = toolbar_action is not None or self._toolbar_contains(point.logical)
+        held_action = self._toolbar_selection.target
+        held_bounds = (
+            self._toolbar_action_bounds(held_action)
+            if isinstance(held_action, str) and self._toolbar_action_bounds is not None
+            else None
+        )
+        can_hold = False
+        if held_bounds is not None:
+            margin = min(
+                TOOLBAR_EDGE_MARGIN_PX, held_bounds.width() // 4, held_bounds.height() // 4
+            )
+            can_hold = pointer_over_app_ui and held_bounds.adjusted(
+                -margin, -margin, margin, margin
+            ).contains(point.logical)
+            if (
+                toolbar_action is None
+                and self._toolbar_selection.is_blocked
+                and held_bounds.contains(point.logical)
+            ):
+                # A replaced suggestion can reject hits while gaze is still on its button.
+                toolbar_action = held_action
 
         if not pointer_over_app_ui:
             self._move_cursor(cursor_point)
 
         if now_ms < self._pause_until_ms:
-            if toolbar_action is None:
+            if held_bounds is not None:
+                # Track departures during cooldown without starting the next selection.
+                self._toolbar_selection.update(
+                    toolbar_action,
+                    now_ms,
+                    pause_ms=self.settings.selection_pause_ms,
+                    dwell_ms=self.settings.dwell_ms,
+                    can_hold=can_hold,
+                    hold_ms=TOOLBAR_LEAVE_GRACE_MS,
+                )
+                if self._toolbar_selection.target != held_action:
+                    self._toolbar_selection.cancel()
+            elif toolbar_action is None:
                 self._reset_toolbar_dwell()
-            else:
-                self._cancel_interaction("toolbar")
-                self._set_toolbar_gaze_target(None)
+            self._cancel_interaction("toolbar")
+            self._set_toolbar_gaze_target(None)
             return
 
-        if toolbar_action is not None:
+        if toolbar_action is not None or can_hold:
             self._reset_target_dwell()
             self._reset_quick_dwell()
             target_center = (
-                self._toolbar_action_center(toolbar_action, point.logical) or point.logical
+                self._toolbar_action_center(toolbar_action, point.logical)
+                if toolbar_action is not None
+                else None
+            ) or point.logical
+            self._handle_toolbar_dwell(
+                toolbar_action,
+                target_center,
+                now_ms,
+                can_hold=can_hold,
+                held_center=held_bounds.center() if held_bounds is not None else None,
             )
-            self._handle_toolbar_dwell(toolbar_action, target_center, now_ms)
             return
 
         self._reset_toolbar_dwell()
@@ -418,18 +462,34 @@ class GazeMouseController(QObject):
             else:
                 logger.debug("Mouse move failed during rate-limit window: %s", exc)
 
-    def _handle_toolbar_dwell(self, action: str, center: QPoint, now_ms: float) -> None:
+    def _handle_toolbar_dwell(
+        self,
+        action: str | None,
+        center: QPoint,
+        now_ms: float,
+        *,
+        can_hold: bool = False,
+        held_center: QPoint | None = None,
+    ) -> None:
         update = self._toolbar_selection.update(
             action,
             now_ms,
             pause_ms=self.settings.selection_pause_ms,
             dwell_ms=self.settings.dwell_ms,
+            can_hold=can_hold,
+            hold_ms=TOOLBAR_LEAVE_GRACE_MS if held_center is not None else 0,
         )
         if update.progress is None:
             self._cancel_interaction("toolbar")
             self._set_toolbar_gaze_target(None)
             return
 
+        target = self._toolbar_selection.target
+        if not isinstance(target, str):
+            return
+        if target != action and held_center is not None:
+            center = held_center
+        action = target
         self._set_toolbar_gaze_target(action)
         self._emit_interaction_progress("toolbar", center, update.progress, _action_label(action))
 

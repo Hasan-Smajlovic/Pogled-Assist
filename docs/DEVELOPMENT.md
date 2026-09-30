@@ -313,6 +313,11 @@ On the Tobii machine, additionally verify:
 - The connection indicator changes from waiting to tracking.
 - Both eye indicators reflect real validity.
 - Losing one eye cancels dwell progress and stops pointer movement.
+- In Speech, a brief movement just beyond a button edge freezes progress without
+  selecting either button. Returning resumes it; a sustained or farther move
+  starts a new selection. Check letters, suggestions, and `Izgovori`, including
+  deliberate fast switches and the leave-before-repeat rule. Record selection
+  errors and switching delay before and after the change on the user's display.
 - Pointer mapping reaches all corners of the calibrated display.
 - Left, right, double-click, precision zoom, and Quick actions work.
 - Default and human-like speech are tested separately.
