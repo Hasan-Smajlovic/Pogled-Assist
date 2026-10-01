@@ -65,6 +65,37 @@ seconds. Raw samples may arrive faster than the UI can safely process them, so
 the provider keeps the newest sample and emits at a bounded interval. This keeps
 the Qt event loop responsive instead of replaying stale gaze positions.
 
+Stream Engine `position_xy` values are normalized display coordinates in both
+the direct backend and the x86 bridge. Finite off-screen values are clamped to
+the same screen edge; their magnitude never changes their units to pixels.
+The bridge serializes each JSON message, newline, and flush under one lock.
+Unexpected end-of-output or a bridge error invalidates both eyes and triggers
+the provider's normal retry path. Stream Engine eye-status delivery older than
+500 ms clears pending gaze and dwell; after three seconds without eye-status
+samples the provider stops the x86 bridge and schedules a fresh connection.
+Direct native streaming stays paused until fresh data arrives: a stuck DLL
+thread cannot be forcibly stopped safely and must not acquire a second device
+subscription. Callbacks from an earlier Stream Engine or Pro SDK connection are
+ignored after stop, failed startup, or replacement. Bridge failure is terminal for that
+bridge instance, even if more buffered messages follow the failure.
+Invalid-eye samples still count as live delivery, so absence or a blink does
+not trigger a reconnect. Diagnostics record delivery age and connection state,
+never typed text.
+
+Before delivering gaze after a gap of at least 500 ms, the provider cancels
+pending interactions through the eye gate and restores current valid status.
+This also covers a stalled Qt event loop or fresh eyes arriving before the
+watchdog runs. The first new gaze starts a full dwell; completed selections
+retain their leave-before-repeat lock.
+
+Eye-status notifications are delivered on the Qt thread before the next gaze
+sample. A backlog retains an intervening invalid-eye state even if both eyes
+are valid again; coalescing must never hide a blink or let queued validity from
+before stop reopen the gate. Pending gaze also carries its local receive time:
+fresh eye status cannot make a gaze sample older than 500 ms usable again.
+The watchdog publishes recovery status on Qt only after checking the current
+connection, so a delayed worker notification cannot overwrite a newer failure.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
@@ -83,6 +114,18 @@ The controller keeps two coordinate spaces separate:
 Smoothing affects visible pointer movement. Click targeting uses the current gaze
 target so smoothing does not move the requested click away from the selected
 point.
+
+`GazeSelectionTimer` owns pause, dwell, and repeat blocking. The controller opts
+Speech, hotbar, and standalone Keyboard controls into a bounded edge hold using
+their current visible, enabled button rectangles in logical coordinates. Hotbar
+hit rectangles extend vertically to the top screen edge, keeping button widths
+and neutral horizontal gaps. Other surfaces retain their existing selection
+rules. During an edge hold, neither elapsed outside time nor the
+interval back to the first returning sample advances selection. Feedback stays
+on the previous button, and a held update can never confirm it. Context changes
+and eye loss discard the hold along with pending progress. Speech also blocks a
+suggestion replaced beneath gaze; that rejection must not count as leaving its
+button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
 
 ## UI and service ownership
 
@@ -105,6 +148,10 @@ validates the request owner, revision, text, caret, and
 selection before displaying a result. Closing the hotbar closes every child
 surface, flushes suggestion learning, stops speech and gaze workers, and
 unregisters the AppBar so Windows restores the full work area.
+
+Speech playback logs identify whether the request came from gaze, button
+activation, or Return in the message field, without recording the message.
+Process startup and UI acknowledgement do not confirm audible playback.
 
 ## Persistent data and logs
 

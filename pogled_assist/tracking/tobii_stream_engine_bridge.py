@@ -7,6 +7,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from typing import Any
 
@@ -14,6 +15,7 @@ from pogled_assist.tracking.tobii_stream_engine import TobiiStreamEngineBackend
 
 logger = logging.getLogger(__name__)
 _running = True
+_output_lock = threading.Lock()
 
 
 def main() -> int:
@@ -73,7 +75,12 @@ def _emit_eye_status(left_open: bool, right_open: bool, timestamp: int) -> None:
 
 def _emit(message_type: str, **payload: Any) -> None:
     message = {"type": message_type, **payload}
-    print(json.dumps(message, separators=(",", ":")), flush=True)
+    line = json.dumps(message, separators=(",", ":")) + "\n"
+    # Startup and SDK callbacks run on different threads. Keep the JSON, newline,
+    # and flush together so stdout remains a stream of complete JSON lines.
+    with _output_lock:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def _pointer_size() -> int:

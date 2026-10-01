@@ -106,10 +106,16 @@ complete, or use a closing reference in a later pull request to the default
 branch. Do not change the normal pull request destination just to close an issue.
 
 The pull request describes the resulting diff, not the original plan. Use the
-repository template to record the outcome, material changes, compatibility
-impact, checks that actually ran, visible evidence when relevant, and anything
-that remains unverified. Link to the issue for scope, dependencies, and acceptance
-criteria instead of repeating them.
+repository template in `.github/pull_request_template.md` to record the outcome,
+material changes, compatibility impact, checks that actually ran, visible
+evidence when relevant, and anything that remains unverified. Link to the issue
+for scope, dependencies, and acceptance criteria instead of repeating them.
+These branch, title, issue-linking, and template rules also apply when suggesting
+a branch name, commit title, or pull request description. Read the template
+before drafting pull request text, retain every heading and checklist item, and
+flag any unknown issue number or verification result in suggestions. Resolve
+issue references before opening the pull request, and mark skipped checks
+Not run with a reason.
 
 Open incomplete work as a draft pull request. Mark it ready for review only when
 the described verification is complete.
