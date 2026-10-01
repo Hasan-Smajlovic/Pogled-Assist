@@ -23,6 +23,10 @@ constraint for every change.
 
 ## Change rules
 
+- Before creating or renaming a branch, follow
+  [Topic branches](CONTRIBUTING.md#topic-branches), including the issue number.
+  Use the repository convention even when an agent or tool supplies a default
+  branch prefix. Resolve the matching issue before choosing the branch name.
 - Treat the current `development` behavior as the compatibility baseline. Keep
   the flows listed in the architecture compatibility contract working unless a
   linked issue explicitly changes one of them.
