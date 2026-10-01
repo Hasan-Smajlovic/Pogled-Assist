@@ -252,8 +252,9 @@ historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
 It currently has main views for Speech, Settings, the installation summary,
-Hotbar, and standalone Keyboard. Controller and gaze overlays do not yet have their own main
-views there. Add the relevant view before changing one of those surfaces.
+Hotbar, standalone Keyboard, and the Controller keyboard. Gaze overlays do not
+yet have their own main views there. Add the relevant view before changing one
+of those surfaces.
 
 Every change to visible layout, copy, control sizes, states, or interaction flow
 must update the matching HTML reference in the same pull request. Update and
