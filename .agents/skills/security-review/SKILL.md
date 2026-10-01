@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Security and privacy rules specific to Pogled Assist - release update trust, typed-message privacy, external process launches, workflow permissions, and public language data. Use when changing pogled_assist/release_update.py, update_windows.ps1, packaging/windows/install_windows.ps1, pogled_assist/speech/speech_service.py, logging, process launches, .github/workflows/, or text under language/ or tests/fixtures/.
+description: Load before changing any text or data under language/ or tests/fixtures/, or changing release update trust, typed-message privacy, logging, external process launches, or GitHub workflow permissions in Pogled Assist.
 ---
 
 # Security review

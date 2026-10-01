@@ -20,6 +20,20 @@
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body { margin: 0; padding: 12px; }
+    .hotbar-reference { position: relative; margin: -12px -12px 18px; height: 76px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: #171d29; }
+    .hotbar-reference button { flex: 0 0 104px; min-height: 58px; height: 58px; padding: 4px; font-size: 14px; }
+    .hotbar-reference button:first-child { flex-basis: 58px; margin-right: 16px; }
+    .hotbar-reference button:nth-child(2) { margin-right: 18px; }
+    .hotbar-reference button:nth-child(3) { flex-basis: 112px; margin-right: 8px; }
+    .hotbar-reference button:nth-child(6) { margin-right: 26px; }
+    .hotbar-reference button::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 9px; }
+    .hotbar-reference small { margin-left: auto; color: #7be5a8; }
+    .sidebar-reference { width: 380px; height: calc(100dvh - 110px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #171d29; }
+    .sidebar-reference nav, .sidebar-reference footer { display: flex; gap: 8px; }
+    .sidebar-reference nav button, .sidebar-reference footer button { flex: 1; min-height: 52px; font-size: 18px; }
+    .sidebar-reference footer button { min-height: 58px; }
+    .sidebar-reference-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .sidebar-reference-grid button { min-height: 54px; }
     button, input { font: inherit; }
     button {
       position: relative;
@@ -329,12 +343,43 @@
 </head>
 <body>
   <nav class="reference-switcher" aria-label="Referentni prikaz">
+    <button type="button" data-reference-view="hotbar" aria-pressed="false">Početni meni</button>
+    <button type="button" data-reference-view="sidebar" aria-pressed="false">Tastatura</button>
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
     <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
     <button type="button" data-reference-view="installation" aria-pressed="false">Instalacija</button>
     <button id="single-letter-preview" type="button">1 slovo</button>
     <button id="twelve-letters-preview" type="button">12 slova</button>
   </nav>
+  <main id="hotbar-screen" hidden>
+    <nav class="hotbar-reference" aria-label="Početni meni">
+      <button type="button" data-edge-control>Sakrij</button>
+      <button type="button" data-edge-control data-open-view="settings">Postavke</button>
+      <button type="button" data-edge-control>Brze radnje</button>
+      <button type="button" data-edge-control>Lijevi klik</button>
+      <button type="button" data-edge-control>Desni klik</button>
+      <button type="button" data-edge-control>Dvostruki klik</button>
+      <button type="button" data-edge-control data-open-view="speech">Govor</button>
+      <button type="button" data-edge-control data-open-view="sidebar">Tastatura</button>
+      <button type="button" data-edge-control>Upravljač</button>
+      <small>● ● ●</small>
+    </nav>
+    <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
+    <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
+    <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
+  </main>
+  <main id="sidebar-screen" hidden>
+    <section class="sidebar-reference" aria-label="Samostalna tastatura">
+      <nav><button type="button" data-edge-control>Slova</button><button type="button" data-edge-control>Brojevi</button><button type="button" data-edge-control>Znakovi</button></nav>
+      <div class="sidebar-reference-grid">
+        <button type="button" data-edge-control>A B C Č Ć</button><button type="button" data-edge-control>D DŽ Đ E F</button>
+        <button type="button" data-edge-control>G H I J K</button><button type="button" data-edge-control>L LJ M N NJ</button>
+        <button type="button" data-edge-control>O P R S Š</button><button type="button" data-edge-control>T U V Z Ž</button>
+      </div>
+      <footer><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
+    </section>
+    <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice, do 120 ms. Izvan dugmeta nema potvrde ni napretka. Novo dugme dobija puno vrijeme odabira; promjena grupe, skrivanje ili gubitak oka poništava prethodni odabir.</p>
+  </main>
   <main id="installation-screen" aria-label="Provjera instalacije" hidden style="max-width:900px;margin:24px auto;padding:24px;background:#1c2029;border-radius:12px">
     <h1>Provjera instalacije</h1>
     <p>Provjerite spremnost programa i dovršite podešavanje Tobii uređaja.</p>
@@ -498,7 +543,9 @@
         <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
         <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
         <li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
-        <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. Pomjeranje na drugi cilj poništava oba tajmera. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga.</li>
+        <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak za manje od 120 ms nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
+        <li>Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta.</li>
+        <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
         <li>Sleep zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
         <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
@@ -568,6 +615,8 @@
       const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
       const GAZE_FILL_MS = 500;
+      const GAZE_LEAVE_GRACE_MS = 120;
+      const GAZE_EDGE_MARGIN = 24;
       const PAGE_SIZE = 6;
       const $ = id => document.getElementById(id);
       const message = $('message');
@@ -588,6 +637,10 @@
       let gazeTarget = null;
       let gazeStart = 0;
       let gazeFrame = 0;
+      let gazeButton = null;
+      let gazePoint = null;
+      let gazeAwayStart = null;
+      let gazeLastSeen = 0;
       let clickFromGaze = false;
       let lastGazeClick = { target: null, time: 0 };
       let blockedGaze = null;
@@ -658,20 +711,17 @@
       document.addEventListener('pointermove', event => {
         if (event.pointerType === 'touch' || !$('gaze-demo').checked) return;
         const button = event.target.closest('button');
-        if (blockedGaze === button) return;
-        blockedGaze = null;
-        if (button === gazeTarget) return;
-        resetGaze();
-        if (!button || button.disabled) return;
-        gazeTarget = button;
-        gazeStart = performance.now();
-        gazeFrame = requestAnimationFrame(tickGaze);
+        gazeButton = button && !button.disabled ? button : null;
+        gazePoint = { x: event.clientX, y: event.clientY };
+        updateGazeTarget(performance.now());
+        if (!gazeFrame && (gazeTarget || gazeAwayStart !== null)) gazeFrame = requestAnimationFrame(tickGaze);
       });
       document.documentElement.addEventListener('pointerleave', resetGaze);
       document.addEventListener('pointerdown', resetGaze);
       document.addEventListener('visibilitychange', resetGaze);
       document.addEventListener('scroll', resetGaze, true);
       window.addEventListener('blur', resetGaze);
+      window.addEventListener('resize', resetGaze);
       $('gaze-demo').addEventListener('change', resetGaze);
       for (const dialog of document.querySelectorAll('dialog')) {
         dialog.addEventListener('cancel', event => {
@@ -687,10 +737,16 @@
         $('speech-screen').hidden = nextView !== 'speech';
         $('settings-screen').hidden = !settingsVisible;
         $('installation-screen').hidden = nextView !== 'installation';
+        $('hotbar-screen').hidden = nextView !== 'hotbar';
+        $('sidebar-screen').hidden = nextView !== 'sidebar';
         for (const button of document.querySelectorAll('[data-reference-view]')) {
           button.setAttribute('aria-pressed', String(button.dataset.referenceView === nextView));
         }
         resetGaze();
+      }
+
+      for (const button of document.querySelectorAll('[data-open-view]')) {
+        button.addEventListener('click', () => showReferenceView(button.dataset.openView));
       }
 
       function handleSettingsAction(action) {
@@ -1089,9 +1145,46 @@
         if ($('alarm-dialog').open) closeDialog($('alarm-dialog'));
       }
 
+      function updateGazeTarget(now) {
+        const candidate = gazeTarget || blockedGaze;
+        if (candidate?.isConnected && !candidate.disabled && candidate.getClientRects().length && gazePoint) {
+          const rect = candidate.getBoundingClientRect();
+          const margin = Math.min(GAZE_EDGE_MARGIN, rect.width / 4, rect.height / 4);
+          const near = gazePoint.x >= rect.left - margin && gazePoint.x <= rect.right + margin && gazePoint.y >= rect.top - margin && gazePoint.y <= rect.bottom + margin;
+          const speechControl = (!$('speech-screen').hidden && candidate.hasAttribute('data-action')) || candidate.hasAttribute('data-edge-control');
+          if (gazeButton !== candidate && speechControl && near) {
+            gazeAwayStart ??= now;
+            if (now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) return;
+          } else if (gazeButton === candidate && gazeAwayStart !== null && now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) {
+            gazeStart += now - gazeLastSeen;
+            gazeAwayStart = null;
+            gazeLastSeen = now;
+            return;
+          }
+        }
+        if (gazeButton === gazeTarget && gazeAwayStart === null) return;
+        if (gazeAwayStart !== null && now - gazeAwayStart >= GAZE_LEAVE_GRACE_MS) blockedGaze = null;
+        resetGaze();
+        if (gazeButton === blockedGaze) return;
+        blockedGaze = null;
+        if (!gazeButton?.isConnected || gazeButton.disabled || !gazeButton.getClientRects().length) return;
+        gazeTarget = gazeButton;
+        gazeStart = gazeLastSeen = now;
+      }
+
       function tickGaze(now) {
+        gazeFrame = 0;
+        updateGazeTarget(now);
+        if (gazeTarget === blockedGaze && gazeAwayStart === null) return;
+        // A completed button still needs departure checks while its ring is hidden.
+        if (!gazeTarget && gazeAwayStart !== null) {
+          gazeFrame = requestAnimationFrame(tickGaze);
+          return;
+        }
         if (!gazeTarget?.isConnected || gazeTarget.disabled || document.hidden) { resetGaze(); return; }
-        const elapsed = now - gazeStart;
+        const held = gazeAwayStart !== null;
+        if (!held) gazeLastSeen = now;
+        const elapsed = gazeLastSeen - gazeStart;
         if (elapsed >= GAZE_PAUSE_MS) {
           const rect = gazeTarget.getBoundingClientRect();
           (gazeTarget.closest('dialog') || document.body).append(ring);
@@ -1101,7 +1194,7 @@
           ring.hidden = false;
           gazeTarget.classList.add('gaze-target');
         }
-        if (elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
+        if (!held && elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
           const target = gazeTarget;
           blockedGaze = target;
           lastGazeClick = { target, time: now };
@@ -1117,6 +1210,8 @@
 
       function resetGaze() {
         cancelAnimationFrame(gazeFrame);
+        gazeFrame = 0;
+        gazeAwayStart = null;
         gazeTarget?.classList.remove('gaze-target');
         gazeTarget = null;
         ring.hidden = true;

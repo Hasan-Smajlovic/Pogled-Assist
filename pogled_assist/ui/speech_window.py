@@ -219,6 +219,7 @@ class SpeechWindow(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
+        self._context_changed()
         self._modal_backdrop.setGeometry(self.rect())
         if self._active_dialog is not None:
             if self._active_dialog is self._sleep_dialog:
@@ -247,16 +248,19 @@ class SpeechWindow(QWidget):
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
+        rect = self.action_bounds(action)
+        return rect.center() if rect is not None and rect.contains(point) else None
+
+    def action_bounds(self, action: str) -> QRect | None:
+        if not self.isVisible():
+            return None
         if self._active_dialog is not None and action not in self._dialog_actions:
             return None
         button = self._action_buttons.get(action)
         if button is None or not button.isVisible() or not button.isEnabled():
             return None
         top_left = button.mapToGlobal(QPoint(0, 0))
-        rect = QRect(top_left, button.size())
-        if not rect.contains(point):
-            return None
-        return rect.center()
+        return QRect(top_left, button.size())
 
     def contains_global_point(self, point: QPoint) -> bool:
         if not self.isVisible():
@@ -275,7 +279,7 @@ class SpeechWindow(QWidget):
                 return
             self._blocked_suggestion = button
         logger.info("Speech window gaze action requested: %s", action)
-        self._trigger_action(action)
+        self._trigger_action(action, source="gaze")
 
     def cancel_gaze_interaction(self) -> None:
         self._set_gaze_target_action(None)
@@ -1297,7 +1301,7 @@ class SpeechWindow(QWidget):
             "phrase": "Nova fraza",
         }[self._editor.kind]
 
-    def _trigger_action(self, action: str) -> None:
+    def _trigger_action(self, action: str, *, source: str = "button") -> None:
         if self._active_dialog is not None and action not in self._dialog_actions:
             return
         button = self._action_buttons.get(action)
@@ -1316,7 +1320,7 @@ class SpeechWindow(QWidget):
         elif command == "confirm:accept":
             self._accept_confirmation()
         elif command == "play":
-            self._play()
+            self._play(source=source)
         elif command == "alarm:start":
             self._start_alarm()
         elif command == "alarm:stop":
@@ -1757,7 +1761,7 @@ class SpeechWindow(QWidget):
                 return
         self._input.setText(text[:-1])
 
-    def _play(self) -> None:
+    def _play(self, *, source: str = "keyboard") -> None:
         if (
             self._editor is not None
             or self._active_dialog is not None
@@ -1768,6 +1772,7 @@ class SpeechWindow(QWidget):
         if not text:
             self._set_status("Prvo sastavite poruku.")
             return
+        logger.info("Speech playback requested: source=%s.", source)
         self._composition.submit()
         self._suggestions.persist()
         if self._speech.speak(text, self._speech_settings):

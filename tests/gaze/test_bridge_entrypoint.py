@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 from pogled_assist.tracking import tobii_stream_engine_bridge
 
@@ -17,6 +18,52 @@ def test_bridge_emit_helpers_write_json(capsys):
         "right_open": False,
         "timestamp": 11,
     }
+
+
+def test_bridge_serializes_concurrent_messages_through_flush(monkeypatch):
+    # Block the first writer inside stdout while the gaze callback tries to write.
+    entered = threading.Event()
+    release = threading.Event()
+    competing = threading.Event()
+    interleaved = threading.Event()
+    chunks = []
+    owner = [None]
+
+    class SlowOutput:
+        def write(self, text):
+            current = threading.get_ident()
+            if owner[0] is None:
+                owner[0] = current
+                entered.set()
+                assert release.wait(2)
+            elif owner[0] != current:
+                interleaved.set()
+            chunks.append(text)
+
+        def flush(self):
+            owner[0] = None
+
+    def gaze():
+        competing.set()
+        tobii_stream_engine_bridge._emit_gaze(0.25, 0.75, 10)
+
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "stdout", SlowOutput())
+    startup = threading.Thread(target=lambda: tobii_stream_engine_bridge._emit("started"))
+    sample = threading.Thread(target=gaze)
+    startup.start()
+    try:
+        assert entered.wait(2)
+        sample.start()
+        assert competing.wait(2)
+        collided = interleaved.wait(0.1)
+    finally:
+        release.set()
+        startup.join(2)
+        sample.join(2)
+    assert not startup.is_alive() and not sample.is_alive()
+    assert not collided
+    messages = [json.loads(line) for line in "".join(chunks).splitlines()]
+    assert [message["type"] for message in messages] == ["started", "gaze"]
 
 
 def test_bridge_main_rejects_64_bit_python(monkeypatch, capsys):
