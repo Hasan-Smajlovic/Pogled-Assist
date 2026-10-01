@@ -90,6 +90,12 @@ point. Gaze does not move the real pointer while the zoom or menu is open.
 ## Speech
 
 Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter.
+The message field is ready for typing when Speech opens, after its controls or
+dialogs are used, and when returning to Speech with Alt+Tab. Returning focus
+preserves the caret and any selected text. While adding a category, answer, or
+phrase, typing belongs to that new entry. Modal dialogs and Sleep block typing
+into the message until closed; Settings and other Windows applications keep
+their focus until you return to Speech. Launch still opens the hotbar.
 Space and Backspace stay on the bottom row. `Izgovori` sends the current text to
 the selected speech engine without clearing it. `Kategorije` contains saved groups
 of answers, while `Fraze` contains standalone reusable text. Both lists support

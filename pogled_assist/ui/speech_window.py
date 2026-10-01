@@ -9,9 +9,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QPaintEvent, QPalette, QResizeEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFrame,
     QGridLayout,
@@ -216,6 +217,23 @@ class SpeechWindow(QWidget):
         self.interaction_context_changed.emit()
         self.closed.emit()
         super().closeEvent(event)
+
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if event.type() == QEvent.Type.WindowActivate:
+            # Qt restores its previous focus widget after sending this event.
+            QTimer.singleShot(0, self, self._restore_input_focus)
+        return handled
+
+    def _restore_input_focus(self) -> None:
+        if (
+            self.isVisible()
+            and QApplication.activeWindow() is self
+            and self._active_dialog is None
+            and QApplication.activeModalWidget() is None
+            and QApplication.activePopupWidget() is None
+        ):
+            self._input.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -1133,6 +1151,7 @@ class SpeechWindow(QWidget):
         self._dialog_actions.clear()
         self._modal_backdrop.hide()
         self._context_changed()
+        QTimer.singleShot(0, self, self._restore_input_focus)
 
     def _clear_main_grid(self) -> None:
         self._set_gaze_target_action(None)
@@ -1206,6 +1225,8 @@ class SpeechWindow(QWidget):
         button = button_type(text, self if parent is None else parent)
         button.setObjectName(object_name)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
+        if button.window() is self:
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.setCheckable(checkable)
         button.setMinimumHeight(minimum_height)
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -1375,6 +1396,7 @@ class SpeechWindow(QWidget):
             self._change_list_page(1)
         elif command.startswith("list:select:"):
             self._select_list_item(int(command.rsplit(":", 1)[1]))
+        self._restore_input_focus()
 
     def _toggle_categories(self) -> None:
         if self._view_mode in ("categories", "answers"):
@@ -1734,21 +1756,21 @@ class SpeechWindow(QWidget):
     def _set_composed_text(self, text: str) -> None:
         self._updating_input = True
         self._input.setText(_uppercase(text))
-        self._input.setFocus(Qt.FocusReason.MouseFocusReason)
+        self._restore_input_focus()
         self._updating_input = False
         self._suggestions.persist()
         self._refresh_suggestions()
 
     def _append_text(self, value: str) -> None:
         self._input.setText(f"{self._input.text()}{_uppercase(value)}")
-        self._input.setFocus(Qt.FocusReason.MouseFocusReason)
+        self._restore_input_focus()
 
     def _append_phrase_to_input(self, phrase: str) -> None:
         current = self._input.text()
         if current and not current.endswith(" "):
             current = f"{current} "
         self._input.setText(f"{current}{_uppercase(phrase.strip())} ")
-        self._input.setFocus(Qt.FocusReason.MouseFocusReason)
+        self._restore_input_focus()
 
     def _backspace(self) -> None:
         text = self._input.text()
