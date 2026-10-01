@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
+from PySide6.QtWidgets import QLineEdit
 
 from pogled_assist.interaction.mouse_controller import (
     CONTROLLER,
@@ -184,6 +185,216 @@ class FakeControllerInput(FakeKeyboardInput):
 
     def scroll(self, units):
         self.scrolls.append(units)
+
+
+@pytest.fixture
+def speech_focus_window(qtbot, qapp):
+    window = SpeechWindow(
+        FakeSpeech(), library_store=FakeLibraryStore(), alarm_sound=FakeAlarmSound()
+    )
+    qtbot.addWidget(window)
+    window.show_full_screen()
+    qapp.setActiveWindow(window)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input)
+    return window
+
+
+@pytest.mark.e2e
+def test_speech_can_type_on_open_and_reopen_without_selecting_input(
+    qtbot, qapp, speech_focus_window
+):
+    window = speech_focus_window
+    qtbot.keyClicks(qapp.focusWidget(), "a")
+    assert window._input.text() == "A"
+    window.close()
+    window.show_full_screen()
+    qapp.setActiveWindow(window)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input)
+    qtbot.keyClicks(qapp.focusWidget(), "b")
+    assert window._input.text() == "AB"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("selection_length", [0, 3])
+def test_speech_restores_focus_on_return_without_changing_caret_or_selection(
+    qtbot, qapp, speech_focus_window, selection_length
+):
+    window = speech_focus_window
+    window._input.setText("ABCDEFGHIJ")
+    if selection_length:
+        window._input.setSelection(2, selection_length)
+    else:
+        window._input.setCursorPosition(2)
+    cursor = window._input.cursorPosition()
+    selected = window._input.selectedText()
+    if not selection_length:
+        # Exercise returning with a previously misplaced focus widget.
+        window._play_button.setFocus()
+
+    other = QLineEdit()
+    qtbot.addWidget(other)
+    other.show()
+    qapp.setActiveWindow(other)
+    other.setFocus()
+    qapp.processEvents()
+    assert qapp.focusWidget() is other
+    qtbot.keyClicks(qapp.focusWidget(), "z")
+    assert other.text() == "z"
+    assert window._input.text() == "ABCDEFGHIJ"
+
+    qapp.setActiveWindow(window)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
+    assert window._input.cursorPosition() == cursor
+    assert window._input.selectedText() == selected
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == "ABX" + "ABCDEFGHIJ"[2 + selection_length :]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("selection_length", [3, -3])
+def test_speech_control_click_keeps_selection_and_its_direction(
+    qtbot, qapp, speech_focus_window, selection_length
+):
+    window = speech_focus_window
+    window._input.setText("ABCDEFGHIJ")
+    window._input.setSelection(2 if selection_length > 0 else 5, selection_length)
+    cursor = window._input.cursorPosition()
+    qtbot.mouseClick(window._categories_button, Qt.LeftButton)
+    assert qapp.focusWidget() is window._input
+    assert window._input.selectedText() == "CDE"
+    assert window._input.cursorPosition() == cursor
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == "ABXFGHIJ"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("source", ["mouse", "gaze"])
+@pytest.mark.parametrize(
+    "command", ["play", "categories", "phrases", "keyboard-toggle", "backspace"]
+)
+def test_speech_controls_leave_message_ready_for_typing(
+    qtbot, qapp, speech_focus_window, source, command
+):
+    window = speech_focus_window
+    window._input.setText("PORUKA")
+    action = f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
+    if source == "mouse":
+        qtbot.mouseClick(window._action_buttons[action], Qt.LeftButton)
+    else:
+        window.handle_gaze_action(action)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
+    previous = window._input.text()
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == previous + "X"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    ("open_command", "close_command"),
+    [
+        ("group:0", "letters:close"),
+        ("group:0", "letter:0:0"),
+        ("clear", "confirm:cancel"),
+        ("clear", "confirm:accept"),
+        ("alarm:start", "alarm:stop"),
+        ("sleep:start", "sleep:wake"),
+        ("exit", "exit:cancel"),
+    ],
+)
+@pytest.mark.parametrize("source", ["mouse", "gaze"])
+def test_speech_dialogs_block_background_typing_and_restore_input_on_close(
+    qtbot, qapp, speech_focus_window, open_command, close_command, source
+):
+    window = speech_focus_window
+    window._input.setText("PORUKA")
+    open_action = f"{SPEECH_WINDOW_ACTION_PREFIX}{open_command}"
+    if source == "mouse":
+        qtbot.mouseClick(window._action_buttons[open_action], Qt.LeftButton)
+    else:
+        window.handle_gaze_action(open_action)
+    qtbot.waitUntil(lambda: qapp.activeModalWidget() is window._active_dialog)
+    # The offscreen platform does not activate modal windows like Windows does.
+    qapp.setActiveWindow(window._active_dialog)
+    assert qapp.focusWidget() is not window._input
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == "PORUKA"
+    action = f"{SPEECH_WINDOW_ACTION_PREFIX}{close_command}"
+    if source == "mouse":
+        qtbot.mouseClick(window._action_buttons[action], Qt.LeftButton)
+    else:
+        window.handle_gaze_action(action)
+    qapp.setActiveWindow(window)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
+    previous = window._input.text()
+    qtbot.keyClicks(qapp.focusWidget(), "y")
+    assert window._input.text() == previous + "Y"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("kind", ["category", "answer", "phrase"])
+@pytest.mark.parametrize("finish", ["save", "cancel", "failure"])
+def test_speech_editor_focus_keeps_draft_separate_from_conversation(
+    qtbot, qapp, speech_focus_window, kind, finish
+):
+    window = speech_focus_window
+    window._input.setText("PORUKA")
+    if kind == "phrase":
+        window._phrases_button.click()
+    else:
+        window._categories_button.click()
+    if kind == "answer":
+        click_speech_action(qtbot, window, "list:select:0")
+    qtbot.mouseClick(window._add_item_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
+    qtbot.keyClicks(qapp.focusWidget(), "novi unos")
+    assert window._editor.message == "PORUKA"
+    assert window._input.text() == "NOVI UNOS"
+    if finish == "failure":
+        window._library_store.fail_saves = True
+    button = window._cancel_editor_button if finish == "cancel" else window._save_item_button
+    qtbot.mouseClick(button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
+    if finish == "failure":
+        assert window._editor is not None
+        assert window._editor.message == "PORUKA"
+        assert window._input.text() == "NOVI UNOS"
+    else:
+        assert window._editor is None
+        assert window._input.text() == "PORUKA"
+    previous = window._input.text()
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == previous + "X"
+
+
+@pytest.mark.e2e
+def test_speech_keeps_typing_focus_when_tab_is_pressed(qtbot, qapp, speech_focus_window):
+    window = speech_focus_window
+    qtbot.keyClick(qapp.focusWidget(), Qt.Key_Tab)
+    assert qapp.focusWidget() is window._input
+    qtbot.keyClicks(qapp.focusWidget(), "a")
+    assert window._input.text() == "A"
+
+
+@pytest.mark.e2e
+def test_speech_queued_focus_return_cannot_take_focus_from_another_window(
+    qtbot, qapp, speech_focus_window
+):
+    window = speech_focus_window
+    other = QLineEdit()
+    qtbot.addWidget(other)
+    other.show()
+    qapp.setActiveWindow(other)
+    other.setFocus()
+    qapp.setActiveWindow(window)
+    # Leave Speech before its deferred activation work reaches the event loop.
+    qapp.setActiveWindow(other)
+    other.setFocus()
+    qapp.processEvents()
+    assert qapp.activeWindow() is other
+    assert qapp.focusWidget() is other
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert other.text() == "x"
+    assert window._input.text() == ""
 
 
 @pytest.mark.e2e

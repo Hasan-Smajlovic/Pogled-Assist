@@ -537,6 +537,7 @@
         <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
         <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
+        <li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Sleep blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
         <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Sleep i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
         <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
         <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
@@ -652,6 +653,7 @@
       let selectedWord = null;
 
       render();
+      requestAnimationFrame(restoreMessageFocus);
 
       for (const button of document.querySelectorAll('[data-reference-view]')) {
         button.addEventListener('click', () => {
@@ -683,6 +685,7 @@
         if (!clickFromGaze && button === lastGazeClick.target && performance.now() - lastGazeClick.time < 350) return;
         resetGaze();
         handleAction(button.dataset.action, button.dataset.value);
+        restoreMessageFocus();
       });
       message.addEventListener('input', () => {
         const appended = message.value.length === lastText.length + 1 && message.value.startsWith(lastText);
@@ -702,6 +705,7 @@
       $('learning-demo-state').addEventListener('change', renderLearning);
       document.addEventListener('keydown', event => {
         if (event.altKey || event.ctrlKey || event.metaKey || document.querySelector('dialog[open]')) return;
+        if (event.key === 'Tab' && event.target === message && !$('speech-screen').hidden) { event.preventDefault(); return; }
         if (event.target.closest('input, summary')) return;
         if (event.target.closest('.reference')) return;
         if (event.key === ' ' && event.target.closest('button')) return;
@@ -721,6 +725,7 @@
       document.addEventListener('visibilitychange', resetGaze);
       document.addEventListener('scroll', resetGaze, true);
       window.addEventListener('blur', resetGaze);
+      window.addEventListener('focus', () => requestAnimationFrame(restoreMessageFocus));
       window.addEventListener('resize', resetGaze);
       $('gaze-demo').addEventListener('change', resetGaze);
       for (const dialog of document.querySelectorAll('dialog')) {
@@ -743,6 +748,16 @@
           button.setAttribute('aria-pressed', String(button.dataset.referenceView === nextView));
         }
         resetGaze();
+        restoreMessageFocus();
+      }
+
+      function restoreMessageFocus() {
+        if (!document.hasFocus() || $('speech-screen').hidden || document.querySelector('dialog[open]')) return;
+        const start = message.selectionStart;
+        const end = message.selectionEnd;
+        const direction = message.selectionDirection;
+        message.focus({ preventScroll: true });
+        message.setSelectionRange(start, end, direction);
       }
 
       for (const button of document.querySelectorAll('[data-open-view]')) {
@@ -1092,6 +1107,7 @@
         resetGaze();
         document.body.append(ring);
         dialog.close();
+        requestAnimationFrame(restoreMessageFocus);
       }
 
       async function startAlarm() {
