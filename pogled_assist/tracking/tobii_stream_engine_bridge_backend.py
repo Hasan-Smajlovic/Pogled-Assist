@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -61,6 +62,10 @@ class TobiiStreamEngineBridgeBackend:
     @property
     def python_path(self) -> str:
         return self._python_path
+
+    @property
+    def connection_error(self) -> str | None:
+        return self._start_error if self._error_event.is_set() else None
 
     def start(self) -> None:
         self._python_path = _find_x86_python()
@@ -141,6 +146,11 @@ class TobiiStreamEngineBridgeBackend:
                     f"32-bit Tobii bridge exited before startup with code {process.returncode}."
                 )
 
+            if self._error_event.is_set():
+                message = self._start_error or "Bridge startup failed."
+                self.stop()
+                raise TobiiStreamEngineBridgeError(message)
+
             if self._started_event.is_set():
                 logger.info(
                     "Tobii Stream Engine x86 bridge started with %s via %s.",
@@ -148,11 +158,6 @@ class TobiiStreamEngineBridgeBackend:
                     self._python_path,
                 )
                 return
-
-            if self._error_event.is_set():
-                message = self._start_error or "Bridge startup failed."
-                self.stop()
-                raise TobiiStreamEngineBridgeError(message)
 
             time.sleep(0.05)
 
@@ -166,16 +171,22 @@ class TobiiStreamEngineBridgeBackend:
         if process is None or process.stdout is None:
             return
 
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                logger.warning("Tobii x86 bridge stdout was not JSON: %s", line)
-                continue
-            self._handle_message(message)
+        try:
+            for raw_line in process.stdout:
+                if self._stop_event.is_set():
+                    break
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.warning("Tobii x86 bridge stdout was not a JSON message.")
+                    continue
+                self._handle_message(message)
+        finally:
+            if not self._stop_event.is_set():
+                self._connection_failed("Tobii x86 bridge output ended unexpectedly.")
 
     def _read_stderr(self) -> None:
         process = self._process
@@ -200,7 +211,20 @@ class TobiiStreamEngineBridgeBackend:
         self._stdout_thread = None
         self._stderr_thread = None
 
-    def _handle_message(self, message: dict[str, object]) -> None:
+    def _connection_failed(self, reason: str) -> None:
+        if self._error_event.is_set() or self._stop_event.is_set():
+            return
+        self._start_error = reason
+        self._error_event.set()
+        self._eye_status_callback(False, False, 0)
+        logger.warning("%s", reason)
+
+    def _handle_message(self, message: object) -> None:
+        if self._error_event.is_set() or self._stop_event.is_set():
+            return
+        if not isinstance(message, dict):
+            logger.warning("Tobii x86 bridge payload was not an object.")
+            return
         message_type = message.get("type")
         if message_type == "started":
             label = str(message.get("label") or self._label)
@@ -215,34 +239,39 @@ class TobiiStreamEngineBridgeBackend:
                 x = float(message["x"])
                 y = float(message["y"])
                 timestamp = int(message.get("timestamp") or 0)
-            except (KeyError, TypeError, ValueError):
-                logger.warning("Tobii x86 bridge gaze payload was invalid: %s", message)
+            except (KeyError, TypeError, ValueError, OverflowError):
+                logger.warning("Tobii x86 bridge gaze payload was invalid.")
+                return
+            if not math.isfinite(x) or not math.isfinite(y):
+                logger.warning("Tobii x86 bridge gaze coordinates were not finite.")
                 return
             self._gaze_callback(x, y, timestamp)
             return
 
         if message_type == "eyes":
             try:
-                left_open = bool(message["left_open"])
-                right_open = bool(message["right_open"])
+                left_open = message["left_open"]
+                right_open = message["right_open"]
+                if not isinstance(left_open, bool) or not isinstance(right_open, bool):
+                    raise ValueError("Eye validity must be boolean.")
                 timestamp = int(message.get("timestamp") or 0)
-            except (KeyError, TypeError, ValueError):
-                logger.warning("Tobii x86 bridge eye-status payload was invalid: %s", message)
+            except (KeyError, TypeError, ValueError, OverflowError):
+                logger.warning("Tobii x86 bridge eye-status payload was invalid.")
+                self._eye_status_callback(False, False, 0)
                 return
             self._eye_status_callback(left_open, right_open, timestamp)
             return
 
         if message_type == "error":
-            self._start_error = str(message.get("message") or "Bridge reported an error.")
-            logger.warning("Tobii x86 bridge error: %s", self._start_error)
-            self._error_event.set()
+            self._connection_failed("Tobii x86 bridge reported an error.")
             return
 
         if message_type == "stopped":
-            logger.info("Tobii x86 bridge reported stopped.")
+            if not self._stop_event.is_set():
+                self._connection_failed("Tobii x86 bridge stopped unexpectedly.")
             return
 
-        logger.info("Tobii x86 bridge message: %s", message)
+        logger.info("Tobii x86 bridge ignored an unknown message type.")
 
 
 def _find_x86_python() -> str:

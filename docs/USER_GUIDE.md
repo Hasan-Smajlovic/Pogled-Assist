@@ -33,6 +33,11 @@ The app tries these tracking backends in order:
 The connection dot is green while tracking, yellow while waiting or retrying,
 and red after an unavailable or failed backend. The two white dots show left and
 right eye validity. Gaze control pauses when either eye becomes invalid.
+It also pauses if Stream Engine stops sending eye status. A prolonged interruption
+in the x86 bridge or a closed bridge starts automatic reconnection; normal
+invalid-eye samples do not restart the connection. A direct native connection
+stays paused until fresh data returns. After a gap in gaze delivery, selection
+starts again from zero rather than confirming a target using time spent waiting.
 
 ## Hotbar controls
 
@@ -59,6 +64,11 @@ then fills for the configured stare time, so the two default 500 ms values take
 one second in total. After a control activates, look away from it before returning
 to select it again. A mouse click remains immediate and cancels any pending gaze
 selection.
+
+The top edge directly above each hotbar button also selects that button. Gaps
+between buttons remain neutral. A brief movement near a button edge freezes
+selection for up to 120 ms, as described under [Speech](#speech); it cannot fire
+an action outside the target or unlock a completed action for a repeat.
 
 A gaze-driven right click arms one direct left click for selecting a context-menu
 item. That follow-up click skips precision zoom so the menu stays open.
@@ -97,6 +107,8 @@ progress. The button cannot activate while gaze is outside it. Moving farther
 away or staying outside longer starts a new selection. This applies to letter
 groups, letters, word suggestions, and `Izgovori`, as well as the other Speech
 controls. A brief edge movement does not unlock a button for repeat selection.
+Returning after the edge tolerance expires permits a repeat with a full new
+pause and dwell, even if no further gaze sample arrived while outside.
 Eye loss, mouse actions, changed views, and window resizing still cancel pending
 progress. A changed word suggestion requires looking away before selecting it.
 
@@ -151,6 +163,9 @@ Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The
 panel sends normal Windows keyboard input to the last external foreground window.
 It reserves the right work area while the hotbar is visible and expands to the
 full screen height while the hotbar is hidden.
+Its controls use the same brief edge tolerance as [Speech](#speech). Changing
+groups, hiding or resizing the panel, or losing either eye cancels pending
+selection.
 
 ## Controller
 

@@ -193,6 +193,13 @@ The suite uses five layers:
 5. Manual Tobii checks verify the device runtime, calibration, gaze quality,
    AppBar behavior, clicks, and speech on the target machine.
 
+Provider regressions also exercise worker-thread eye notifications arriving
+before Qt has dispatched them, shutdown/reconnect with pending callbacks, and
+stale gaze queued during a GUI stall. These cases use the real provider and
+controller with fake device inputs; sequential callback tests alone cannot
+verify their dispatch ordering. Speech UI tests cover gaze, button and Return
+activation and check that source diagnostics omit the message text.
+
 Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`,
 `tests/suggestions/`, `tests/ui/`, `tests/release/`, and `tests/tooling/`.
 Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
@@ -244,8 +251,8 @@ is the design source of truth for the visible Pogled Assist interface. The
 historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
-It currently has main views for Speech, Settings, and the installation summary. Hotbar, standalone
-Keyboard and Controller, and gaze overlays do not yet have their own main
+It currently has main views for Speech, Settings, the installation summary,
+Hotbar, and standalone Keyboard. Controller and gaze overlays do not yet have their own main
 views there. Add the relevant view before changing one of those surfaces.
 
 Every change to visible layout, copy, control sizes, states, or interaction flow
@@ -313,11 +320,19 @@ On the Tobii machine, additionally verify:
 - The connection indicator changes from waiting to tracking.
 - Both eye indicators reflect real validity.
 - Losing one eye cancels dwell progress and stops pointer movement.
-- In Speech, a brief movement just beyond a button edge freezes progress without
+- At 150% scaling, select Speech, Keyboard, and Settings from the top screen edge
+  without a mouse. Gaps between buttons must not select either neighbor.
+- In Speech, the hotbar, and standalone Keyboard, a brief movement just beyond a button edge freezes progress without
   selecting either button. Returning resumes it; a sustained or farther move
   starts a new selection. Check letters, suggestions, and `Izgovori`, including
   deliberate fast switches and the leave-before-repeat rule. Record selection
   errors and switching delay before and after the change on the user's display.
+- Disconnect and reconnect the tracker while dwelling. Progress must cancel,
+  the connection must recover, and the first new selection must start from zero.
+  Confirm that normal invalid-eye samples do not repeatedly restart the backend.
+- With the x86 bridge, resume after Windows sleep and confirm that old dwell
+  progress cannot fire an action. A direct native connection pauses until data
+  returns and does not start a replacement native subscription during an outage.
 - Pointer mapping reaches all corners of the calibrated display.
 - Left, right, double-click, precision zoom, and Quick actions work.
 - Default and human-like speech are tested separately.

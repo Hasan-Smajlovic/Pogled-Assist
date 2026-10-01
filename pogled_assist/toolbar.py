@@ -116,7 +116,7 @@ class HotbarWindow(QWidget):
             self.contains_global_point,
             self,
             pointer_movement_enabled=not simulate_gaze,
-            toolbar_action_bounds=self.speech_action_bounds,
+            toolbar_action_bounds=self.action_bounds,
         )
         self._mouse.update_settings(self._initial_gaze_settings)
         self._gaze_bubble = GazeBubbleWindow()
@@ -164,6 +164,11 @@ class HotbarWindow(QWidget):
         self._appbar.unregister()
         super().closeEvent(event)
 
+    def resizeEvent(self, event) -> None:
+        if hasattr(self, "_mouse"):
+            self._mouse.cancel_toolbar_interaction(require_leave=True)
+        super().resizeEvent(event)
+
     def action_at_global_point(self, point: QPoint) -> str | None:
         if self._quick_zoom.isVisible():
             return None
@@ -185,13 +190,9 @@ class HotbarWindow(QWidget):
         if self._settings_window is not None and self._settings_window.isVisible():
             return None
 
-        for action, button in self._buttons.items():
-            if not button.isVisible() or not button.isEnabled():
-                continue
-
-            top_left = button.mapToGlobal(QPoint(0, 0))
-            rect = QRect(top_left, button.size())
-            if rect.contains(point):
+        for action in self._buttons:
+            rect = self._hotbar_action_bounds(action)
+            if rect is not None and rect.contains(point):
                 return action
 
         return None
@@ -220,17 +221,35 @@ class HotbarWindow(QWidget):
 
         top_left = button.mapToGlobal(QPoint(0, 0))
         rect = QRect(top_left, button.size())
-        if not rect.contains(point):
+        bounds = self._hotbar_action_bounds(action)
+        if bounds is None or not bounds.contains(point):
             return None
 
         return rect.center()
 
-    def speech_action_bounds(self, action: str) -> QRect | None:
+    def action_bounds(self, action: str) -> QRect | None:
         if self._quick_zoom.isVisible() or self._quick_menu.isVisible():
             return None
         if self._speech_window is not None and self._speech_window.isVisible():
             return self._speech_window.action_bounds(action)
-        return None
+        if self._settings_window is not None and self._settings_window.isVisible():
+            return None
+        if action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX):
+            if self._keyboard_window is not None:
+                return self._keyboard_window.action_bounds(action)
+            return None
+        return self._hotbar_action_bounds(action)
+
+    def _hotbar_action_bounds(self, action: str) -> QRect | None:
+        button = self._buttons.get(action)
+        if button is None or not button.isVisible() or not button.isEnabled():
+            return None
+        rect = QRect(button.mapToGlobal(QPoint(0, 0)), button.size())
+        if self.isVisible() and button is not self._restore_button:
+            # Gaze clamped to the screen's top edge must still reach the buttons.
+            # Preserve each horizontal span so adjacent targets never overlap.
+            rect.setTop(self.mapToGlobal(QPoint(0, 0)).y())
+        return rect
 
     def contains_global_point(self, point: QPoint) -> bool:
         if self._quick_zoom.isVisible():
@@ -801,6 +820,7 @@ class HotbarWindow(QWidget):
 
     def _hide_hotbar(self) -> None:
         logger.info("Hiding hotbar.")
+        self._mouse.cancel_toolbar_interaction(require_leave=True)
         self._set_toolbar_gaze_target(None)
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()

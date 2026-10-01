@@ -364,7 +364,7 @@ class GazeMouseController(QObject):
                     can_hold=can_hold,
                     hold_ms=TOOLBAR_LEAVE_GRACE_MS,
                 )
-                if self._toolbar_selection.target != held_action:
+                if not self._toolbar_selection.is_blocked:
                     self._toolbar_selection.cancel()
             elif toolbar_action is None:
                 self._reset_toolbar_dwell()
@@ -385,7 +385,12 @@ class GazeMouseController(QObject):
                 target_center,
                 now_ms,
                 can_hold=can_hold,
-                held_center=held_bounds.center() if held_bounds is not None else None,
+                held_center=(
+                    self._toolbar_action_center(held_action, held_bounds.center())
+                    or held_bounds.center()
+                    if held_bounds is not None
+                    else None
+                ),
             )
             return
 

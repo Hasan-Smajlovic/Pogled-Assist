@@ -155,6 +155,14 @@ class KeyboardWindow(QWidget):
         self.hide()
         logger.info("Keyboard sidebar hidden.")
 
+    def hideEvent(self, event) -> None:
+        self.interaction_context_changed.emit()
+        super().hideEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        self.interaction_context_changed.emit()
+        super().resizeEvent(event)
+
     def set_full_height(self, full_height: bool) -> None:
         full_height = bool(full_height)
         if self._full_height == full_height:
@@ -204,28 +212,24 @@ class KeyboardWindow(QWidget):
         logger.info("Keyboard sidebar settings updated: %s", self._settings)
 
     def action_at_global_point(self, point: QPoint) -> str | None:
-        for action, button in self._action_buttons.items():
-            if not button.isVisible() or not button.isEnabled():
-                continue
-
-            top_left = button.mapToGlobal(QPoint(0, 0))
-            rect = QRect(top_left, button.size())
-            if rect.contains(point):
+        for action in self._action_buttons:
+            rect = self.action_bounds(action)
+            if rect is not None and rect.contains(point):
                 return action
 
         return None
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
+        rect = self.action_bounds(action)
+        return rect.center() if rect is not None and rect.contains(point) else None
+
+    def action_bounds(self, action: str) -> QRect | None:
+        if not self.isVisible():
+            return None
         button = self._action_buttons.get(action)
         if button is None or not button.isVisible() or not button.isEnabled():
             return None
-
-        top_left = button.mapToGlobal(QPoint(0, 0))
-        rect = QRect(top_left, button.size())
-        if not rect.contains(point):
-            return None
-
-        return rect.center()
+        return QRect(button.mapToGlobal(QPoint(0, 0)), button.size())
 
     def contains_global_point(self, point: QPoint) -> bool:
         if not self.isVisible():

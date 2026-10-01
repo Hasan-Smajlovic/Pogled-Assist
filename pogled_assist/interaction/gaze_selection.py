@@ -64,6 +64,9 @@ class GazeSelectionTimer:
                 return GazeSelectionUpdate(progress=progress.progress)
 
         if self._away_since_ms is not None:
+            if now_ms - self._away_since_ms >= hold_ms:
+                # Departure can expire between samples, including on the return.
+                self._blocked_target = None
             if target == self._target and target is not None:
                 if now_ms - self._away_since_ms < hold_ms:
                     # Exclude the interval up to the first returning sample.

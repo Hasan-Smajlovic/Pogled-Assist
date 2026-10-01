@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import replace
 
 import pytest
@@ -83,6 +84,25 @@ class FakeSpeech:
 
     def stop(self):
         self.stop_calls += 1
+
+
+@pytest.mark.parametrize("source", ["gaze", "button", "keyboard"])
+def test_speech_playback_logs_input_source_without_message(qtbot, caplog, source):
+    speech = FakeSpeech()
+    window = SpeechWindow(speech, library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("SYNTHETIC PRIVATE MESSAGE")
+    with caplog.at_level(logging.INFO):
+        if source == "gaze":
+            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}play")
+        elif source == "button":
+            qtbot.mouseClick(window._play_button, Qt.LeftButton)
+        else:
+            qtbot.keyClick(window._input, Qt.Key_Return)
+    assert len(speech.requests) == 1
+    assert f"Speech playback requested: source={source}." in caplog.text
+    assert "SYNTHETIC PRIVATE MESSAGE" not in caplog.text
 
 
 class FakeAlarmSound(QObject):
@@ -1004,8 +1024,9 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
 
 
 @pytest.fixture(params=[(1920, 1080), (1280, 720)])
-def speech_gaze(qtbot, monkeypatch, request):
+def hotbar_gaze(qtbot, monkeypatch, request):
     from pogled_assist import toolbar
+    from pogled_assist.ui import keyboard_window
     from scripts.ui.capture_ui import PreviewSuggestionService
 
     monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
@@ -1014,14 +1035,14 @@ def speech_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(toolbar, "SuggestionService", PreviewSuggestionService)
     monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
     monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
+    monkeypatch.setattr(toolbar.HotbarWindow, "_start_services", lambda _self: None)
+    monkeypatch.setattr(keyboard_window, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(keyboard_window, "WindowsInputController", FakeHotbarInput)
     hotbar = toolbar.HotbarWindow(simulate_gaze=True)
     qtbot.addWidget(hotbar)
-    hotbar._open_speech()
-    window = hotbar._speech_window
-    window.showNormal()
     width, height = request.param
-    window.setGeometry(0, 0, width, height)
-    qtbot.waitUntil(window.isVisible)
+    hotbar.show()
+    hotbar.setGeometry(0, 0, width, hotbar.BAR_HEIGHT)
     qtbot.wait(1)
     controller = hotbar._mouse
     controller._logical_screen_rect = (0, 0, width, height)
@@ -1040,7 +1061,146 @@ def speech_gaze(qtbot, monkeypatch, request):
         now[0] = 10.0 + milliseconds / 1000
         controller.handle_gaze(point.x() / (width - 1), point.y() / (height - 1), milliseconds)
 
+    return hotbar, controller, feed, actions, progress
+
+
+@pytest.fixture
+def speech_gaze(hotbar_gaze, qtbot):
+    hotbar, controller, feed, actions, progress = hotbar_gaze
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(*controller._logical_screen_rect)
+    qtbot.waitUntil(window.isVisible)
+    qtbot.wait(1)
     return window, controller, hotbar._speech, feed, actions, progress
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("action", [SPEECH, KEYBOARD, SETTINGS])
+@pytest.mark.parametrize("y", [0, 1])
+def test_hotbar_gaze_acquires_buttons_at_top_edge(hotbar_gaze, monkeypatch, action, y):
+    hotbar, _controller, feed, actions, _progress = hotbar_gaze
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    point = hotbar._buttons[action].mapToGlobal(QPoint(50, 0))
+    point.setY(y)
+    assert hotbar.action_at_global_point(point) == action
+    feed(point, 0)
+    feed(point, 800)
+    assert hotbar._buttons[action].property("gazeTarget") is True
+    feed(point, 1001)
+    assert actions == [action]
+    opened = {
+        SPEECH: hotbar._speech_window,
+        KEYBOARD: hotbar._keyboard_window,
+        SETTINGS: hotbar._settings_window,
+    }[action]
+    assert opened is not None and opened.isVisible()
+
+
+@pytest.mark.e2e
+def test_hotbar_top_edge_has_distinct_targets_and_neutral_gaps(hotbar_gaze):
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    bounds = [(action, hotbar.action_bounds(action)) for action in hotbar._buttons]
+    bounds = [(action, rect) for action, rect in bounds if rect is not None]
+    for x in range(hotbar.width()):
+        point = QPoint(x, 0)
+        matches = [action for action, rect in bounds if rect.contains(point)]
+        assert len(matches) <= 1
+        assert hotbar.action_at_global_point(point) == (matches[0] if matches else None)
+    hotbar._buttons[SPEECH].setEnabled(False)
+    assert hotbar.action_bounds(SPEECH) is None
+    hotbar.hide()
+    assert hotbar.action_at_global_point(QPoint(50, 0)) is None
+
+
+@pytest.fixture(params=["hotbar", "keyboard"])
+def edge_surface(hotbar_gaze, qtbot, request):
+    hotbar, controller, feed, actions, progress = hotbar_gaze
+    if request.param == "hotbar":
+        window = hotbar
+        action = QUICK_ACTIONS
+        button = hotbar._buttons[action]
+    else:
+        hotbar._show_keyboard_sidebar()
+        window = hotbar._keyboard_window
+        _, _, width, height = controller._logical_screen_rect
+        window.setGeometry(width - 380, hotbar.BAR_HEIGHT, 380, height - hotbar.BAR_HEIGHT)
+        qtbot.wait(1)
+        action = f"{KEYBOARD_WINDOW_ACTION_PREFIX}space"
+        button = window._space_button
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 2, button.height() // 2))
+    return window, controller, feed, actions, progress, action, center, outside
+
+
+@pytest.mark.e2e
+def test_hotbar_and_keyboard_hold_progress_without_selecting_outside(edge_surface):
+    _window, _controller, feed, actions, progress, action, center, outside = edge_surface
+    feed(center, 0)
+    feed(center, 800)
+    feed(outside, 820)
+    feed(outside, 860)
+    assert progress[-1] == pytest.approx(0.6)
+    assert actions == []
+    feed(center, 900)
+    feed(center, 1099)
+    assert actions == []
+    feed(center, 1101)
+    assert actions == [action]
+    feed(outside, 1120)
+    feed(center, 1160)
+    feed(center, 2500)
+    assert actions == [action]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("reset", ["eye", "long-departure", "hide", "resize"])
+def test_hotbar_and_keyboard_discard_progress_after_interruption(edge_surface, reset):
+    window, controller, feed, actions, _progress, _action, center, outside = edge_surface
+    feed(center, 0)
+    feed(center, 800)
+    feed(outside, 820)
+    if reset == "eye":
+        controller.handle_eye_status(True, False)
+        controller.handle_eye_status(True, True)
+    elif reset == "long-departure":
+        feed(outside, 950)
+    elif reset == "hide":
+        if hasattr(window, "_hide_hotbar"):
+            window._hide_hotbar()
+        else:
+            window.hide_sidebar()
+    else:
+        window.resize(window.width() - 1, window.height())
+    feed(center, 980)
+    feed(center, 1200)
+    assert actions == []
+
+
+@pytest.mark.e2e
+def test_keyboard_letter_entry_survives_brief_edge_jitter(hotbar_gaze, qtbot):
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._show_keyboard_sidebar()
+    window = hotbar._keyboard_window
+    _, _, width, height = controller._logical_screen_rect
+    window.setGeometry(width - 380, 76, 380, height - 76)
+    window._show_letter_group(0)
+    qtbot.wait(1)
+    action = f"{KEYBOARD_WINDOW_ACTION_PREFIX}letter:0:0"
+    button = window._action_buttons[action]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 2, button.height() // 2))
+    feed(center, 0)
+    feed(center, 800)
+    feed(outside, 820)
+    feed(center, 900)
+    feed(center, 1101)
+    assert actions == [action]
+    assert window._input.typed == ["A"]
+    assert window._active_group_index is None
 
 
 @pytest.mark.e2e
@@ -1231,4 +1391,30 @@ def test_speech_gaze_edge_jitter_cannot_repeat_completed_action(speech_gaze, com
     feed(outside, 3941)
     feed(center, 3960)
     feed(center, 4961)
+    assert len(actions) == 2
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("command", ["play", "suggestion:0"])
+@pytest.mark.parametrize("during_cooldown", [False, True])
+def test_speech_gaze_can_repeat_after_departure_with_no_expiry_sample(
+    speech_gaze, command, during_cooldown
+):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    window._input.setText("ŽELIM ")
+    button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 4, button.height() // 2))
+    feed(center, 0)
+    feed(center, 1001)
+    feed(center, 1010 if during_cooldown else 1400)
+    assert len(actions) == 1
+    feed(outside, 1020 if during_cooldown else 1420)
+    # Return after the 120 ms hold, without another sample while outside.
+    feed(center, 1160 if during_cooldown else 1560)
+    start = 1360 if during_cooldown else 1560
+    feed(center, start)
+    feed(center, start + 999)
+    assert len(actions) == 1
+    feed(center, start + 1001)
     assert len(actions) == 2

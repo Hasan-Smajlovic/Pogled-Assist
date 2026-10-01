@@ -163,6 +163,23 @@ def test_completed_target_stays_blocked_through_brief_excursions_and_eye_loss():
     assert timer.update("button", 4160, **timing).ready
 
 
+def test_completed_target_unlocks_when_first_return_is_after_hold_expiry():
+    timer = GazeSelectionTimer()
+    timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)
+    timer.update("button", 0, **timing)
+    assert timer.update("button", 1000, **timing).ready
+    timer.complete()
+
+    timer.update(None, 1020, can_hold=True, **timing)
+    # A short delivery gap can skip the outside sample at the expiry boundary.
+    returned = timer.update("button", 1160, **timing)
+    assert not timer.is_blocked
+    assert returned.progress is None
+    assert not returned.ready
+    assert not timer.update("button", 2159, **timing).ready
+    assert timer.update("button", 2160, **timing).ready
+
+
 @pytest.mark.parametrize("cancel", ["pause", "cancel", "restart"])
 def test_cancellation_discards_frozen_time(cancel):
     timer = GazeSelectionTimer()
