@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import os
 from contextlib import ExitStack
 from dataclasses import replace
 from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
+if os.name == "nt":
+    font_directory = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    if font_directory.is_dir():
+        os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
+
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
+from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
 from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
@@ -173,11 +180,16 @@ def _capture_widget(
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     widget.resize(width, height)
     if widget.layout() is not None:
+        # Reused native windows can retain the previous tab's cached geometry.
+        widget.layout().invalidate()
         widget.layout().activate()
     widget.repaint()
     app.processEvents()
 
     image_path = output_dir / f"{name}.png"
+    # A first native grab can finish pending child visibility/layout changes.
+    widget.grab()
+    app.processEvents()
     pixmap = widget.grab()
     if pixmap.isNull() or not pixmap.save(str(image_path), "PNG"):
         raise RuntimeError(f"Could not render UI snapshot: {name}")
@@ -434,6 +446,128 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                         _capture_widget(app, controller, output_dir, name, sidebar_width, height),
                     )
                 )
+            # Arabic uses the same services and storage fakes, with original Unicode.
+            arabic_settings = replace(speech_settings, keyboard_script=ARABIC_SCRIPT)
+            settings.update_speech_settings(arabic_settings)
+            settings._select_tab(2)
+            snapshots.append(
+                (
+                    "Settings: Arabic",
+                    _capture_widget(app, settings, output_dir, "settings-arabic", width, height),
+                )
+            )
+            speech._cancel_editor()
+            speech.update_settings(arabic_settings)
+            speech._view_mode = "keyboard"
+            speech._show_group_level()
+            speech._input.setText("سَلَامٌ · SELAM · ١٢٣")
+            snapshots.append(
+                (
+                    "Speech: Arabic",
+                    _capture_widget(app, speech, output_dir, "speech-arabic", width, height),
+                )
+            )
+            speech._open_letter_dialog(0)
+            snapshots.append(
+                (
+                    "Speech: Arabic letters",
+                    _capture_widget(
+                        app,
+                        speech._letter_dialog,
+                        output_dir,
+                        "speech-arabic-letters",
+                        speech._letter_dialog.width(),
+                        speech._letter_dialog.height(),
+                    ),
+                )
+            )
+            speech._close_dialog()
+            speech._show_symbols_level()
+            snapshots.append(
+                (
+                    "Speech: Arabic symbols",
+                    _capture_widget(
+                        app, speech, output_dir, "speech-arabic-symbols", width, height
+                    ),
+                )
+            )
+            mark_group = next(
+                index
+                for index, keys in enumerate(speech._symbol_groups)
+                if all(key in ARABIC_MARKS for key in keys)
+            )
+            speech._open_letter_dialog(mark_group, symbols=True)
+            snapshots.append(
+                (
+                    "Speech: Arabic vowel marks",
+                    _capture_widget(
+                        app,
+                        speech._letter_dialog,
+                        output_dir,
+                        "speech-arabic-marks",
+                        speech._letter_dialog.width(),
+                        speech._letter_dialog.height(),
+                    ),
+                )
+            )
+            speech._close_dialog()
+            speech._view_mode = "phrases"
+            speech._show_list_level()
+            speech._start_editor()
+            speech._input.setText("سَلَامٌ")
+            snapshots.append(
+                (
+                    "Speech: Arabic editor",
+                    _capture_widget(app, speech, output_dir, "speech-arabic-editor", width, height),
+                )
+            )
+            keyboard.update_settings(arabic_settings)
+            keyboard._show_letter_groups()
+            snapshots.append(
+                (
+                    "Keyboard: Arabic",
+                    _capture_widget(
+                        app, keyboard, output_dir, "keyboard-arabic", sidebar_width, height
+                    ),
+                )
+            )
+            keyboard._show_symbols()
+            keyboard._group_page = 1
+            keyboard._show_symbols()
+            snapshots.append(
+                (
+                    "Keyboard: Arabic symbols, page 2",
+                    _capture_widget(
+                        app, keyboard, output_dir, "keyboard-arabic-symbols", sidebar_width, height
+                    ),
+                )
+            )
+            controller.update_speech_settings(arabic_settings)
+            controller._show_keyboard_tab()
+            snapshots.append(
+                (
+                    "Controller: Arabic keyboard",
+                    _capture_widget(
+                        app, controller, output_dir, "controller-arabic", sidebar_width, height
+                    ),
+                )
+            )
+            controller._show_keyboard_symbols()
+            controller._keyboard_group_page = 1
+            controller._show_keyboard_symbols()
+            snapshots.append(
+                (
+                    "Controller: Arabic symbols, page 2",
+                    _capture_widget(
+                        app,
+                        controller,
+                        output_dir,
+                        "controller-arabic-symbols",
+                        sidebar_width,
+                        height,
+                    ),
+                )
+            )
         finally:
             for widget in reversed(widgets):
                 widget.close()

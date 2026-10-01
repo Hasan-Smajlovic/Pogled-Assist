@@ -34,6 +34,10 @@
     .sidebar-reference footer button { min-height: 58px; }
     .sidebar-reference-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .sidebar-reference-grid button { min-height: 54px; }
+    .sidebar-reference > [data-script-toggle] { min-height: 52px; font-size: 18px; padding: 6px; }
+    .sidebar-reference-grid button { white-space: pre-line; font-size: 19px; padding: 6px; }
+    .sidebar-reference .sidebar-pages button { min-height: 52px; font-size: 16px; }
+    .system-actions button { white-space: normal; }
     button, input { font: inherit; }
     button {
       position: relative;
@@ -149,7 +153,7 @@
     .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
     .system-actions small { font-size: 15px; font-weight: 400; }
     .sleep { background: #202538; border-color: #5b658c; color: #e0e5ff; }
-    .utility-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: var(--gap); }
+    .utility-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr .8fr; gap: var(--gap); }
     .paging { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
     .paging button { min-width: 160px; min-height: 80px; font-size: 18px; }
     .paging span { min-width: 60px; text-align: center; color: #bac5d4; }
@@ -318,7 +322,7 @@
       .system-actions .section-label { grid-column: 1 / -1; }
       .system-actions button { font-size: 21px; }
       .system-actions small { font-size: 12px; }
-      .utility-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .utility-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       #status { white-space: normal; }
       dialog { width: calc(100vw - 24px); padding: 16px; }
       dialog h2 { font-size: 23px; }
@@ -345,6 +349,7 @@
   <nav class="reference-switcher" aria-label="Referentni prikaz">
     <button type="button" data-reference-view="hotbar" aria-pressed="false">Početni meni</button>
     <button type="button" data-reference-view="sidebar" aria-pressed="false">Tastatura</button>
+    <button type="button" data-reference-view="controller" aria-pressed="false">Upravljač: tastatura</button>
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
     <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
     <button type="button" data-reference-view="installation" aria-pressed="false">Instalacija</button>
@@ -370,15 +375,28 @@
   </main>
   <main id="sidebar-screen" hidden>
     <section class="sidebar-reference" aria-label="Samostalna tastatura">
-      <nav><button type="button" data-edge-control>Slova</button><button type="button" data-edge-control>Brojevi</button><button type="button" data-edge-control>Znakovi</button></nav>
+      <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
+      <button type="button" data-script-toggle data-edge-control>Arapski</button>
       <div class="sidebar-reference-grid">
         <button type="button" data-edge-control>A B C Č Ć</button><button type="button" data-edge-control>D DŽ Đ E F</button>
         <button type="button" data-edge-control>G H I J K</button><button type="button" data-edge-control>L LJ M N NJ</button>
         <button type="button" data-edge-control>O P R S Š</button><button type="button" data-edge-control>T U V Z Ž</button>
       </div>
-      <footer><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
+      <nav class="sidebar-pages" hidden><button type="button" data-side-page="-1">Prethodna</button><button type="button" data-side-page="1">Sljedeća</button></nav>
+      <footer><button type="button" data-side-back hidden>Grupe</button><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
     </section>
     <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice, do 120 ms. Izvan dugmeta nema potvrde ni napretka. Novo dugme dobija puno vrijeme odabira; promjena grupe, skrivanje ili gubitak oka poništava prethodni odabir.</p>
+  </main>
+  <main id="controller-screen" hidden>
+    <section class="sidebar-reference" aria-label="Tastatura u upravljaču">
+      <nav><button type="button">Opće</button><button type="button">Tastatura</button><button type="button">Govor</button><button type="button">Postavke</button></nav>
+      <button type="button" data-script-toggle>Arapski</button>
+      <nav><button type="button" data-side-tab="letters">Slova</button><button type="button" data-side-tab="numbers">Brojevi</button><button type="button" data-side-tab="symbols">Znakovi</button></nav>
+      <div class="sidebar-reference-grid"></div>
+      <nav class="sidebar-pages" hidden><button type="button" data-side-page="-1">Prethodna</button><button type="button" data-side-page="1">Sljedeća</button></nav>
+      <footer><button type="button" data-side-back hidden>Grupe</button><button type="button">Razmak</button><button type="button">Obriši</button></footer>
+    </section>
+    <p>Globalni izbor pisma važi i za tastaturu Upravljača. Komande ostaju na istim mjestima; arapske grupe čitaju se zdesna nalijevo. Znakovi uključuju sve harekate i dodatne kur'anske oznake.</p>
   </main>
   <main id="installation-screen" aria-label="Provjera instalacije" hidden style="max-width:900px;margin:24px auto;padding:24px;background:#1c2029;border-radius:12px">
     <h1>Provjera instalacije</h1>
@@ -445,6 +463,7 @@
       <button type="button" data-action="space">Razmak</button>
       <button type="button" data-action="backspace">Obriši slovo</button>
       <button id="keyboard-toggle" type="button" data-action="keyboard-toggle">Brojevi i znakovi</button>
+      <button type="button" data-script-toggle>Arapski</button>
     </div>
   </main>
   <main id="settings-screen" class="settings-screen" aria-label="Pogled Assist postavke" hidden>
@@ -507,9 +526,10 @@
           <h2>Postavke govora</h2>
           <p>Podesite glas i raspored tastature za komunikaciju.</p>
         </header>
+        <section class="update-card"><div class="update-copy"><h3>Pismo tastature</h3><p>Izbor važi za Govor, Tastaturu i Upravljač i ostaje sačuvan. Tekst i fraze se ne prevode.</p></div><button type="button" data-script-toggle>Arapski</button></section>
         <div class="setting-row"><div class="setting-copy"><h3>Brzina govora</h3><p>Broj riječi u minuti koji koristi eSpeak NG.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">155 riječi/min</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Broj slova u grupi</h3><p>Broj slova u svakoj grupi na ekranima za govor i tastaturu.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">5</strong><button>+&nbsp; Više</button></div>
-        <section class="update-card"><div class="update-copy"><h3>Glas</h3><p>Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.</p></div><button type="button">Standardni</button></section>
+        <section class="update-card"><div class="update-copy"><h3>Glas</h3><p id="voice-hint">Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.</p></div><button id="voice-preview" type="button">Standardni</button></section>
         <p class="settings-group-label">Akcije</p>
         <div class="speech-actions"><button class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
       </section>
@@ -533,6 +553,7 @@
       <h2>Referenca interfejsa Pogled Assist</h2>
       <p>Interaktivna HTML referenca za buduće izmjene Python aplikacije. Tekst i raspored su na bosanskom jeziku. Prebacivač prikazuje govor i opće postavke.</p>
       <ul>
+        <li>Arapski mijenja samo tastature i smjer unosa. Poruka je vizuelno poravnata uz desni rub polja, uključujući miješani arapski i latinični tekst. Komande ostaju na bosanskom i na istim mjestima. Latinica vraća postojeću tastaturu bez promjene poruke, editorâ ili biblioteke. Arapski režim nema prijedloga riječi. Brojevi i znakovi otvaraju grupe zapadnih i arapskih brojeva, interpunkcije i harekata; oznaka ◌ služi samo za vidljivost harekata i ne unosi se. Prirodni muški arapski glas Hamed zahtijeva internet; nedostupan glas ostavlja poruku sačuvanu i prikazuje grešku. Referentna provjera: 1920 × 1080 fizičkih piksela pri 150%, odnosno 1280 × 720 logičkih piksela.</li>
         <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
         <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
@@ -611,7 +632,17 @@
         ['O', 'P', 'R', 'S', 'Š'], ['T', 'U', 'V', 'Z', 'Ž']
       ];
       let activeGroups = GROUPS;
+      let arabic = false;
+      let sideTab = 'letters', sidePage = 0, sideGroup = null;
+      const ARABIC_LETTERS = [...'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئةىٱ'];
+      const ARABIC_MARKS = Array.from({length: 21}, (_, index) => String.fromCodePoint(0x64b + index)).concat('ٰ', [...'ۣ۪ۭۖۗۘۙۚۛۜ۟۠ۡۢۤۧۨ۫۬']);
+      const ARABIC_SYMBOLS = [...'1234567890٠١٢٣٤٥٦٧٨٩.,،؟؛!:%٪-+/=()«»', ...ARABIC_MARKS];
+      const grouped = keys => Array.from({length: Math.ceil(keys.length / 5)}, (_, index) => keys.slice(index * 5, index * 5 + 5));
+      const keyLabel = key => /\p{Mark}/u.test(key[0]) ? '◌' + key : key;
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
+      const ARABIC_SPEECH_SYMBOLS = [...new Set([...SYMBOLS, ...ARABIC_SYMBOLS])];
+      const SIDEBAR_SYMBOLS = [...'.,@/?!$%&*()-_+=:;', "'", '"', '#', '\\', ...'|<>[]{}~`^'];
+      const SIDEBAR_NUMPAD = [...'7894561230.', 'Potvrdi', ...'+-*/='];
       const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
       const STORE_KEY = 'pogled-assist-design-v1';
       const GAZE_PAUSE_MS = 500;
@@ -652,13 +683,34 @@
       let learnedWords = ['ĆEVAPI', 'DŽEZ', 'KAHVA', 'LJETO', 'NJIVA', 'ŠETNJA'];
       let selectedWord = null;
 
+      try { arabic = localStorage.getItem('pogled-assist-design-script') === 'arabic'; } catch {}
+      activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
       render();
       requestAnimationFrame(restoreMessageFocus);
+      for (const button of document.querySelectorAll('[data-side-tab]')) button.addEventListener('click', () => {
+        sideTab = button.dataset.sideTab; sidePage = 0; sideGroup = null; renderSidebars(); resetGaze();
+      });
+      for (const button of document.querySelectorAll('[data-side-page]')) button.addEventListener('click', () => {
+        sidePage += Number(button.dataset.sidePage); sideGroup = null; renderSidebars(); resetGaze();
+      });
+      for (const button of document.querySelectorAll('[data-side-back]')) button.addEventListener('click', () => {
+        sideGroup = null; renderSidebars(); resetGaze();
+      });
+      for (const button of document.querySelectorAll('[data-script-toggle]')) button.addEventListener('click', () => {
+        arabic = !arabic;
+        try { localStorage.setItem('pogled-assist-design-script', arabic ? 'arabic' : 'latin'); } catch {}
+        sidePage = 0; sideGroup = null;
+        activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
+        if ($('letters-dialog').open) closeDialog($('letters-dialog'));
+        symbols = false;
+        render();
+        restoreMessageFocus();
+      });
 
       for (const button of document.querySelectorAll('[data-reference-view]')) {
         button.addEventListener('click', () => {
           if (button.dataset.referenceView === 'speech') {
-            activeGroups = GROUPS;
+            activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
             switchView('keyboard');
           }
           showReferenceView(button.dataset.referenceView);
@@ -666,12 +718,12 @@
       }
       $('single-letter-preview').addEventListener('click', () => {
         showReferenceView('speech');
-        activeGroups = GROUPS.flat().map(letter => [letter]);
+        activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
         switchView('keyboard');
       });
       $('twelve-letters-preview').addEventListener('click', () => {
         showReferenceView('speech');
-        activeGroups = GROUPS;
+        activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
         switchView('keyboard');
         openLetters(0, 12);
       });
@@ -744,6 +796,7 @@
         $('installation-screen').hidden = nextView !== 'installation';
         $('hotbar-screen').hidden = nextView !== 'hotbar';
         $('sidebar-screen').hidden = nextView !== 'sidebar';
+        $('controller-screen').hidden = nextView !== 'controller';
         for (const button of document.querySelectorAll('[data-reference-view]')) {
           button.setAttribute('aria-pressed', String(button.dataset.referenceView === nextView));
         }
@@ -820,6 +873,14 @@
 
       function render() {
         resetGaze();
+        for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
+        message.dir = arabic ? 'rtl' : 'ltr';
+        message.style.textAlign = arabic ? 'right' : 'center';
+        document.querySelector('.predictions').hidden = arabic;
+        $('voice-hint').textContent = arabic ? 'Prirodni muški arapski glas Hamed zahtijeva internet. Bez njega poruka ostaje sačuvana.' : 'Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.';
+        $('voice-preview').textContent = arabic ? 'Prirodni · Hamed' : 'Standardni';
+        $('voice-preview').disabled = arabic;
+        renderSidebars();
         const browsing = view !== 'keyboard';
         const activeCategory = library.categories.find(item => item.id === category);
         $('categories-toggle').textContent = view === 'categories' ? 'Tastatura' : 'Kategorije';
@@ -842,10 +903,17 @@
         $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
         content.replaceChildren();
         content.className = browsing ? 'item-grid' : symbols ? 'key-grid symbols' : activeGroups.length >= 20 ? 'key-grid dense' : 'key-grid';
+        const keyCount = symbols ? grouped(ARABIC_SPEECH_SYMBOLS).length : activeGroups.length;
+        let columns = keyCount <= 1 ? 1 : keyCount <= 8 ? 2 : Math.min(6, Math.ceil(keyCount / 5));
+        if (!symbols) columns = Math.max(columns, Math.ceil(keyCount / 5));
+        content.style.gridTemplateColumns = !browsing && arabic ? `repeat(${columns}, minmax(0, 1fr))` : '';
+        content.style.gridTemplateRows = !browsing && arabic ? `repeat(${Math.ceil(keyCount / columns)}, minmax(72px, 1fr))` : '';
+        content.dir = !browsing && arabic ? 'rtl' : 'ltr';
         if (browsing) renderItems();
         else {
           $('paging').hidden = true;
-          if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
+          if (symbols && arabic) grouped(ARABIC_SPEECH_SYMBOLS).forEach((keys, index) => content.append(makeButton(keys.map(keyLabel).join(' '), 'symbol-group', index, 'group')));
+          else if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
           else activeGroups.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
         }
         renderPredictions();
@@ -855,6 +923,7 @@
       function handleAction(action, value) {
         switch (action) {
           case 'group': openLetters(Number(value)); break;
+          case 'symbol-group': openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); break;
           case 'letter': append(value); closeDialog($('letters-dialog')); break;
           case 'symbol': append(value); break;
           case 'close-letters': closeDialog($('letters-dialog')); break;
@@ -903,14 +972,48 @@
         }
       }
 
-      function openLetters(index, previewSize = 0) {
-        const letters = previewSize ? GROUPS.flat().slice(0, previewSize) : activeGroups[index];
+      function renderSidebars() {
+        const keys = sideTab === 'letters' ? activeGroups : grouped(sideTab === 'numbers' ? [...SIDEBAR_NUMPAD, ...(arabic ? [...'٠١٢٣٤٥٦٧٨٩'] : [])] : arabic ? [...new Set([...SIDEBAR_SYMBOLS, ...ARABIC_SYMBOLS])] : SIDEBAR_SYMBOLS);
+        const pages = arabic ? Math.ceil(keys.length / 8) : 1;
+        sidePage = Math.max(0, Math.min(sidePage, pages - 1));
+        for (const grid of document.querySelectorAll('.sidebar-reference-grid')) {
+          grid.dir = arabic && (sideGroup === null || sideTab === 'letters') ? 'rtl' : 'ltr';
+          grid.style.gridTemplateColumns = `repeat(${sideGroup === null ? 2 : 3}, 1fr)`;
+          const visible = sideGroup === null ? (arabic ? keys.slice(sidePage * 8, sidePage * 8 + 8) : keys) : keys[sideGroup];
+          grid.replaceChildren(...visible.map((item, index) => {
+            const button = document.createElement('button'); button.type = 'button';
+            button.textContent = sideGroup === null ? (arabic ? item.map(keyLabel).reduce((rows, label, index) => { if (index % 3 === 0) rows.push([]); rows.at(-1).push(label); return rows; }, []).map(row => row.join(' ')).join('\n') : item.join(' ')) : keyLabel(item);
+            button.onclick = () => { if (sideGroup === null) sideGroup = (arabic ? sidePage * 8 : 0) + index; else { append(item); sideGroup = null; } renderSidebars(); resetGaze(); };
+            return button;
+          }));
+          const navigation = grid.parentElement.querySelector('.sidebar-pages');
+          navigation.hidden = pages <= 1 || sideGroup !== null;
+          navigation.querySelector('[data-side-page="-1"]').disabled = sidePage === 0;
+          navigation.querySelector('[data-side-page="1"]').disabled = sidePage + 1 === pages;
+          const back = grid.parentElement.querySelector('[data-side-back]');
+          back.hidden = sideGroup === null;
+          back.parentElement.style.gridTemplateColumns = sideGroup === null ? 'repeat(2, 1fr)' : '1fr 2fr 2fr';
+        }
+      }
+
+      function openLetters(index, previewSize = 0, groups = activeGroups) {
+        const letters = previewSize ? groups.flat().slice(0, previewSize) : groups[index];
         if (!letters) return;
         $('letters').classList.toggle('wide', letters.length >= 6);
         $('letters-dialog').classList.toggle('compact', letters.length >= 12);
-        $('letters-title').textContent = 'Odaberite slovo';
-        $('letters').replaceChildren(...letters.map(letter => makeButton(letter, 'letter', letter)));
+        $('letters-title').textContent = symbols ? 'Odaberite znak' : 'Odaberite slovo';
+        $('letters').dir = 'ltr';
+        $('letters').replaceChildren(...letters.map(letter => makeButton(keyLabel(letter), 'letter', letter)));
         $('letters').append(makeButton(letters.length >= 12 ? 'Nazad' : 'Nazad na grupe', 'close-letters', '', 'back'));
+        if (arabic) {
+          const columns = letters.length + 1 <= 6 ? 3 : 4;
+          [...$('letters').children].forEach((button, index) => {
+            const row = Math.floor(index / columns);
+            const rowKeys = Math.min(columns, letters.length - row * columns);
+            button.style.gridRow = String(row + 1);
+            button.style.gridColumn = String(index === letters.length ? index % columns + 1 : rowKeys - index % columns);
+          });
+        }
         openDialog($('letters-dialog'));
       }
 
@@ -1061,7 +1164,7 @@
         resetGaze();
         const partial = message.value.match(/[a-zčćđšž]+$/iu)?.[0].toLocaleLowerCase('bs') || '';
         const pattern = new RegExp('^' + (partial.match(/dj|./gu) || []).map(letter => ({ dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' }[letter] || letter)).join(''), 'iu');
-        const enabled = editor?.kind !== 'category' && message.selectionStart === message.value.length && message.selectionEnd === message.value.length && (partial || !message.value || /[\s.,?!]$/.test(message.value));
+        const enabled = !arabic && editor?.kind !== 'category' && message.selectionStart === message.value.length && message.selectionEnd === message.value.length && (partial || !message.value || /[\s.,?!]$/.test(message.value));
         const matches = enabled ? (partial ? WORDS.filter(word => pattern.test(word)) : /ŽELIM\s+$/iu.test(message.value) ? ['VODU', 'RAZGOVARATI', 'ČAJ', 'KAFU', 'ODMORITI'] : WORDS) : [];
         if (!$('predictions').children.length) for (let index = 0; index < 5; index++) $('predictions').append(makeButton('·', 'word', '', 'word'));
         for (let index = 0; index < 5; index++) {
@@ -1080,8 +1183,8 @@
         if (!('speechSynthesis' in window)) { say('Izgovor nije podržan u ovom pregledniku.'); return; }
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'bs-BA';
-        const voice = window.speechSynthesis.getVoices().find(voice => /^bs(?:-|$)/i.test(voice.lang));
+        utterance.lang = arabic ? 'ar-SA' : 'bs-BA';
+        const voice = window.speechSynthesis.getVoices().find(voice => (arabic ? /^ar(?:-|$)/i : /^bs(?:-|$)/i).test(voice.lang));
         if (voice) utterance.voice = voice;
         utterance.onstart = () => say(`Izgovaram: ${text}`);
         utterance.onend = () => say('Poruka je izgovorena.');

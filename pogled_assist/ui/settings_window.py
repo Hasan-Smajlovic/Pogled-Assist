@@ -31,6 +31,7 @@ from ..interaction.gaze_selection import (
     GazeSelectionTimer,
 )
 from ..interaction.mouse_controller import GazeSettings
+from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from ..logging_setup import set_application_logging_enabled
 from ..release_update import ReleaseCheckResult, ReleaseUpdateManager
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
@@ -175,6 +176,10 @@ class SettingsWindow(QWidget):
 
     def set_status(self, text: str) -> None:
         self._set_status(text)
+
+    def update_speech_settings(self, settings: SpeechSettings) -> None:
+        self._speech_settings = replace(settings)
+        self._refresh_values()
 
     def _build_ui(self) -> None:
         self.setStyleSheet(
@@ -726,6 +731,22 @@ class SettingsWindow(QWidget):
         description.setObjectName("sectionDescription")
         layout.addWidget(description)
 
+        script_row = QFrame(page)
+        script_row.setObjectName("settingRow")
+        script_layout = QHBoxLayout(script_row)
+        script_layout.setContentsMargins(16, 10, 16, 10)
+        script_title = QLabel("Pismo tastature", script_row)
+        script_title.setObjectName("settingTitle")
+        self._script_combo = QComboBox(script_row)
+        self._script_combo.setMinimumSize(QSize(260, 58))
+        for value, label in KEYBOARD_SCRIPTS:
+            self._script_combo.addItem(label, value)
+        self._script_combo.currentIndexChanged.connect(self._script_combo_changed)
+        self._register_gaze(self._script_combo, self._cycle_keyboard_script, "Pismo tastature")
+        script_layout.addWidget(script_title, 1)
+        script_layout.addWidget(self._script_combo)
+        layout.addWidget(script_row)
+
         self._speed_value = self._make_value_label(page)
         layout.addWidget(
             self._make_adjust_row(
@@ -759,13 +780,13 @@ class SettingsWindow(QWidget):
 
         voice_title = QLabel("Glas", voice_row)
         voice_title.setObjectName("settingTitle")
-        voice_hint = QLabel(
+        self._voice_hint = QLabel(
             "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge "
             "bs-BA-GoranNeural.",
             voice_row,
         )
-        voice_hint.setObjectName("settingHint")
-        voice_hint.setWordWrap(True)
+        self._voice_hint.setObjectName("settingHint")
+        self._voice_hint.setWordWrap(True)
 
         self._voice_combo = QComboBox(voice_row)
         self._voice_combo.setMinimumSize(QSize(260, 58))
@@ -776,7 +797,7 @@ class SettingsWindow(QWidget):
         self._register_gaze(self._voice_combo, self._cycle_voice_preset, "Glas")
 
         voice_layout.addWidget(voice_title, 0, 0)
-        voice_layout.addWidget(voice_hint, 1, 0)
+        voice_layout.addWidget(self._voice_hint, 1, 0)
         voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
         layout.addWidget(voice_row)
 
@@ -1231,6 +1252,8 @@ class SettingsWindow(QWidget):
         self._emit_speech_settings("Broj slova u grupi je ažuriran.")
 
     def _voice_combo_changed(self, index: int) -> None:
+        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+            return
         value = self._voice_combo.itemData(index)
         if not isinstance(value, str) or not value:
             value = VOICE_PRESET_DEFAULT
@@ -1241,7 +1264,24 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
         self._emit_speech_settings("Glas je ažuriran.")
 
+    def _script_combo_changed(self, index: int) -> None:
+        script = self._script_combo.itemData(index)
+        if script not in dict(KEYBOARD_SCRIPTS):
+            script = LATIN_SCRIPT
+        if script == self._speech_settings.keyboard_script:
+            return
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_settings = replace(self._speech_settings, keyboard_script=script)
+        self._emit_speech_settings("Pismo tastature je ažurirano.")
+
+    def _cycle_keyboard_script(self) -> None:
+        self._script_combo.setCurrentIndex(
+            (self._script_combo.currentIndex() + 1) % self._script_combo.count()
+        )
+
     def _cycle_voice_preset(self) -> None:
+        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+            return
         count = self._voice_combo.count()
         if count <= 0:
             return
@@ -1362,17 +1402,35 @@ class SettingsWindow(QWidget):
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(self._gaze_settings.show_launcher_window)
         self._sync_voice_combo()
+        previous = self._script_combo.blockSignals(True)
+        self._script_combo.setCurrentIndex(
+            max(0, self._script_combo.findData(self._speech_settings.keyboard_script))
+        )
+        self._script_combo.blockSignals(previous)
+        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
+        self._voice_combo.setEnabled(not arabic)
+        self._voice_hint.setText(
+            "Arapski koristi prirodni muški glas Hamed. Potreban je internet. "
+            "Izbor bosanskog glasa ostaje sačuvan."
+            if arabic
+            else "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural."
+        )
 
     def _sync_voice_combo(self) -> None:
-        desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
-        index = self._voice_combo.findData(desired)
-        if index < 0:
-            index = self._voice_combo.findData(VOICE_PRESET_DEFAULT)
-        if index < 0 or index == self._voice_combo.currentIndex():
-            return
-
         previous = self._voice_combo.blockSignals(True)
         try:
+            arabic_index = self._voice_combo.findData("arabic_hamed")
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+                if arabic_index < 0:
+                    self._voice_combo.addItem("Prirodni · Hamed", "arabic_hamed")
+                index = self._voice_combo.findData("arabic_hamed")
+            else:
+                if arabic_index >= 0:
+                    self._voice_combo.removeItem(arabic_index)
+                desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
+                index = self._voice_combo.findData(desired)
+                if index < 0:
+                    index = self._voice_combo.findData(VOICE_PRESET_DEFAULT)
             self._voice_combo.setCurrentIndex(index)
         finally:
             self._voice_combo.blockSignals(previous)

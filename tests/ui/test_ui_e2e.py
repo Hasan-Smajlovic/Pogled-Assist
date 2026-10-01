@@ -17,6 +17,7 @@ from pogled_assist.interaction.mouse_controller import (
     SPEECH,
     GazeSettings,
 )
+from pogled_assist.keyboard_layouts import ARABIC_LETTERS, ARABIC_MARKS, ARABIC_SYMBOLS
 from pogled_assist.speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -395,6 +396,299 @@ def test_speech_queued_focus_return_cannot_take_focus_from_another_window(
     qtbot.keyClicks(qapp.focusWidget(), "x")
     assert other.text() == "x"
     assert window._input.text() == ""
+
+
+@pytest.mark.e2e
+def test_arabic_speech_keys_marks_switching_and_stale_predictions(qtbot):
+    from scripts.ui.capture_ui import PreviewSuggestionService
+
+    suggestions = PreviewSuggestionService()
+    requests = []
+    suggestions.request = lambda *args: requests.append(args)
+    speech = FakeSpeech()
+    store = FakeLibraryStore()
+    window = SpeechWindow(speech, library_store=store, suggestions=suggestions)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("SELAM ")
+    previous_request = requests[-1]
+    window._script_button.click()
+    assert window._input.text() == "SELAM "
+    assert window._input.layoutDirection() == Qt.RightToLeft
+    assert [letter for group in window._letter_groups for letter in group] == ARABIC_LETTERS
+    assert not window._prediction_label.isVisible()
+    count = len(requests)
+    click_speech_action(qtbot, window, "group:0")
+    click_speech_action(qtbot, window, "letter:0:1")
+    assert window._input.text() == "SELAM ب"
+    window._show_symbols_level()
+    for mark in ARABIC_MARKS:
+        index = window._symbols.index(mark)
+        click_speech_action(qtbot, window, f"symbol-group:{index // 5}")
+        button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}symbol:{index}"]
+        assert button.text() == "◌" + mark
+        button.click()
+        assert window._input.text() == "SELAM ب" + mark
+        window._backspace()
+        assert window._input.text() == "SELAM ب"
+    assert len(requests) == count
+    suggestions.predictions_ready.emit(previous_request[0], previous_request[1], ["ZASTARJELO"])
+    assert all(not button.isEnabled() for button in window._prediction_buttons)
+    window._play_button.click()
+    assert speech.requests[-1][0] == "SELAM ب"
+    assert speech.requests[-1][1].keyboard_script == "arabic"
+    window._script_button.click()
+    assert window._input.text() == "SELAM ب"
+    assert window._input.layoutDirection() == Qt.LeftToRight
+    assert window._prediction_label.isVisible()
+    assert len(requests) > count
+    assert [letter for group in window._letter_groups for letter in group] == BOSNIAN_LETTERS
+    assert store.saved == []
+
+
+@pytest.mark.e2e
+def test_arabic_phrase_editor_survives_switch_and_preserves_library(qtbot):
+    store = FakeLibraryStore(
+        SpeechLibrary(
+            categories=[CategoryRecord("Moje", ["ODGOVOR"])],
+            phrases=[PhraseRecord("STARA FRAZA", 3)],
+        )
+    )
+    window = SpeechWindow(FakeSpeech(), library_store=store)
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("PORUKA ZA RAZGOVOR")
+    window._phrases_button.click()
+    window._add_item_button.click()
+    window._script_button.click()
+    window._input.setText("سَلَامٌ")
+    window._script_button.click()
+    assert window._input.text() == "سَلَامٌ"
+    window._save_item_button.click()
+    assert window._input.text() == "PORUKA ZA RAZGOVOR"
+    assert store.library.categories == [CategoryRecord("Moje", ["ODGOVOR"])]
+    assert PhraseRecord("STARA FRAZA", 3) in store.library.phrases
+    assert PhraseRecord("سَلَامٌ", 0) in store.library.phrases
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("kind", ["keyboard", "controller"])
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+def test_arabic_sidebar_pages_fit_and_send_actual_unicode(
+    qtbot, monkeypatch, kind, letters_per_group
+):
+    from pogled_assist.ui import controller_window, keyboard_window
+
+    module = keyboard_window if kind == "keyboard" else controller_window
+    monkeypatch.setattr(module, "WindowsAppBar", FakeAppBar)
+    settings = SpeechSettings(keyboard_script="arabic", letters_per_group=letters_per_group)
+    window = (
+        KeyboardWindow(settings)
+        if kind == "keyboard"
+        else ControllerWindow(GazeSettings(), settings)
+    )
+    qtbot.addWidget(window)
+    fake_input = FakeControllerInput()
+    window._input = fake_input
+    window.set_target_window(50)
+    if kind == "controller":
+        window._show_settings_tab()
+        window.show()
+        qtbot.wait(1)
+        window._show_keyboard_tab()
+    window.resize(380, 640)
+    window.show()
+    for symbols in (False, True):
+        if symbols:
+            (window._show_symbols if kind == "keyboard" else window._show_keyboard_symbols)()
+        groups = window._symbol_groups if symbols else window._letter_groups
+        prefix = (
+            KEYBOARD_WINDOW_ACTION_PREFIX if kind == "keyboard" else CONTROLLER_WINDOW_ACTION_PREFIX
+        )
+        group_action = (
+            ("symbol_group:" if symbols else "group:")
+            if kind == "keyboard"
+            else ("keyboard_symbol_group:" if symbols else "keyboard_group:")
+        )
+        page_action = "group-page:1" if kind == "keyboard" else "keyboard-page:1"
+        pages = (len(groups) + 7) // 8
+        for page in range(pages):
+            qtbot.wait(1)
+            assert window.width() <= 380 and window.height() <= 640, (
+                kind,
+                letters_per_group,
+                symbols,
+                page,
+                window.size(),
+            )
+            assert window._script_button.isVisible()
+            bounds = window.rect()
+            for button in window._action_buttons.values():
+                if button.isVisible():
+                    assert bounds.contains(
+                        QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+                    ), button.text()
+                    assert button.height() >= (
+                        46
+                        if kind == "controller" and button.objectName() == "keyboardSubTabButton"
+                        else 52
+                    )
+            for group_index in range(page * 8, min(len(groups), (page + 1) * 8)):
+                window._action_buttons[prefix + group_action + str(group_index)].click()
+                for index, key in enumerate(groups[group_index]):
+                    key_action = (
+                        ("symbol:" if symbols else f"letter:{group_index}:")
+                        if kind == "keyboard"
+                        else ("keyboard_symbol:" if symbols else f"keyboard_letter:{group_index}:")
+                    )
+                    window._action_buttons[prefix + key_action + str(index)].click()
+                    assert fake_input.typed[-1] == key
+                    # Each selection returns to its groups.
+                    if index < len(groups[group_index]) - 1:
+                        window._action_buttons[prefix + group_action + str(group_index)].click()
+                (
+                    window._show_current_group_level
+                    if kind == "keyboard"
+                    else window._show_keyboard_current_group_level
+                )()
+            if page + 1 < pages:
+                window._action_buttons[prefix + page_action].click()
+    assert set(ARABIC_LETTERS + ARABIC_SYMBOLS) <= set(fake_input.typed)
+
+
+@pytest.mark.e2e
+def test_keyboard_script_is_global_and_persisted(hotbar_gaze, qtbot, monkeypatch):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import controller_window, settings_window
+
+    hotbar = hotbar_gaze[0]
+    saved = []
+    monkeypatch.setattr(
+        toolbar, "save_app_settings", lambda gaze, speech: saved.append(replace(speech))
+    )
+    monkeypatch.setattr(controller_window, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(controller_window, "WindowsInputController", FakeControllerInput)
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar._show_keyboard_sidebar()
+    hotbar._keyboard_window._script_button.click()
+    assert hotbar._speech.settings.keyboard_script == "arabic"
+    assert saved[-1].keyboard_script == "arabic"
+    hotbar._open_speech()
+    assert hotbar._speech_window._speech_settings.keyboard_script == "arabic"
+    hotbar._speech_window._input.setText("سَلَامٌ")
+    hotbar._show_controller_sidebar()
+    hotbar._controller_window._show_keyboard_tab()
+    hotbar._controller_window._script_button.click()
+    assert hotbar._speech_window._input.text() == "سَلَامٌ"
+    assert hotbar._speech_window._speech_settings.keyboard_script == "latin"
+    assert hotbar._keyboard_window._settings.keyboard_script == "latin"
+    assert saved[-1].keyboard_script == "latin"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("preset", ["default", "human_like"])
+def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
+    qtbot, monkeypatch, preset
+):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings(voice_preset=preset))
+    qtbot.addWidget(window)
+    window._select_tab(2)
+    window.resize(1280, 720)
+    window.show()
+    updates = []
+    window.speech_settings_changed.connect(updates.append)
+    window._cycle_keyboard_script()
+    qtbot.wait(1)
+    assert updates[-1].keyboard_script == "arabic"
+    assert updates[-1].voice_preset == preset
+    assert window._voice_combo.currentText() == "Prirodni · Hamed"
+    assert not window._voice_combo.isEnabled()
+    assert window.width() <= 1280 and window.height() <= 720
+    for control in (window._script_combo, window._voice_combo, window._test_speech_button):
+        assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
+        assert control.height() >= 58
+    window._cycle_keyboard_script()
+    assert updates[-1].keyboard_script == "latin"
+    assert updates[-1].voice_preset == preset
+    assert window._voice_combo.currentData() == preset
+    assert window._voice_combo.isEnabled()
+
+
+@pytest.mark.e2e
+def test_arabic_script_gaze_switch_cannot_repeat_on_replacement_label(
+    speech_gaze, qtbot, monkeypatch
+):
+    monkeypatch.setattr("pogled_assist.toolbar.save_app_settings", lambda *_args: None)
+    window, controller, _speech, feed, actions, _progress = speech_gaze
+    switch = window._script_button.mapToGlobal(window._script_button.rect().center())
+    feed(switch, 0)
+    feed(switch, 1001)
+    assert window._speech_settings.keyboard_script == "arabic"
+    assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}script-toggle"]
+    feed(switch, 1500)
+    feed(switch, 3000)
+    assert window._speech_settings.keyboard_script == "arabic"
+    qtbot.wait(1)
+    group = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+    group_point = group.mapToGlobal(group.rect().center())
+    assert window.action_at_global_point(group_point) == f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"
+    feed(group_point, 3100)
+    feed(group_point, 3900)
+    controller.handle_eye_status(True, False)
+    feed(group_point, 4500)
+    assert window._active_dialog is None
+    controller.handle_eye_status(True, True)
+    feed(group_point, 4600)
+    feed(group_point, 5599)
+    assert window._active_dialog is None
+    feed(group_point, 5601)
+    assert window._active_dialog is window._letter_dialog
+    qtbot.wait(1)
+    letter = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"]
+    feed(letter.mapToGlobal(letter.rect().center()), 6000)
+    feed(letter.mapToGlobal(letter.rect().center()), 7001)
+    assert window._input.text() == "\u0627"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+def test_arabic_speech_groups_and_dialog_fit_150_percent(qtbot, letters_per_group):
+    from scripts.ui.capture_ui import PreviewSuggestionService
+
+    window = SpeechWindow(
+        FakeSpeech(),
+        letters_per_group=letters_per_group,
+        library_store=FakeLibraryStore(),
+        suggestions=PreviewSuggestionService(),
+    )
+    qtbot.addWidget(window)
+    window.update_settings(replace(window._speech_settings, keyboard_script="arabic"))
+    window.resize(1280, 720)
+    window.show()
+    qtbot.wait(1)
+    assert window.width() <= 1280 and window.height() <= 720
+    window._input.setText("سَلَامٌ")
+    qtbot.wait(1)
+    assert window._input.cursorRect().x() > window._input.width() // 2
+    for action, button in window._action_buttons.items():
+        if "group:" in action:
+            assert window.rect().contains(QRect(button.mapTo(window, QPoint(0, 0)), button.size()))
+            assert button.height() >= 72
+    window._open_letter_dialog(0)
+    qtbot.wait(1)
+    dialog = window._letter_dialog
+    assert dialog.width() <= 1280 and dialog.height() <= 720
+    rects = []
+    for action in window._letter_dialog_actions:
+        button = window._action_buttons[action]
+        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
+        assert dialog.rect().contains(rect)
+        assert all(not rect.intersects(previous) for previous in rects)
+        rects.append(rect)
 
 
 @pytest.mark.e2e

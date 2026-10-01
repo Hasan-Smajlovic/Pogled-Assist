@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import replace
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QCursor, QGuiApplication, QIcon, QKeySequence, QShortcut
@@ -67,6 +68,7 @@ SECONDARY_BUTTONS = [
 SETTINGS_BUTTON = (SETTINGS, "Postavke", "fa5s.cog")
 QUICK_ACTION_BUTTON = (QUICK_ACTIONS, "Brze radnje", "fa5s.bolt")
 SPEECH_TEST_TEXT = "Zdravo. Ovo je test govora na bosanskom jeziku."
+ARABIC_SPEECH_TEST_TEXT = "مَرْحَبًا. هٰذَا اخْتِبَارٌ لِلصَّوْتِ بِاللُّغَةِ الْعَرَبِيَّةِ."
 
 
 class HotbarWindow(QWidget):
@@ -955,6 +957,7 @@ class HotbarWindow(QWidget):
         if self._keyboard_window is None:
             self._keyboard_window = KeyboardWindow(self._speech.settings, self)
             self._keyboard_window.closed.connect(self._keyboard_window_closed)
+            self._keyboard_window.keyboard_script_changed.connect(self._change_keyboard_script)
             self._keyboard_window.status_changed.connect(self._set_status)
             self._keyboard_window.interaction_context_changed.connect(
                 lambda: self._mouse.cancel_toolbar_interaction(require_leave=True)
@@ -1008,6 +1011,7 @@ class HotbarWindow(QWidget):
                 self,
             )
             self._controller_window.closed.connect(self._controller_window_closed)
+            self._controller_window.keyboard_script_changed.connect(self._change_keyboard_script)
             self._controller_window.status_changed.connect(self._set_status)
             self._controller_window.speech_requested.connect(self._open_speech_from_controller)
             self._controller_window.gaze_settings_changed.connect(self._update_gaze_settings)
@@ -1056,6 +1060,7 @@ class HotbarWindow(QWidget):
                 library_store=self._speech_library_store,
                 suggestions=self._suggestions,
             )
+            self._speech_window.keyboard_script_changed.connect(self._change_keyboard_script)
             self._speech_window.closed.connect(
                 lambda: self._set_status("Prozor za govor je zatvoren.")
             )
@@ -1176,11 +1181,21 @@ class HotbarWindow(QWidget):
             self._keyboard_window.update_settings(self._speech.settings)
         if self._controller_window is not None:
             self._controller_window.update_speech_settings(self._speech.settings)
+        if self._settings_window is not None:
+            self._settings_window.update_speech_settings(self._speech.settings)
         save_app_settings(self._mouse.settings, self._speech.settings)
+
+    def _change_keyboard_script(self, script: str) -> None:
+        self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
 
     def _test_current_speech_settings(self) -> None:
         try:
-            if self._speech.speak(SPEECH_TEST_TEXT):
+            text = (
+                ARABIC_SPEECH_TEST_TEXT
+                if self._speech.settings.keyboard_script == "arabic"
+                else SPEECH_TEST_TEXT
+            )
+            if self._speech.speak(text):
                 self._set_status("Test govora je pokrenut.")
                 if self._settings_window is not None:
                     self._settings_window.set_status("Test govora je pokrenut.")

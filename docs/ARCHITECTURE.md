@@ -153,6 +153,15 @@ Speech playback logs identify whether the request came from gaze, button
 activation, or Return in the message field, without recording the message.
 Process startup and UI acknowledgement do not confirm audible playback.
 
+`SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
+The hotbar propagates Settings and keyboard switch signals to all three input
+surfaces. `keyboard_layouts.py` owns the script-specific Unicode keys and
+display-only combining-mark labels. Qt shapes and displays Arabic; Windows input
+receives the original characters. Arabic bypasses Bosnian suggestions and new
+learning, and selects the existing Edge playback boundary with the Hamed voice.
+The Bosnian voice preference and existing model/profile remain intact. See the
+[Arabic keyboard guide](USER_GUIDE.md#arabic-keyboard) for controls and limitations.
+
 ## Persistent data and logs
 
 The runtime root is the executable directory for a packaged build and the

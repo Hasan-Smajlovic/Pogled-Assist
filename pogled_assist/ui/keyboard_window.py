@@ -19,11 +19,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..keyboard_layouts import (
+    ARABIC_SCRIPT,
+    SIDEBAR_GROUPS_PER_PAGE,
+    group_label,
+    key_label,
+    letters_for_script,
+    numpad_for_script,
+    other_script,
+    switch_label,
+    symbols_for_script,
+)
 from ..speech.speech_service import SpeechSettings
 from ..windows.appbar import ABE_RIGHT, WindowsAppBar
 from ..windows.windows_input import WindowsInputController
 from .gaze_feedback import set_gaze_feedback
-from .speech_window import BOSNIAN_LETTERS
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +113,7 @@ class KeyboardWindow(QWidget):
     status_changed = Signal(str)
     interaction_context_changed = Signal()
     mouse_action_started = Signal()
+    keyboard_script_changed = Signal(str)
 
     def __init__(
         self,
@@ -118,9 +129,8 @@ class KeyboardWindow(QWidget):
 
         self._settings = replace(settings)
         self._letters_per_group = max(1, self._settings.letters_per_group)
-        self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
-        self._numpad_groups = _group_letters(NUMPAD_KEYS, self._letters_per_group)
-        self._symbol_groups = _group_letters(SYMBOL_KEYS, self._letters_per_group)
+        self._rebuild_key_groups()
+        self._group_page = 0
         self._active_tab = TAB_LETTERS
         self._active_group_index: int | None = None
         self._action_buttons: dict[str, QToolButton] = {}
@@ -200,16 +210,34 @@ class KeyboardWindow(QWidget):
 
     def update_settings(self, settings: SpeechSettings) -> None:
         old_letters_per_group = self._letters_per_group
+        old_script = self._settings.keyboard_script
         self._settings = replace(settings)
         self._letters_per_group = max(1, self._settings.letters_per_group)
-        if old_letters_per_group != self._letters_per_group:
-            self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
-            self._numpad_groups = _group_letters(NUMPAD_KEYS, self._letters_per_group)
-            self._symbol_groups = _group_letters(SYMBOL_KEYS, self._letters_per_group)
+        if (
+            old_letters_per_group != self._letters_per_group
+            or old_script != settings.keyboard_script
+        ):
+            self._rebuild_key_groups()
+            self._group_page = 0
+            self._script_button.setText(switch_label(settings.keyboard_script))
             self._active_group_index = None
             self._show_current_group_level()
 
         logger.info("Keyboard sidebar settings updated: %s", self._settings)
+
+    def _rebuild_key_groups(self) -> None:
+        script = self._settings.keyboard_script
+        self._letter_groups = _group_letters(letters_for_script(script), self._letters_per_group)
+        size = (
+            max(5, self._letters_per_group) if script == ARABIC_SCRIPT else self._letters_per_group
+        )
+        self._numpad_groups = _group_letters(numpad_for_script(script, NUMPAD_KEYS), size)
+        self._symbol_groups = _group_letters(symbols_for_script(script, SYMBOL_KEYS), size)
+
+    def _switch_keyboard_script(self) -> None:
+        script = other_script(self._settings.keyboard_script)
+        self.update_settings(replace(self._settings, keyboard_script=script))
+        self.keyboard_script_changed.emit(script)
 
     def action_at_global_point(self, point: QPoint) -> str | None:
         for action in self._action_buttons:
@@ -370,27 +398,21 @@ class KeyboardWindow(QWidget):
         utility_row.addWidget(self._backspace_button, 2)
 
         root.addLayout(tab_row)
+        self._script_button = self._make_button(
+            switch_label(self._settings.keyboard_script),
+            self._action("script-toggle"),
+            "tabButton",
+            minimum_height=TAB_HEIGHT,
+            dynamic=False,
+        )
+        root.addWidget(self._script_button)
         root.addWidget(self._key_host, 1)
         root.addLayout(utility_row)
 
     def _show_letter_groups(self) -> None:
         self._active_tab = TAB_LETTERS
         self._active_group_index = None
-        self._clear_dynamic_buttons()
-        self._sync_tabs()
-        self._groups_button.setVisible(False)
-
-        columns = 2
-        self._set_grid_stretch(len(self._letter_groups), columns)
-        for index, group in enumerate(self._letter_groups):
-            button = self._make_button(
-                " ".join(group),
-                self._action(f"group:{index}"),
-                "groupButton",
-                minimum_height=KEY_MIN_HEIGHT,
-                dynamic=True,
-            )
-            self._key_layout.addWidget(button, index // columns, index % columns)
+        self._show_group_buttons(self._letter_groups, "group", columns=2)
 
     def _show_letter_group(self, group_index: int) -> None:
         if group_index < 0 or group_index >= len(self._letter_groups):
@@ -413,14 +435,23 @@ class KeyboardWindow(QWidget):
                 minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
-            self._key_layout.addWidget(button, index // columns, index % columns)
+            column = (
+                columns - 1 - index % columns
+                if self._settings.keyboard_script == ARABIC_SCRIPT
+                else index % columns
+            )
+            self._key_layout.addWidget(button, index // columns, column)
 
     def _show_numpad(self) -> None:
+        if self._active_tab != TAB_NUMPAD:
+            self._group_page = 0
         self._active_tab = TAB_NUMPAD
         self._active_group_index = None
         self._show_group_buttons(self._numpad_groups, "numpad_group", columns=2)
 
     def _show_symbols(self) -> None:
+        if self._active_tab != TAB_SYMBOLS:
+            self._group_page = 0
         self._active_tab = TAB_SYMBOLS
         self._active_group_index = None
         self._show_group_buttons(self._symbol_groups, "symbol_group", columns=2)
@@ -437,16 +468,36 @@ class KeyboardWindow(QWidget):
         self._clear_dynamic_buttons()
         self._sync_tabs()
         self._groups_button.setVisible(False)
-        self._set_grid_stretch(len(groups), columns)
-        for index, group in enumerate(groups):
+        arabic = self._settings.keyboard_script == ARABIC_SCRIPT
+        page_count = math.ceil(len(groups) / SIDEBAR_GROUPS_PER_PAGE) if arabic else 1
+        self._group_page = min(self._group_page, max(0, page_count - 1))
+        start = self._group_page * SIDEBAR_GROUPS_PER_PAGE if arabic else 0
+        visible = groups[start : start + SIDEBAR_GROUPS_PER_PAGE] if arabic else groups
+        self._set_grid_stretch(len(visible), columns)
+        for offset, group in enumerate(visible):
+            index = start + offset
             button = self._make_button(
-                " ".join(group),
+                group_label(group, self._settings.keyboard_script),
                 self._action(f"{action_prefix}:{index}"),
                 "groupButton",
                 minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
-            self._key_layout.addWidget(button, index // columns, index % columns)
+            button.setLayoutDirection(Qt.RightToLeft if arabic else Qt.LeftToRight)
+            column = columns - 1 - offset % columns if arabic else offset % columns
+            self._key_layout.addWidget(button, offset // columns, column)
+        if page_count > 1:
+            row = math.ceil(len(visible) / columns)
+            for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
+                button = self._make_button(
+                    label,
+                    self._action(f"group-page:{delta}"),
+                    "tabButton",
+                    minimum_height=TAB_HEIGHT,
+                    dynamic=True,
+                )
+                button.setEnabled(0 <= self._group_page + delta < page_count)
+                self._key_layout.addWidget(button, row, column)
 
     def _show_key_group(
         self,
@@ -469,7 +520,7 @@ class KeyboardWindow(QWidget):
         self._set_grid_stretch(len(group), columns)
         for index, label in enumerate(group):
             button = self._make_button(
-                label,
+                key_label(label),
                 self._action(f"{action_prefix}:{index}"),
                 "keyButton",
                 minimum_height=KEY_MIN_HEIGHT,
@@ -479,8 +530,15 @@ class KeyboardWindow(QWidget):
 
     def _trigger_action(self, action: str) -> None:
         command = action.removeprefix(KEYBOARD_WINDOW_ACTION_PREFIX)
+        if command.startswith("tab:"):
+            self._group_page = 0
 
-        if command == "tab:letters":
+        if command == "script-toggle":
+            self._switch_keyboard_script()
+        elif command.startswith("group-page:"):
+            self._group_page = max(0, self._group_page + int(command.split(":", 1)[1]))
+            self._show_current_group_level()
+        elif command == "tab:letters":
             self._show_letter_groups()
         elif command == "tab:numpad":
             self._show_numpad()
