@@ -191,9 +191,7 @@ class SpeechDialogs(QObject):
         exit_layout.addWidget(exit_copy)
         exit_layout.addStretch(1)
         exit_layout.addLayout(exit_actions)
-        self.exit.finished.connect(
-            lambda _result, dialog=self.exit: self._dialog_finished(dialog)
-        )
+        self.exit.finished.connect(lambda _result, dialog=self.exit: self._dialog_finished(dialog))
 
     def _build_alarm_dialog(self) -> None:
         self.alarm = self._new_dialog()
@@ -202,9 +200,7 @@ class SpeechDialogs(QObject):
         alarm_layout.setSpacing(24)
         alarm_title = QLabel("Alarm je uključen", self.alarm)
         alarm_title.setObjectName("dialogTitle")
-        self.alarm_copy = QLabel(
-            "Zvučni signal se ponavlja dok ga ne zaustavite.", self.alarm
-        )
+        self.alarm_copy = QLabel("Zvučni signal se ponavlja dok ga ne zaustavite.", self.alarm)
         self.alarm_copy.setObjectName("dialogCopy")
         self.alarm_copy.setWordWrap(True)
         stop_alarm = self._make_button(

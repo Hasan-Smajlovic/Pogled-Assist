@@ -232,9 +232,7 @@ def _required_release_assets(version: StableVersion) -> dict[str, str]:
     }
 
 
-def _validate_release_asset(
-    assets: list, name: str, expected_url: str, *, official: bool
-) -> None:
+def _validate_release_asset(assets: list, name: str, expected_url: str, *, official: bool) -> None:
     matches = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") == name]
     if len(matches) != 1:
         raise ReleaseUpdateError(f"Stabilnom izdanju nedostaje datoteka {name}.")

@@ -28,8 +28,8 @@
         "passed": false
       },
       "latency": {
-        "mean_ms": 1.99,
-        "p95_ms": 8.02
+        "mean_ms": 1.53,
+        "p95_ms": 6.36
       }
     },
     {
@@ -46,8 +46,8 @@
         "passed": false
       },
       "latency": {
-        "mean_ms": 2.03,
-        "p95_ms": 8.64
+        "mean_ms": 1.48,
+        "p95_ms": 6.15
       }
     },
     {
@@ -64,8 +64,8 @@
         "passed": true
       },
       "latency": {
-        "mean_ms": 1.99,
-        "p95_ms": 8.44
+        "mean_ms": 1.47,
+        "p95_ms": 6.16
       }
     },
     {
@@ -82,8 +82,8 @@
         "passed": true
       },
       "latency": {
-        "mean_ms": 1.95,
-        "p95_ms": 8.02
+        "mean_ms": 1.56,
+        "p95_ms": 6.47
       }
     }
   ]

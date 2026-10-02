@@ -236,9 +236,7 @@ def prepare_counts(
         sample.counts, conversation_rows, options.weights.supplement_multiplier
     )
     starters_path = supplement.with_name("starters.tsv")
-    starter_rows = _add_starters(
-        sample.counts, starters_path, options.weights.starter_multiplier
-    )
+    starter_rows = _add_starters(sample.counts, starters_path, options.weights.starter_multiplier)
     supplement_words.update(starter_rows)
     return PreparedCounts(
         counts=sample.counts,
