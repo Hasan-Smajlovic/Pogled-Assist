@@ -195,6 +195,19 @@ def _read_installed_version(root: Path) -> StableVersion:
 def _validate_release(payload: Any, *, release_api_url: str) -> StableVersion:
     if not isinstance(payload, dict):
         raise ReleaseUpdateError("GitHub nije vratio ispravne podatke o izdanju.")
+    version = _release_version(payload)
+    assets = payload.get("assets")
+    if not isinstance(assets, list):
+        raise ReleaseUpdateError("GitHub izdanje nema ispravnu listu datoteka.")
+
+    for name, expected_url in _required_release_assets(version).items():
+        _validate_release_asset(
+            assets, name, expected_url, official=release_api_url == RELEASE_API_URL
+        )
+    return version
+
+
+def _release_version(payload: dict) -> StableVersion:
     if payload.get("draft") is not False or payload.get("prerelease") is not False:
         raise ReleaseUpdateError("GitHub nije vratio posljednje stabilno izdanje.")
 
@@ -205,31 +218,28 @@ def _validate_release(payload: Any, *, release_api_url: str) -> StableVersion:
     normalized_tag = f"v{version}"
     if tag != normalized_tag:
         raise ReleaseUpdateError(f"Oznaka posljednjeg izdanja mora biti {normalized_tag}.")
+    return version
 
+
+def _required_release_assets(version: StableVersion) -> dict[str, str]:
+    normalized_tag = f"v{version}"
     artifact_name = f"PogledAssist-{normalized_tag}-windows-x64.zip"
-    required_assets = {
+    return {
         artifact_name: f"{RELEASE_DOWNLOAD_ROOT}/{normalized_tag}/{artifact_name}",
         f"{artifact_name}.sha256": (
             f"{RELEASE_DOWNLOAD_ROOT}/{normalized_tag}/{artifact_name}.sha256"
         ),
     }
-    assets = payload.get("assets")
-    if not isinstance(assets, list):
-        raise ReleaseUpdateError("GitHub izdanje nema ispravnu listu datoteka.")
 
-    for name, expected_url in required_assets.items():
-        matches = [
-            asset for asset in assets if isinstance(asset, dict) and asset.get("name") == name
-        ]
-        if len(matches) != 1:
-            raise ReleaseUpdateError(f"Stabilnom izdanju nedostaje datoteka {name}.")
-        if (
-            release_api_url == RELEASE_API_URL
-            and matches[0].get("browser_download_url") != expected_url
-        ):
-            raise ReleaseUpdateError(f"Datoteka {name} nije objavljena na očekivanoj lokaciji.")
 
-    return version
+def _validate_release_asset(
+    assets: list, name: str, expected_url: str, *, official: bool
+) -> None:
+    matches = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") == name]
+    if len(matches) != 1:
+        raise ReleaseUpdateError(f"Stabilnom izdanju nedostaje datoteka {name}.")
+    if official and matches[0].get("browser_download_url") != expected_url:
+        raise ReleaseUpdateError(f"Datoteka {name} nije objavljena na očekivanoj lokaciji.")
 
 
 def _powershell_executable() -> Path | str:

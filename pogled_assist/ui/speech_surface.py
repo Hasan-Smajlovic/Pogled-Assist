@@ -10,7 +10,6 @@ from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 from ..keyboard_layouts import switch_label
 from .gaze_feedback import set_gaze_feedback
 from .speech_buttons import WrappedButton, button_bounds
+from .speech_dialogs import SpeechDialogs
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
 KEY_GRID_MAX_COLUMNS = 8
@@ -31,7 +31,6 @@ KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 LIST_ACTION_MIN_HEIGHT = 80
 LIST_ACTION_MIN_WIDTH = 160
-DIALOG_ACTION_MIN_HEIGHT = 128
 
 
 class SpeechSurface(QWidget):
@@ -49,12 +48,12 @@ class SpeechSurface(QWidget):
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self._action_buttons: dict[str, QPushButton] = {}
         self._main_dynamic_actions: set[str] = set()
-        self._letter_dialog_actions: set[str] = set()
-        self._dialog_actions: set[str] = set()
-        self._active_dialog: QDialog | None = None
         self._gaze_target_action: str | None = None
         self._build_ui(keyboard_script)
-        self._build_dialogs()
+        self._dialogs = SpeechDialogs(
+            self, self._make_button, self._context_changed, self._restore_input_focus
+        )
+        self._dialogs.closed.connect(self.dialog_closed.emit)
 
     def _build_ui(self, keyboard_script: str) -> None:
         self.setStyleSheet(SPEECH_STYLE)
@@ -65,9 +64,6 @@ class SpeechSurface(QWidget):
         root.addLayout(self._build_predictions())
         root.addLayout(self._build_workspace(), 1)
         root.addLayout(self._build_utility_row(keyboard_script))
-        self._modal_backdrop = QFrame(self)
-        self._modal_backdrop.setObjectName("modalBackdrop")
-        self._modal_backdrop.hide()
 
     def _build_topbar(self) -> QHBoxLayout:
         topbar = QHBoxLayout()
@@ -314,162 +310,6 @@ class SpeechSurface(QWidget):
 
         return utility_row
 
-    def _build_dialogs(self) -> None:
-        self._build_letter_dialog()
-        self._build_confirm_dialog()
-        self._build_exit_dialog()
-        self._build_alarm_dialog()
-        self._build_sleep_dialog()
-
-    def _build_letter_dialog(self) -> None:
-        self._letter_dialog = self._new_dialog()
-        letter_layout = QVBoxLayout(self._letter_dialog)
-        letter_layout.setContentsMargins(32, 30, 32, 32)
-        letter_layout.setSpacing(24)
-        self._letter_dialog_title = QLabel("Odaberite slovo", self._letter_dialog)
-        self._letter_dialog_title.setObjectName("dialogTitle")
-        self._letter_grid_host = QWidget(self._letter_dialog)
-        self._letter_grid = QGridLayout(self._letter_grid_host)
-        self._letter_grid.setContentsMargins(0, 0, 0, 0)
-        self._letter_grid.setHorizontalSpacing(16)
-        self._letter_grid.setVerticalSpacing(16)
-        letter_layout.addWidget(self._letter_dialog_title)
-        letter_layout.addWidget(self._letter_grid_host, 1)
-        self._letter_dialog.finished.connect(
-            lambda _result, dialog=self._letter_dialog: self._dialog_finished(dialog)
-        )
-
-    def _build_confirm_dialog(self) -> None:
-        self._confirm_dialog = self._new_dialog()
-        confirm_layout = QVBoxLayout(self._confirm_dialog)
-        confirm_layout.setContentsMargins(32, 30, 32, 32)
-        confirm_layout.setSpacing(24)
-        self._confirm_title = QLabel("Potvrda", self._confirm_dialog)
-        self._confirm_title.setObjectName("dialogTitle")
-        self._confirm_copy = QLabel("Cijela poruka bit će obrisana.", self._confirm_dialog)
-        self._confirm_copy.setObjectName("dialogCopy")
-        self._confirm_copy.setWordWrap(True)
-        confirm_actions = QHBoxLayout()
-        confirm_actions.setContentsMargins(0, 0, 0, 0)
-        confirm_actions.setSpacing(24)
-        cancel = self._make_button(
-            "Odustani",
-            "confirm:cancel",
-            "dialogCancelButton",
-            parent=self._confirm_dialog,
-            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
-        )
-        self._confirm_button = self._make_button(
-            "Potvrdi",
-            "confirm:accept",
-            "dialogConfirmButton",
-            parent=self._confirm_dialog,
-            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
-        )
-        confirm_actions.addWidget(cancel, 1)
-        confirm_actions.addWidget(self._confirm_button, 1)
-        confirm_layout.addWidget(self._confirm_title)
-        confirm_layout.addWidget(self._confirm_copy)
-        confirm_layout.addStretch(1)
-        confirm_layout.addLayout(confirm_actions)
-        self._confirm_dialog.finished.connect(
-            lambda _result, dialog=self._confirm_dialog: self._dialog_finished(dialog)
-        )
-
-    def _build_exit_dialog(self) -> None:
-        self._exit_dialog = self._new_dialog()
-        exit_layout = QVBoxLayout(self._exit_dialog)
-        exit_layout.setContentsMargins(32, 30, 32, 32)
-        exit_layout.setSpacing(24)
-        exit_title = QLabel("Izaći iz govornog načina?", self._exit_dialog)
-        exit_title.setObjectName("dialogTitle")
-        exit_copy = QLabel(
-            "Možete se vratiti na razgovor, izaći iz govornog načina ili ugasiti cijelu aplikaciju.",
-            self._exit_dialog,
-        )
-        exit_copy.setObjectName("dialogCopy")
-        exit_copy.setWordWrap(True)
-        exit_actions = QHBoxLayout()
-        exit_actions.setContentsMargins(0, 0, 0, 0)
-        exit_actions.setSpacing(24)
-        cancel_exit = self._make_button(
-            "Odustani",
-            "exit:cancel",
-            "dialogCancelButton",
-            parent=self._exit_dialog,
-            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
-        )
-        leave_speech = self._make_button(
-            "Izađi",
-            "exit:leave-speech",
-            "dialogCancelButton",
-            parent=self._exit_dialog,
-            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
-        )
-        quit_app = self._make_button(
-            "Ugasi aplikaciju",
-            "exit:quit-app",
-            "dialogConfirmButton",
-            parent=self._exit_dialog,
-            minimum_height=DIALOG_ACTION_MIN_HEIGHT,
-        )
-        exit_actions.addWidget(cancel_exit, 1)
-        exit_actions.addWidget(leave_speech, 1)
-        exit_actions.addWidget(quit_app, 1)
-        exit_layout.addWidget(exit_title)
-        exit_layout.addWidget(exit_copy)
-        exit_layout.addStretch(1)
-        exit_layout.addLayout(exit_actions)
-        self._exit_dialog.finished.connect(
-            lambda _result, dialog=self._exit_dialog: self._dialog_finished(dialog)
-        )
-
-    def _build_alarm_dialog(self) -> None:
-        self._alarm_dialog = self._new_dialog()
-        alarm_layout = QVBoxLayout(self._alarm_dialog)
-        alarm_layout.setContentsMargins(32, 30, 32, 32)
-        alarm_layout.setSpacing(24)
-        alarm_title = QLabel("Alarm je uključen", self._alarm_dialog)
-        alarm_title.setObjectName("dialogTitle")
-        self._alarm_copy = QLabel(
-            "Zvučni signal se ponavlja dok ga ne zaustavite.", self._alarm_dialog
-        )
-        self._alarm_copy.setObjectName("dialogCopy")
-        self._alarm_copy.setWordWrap(True)
-        stop_alarm = self._make_button(
-            "Zaustavi alarm",
-            "alarm:stop",
-            "dialogConfirmButton",
-            parent=self._alarm_dialog,
-            minimum_height=140,
-        )
-        alarm_layout.addWidget(alarm_title)
-        alarm_layout.addWidget(self._alarm_copy)
-        alarm_layout.addStretch(1)
-        alarm_layout.addWidget(stop_alarm)
-        self._alarm_dialog.finished.connect(
-            lambda _result, dialog=self._alarm_dialog: self._dialog_finished(dialog)
-        )
-
-    def _build_sleep_dialog(self) -> None:
-        self._sleep_dialog = self._new_dialog(object_name="sleepDialog")
-        sleep_layout = QVBoxLayout(self._sleep_dialog)
-        sleep_layout.setContentsMargins(32, 32, 32, 56)
-        sleep_layout.addStretch(1)
-        self._wake_button = self._make_button(
-            "Nastavi",
-            "sleep:wake",
-            "wakeButton",
-            parent=self._sleep_dialog,
-            minimum_height=140,
-        )
-        self._wake_button.setMinimumWidth(320)
-        self._wake_button.setMaximumWidth(420)
-        sleep_layout.addWidget(self._wake_button, 0, Qt.AlignHCenter)
-        self._sleep_dialog.finished.connect(
-            lambda _result, dialog=self._sleep_dialog: self._dialog_finished(dialog)
-        )
-
     def event(self, event: QEvent) -> bool:
         handled = super().event(event)
         if event.type() == QEvent.Type.WindowActivate:
@@ -480,7 +320,7 @@ class SpeechSurface(QWidget):
     def _restore_input_focus(self) -> None:
         if not self.isVisible() or QApplication.activeWindow() is not self:
             return
-        if self._active_dialog is not None:
+        if self._dialogs.active is not None:
             return
         if QApplication.activeModalWidget() is not None:
             return
@@ -503,12 +343,7 @@ class SpeechSurface(QWidget):
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self._context_changed()
-        self._modal_backdrop.setGeometry(self.rect())
-        if self._active_dialog is not None:
-            if self._active_dialog is self._sleep_dialog:
-                self._position_sleep_dialog()
-            else:
-                self._position_dialog(self._active_dialog)
+        self._dialogs.resize()
 
     def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
         rect = self.action_bounds(action)
@@ -521,7 +356,7 @@ class SpeechSurface(QWidget):
         return button_bounds(button) if button is not None else None
 
     def _available_button(self, action: str) -> QPushButton | None:
-        if self._active_dialog is not None and action not in self._dialog_actions:
+        if self._dialogs.active is not None and action not in self._dialogs.actions:
             return None
         button = self._action_buttons.get(action)
         if button is None:
@@ -543,49 +378,14 @@ class SpeechSurface(QWidget):
     def set_gaze_target_action(self, action: str | None) -> None:
         self._set_gaze_target_action(action)
 
-    def _new_dialog(self, *, object_name: str = "speechDialog") -> QDialog:
-        dialog = QDialog(self)
-        dialog.setObjectName(object_name)
-        dialog.setModal(True)
-        dialog.setWindowModality(Qt.ApplicationModal)
-        dialog.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        return dialog
-
-    def _position_sleep_dialog(self) -> None:
-        top_left = self.mapToGlobal(QPoint(0, 0))
-        self._sleep_dialog.setGeometry(QRect(top_left, self.size()))
-
     def _open_dialog(self, dialog: QDialog, height: int) -> None:
-        self._context_changed()
-        self._active_dialog = dialog
-        self._modal_backdrop.setGeometry(self.rect())
-        self._modal_backdrop.show()
-        self._modal_backdrop.raise_()
-        available_width = max(320, self.width() - 64)
-        width = min(1280, max(680, round(self.width() * 0.68)), available_width)
-        dialog.resize(width, min(height, max(320, self.height() - 64)))
-        self._position_dialog(dialog)
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-
-    def _position_dialog(self, dialog: QDialog) -> None:
-        center = self.mapToGlobal(self.rect().center())
-        dialog.move(center.x() - dialog.width() // 2, center.y() - dialog.height() // 2)
+        self._dialogs.open(dialog, height)
 
     def _close_dialog(self) -> None:
-        if self._active_dialog is not None:
-            self._active_dialog.done(0)
+        self._dialogs.close()
 
-    def _dialog_finished(self, dialog: QDialog) -> None:
-        if dialog is not self._active_dialog:
-            return
-        self._active_dialog = None
-        self.dialog_closed.emit(dialog)
-        self._dialog_actions.clear()
-        self._modal_backdrop.hide()
-        self._context_changed()
-        QTimer.singleShot(0, self, self._restore_input_focus)
+    def _position_sleep_dialog(self) -> None:
+        self._dialogs.position_sleep()
 
     def _clear_main_grid(self) -> None:
         self._set_gaze_target_action(None)
@@ -596,10 +396,10 @@ class SpeechSurface(QWidget):
         self._set_grid_stretch(0, 1)
 
     def _clear_letter_dialog(self) -> None:
-        for action in self._letter_dialog_actions:
+        for action in self._dialogs.letter_actions:
             self._action_buttons.pop(action, None)
-        self._letter_dialog_actions.clear()
-        self._clear_layout(self._letter_grid)
+        self._dialogs.letter_actions.clear()
+        self._clear_layout(self._dialogs.letter_grid)
 
     def _clear_layout(self, layout: QGridLayout | QHBoxLayout) -> None:
         while layout.count():

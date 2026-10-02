@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint
 
+from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.interaction.mouse_controller import (
     DOUBLE_LEFT_CLICK,
     LEFT_CLICK,
@@ -26,9 +27,11 @@ class FakeInput:
 
 def make_controller():
     controller = GazeMouseController(
-        toolbar_action_at=lambda _point: None,
-        toolbar_action_center=lambda _action, _point: None,
-        toolbar_contains=lambda _point: False,
+        GazeTargets(
+            action_at=lambda _point: None,
+            action_center=lambda _action, _point: None,
+            contains=lambda _point: False,
+        ),
     )
     controller._logical_screen_rect = (10, 20, 101, 201)
     controller._physical_screen_rect = (100, 200, 201, 401)
@@ -82,9 +85,11 @@ def test_eye_gate_blocks_gaze_and_clears_active_interactions():
 
 def test_simulation_can_disable_pointer_movement_without_blocking_gaze():
     controller = GazeMouseController(
-        toolbar_action_at=lambda _point: None,
-        toolbar_action_center=lambda _action, _point: None,
-        toolbar_contains=lambda _point: False,
+        GazeTargets(
+            action_at=lambda _point: None,
+            action_center=lambda _action, _point: None,
+            contains=lambda _point: False,
+        ),
         pointer_movement_enabled=False,
     )
     controller._logical_screen_rect = (10, 20, 101, 201)

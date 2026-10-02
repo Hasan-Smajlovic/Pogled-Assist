@@ -7,11 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pogled_assist.speech.alarm_sound import (
-    ALARM_SOUND_FILE,
-    ALARM_UNAVAILABLE_MESSAGE,
-    AlarmSound,
-)
+from pogled_assist.speech.alarm_sound import ALARM_SOUND_FILE, ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from pogled_assist.speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -123,6 +119,29 @@ def test_packaged_speech_candidates_use_the_installed_application_root(monkeypat
     assert _application_root() == tmp_path
     assert espeak in _candidate_paths()
     assert edge in _edge_playback_candidate_paths()
+
+
+def test_espeak_candidates_keep_search_priority_and_first_path_spelling(monkeypatch, tmp_path):
+    from pogled_assist.speech import speech_service
+
+    root = tmp_path / "app"
+    override = tmp_path / "ESPEAK-NG.EXE"
+    local = root / "tools" / "espeak-ng" / "bin" / "espeak-ng.exe"
+    local.parent.mkdir(parents=True)
+    local.touch()
+    monkeypatch.setenv(APP_ROOT_ENV, str(root))
+    monkeypatch.setenv("ESPEAK_NG_EXE", str(override))
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "programs"))
+    monkeypatch.setenv("ProgramFiles(x86)", "")
+    monkeypatch.setenv("LocalAppData", "")
+    monkeypatch.setattr(speech_service.sys, "platform", "win32")
+    monkeypatch.setattr(speech_service.shutil, "which", lambda _name: str(override).lower())
+
+    candidates = _candidate_paths()
+
+    assert candidates[:3] == [override, root / "speech" / "espeak-ng" / "espeak-ng.exe", local]
+    assert candidates[3] == tmp_path / "programs" / "eSpeak NG" / "espeak-ng.exe"
+    assert len(candidates) == 8
 
 
 def test_speech_service_builds_espeak_command(monkeypatch, tmp_path):

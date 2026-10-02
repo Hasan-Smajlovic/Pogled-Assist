@@ -75,13 +75,13 @@ def test_arabic_script_gaze_switch_cannot_repeat_on_replacement_label(
     feed(group_point, 3900)
     controller.handle_eye_status(True, False)
     feed(group_point, 4500)
-    assert window._active_dialog is None
+    assert window._dialogs.active is None
     controller.handle_eye_status(True, True)
     feed(group_point, 4600)
     feed(group_point, 5599)
-    assert window._active_dialog is None
+    assert window._dialogs.active is None
     feed(group_point, 5601)
-    assert window._active_dialog is window._letter_dialog
+    assert window._dialogs.active is window._dialogs.letter
     qtbot.wait(1)
     letter = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"]
     feed(letter.mapToGlobal(letter.rect().center()), 6000)
@@ -111,9 +111,9 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     assert window._hide_button.text() == "Sakrij"
     assert window._settings_button.text() == "Postavke"
     assert window._quick_actions_button.text() == "Brze radnje"
-    assert window._foreground_input is not None
-    assert window._last_external_foreground_window == 50
-    assert window._last_external_cursor_position == (600, 500)
+    assert window._foreground.ready
+    assert window._foreground.window == 50
+    assert window._foreground.cursor == (600, 500)
 
     window._run_toolbar_action(LEFT_CLICK, checked=True, source="mouse")
     assert window._mouse.active_mode == LEFT_CLICK
@@ -567,7 +567,7 @@ def test_speech_gaze_keeps_progress_through_brief_edge_excursion(speech_gaze, qt
     elif command == "play":
         assert speech.requests[0][0] == "ŽELIM"
     else:
-        assert window._active_dialog is window._letter_dialog
+        assert window._dialogs.active is window._dialogs.letter
 
 
 @pytest.mark.e2e
@@ -693,13 +693,13 @@ def test_speech_gaze_switch_during_cooldown_waits_before_starting_selection(spee
     feed(group_center, 1360)
     feed(group_center, 2359)
     assert actions == [f"{SPEECH_WINDOW_ACTION_PREFIX}play"]
-    assert window._active_dialog is None
+    assert window._dialogs.active is None
     feed(group_center, 2361)
     assert actions == [
         f"{SPEECH_WINDOW_ACTION_PREFIX}play",
         f"{SPEECH_WINDOW_ACTION_PREFIX}group:0",
     ]
-    assert window._active_dialog is window._letter_dialog
+    assert window._dialogs.active is window._dialogs.letter
 
 
 @pytest.mark.e2e

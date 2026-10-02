@@ -7,7 +7,7 @@ import sys
 from dataclasses import replace
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QCursor, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 from .interaction.mouse_controller import (
@@ -44,6 +44,7 @@ from .ui.quick_action_zoom import QuickActionZoomWindow
 from .ui.settings_window import SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .windows.appbar import WindowsAppBar
+from .windows.foreground_tracker import ForegroundTracker
 from .windows.windows_input import WindowsInputController
 
 logger = logging.getLogger(__name__)
@@ -85,21 +86,13 @@ class HotbarWindow(QWidget):
         self._settings_window: SettingsWindow | None = None
         self._restore_button: QToolButton | None = None
         self._zoom_context: str | None = None
-        self._foreground_input: WindowsInputController | None = None
-        self._last_external_foreground_window: int | None = None
-        self._last_external_cursor_position: tuple[int, int] | None = None
-        self._foreground_timer = QTimer(self)
-        self._foreground_timer.setInterval(250)
-        self._foreground_timer.timeout.connect(self._update_last_external_foreground_window)
+        self._foreground = ForegroundTracker(self, self, WindowsInputController)
         self._quick_menu = QuickActionRadialMenu()
         self._quick_zoom = QuickActionZoomWindow()
         self._mouse = GazeMouseController(
-            self.action_at_global_point,
-            self.action_center_at_global_point,
-            self.contains_global_point,
+            self,
             self,
             pointer_movement_enabled=not simulate_gaze,
-            toolbar_action_bounds=self.action_bounds,
         )
         self._mouse.update_settings(self._initial_gaze_settings)
         self._gaze_bubble = GazeBubbleWindow()
@@ -111,7 +104,7 @@ class HotbarWindow(QWidget):
         self._build_restore_button()
         self._connect_signals()
         self._install_shortcuts()
-        self._prime_foreground_tracking()
+        self._foreground.prime()
         logger.info("Hotbar window initialized.")
 
     def showEvent(self, event) -> None:
@@ -138,7 +131,7 @@ class HotbarWindow(QWidget):
         self._interaction_overlay.set_enabled(False)
         self._gaze_bubble.close()
         self._interaction_overlay.close()
-        self._foreground_timer.stop()
+        self._foreground.stop()
         if self._restore_button is not None:
             self._restore_button.close()
         self._speech.stop()
@@ -260,6 +253,7 @@ class HotbarWindow(QWidget):
         self._restore_button = self._controls.build_restore_button()
 
     def _connect_signals(self) -> None:
+        self._foreground.status_changed.connect(self._set_status)
         self._gaze.gaze_updated.connect(self._mouse.handle_gaze)
         self._gaze.gaze_updated.connect(self._tracking_status.handle_gaze)
         self._gaze.eye_status_changed.connect(self._mouse.handle_eye_status)
@@ -300,7 +294,7 @@ class HotbarWindow(QWidget):
         self._position_on_primary_screen()
         self._register_appbar()
         self._mouse.start()
-        self._start_foreground_tracking()
+        self._foreground.start()
         self._gaze.start()
 
     def _position_on_primary_screen(self) -> None:
@@ -563,64 +557,14 @@ class HotbarWindow(QWidget):
         self._restore_button.show()
         self._restore_button.raise_()
 
-    def _start_foreground_tracking(self) -> None:
-        if self._foreground_input is None:
-            try:
-                self._foreground_input = WindowsInputController()
-            except Exception:
-                logger.exception("Foreground window tracking failed to start.")
-                self._set_status("Praćenje aktivnog prozora nije dostupno.")
-                return
+    def set_external_window(self, hwnd: int) -> None:
+        for window in (self._keyboard_window, self._controller_window):
+            if window is not None:
+                window.set_target_window(hwnd)
 
-        self._update_last_external_foreground_window()
-        if not self._foreground_timer.isActive():
-            self._foreground_timer.start()
-        logger.info("Foreground window tracking started.")
-
-    def _update_last_external_foreground_window(self) -> None:
-        if self._foreground_input is None:
-            return
-
-        try:
-            hwnd = self._foreground_input.foreground_window()
-            if hwnd is not None and not self._foreground_input.belongs_to_current_process(hwnd):
-                if hwnd != self._last_external_foreground_window:
-                    logger.info("Last external foreground window updated: hwnd=%s.", hwnd)
-                self._last_external_foreground_window = hwnd
-                if self._keyboard_window is not None:
-                    self._keyboard_window.set_target_window(hwnd)
-                if self._controller_window is not None:
-                    self._controller_window.set_target_window(hwnd)
-
-            self._update_last_external_cursor_position()
-        except Exception:
-            logger.exception("Foreground window tracking update failed.")
-            self._foreground_timer.stop()
-            self._set_status("Praćenje aktivnog prozora je zaustavljeno zbog greške.")
-
-    def _update_last_external_cursor_position(self) -> None:
-        if self._foreground_input is None:
-            return
-
-        logical_cursor = QCursor.pos()
-        if self.contains_global_point(logical_cursor):
-            return
-
-        physical_cursor = self._foreground_input.cursor_position()
-        if physical_cursor == self._last_external_cursor_position:
-            return
-
-        self._last_external_cursor_position = physical_cursor
+    def set_external_cursor(self, position: tuple[int, int]) -> None:
         if self._controller_window is not None:
-            self._controller_window.set_target_cursor_position(physical_cursor)
-
-    def _prime_foreground_tracking(self) -> None:
-        try:
-            self._foreground_input = WindowsInputController()
-            self._update_last_external_foreground_window()
-            logger.info("Foreground window tracking primed.")
-        except Exception:
-            logger.exception("Foreground window tracking could not be primed.")
+            self._controller_window.set_target_cursor_position(position)
 
     def _position_restore_button(self) -> None:
         if self._restore_button is None:
@@ -654,8 +598,8 @@ class HotbarWindow(QWidget):
                 self._mouse.cancel_gaze_interactions_for_mouse
             )
 
-        self._update_last_external_foreground_window()
-        self._keyboard_window.set_target_window(self._last_external_foreground_window)
+        self._foreground.update()
+        self._keyboard_window.set_target_window(self._foreground.window)
         self._keyboard_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._keyboard_window.update_settings(self._speech.settings)
         self._keyboard_window.show_sidebar(full_height=not self.isVisible())
@@ -709,9 +653,9 @@ class HotbarWindow(QWidget):
                 self._mouse.cancel_gaze_interactions_for_mouse
             )
 
-        self._update_last_external_foreground_window()
-        self._controller_window.set_target_window(self._last_external_foreground_window)
-        self._controller_window.set_target_cursor_position(self._last_external_cursor_position)
+        self._foreground.update()
+        self._controller_window.set_target_window(self._foreground.window)
+        self._controller_window.set_target_cursor_position(self._foreground.cursor)
         self._controller_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._controller_window.update_gaze_settings(self._mouse.settings)
         self._controller_window.update_speech_settings(self._speech.settings)

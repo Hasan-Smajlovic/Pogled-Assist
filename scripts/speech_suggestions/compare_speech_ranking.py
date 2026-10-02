@@ -60,68 +60,14 @@ def sparse_context_check(model: WordModel) -> dict:
 
 
 def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> dict:
-    source = FIXTURES / "development.tsv"
-    digest = fixture_sha256(source)
-    frozen = json.loads((FIXTURES / "frozen.json").read_text())
-    if digest != frozen["sha256"][source.name]:
-        raise ValueError("Frozen development messages changed")
-    with source.open(encoding="utf-8") as stream:
-        cases = list(csv.DictReader(stream, delimiter="\t"))
+    digest, cases = _development_cases()
     bundled = model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH
     model = load_model() if bundled else load_model_from_paths(model_path, metadata_path)
-    control = FixedWeightModel(
-        ((*context, word), count)
-        for context, rows in model.contexts.items()
-        for word, count in rows.items()
-    )
-    candidates = [("fixed", control, None), *[("adaptive", model, value) for value in discounts]]
-    results = []
-    for name, candidate, discount in candidates:
-        if discount is not None:
-            candidate.context_discount = discount
-        totals = Counter()
-        durations = []
-        for case in cases:
-            result = simulate(case["text"], candidate)
-            durations.extend(result.pop("durations_ms"))
-            totals.update(result)
-        results.append(
-            {
-                "ranking": name,
-                "context_discount": discount,
-                "activations": totals["activations"],
-                "next_word_queries": totals["next_word_queries"],
-                "next_word_top_one_hits": totals["next_word_top_one_hits"],
-                "next_word_top_five_hits": totals["next_word_top_five_hits"],
-                "completion_selections": totals["completion_selections"],
-                "sparse_context": sparse_context_check(candidate),
-                "latency": {
-                    "mean_ms": round(statistics.mean(durations), 2),
-                    "p95_ms": round(sorted(durations)[int(0.95 * (len(durations) - 1))], 2),
-                },
-            }
-        )
-    control_result = results[0]
-    eligible = [
-        row
-        for row in results
-        if row["latency"]["p95_ms"] <= 50
-        and row["activations"] <= control_result["activations"]
-        and row["next_word_top_five_hits"] >= control_result["next_word_top_five_hits"]
-        and row["sparse_context"]["passed"]
+    results = [
+        _evaluate_candidate(name, candidate, discount, cases)
+        for name, candidate, discount in _ranking_candidates(model, discounts)
     ]
-    if not eligible:
-        raise ValueError("No ranking meets the latency and quality requirements")
-    recommended = min(
-        eligible,
-        key=lambda row: (
-            row["activations"],
-            -row["next_word_top_five_hits"],
-            -row["next_word_top_one_hits"],
-            row["ranking"] != "fixed",
-            -(row["context_discount"] or 0),
-        ),
-    )
+    recommended = _recommend(results)
     return {
         "dataset": "development",
         "dataset_sha256": digest,
@@ -142,6 +88,77 @@ def compare(model_path: Path, metadata_path: Path, discounts: list[float]) -> di
         "recommended": {key: recommended[key] for key in ("ranking", "context_discount")},
         "candidates": results,
     }
+
+
+def _development_cases() -> tuple[str, list[dict]]:
+    source = FIXTURES / "development.tsv"
+    digest = fixture_sha256(source)
+    frozen = json.loads((FIXTURES / "frozen.json").read_text())
+    if digest != frozen["sha256"][source.name]:
+        raise ValueError("Frozen development messages changed")
+    with source.open(encoding="utf-8") as stream:
+        cases = list(csv.DictReader(stream, delimiter="\t"))
+    return digest, cases
+
+
+def _ranking_candidates(model: WordModel, discounts: list[float]) -> list[tuple]:
+    control = FixedWeightModel(
+        ((*context, word), count)
+        for context, rows in model.contexts.items()
+        for word, count in rows.items()
+    )
+    return [("fixed", control, None), *[("adaptive", model, value) for value in discounts]]
+
+
+def _evaluate_candidate(name: str, model: WordModel, discount: float | None, cases: list) -> dict:
+    if discount is not None:
+        model.context_discount = discount
+    totals = Counter()
+    durations = []
+    for case in cases:
+        result = simulate(case["text"], model)
+        durations.extend(result.pop("durations_ms"))
+        totals.update(result)
+    return {
+        "ranking": name,
+        "context_discount": discount,
+        "activations": totals["activations"],
+        "next_word_queries": totals["next_word_queries"],
+        "next_word_top_one_hits": totals["next_word_top_one_hits"],
+        "next_word_top_five_hits": totals["next_word_top_five_hits"],
+        "completion_selections": totals["completion_selections"],
+        "sparse_context": sparse_context_check(model),
+        "latency": {
+            "mean_ms": round(statistics.mean(durations), 2),
+            "p95_ms": round(sorted(durations)[int(0.95 * (len(durations) - 1))], 2),
+        },
+    }
+
+
+def _recommend(results: list[dict]) -> dict:
+    eligible = [row for row in results if _eligible(row, results[0])]
+    if not eligible:
+        raise ValueError("No ranking meets the latency and quality requirements")
+    return min(eligible, key=_ranking_order)
+
+
+def _eligible(row: dict, control: dict) -> bool:
+    return (
+        row["latency"]["p95_ms"] <= 50
+        and row["activations"] <= control["activations"]
+        and row["next_word_top_five_hits"] >= control["next_word_top_five_hits"]
+        and row["sparse_context"]["passed"]
+    )
+
+
+def _ranking_order(row: dict) -> tuple:
+    return (
+        row["activations"],
+        -row["next_word_top_five_hits"],
+        -row["next_word_top_one_hits"],
+        row["ranking"] != "fixed",
+        -(row["context_discount"] or 0),
+    )
 
 
 def main() -> None:

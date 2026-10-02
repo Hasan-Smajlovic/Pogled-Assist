@@ -11,6 +11,7 @@ import statistics
 import sys
 import time
 from collections import Counter
+from itertools import islice
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -34,47 +35,57 @@ def rank(candidates: list[str], target: str) -> int | None:
 
 
 def evaluate_learning(model: WordModel, scenarios: Path) -> list[dict]:
-    with scenarios.open(encoding="utf-8", newline="") as stream:
+    return [_evaluate_case(model, case) for case in _load_scenarios(scenarios)]
+
+
+def _load_scenarios(path: Path) -> list[dict]:
+    columns = ["id", "learn", "query", "target", "control", "control_target"]
+    with path.open(encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream, delimiter="\t")
-        if reader.fieldnames != ["id", "learn", "query", "target", "control", "control_target"]:
+        if reader.fieldnames != columns:
             raise ValueError("Unexpected learning scenario columns")
         cases = list(reader)
     if not cases:
         raise ValueError("Learning scenarios must not be empty")
-    results = []
-    identifiers = set()
+    identifiers: set[str] = set()
     for case in cases:
-        if (
-            None in case
-            or any(case.get(key) is None for key in reader.fieldnames)
-            or not all(case[key].strip() for key in ("id", "learn", "target", "control_target"))
-            or case["id"] in identifiers
-        ):
+        if not _valid_scenario(case, identifiers):
             raise ValueError(f"Invalid learning scenario: {case!r}")
         identifiers.add(case["id"])
-        store = LearningStore()
-        checkpoints = []
-        baseline = model.predict(case["control"])
-        for uses in range(11):
-            if uses in (0, 1, 3, 10):
-                profile = WordModel(store.snapshot())
-                candidates = model.predict(case["query"], profile)
-                control = model.predict(case["control"], profile)
-                checkpoints.append(
-                    {
-                        "uses": uses,
-                        "candidates": candidates,
-                        "target_rank": rank(candidates, case["target"].upper()),
-                        "control_candidates": control,
-                        "control_rank": rank(control, case["control_target"].upper()),
-                        "control_lost_hit": case["control_target"].upper() in baseline
-                        and case["control_target"].upper() not in control,
-                    }
-                )
-            if uses < 10:
-                store.learn_text(case["learn"])
-        results.append({"id": case["id"], "checkpoints": checkpoints})
-    return results
+    return cases
+
+
+def _valid_scenario(case: dict, identifiers: set[str]) -> bool:
+    if None in case or any(value is None for value in case.values()):
+        return False
+    required = ("id", "learn", "target", "control_target")
+    return all(case[key].strip() for key in required) and case["id"] not in identifiers
+
+
+def _evaluate_case(model: WordModel, case: dict) -> dict:
+    store = LearningStore()
+    checkpoints = []
+    baseline = model.predict(case["control"])
+    for uses in range(11):
+        if uses in (0, 1, 3, 10):
+            profile = WordModel(store.snapshot())
+            checkpoints.append({"uses": uses, **_checkpoint(model, case, profile, baseline)})
+        if uses < 10:
+            store.learn_text(case["learn"])
+    return {"id": case["id"], "checkpoints": checkpoints}
+
+
+def _checkpoint(model: WordModel, case: dict, profile: WordModel, baseline: list[str]) -> dict:
+    candidates = model.predict(case["query"], profile)
+    control = model.predict(case["control"], profile)
+    target = case["control_target"].upper()
+    return {
+        "candidates": candidates,
+        "target_rank": rank(candidates, case["target"].upper()),
+        "control_candidates": control,
+        "control_rank": rank(control, target),
+        "control_lost_hit": target in baseline and target not in control,
+    }
 
 
 def assess_learning(results: list[dict]) -> dict:
@@ -110,14 +121,7 @@ def assess_learning(results: list[dict]) -> dict:
 
 
 def stress_profile(model: WordModel, size: int) -> dict:
-    counts = Counter()
-    for context, row in sorted(model.contexts.items(), key=lambda item: (len(item[0]), item[0])):
-        for word in sorted(row):
-            if len(counts) >= size:
-                break
-            counts[(*context, word)] = 1
-        if len(counts) >= size:
-            break
+    counts = Counter(islice(_profile_keys(model), max(0, size)))
     if len(counts) != size:
         raise ValueError(f"Requested {size} entries but the base only supplies {len(counts)}")
     started = time.perf_counter()
@@ -140,6 +144,12 @@ def stress_profile(model: WordModel, size: int) -> dict:
         "mean_ms": round(statistics.mean(durations), 2),
         "p95_ms": round(sorted(durations)[int(0.95 * (len(durations) - 1))], 2),
     }
+
+
+def _profile_keys(model: WordModel):
+    for context, row in sorted(model.contexts.items(), key=lambda item: (len(item[0]), item[0])):
+        for word in sorted(row):
+            yield (*context, word)
 
 
 def main() -> None:

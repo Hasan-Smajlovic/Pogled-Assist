@@ -633,10 +633,8 @@ function Assert-Windows {
     Write-Success "Windows detected."
 }
 
-function Assert-RepositoryFiles {
-    Write-Step "Checking required project files"
-
-    $requiredFiles = @(
+function Get-RequiredRepositoryFiles {
+    return @(
         "requirements.txt",
         "run_gaze_mouse.py",
         "start_gaze_mouse.ps1",
@@ -663,7 +661,9 @@ function Assert-RepositoryFiles {
         "pogled_assist\tracking\tobii_stream_engine_bridge_backend.py",
         "pogled_assist\interaction\__init__.py",
         "pogled_assist\interaction\gaze_selection.py",
+        "pogled_assist\interaction\gaze_targets.py",
         "pogled_assist\interaction\mouse_controller.py",
+        "pogled_assist\interaction\screen_mapping.py",
         "pogled_assist\ui\__init__.py",
         "pogled_assist\ui\controller_window.py",
         "pogled_assist\ui\gaze_bubble.py",
@@ -675,6 +675,8 @@ function Assert-RepositoryFiles {
         "pogled_assist\ui\quick_action_zoom.py",
         "pogled_assist\ui\settings_window.py",
         "pogled_assist\ui\speech_window.py",
+        "pogled_assist\ui\speech_dialogs.py",
+        "pogled_assist\ui\speech_predictions.py",
         "pogled_assist\speech\__init__.py",
         "pogled_assist\speech\alarm_sound.py",
         "pogled_assist\speech\speech_library.py",
@@ -688,11 +690,18 @@ function Assert-RepositoryFiles {
         "pogled_assist\windows\__init__.py",
         "pogled_assist\windows\appbar.py",
         "pogled_assist\windows\dpi.py",
+        "pogled_assist\windows\foreground_tracker.py",
         "pogled_assist\windows\windows_input.py",
         "pogled_assist\windows\windows_keyboard.py",
         "pogled_assist\windows\windows_startup.py",
         "pogled_assist\windows\windows_z_order.py"
     )
+}
+
+function Assert-RepositoryFiles {
+    Write-Step "Checking required project files"
+
+    $requiredFiles = Get-RequiredRepositoryFiles
 
     foreach ($relativePath in $requiredFiles) {
         $fullPath = Join-Path $RepoRoot $relativePath

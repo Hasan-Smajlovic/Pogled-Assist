@@ -362,13 +362,13 @@ class _CaptureSession:
 
     def capture_speech_dialogs(self) -> None:
         self.speech._start_alarm()
-        self.capture_dialog(self.speech._alarm_dialog, "speech-alarm", "Speech alarm")
+        self.capture_dialog(self.speech._dialogs.alarm, "speech-alarm", "Speech alarm")
         self.speech._stop_alarm()
         self.speech._start_sleep()
-        self.capture(self.speech._sleep_dialog, "speech-sleep", "Speech sleep")
+        self.capture(self.speech._dialogs.sleep, "speech-sleep", "Speech sleep")
         self.speech._wake_from_sleep()
         self.speech._open_exit_dialog()
-        self.capture_dialog(self.speech._exit_dialog, "speech-exit", "Speech exit confirmation")
+        self.capture_dialog(self.speech._dialogs.exit, "speech-exit", "Speech exit confirmation")
         self.speech._close_dialog()
 
     def capture_sidebars(self) -> None:
@@ -426,7 +426,7 @@ class _CaptureSession:
         self.capture(self.speech, "speech-arabic", "Speech: Arabic")
         self.speech._open_letter_dialog(0)
         self.capture_dialog(
-            self.speech._letter_dialog, "speech-arabic-letters", "Speech: Arabic letters"
+            self.speech._dialogs.letter, "speech-arabic-letters", "Speech: Arabic letters"
         )
         self.speech._close_dialog()
         self.speech._show_symbols_level()
@@ -438,7 +438,7 @@ class _CaptureSession:
         )
         self.speech._open_letter_dialog(mark_group, symbols=True)
         self.capture_dialog(
-            self.speech._letter_dialog, "speech-arabic-marks", "Speech: Arabic vowel marks"
+            self.speech._dialogs.letter, "speech-arabic-marks", "Speech: Arabic vowel marks"
         )
         self.speech._close_dialog()
         self.speech._view_mode = "phrases"

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 
@@ -39,9 +40,11 @@ def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stre
     provider.tracking_status_changed.connect(tracking.append)
     provider.status_changed.connect(statuses.append)
     controller = GazeMouseController(
-        lambda _point: "speech",
-        lambda *_args: QPoint(10, 10),
-        lambda _point: True,
+        GazeTargets(
+            lambda _point: "speech",
+            lambda *_args: QPoint(10, 10),
+            lambda _point: True,
+        ),
         pointer_movement_enabled=False,
     )
     controller._logical_screen_rect = (0, 0, 1280, 720)
@@ -129,9 +132,11 @@ def test_resumed_gaze_cannot_complete_dwell_from_before_delivery_gap(
 
     provider, now, _stopped = active_stream
     controller = GazeMouseController(
-        lambda _point: "speech",
-        lambda *_args: QPoint(10, 10),
-        lambda _point: True,
+        GazeTargets(
+            lambda _point: "speech",
+            lambda *_args: QPoint(10, 10),
+            lambda _point: True,
+        ),
         pointer_movement_enabled=False,
     )
     controller._logical_screen_rect = (0, 0, 1280, 720)
@@ -178,9 +183,11 @@ def test_delivery_gap_preserves_completed_target_repeat_lock(active_stream):
 
     provider, now, _stopped = active_stream
     controller = GazeMouseController(
-        lambda _point: "speech",
-        lambda *_args: QPoint(10, 10),
-        lambda _point: True,
+        GazeTargets(
+            lambda _point: "speech",
+            lambda *_args: QPoint(10, 10),
+            lambda _point: True,
+        ),
         pointer_movement_enabled=False,
     )
     controller._logical_screen_rect = (0, 0, 1280, 720)
@@ -213,9 +220,11 @@ def test_worker_eye_loss_is_delivered_before_next_gaze(active_stream):
 
     provider, now, _stopped = active_stream
     controller = GazeMouseController(
-        lambda _point: "speech",
-        lambda *_args: QPoint(10, 10),
-        lambda _point: True,
+        GazeTargets(
+            lambda _point: "speech",
+            lambda *_args: QPoint(10, 10),
+            lambda _point: True,
+        ),
         pointer_movement_enabled=False,
     )
     controller._logical_screen_rect = (0, 0, 1280, 720)

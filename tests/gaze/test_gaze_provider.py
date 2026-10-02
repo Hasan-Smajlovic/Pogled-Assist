@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.tracking.gaze_provider import (
     TobiiGazeProvider,
     _choose_tracker,
@@ -62,7 +63,13 @@ def test_stream_engine_offscreen_point_maps_to_same_edge_at_150_percent(qapp):
     from pogled_assist.interaction.mouse_controller import GazeMouseController
 
     provider = TobiiGazeProvider()
-    controller = GazeMouseController(lambda _: None, lambda *_: None, lambda _: False)
+    controller = GazeMouseController(
+        GazeTargets(
+            lambda _: None,
+            lambda *_: None,
+            lambda _: False,
+        ),
+    )
     controller._logical_screen_rect = (0, 0, 1280, 720)
     controller._physical_screen_rect = (0, 0, 1920, 1080)
     mapped = []
@@ -350,7 +357,13 @@ def test_queued_eye_status_cannot_reopen_gate_after_stop(qapp):
     from pogled_assist.interaction.mouse_controller import GazeMouseController
 
     provider = TobiiGazeProvider()
-    controller = GazeMouseController(lambda _: None, lambda *_: None, lambda _: False)
+    controller = GazeMouseController(
+        GazeTargets(
+            lambda _: None,
+            lambda *_: None,
+            lambda _: False,
+        ),
+    )
     provider.eye_status_changed.connect(controller.handle_eye_status)
     _gaze, eyes = provider._new_stream_callbacks()
     worker = threading.Thread(target=lambda: eyes(True, True, 1))
@@ -378,7 +391,13 @@ def test_research_callbacks_from_previous_subscription_are_ignored(qapp, monkeyp
         SimpleNamespace(find_all_eyetrackers=lambda: [tracker], EYETRACKER_GAZE_DATA="gaze"),
     )
     provider = TobiiGazeProvider()
-    controller = GazeMouseController(lambda _: None, lambda *_: None, lambda _: False)
+    controller = GazeMouseController(
+        GazeTargets(
+            lambda _: None,
+            lambda *_: None,
+            lambda _: False,
+        ),
+    )
     provider.eye_status_changed.connect(controller.handle_eye_status)
     gaze = []
     provider.gaze_updated.connect(lambda *args: gaze.append(args))

@@ -264,12 +264,7 @@ def find_edge_playback() -> Path | None:
 
 
 def _candidate_paths() -> list[Path]:
-    candidates: list[Path] = []
-
-    env_path = os.environ.get("ESPEAK_NG_EXE", "").strip()
-    if env_path:
-        candidates.append(Path(env_path))
-
+    candidates = _environment_candidates("ESPEAK_NG_EXE")
     candidates.append(_application_root() / "speech" / "espeak-ng" / "espeak-ng.exe")
 
     path_match = shutil.which("espeak-ng") or shutil.which("espeak-ng.exe")
@@ -281,41 +276,12 @@ def _candidate_paths() -> list[Path]:
     if tools_root.exists():
         candidates.extend(sorted(tools_root.rglob("espeak-ng.exe")))
 
-    if sys.platform == "win32":
-        for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
-            base = os.environ.get(env_name)
-            if not base:
-                continue
-
-            root = Path(base)
-            candidates.extend(
-                [
-                    root / "eSpeak NG" / "espeak-ng.exe",
-                    root / "eSpeak NG" / "command_line" / "espeak-ng.exe",
-                    root / "eSpeak NG" / "bin" / "espeak-ng.exe",
-                    root / "Programs" / "eSpeak NG" / "espeak-ng.exe",
-                    root / "Programs" / "eSpeak NG" / "command_line" / "espeak-ng.exe",
-                ]
-            )
-
-    deduped: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate).lower()
-        if key not in seen:
-            seen.add(key)
-            deduped.append(candidate)
-
-    return deduped
+    candidates.extend(_espeak_system_paths())
+    return _unique_paths(candidates)
 
 
 def _edge_playback_candidate_paths() -> list[Path]:
-    candidates: list[Path] = []
-
-    env_path = os.environ.get("EDGE_PLAYBACK_EXE", "").strip()
-    if env_path:
-        candidates.append(Path(env_path))
-
+    candidates = _environment_candidates("EDGE_PLAYBACK_EXE")
     candidates.append(_application_root() / "speech" / "edge" / "edge-playback.exe")
 
     for name in ("edge-playback", "edge-playback.exe"):
@@ -341,15 +307,44 @@ def _edge_playback_candidate_paths() -> list[Path]:
         ]
     )
 
-    deduped: list[Path] = []
+    return _unique_paths(candidates)
+
+
+def _environment_candidates(name: str) -> list[Path]:
+    value = os.environ.get(name, "").strip()
+    return [Path(value)] if value else []
+
+
+def _espeak_system_paths() -> list[Path]:
+    if sys.platform != "win32":
+        return []
+    paths: list[Path] = []
+    for name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
+        base = os.environ.get(name)
+        if base:
+            paths.extend(_espeak_paths_under(Path(base)))
+    return paths
+
+
+def _espeak_paths_under(root: Path) -> list[Path]:
+    return [
+        root / "eSpeak NG" / "espeak-ng.exe",
+        root / "eSpeak NG" / "command_line" / "espeak-ng.exe",
+        root / "eSpeak NG" / "bin" / "espeak-ng.exe",
+        root / "Programs" / "eSpeak NG" / "espeak-ng.exe",
+        root / "Programs" / "eSpeak NG" / "command_line" / "espeak-ng.exe",
+    ]
+
+
+def _unique_paths(candidates: list[Path]) -> list[Path]:
+    paths: list[Path] = []
     seen: set[str] = set()
     for candidate in candidates:
         key = str(candidate).lower()
         if key not in seen:
             seen.add(key)
-            deduped.append(candidate)
-
-    return deduped
+            paths.append(candidate)
+    return paths
 
 
 def _application_root() -> Path:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QPoint, QRect, Signal
@@ -13,6 +12,9 @@ from PySide6.QtGui import QGuiApplication
 
 from ..windows.windows_input import WindowsInputController
 from .gaze_selection import DEFAULT_SELECTION_PAUSE_MS, GazeSelectionTimer
+from .gaze_targets import GazeTarget
+from .screen_mapping import GazeScreenPoint as GazeScreenPoint
+from .screen_mapping import ScreenMapping
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +59,6 @@ class GazeSettings:
 
 
 @dataclass(frozen=True)
-class GazeScreenPoint:
-    logical: QPoint
-    physical: QPoint
-
-
-@dataclass(frozen=True)
 class _ToolbarHit:
     action: str | None
     over_app_ui: bool
@@ -94,22 +90,16 @@ class GazeMouseController(QObject):
 
     def __init__(
         self,
-        toolbar_action_at: Callable[[QPoint], str | None],
-        toolbar_action_center: Callable[[str, QPoint], QPoint | None],
-        toolbar_contains: Callable[[QPoint], bool],
+        target: GazeTarget,
         parent: QObject | None = None,
         *,
         pointer_movement_enabled: bool = True,
-        toolbar_action_bounds: Callable[[str], QRect | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings = GazeSettings()
         self.active_mode: str | None = None
         self.quick_actions_enabled = False
-        self._toolbar_action_at = toolbar_action_at
-        self._toolbar_action_center = toolbar_action_center
-        self._toolbar_contains = toolbar_contains
-        self._toolbar_action_bounds = toolbar_action_bounds
+        self._target = target
         self._pointer_movement_enabled = pointer_movement_enabled
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
@@ -364,8 +354,8 @@ class GazeMouseController(QObject):
         return self._quick_menu_open or self._click_zoom_open
 
     def _toolbar_hit(self, logical: QPoint) -> _ToolbarHit:
-        action = self._toolbar_action_at(logical)
-        over_app_ui = action is not None or self._toolbar_contains(logical)
+        action = self._target.action_at_global_point(logical)
+        over_app_ui = action is not None or self._target.contains_global_point(logical)
         held_action = self._toolbar_selection.target
         held_bounds = self._held_bounds(held_action)
         if held_bounds is None:
@@ -382,14 +372,14 @@ class GazeMouseController(QObject):
         return self._toolbar_selection.is_blocked and held_bounds.contains(logical)
 
     def _held_bounds(self, held_action: object | None) -> QRect | None:
-        if not isinstance(held_action, str) or self._toolbar_action_bounds is None:
+        if not isinstance(held_action, str):
             return None
-        return self._toolbar_action_bounds(held_action)
+        return self._target.action_bounds(held_action)
 
     def _toolbar_center(self, action: str | None, fallback: QPoint) -> QPoint:
         if action is None:
             return fallback
-        return self._toolbar_action_center(action, fallback) or fallback
+        return self._target.action_center_at_global_point(action, fallback) or fallback
 
     def _held_center(self, hit: _ToolbarHit) -> QPoint | None:
         if hit.held_bounds is None:
@@ -424,21 +414,10 @@ class GazeMouseController(QObject):
         self._handle_target_dwell(point, now_ms)
 
     def _map_to_screen(self, normalized_x: float, normalized_y: float) -> GazeScreenPoint:
-        logical_left, logical_top, logical_width, logical_height = self._logical_screen_geometry()
-        x = _clamp(normalized_x, 0.0, 1.0)
-        y = _clamp(normalized_y, 0.0, 1.0)
-        logical = QPoint(
-            round(logical_left + x * max(1, logical_width - 1)),
-            round(logical_top + y * max(1, logical_height - 1)),
-        )
-        physical_left, physical_top, physical_width, physical_height = (
-            self._physical_screen_geometry()
-        )
-        physical = QPoint(
-            round(physical_left + x * max(1, physical_width - 1)),
-            round(physical_top + y * max(1, physical_height - 1)),
-        )
-        return GazeScreenPoint(logical=logical, physical=physical)
+        return self._screen_mapping().normalized(normalized_x, normalized_y)
+
+    def _screen_mapping(self) -> ScreenMapping:
+        return ScreenMapping(self._logical_screen_geometry(), self._physical_screen_geometry())
 
     def _smooth_physical(self, raw_point: QPoint) -> QPoint:
         alpha = _clamp(self.settings.smoothing, 0.01, 1.0)
@@ -751,21 +730,7 @@ class GazeMouseController(QObject):
         return self._logical_screen_rect
 
     def _screen_point_from_logical(self, logical: QPoint) -> GazeScreenPoint:
-        logical_left, logical_top, logical_width, logical_height = self._logical_screen_geometry()
-        logical_right = logical_left + logical_width - 1
-        logical_bottom = logical_top + logical_height - 1
-        logical_x = max(logical_left, min(logical_right, logical.x()))
-        logical_y = max(logical_top, min(logical_bottom, logical.y()))
-        x_ratio = (logical_x - logical_left) / max(1, logical_width - 1)
-        y_ratio = (logical_y - logical_top) / max(1, logical_height - 1)
-        physical_left, physical_top, physical_width, physical_height = (
-            self._physical_screen_geometry()
-        )
-        physical = QPoint(
-            round(physical_left + x_ratio * max(1, physical_width - 1)),
-            round(physical_top + y_ratio * max(1, physical_height - 1)),
-        )
-        return GazeScreenPoint(logical=QPoint(logical_x, logical_y), physical=physical)
+        return self._screen_mapping().from_logical(logical)
 
     def _log_screen_mapping(self) -> None:
         logical_left, logical_top, logical_width, logical_height = self._logical_screen_geometry()

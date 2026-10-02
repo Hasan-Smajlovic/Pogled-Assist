@@ -35,8 +35,8 @@ from ..speech.speech_library import (
 from ..speech.speech_service import SpeechService, SpeechSettings
 from ..suggestions.composition import Composition
 from ..suggestions.service import SuggestionService
-from .speech_buttons import button_bounds
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
+from .speech_predictions import PredictionControls, SpeechPredictions
 from .speech_surface import SPEECH_WINDOW_ACTION_PREFIX as SPEECH_WINDOW_ACTION_PREFIX
 from .speech_surface import SpeechSurface
 
@@ -94,12 +94,18 @@ class SpeechWindow(SpeechSurface):
         self._suggestions = suggestions or SuggestionService(self)
         self._composition = Composition(self._suggestions.store)
         self._conversation = self._composition
-        self._prediction_owner = object()
-        self._prediction_revision = 0
-        self._prediction_text = ""
         self._updating_input = False
-        self._last_gaze_point: QPoint | None = None
-        self._blocked_suggestion: QPushButton | None = None
+        self._predictions = SpeechPredictions(
+            PredictionControls(
+                self._input,
+                self._prediction_label,
+                self._prediction_buttons,
+                self._undo_word_button,
+            ),
+            self._suggestions,
+            self._suggestion_allowed,
+            self._context_changed,
+        )
 
         self.action_requested.connect(self._trigger_action)
         self.dialog_closed.connect(self._after_dialog_closed)
@@ -108,10 +114,8 @@ class SpeechWindow(SpeechSurface):
         self._input.textChanged.connect(self._text_changed)
         self._input.cursorPositionChanged.connect(self._refresh_suggestions)
         self._input.selectionChanged.connect(self._refresh_suggestions)
-        self._suggestions.predictions_ready.connect(self._receive_suggestions)
-        self._suggestions.status_changed.connect(self._prediction_status)
         self._show_group_level()
-        self._prediction_status(self._suggestions.status)
+        self._predictions.show_status(self._suggestions.status)
         logger.info("Speech window initialized with %s letter groups.", len(self._letter_groups))
 
     def show_full_screen(self) -> None:
@@ -164,7 +168,7 @@ class SpeechWindow(SpeechSurface):
         direction = Qt.RightToLeft if arabic else Qt.LeftToRight
         self._input.setLayoutDirection(direction)
         self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
-        self._letter_grid_host.setLayoutDirection(Qt.LeftToRight)
+        self._dialogs.letter_grid_host.setLayoutDirection(Qt.LeftToRight)
         self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
         for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
             widget.setVisible(not arabic)
@@ -178,22 +182,20 @@ class SpeechWindow(SpeechSurface):
         logger.info("Speech window close event received.")
         self._restore_message_if_editing()
         self._alarm_sound.stop()
-        if self._active_dialog is not None:
-            self._active_dialog.done(0)
+        if self._dialogs.active is not None:
+            self._dialogs.active.done(0)
         self._set_gaze_target_action(None)
         self.interaction_context_changed.emit()
         self.closed.emit()
         super().closeEvent(event)
 
     def action_at_global_point(self, point: QPoint) -> str | None:
-        self._last_gaze_point = QPoint(point)
-        if self._blocked_suggestion is not None:
-            button = self._blocked_suggestion
-            if button_bounds(button).contains(point):
-                return None
-            self._blocked_suggestion = None
+        if not self._predictions.allows_gaze(point):
+            return None
         actions = (
-            self._dialog_actions if self._active_dialog is not None else self._action_buttons.keys()
+            self._dialogs.actions
+            if self._dialogs.active is not None
+            else self._action_buttons.keys()
         )
         return self._action_at_point(actions, point)
 
@@ -206,20 +208,19 @@ class SpeechWindow(SpeechSurface):
     def handle_gaze_action(self, action: str) -> None:
         if not action.startswith(SPEECH_WINDOW_ACTION_PREFIX):
             return
-        if self._active_dialog is not None and action not in self._dialog_actions:
+        if self._dialogs.active is not None and action not in self._dialogs.actions:
             return
         if action.startswith(self._action("suggestion:")):
             button = self._action_buttons.get(action)
-            if button is self._blocked_suggestion:
+            if not self._predictions.allows_action(button):
                 return
-            self._blocked_suggestion = button
         logger.info("Speech window gaze action requested: %s", action)
         self._trigger_action(action, source="gaze")
 
     def _after_dialog_closed(self, dialog: QDialog) -> None:
-        if dialog is self._alarm_dialog:
+        if dialog is self._dialogs.alarm:
             self._alarm_sound.stop()
-        if dialog is self._confirm_dialog:
+        if dialog is self._dialogs.confirm:
             self._confirm_action = None
 
     def _show_group_level(self) -> None:
@@ -350,16 +351,16 @@ class SpeechWindow(SpeechSurface):
     def _populate_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
         self._clear_letter_dialog()
         group = (self._symbol_groups if symbols else self._letter_groups)[group_index]
-        self._letter_dialog_title.setText("Odaberite znak" if symbols else "Odaberite slovo")
+        self._dialogs.letter_title.setText("Odaberite znak" if symbols else "Odaberite slovo")
         item_count = len(group) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
         # Four rows of full-size buttons exceed a 720px display.
         compact = rows >= 4
         for column in range(4):
-            self._letter_grid.setColumnStretch(column, 1 if column < columns else 0)
+            self._dialogs.letter_grid.setColumnStretch(column, 1 if column < columns else 0)
         for row in range(5):
-            self._letter_grid.setRowStretch(row, 1 if row < rows else 0)
+            self._dialogs.letter_grid.setRowStretch(row, 1 if row < rows else 0)
 
         for index, letter in enumerate(group):
             action = self._action(
@@ -371,38 +372,38 @@ class SpeechWindow(SpeechSurface):
                 key_label(letter),
                 action,
                 "dialogCompactLetterButton" if compact else "dialogLetterButton",
-                parent=self._letter_dialog,
+                parent=self._dialogs.letter,
                 minimum_height=100 if compact else 120,
             )
-            self._letter_dialog_actions.add(action)
+            self._dialogs.letter_actions.add(action)
             column = index % columns
             if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
                 row_keys = min(columns, len(group) - (index // columns) * columns)
                 column = row_keys - 1 - column
-            self._letter_grid.addWidget(button, index // columns, column)
+            self._dialogs.letter_grid.addWidget(button, index // columns, column)
 
         back_action = self._action("letters:close")
         back = self._make_button(
             "Nazad" if compact else "Nazad na grupe",
             back_action,
             "dialogCompactBackButton" if compact else "dialogBackButton",
-            parent=self._letter_dialog,
+            parent=self._dialogs.letter,
             minimum_height=100 if compact else 120,
         )
-        self._letter_dialog_actions.add(back_action)
+        self._dialogs.letter_actions.add(back_action)
         back_index = len(group)
-        self._letter_grid.addWidget(back, back_index // columns, back_index % columns)
+        self._dialogs.letter_grid.addWidget(back, back_index // columns, back_index % columns)
 
     def _open_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
         groups = self._symbol_groups if symbols else self._letter_groups
         if group_index < 0 or group_index >= len(groups):
             return
         self._populate_letter_dialog(group_index, symbols=symbols)
-        self._dialog_actions = set(self._letter_dialog_actions)
+        self._dialogs.actions = set(self._dialogs.letter_actions)
         item_count = len(groups[group_index]) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
-        self._open_dialog(self._letter_dialog, min(820, 210 + rows * 150))
+        self._open_dialog(self._dialogs.letter, min(820, 210 + rows * 150))
 
     def _open_clear_dialog(self) -> None:
         if not self._input.text():
@@ -427,15 +428,15 @@ class SpeechWindow(SpeechSurface):
         confirm_label: str,
         action: Callable[[], None],
     ) -> None:
-        self._confirm_title.setText(title)
-        self._confirm_copy.setText(copy_text)
-        self._confirm_button.setText(confirm_label)
+        self._dialogs.confirm_title.setText(title)
+        self._dialogs.confirm_copy.setText(copy_text)
+        self._dialogs.confirm_button.setText(confirm_label)
         self._confirm_action = action
-        self._dialog_actions = {
+        self._dialogs.actions = {
             self._action("confirm:cancel"),
             self._action("confirm:accept"),
         }
-        self._open_dialog(self._confirm_dialog, 460)
+        self._open_dialog(self._dialogs.confirm, 460)
 
     def _cancel_confirmation(self) -> None:
         self._confirm_action = None
@@ -450,55 +451,55 @@ class SpeechWindow(SpeechSurface):
 
     def _start_alarm(self) -> None:
         self._speech.stop()
-        self._alarm_copy.setText("Pokrećem zvučni signal…")
-        self._dialog_actions = {self._action("alarm:stop")}
-        self._open_dialog(self._alarm_dialog, 460)
+        self._dialogs.alarm_copy.setText("Pokrećem zvučni signal…")
+        self._dialogs.actions = {self._action("alarm:stop")}
+        self._open_dialog(self._dialogs.alarm, 460)
         try:
             started = self._alarm_sound.start()
         except Exception:
             logger.exception("Alarm sound could not be started.")
             started = False
         if started:
-            self._alarm_copy.setText("Zvučni signal se ponavlja dok ga ne zaustavite.")
+            self._dialogs.alarm_copy.setText("Zvučni signal se ponavlja dok ga ne zaustavite.")
             self._set_status("Alarm je uključen.")
         else:
             self._alarm_failed(self._alarm_sound.last_error or ALARM_UNAVAILABLE_MESSAGE)
 
     def _alarm_failed(self, message: str) -> None:
-        if self._active_dialog is self._alarm_dialog:
-            self._alarm_copy.setText(message)
+        if self._dialogs.active is self._dialogs.alarm:
+            self._dialogs.alarm_copy.setText(message)
         self._set_status(message)
 
     def _stop_alarm(self) -> None:
         self._alarm_sound.stop()
-        if self._active_dialog is self._alarm_dialog:
+        if self._dialogs.active is self._dialogs.alarm:
             self._close_dialog()
         self._set_status("Alarm je zaustavljen.")
 
     def _start_sleep(self) -> None:
         self._speech.stop()
-        self._dialog_actions = {self._action("sleep:wake")}
+        self._dialogs.actions = {self._action("sleep:wake")}
         self._context_changed()
-        self._active_dialog = self._sleep_dialog
-        self._modal_backdrop.hide()
+        self._dialogs.active = self._dialogs.sleep
+        self._dialogs.backdrop.hide()
         self._position_sleep_dialog()
-        self._sleep_dialog.show()
-        self._sleep_dialog.raise_()
-        self._sleep_dialog.activateWindow()
+        self._dialogs.sleep.show()
+        self._dialogs.sleep.raise_()
+        self._dialogs.sleep.activateWindow()
         self._set_status("Odmor je uključen.")
 
     def _wake_from_sleep(self) -> None:
-        if self._active_dialog is self._sleep_dialog:
+        if self._dialogs.active is self._dialogs.sleep:
             self._close_dialog()
         self._set_status("Možete nastaviti.")
 
     def _open_exit_dialog(self) -> None:
-        self._dialog_actions = {
+        self._dialogs.actions = {
             self._action("exit:cancel"),
             self._action("exit:leave-speech"),
             self._action("exit:quit-app"),
         }
-        self._open_dialog(self._exit_dialog, 460)
+        self._open_dialog(self._dialogs.exit, 460)
 
     def _leave_speech_mode(self) -> None:
         self._close_dialog()
@@ -890,54 +891,15 @@ class SpeechWindow(SpeechSurface):
     def _refresh_suggestions(self, *_args) -> None:
         if self._updating_input:
             return
-        self._hold_suggestion_under_gaze()
-        self._prediction_revision += 1
-        for button in self._prediction_buttons:
-            button.setEnabled(False)
-        self._undo_word_button.setEnabled(
-            self._speech_settings.keyboard_script != ARABIC_SCRIPT
+        self._predictions.refresh(
+            can_undo=self._speech_settings.keyboard_script != ARABIC_SCRIPT
             and self._composition.undo is not None
         )
-        self._context_changed()
-        if self._suggestion_allowed():
-            self._prediction_text = self._input.text()
-            self._suggestions.request(
-                self._prediction_owner, self._prediction_revision, self._prediction_text
-            )
-        else:
-            for button in self._prediction_buttons:
-                button.setText("·")
-                button.setAccessibleName("Nema prijedloga")
-
-    def _hold_suggestion_under_gaze(self) -> None:
-        if self._last_gaze_point is None:
-            return
-        for button in self._prediction_buttons:
-            if button_bounds(button).contains(self._last_gaze_point):
-                self._blocked_suggestion = button
-                return
-
-    def _receive_suggestions(self, owner: object, revision: int, candidates: list[str]) -> None:
-        if owner is not self._prediction_owner or revision != self._prediction_revision:
-            return
-        if not self._suggestion_allowed() or self._input.text() != self._prediction_text:
-            return
-        for index, button in enumerate(self._prediction_buttons):
-            candidate = _uppercase(candidates[index]) if index < len(candidates) else ""
-            button.setText(candidate or "·")
-            button.setAccessibleName(candidate or "Nema prijedloga")
-            button.setEnabled(bool(candidate))
-
-    def _prediction_status(self, message: str) -> None:
-        self._prediction_label.setText(f"Brzi izbor · {message}" if message else "Brzi izbor")
-        self._prediction_label.setToolTip(message)
 
     def _select_suggestion(self, index: int) -> None:
-        if not self._suggestion_allowed() or self._input.text() != self._prediction_text:
-            return
-        button = self._prediction_buttons[index]
-        if button.isEnabled():
-            self._set_composed_text(self._composition.select(button.text()))
+        candidate = self._predictions.candidate(index)
+        if candidate is not None:
+            self._set_composed_text(self._composition.select(candidate))
 
     def _set_composed_text(self, text: str) -> None:
         self._updating_input = True
@@ -970,7 +932,7 @@ class SpeechWindow(SpeechSurface):
         self._input.setText(text[:-1])
 
     def _play(self, *, source: str = "keyboard") -> None:
-        if self._editor is not None or self._active_dialog is not None:
+        if self._editor is not None or self._dialogs.active is not None:
             return
         if not self._play_button.isEnabled():
             return
