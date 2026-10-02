@@ -406,7 +406,7 @@ class TobiiGazeProvider(QObject):
 
     def _check_stream_health(self) -> None:
         with self._sample_lock:
-            if not self._running or self._stream_engine is None or self._stream_started_at is None:
+            if not self._stream_is_monitored():
                 return
             last_sample = self._last_stream_eye_sample_at
             age = time.monotonic() - (
@@ -414,32 +414,10 @@ class TobiiGazeProvider(QObject):
             )
             failure = getattr(self._stream_engine, "connection_error", None)
             if failure or age >= STREAM_EYE_STALE_SECONDS:
-                self._stream_eye_status_known = False
-                self._stream_left_open = False
-                self._stream_right_open = False
-                self._clear_pending_gaze_sample()
-                self._emit_eye_status(False, False, "stream-stale")
-                if not self._stream_stale:
-                    self._set_tracking_status(TrackingState.WAITING, self._tracking_status.detail)
-                    logger.warning(
-                        "Stream Engine eye-status delivery is stale: age_ms=%s bridge_failed=%s.",
-                        round(age * 1000),
-                        bool(failure),
-                    )
-                    self.status_changed.emit("Čekam svježe podatke o očima.")
-                self._stream_stale = True
+                self._mark_stream_stale(age, failure)
             elif self._stream_stale:
-                self._stream_stale = False
-                self._set_tracking_status(TrackingState.CONNECTED, self._tracking_status.detail)
-                logger.info("Stream Engine eye-status delivery resumed.")
-                # Publish recovery on Qt after rechecking the current connection,
-                # so a queued worker status cannot overwrite a newer failure.
-                self.status_changed.emit("Praćenje je aktivno. Podaci o očima ponovo stižu.")
-            restart = (
-                (failure or age >= STREAM_RESTART_SECONDS)
-                and self._start_requested
-                and self._backend_name == "stream-engine-x86-bridge"
-            )
+                self._mark_stream_resumed()
+            restart = self._bridge_needs_restart(age, failure)
         if restart:
             # This runs on the Qt thread; reader threads never stop their own backend.
             # Only the isolated bridge can be forcibly stopped. A stalled native DLL
@@ -448,6 +426,42 @@ class TobiiGazeProvider(QObject):
             self._start_requested = True
             self._emit_timer.start()
             self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+
+    def _stream_is_monitored(self) -> bool:
+        return (
+            self._running
+            and self._stream_engine is not None
+            and self._stream_started_at is not None
+        )
+
+    def _mark_stream_stale(self, age: float, failure: object) -> None:
+        self._stream_eye_status_known = False
+        self._stream_left_open = False
+        self._stream_right_open = False
+        self._clear_pending_gaze_sample()
+        self._emit_eye_status(False, False, "stream-stale")
+        if not self._stream_stale:
+            self._set_tracking_status(TrackingState.WAITING, self._tracking_status.detail)
+            logger.warning(
+                "Stream Engine eye-status delivery is stale: age_ms=%s bridge_failed=%s.",
+                round(age * 1000),
+                bool(failure),
+            )
+            self.status_changed.emit("Čekam svježe podatke o očima.")
+        self._stream_stale = True
+
+    def _mark_stream_resumed(self) -> None:
+        self._stream_stale = False
+        self._set_tracking_status(TrackingState.CONNECTED, self._tracking_status.detail)
+        logger.info("Stream Engine eye-status delivery resumed.")
+        # Publish recovery on Qt after rechecking the current connection,
+        # so a queued worker status cannot overwrite a newer failure.
+        self.status_changed.emit("Praćenje je aktivno. Podaci o očima ponovo stižu.")
+
+    def _bridge_needs_restart(self, age: float, failure: object) -> bool:
+        if not self._start_requested or self._backend_name != "stream-engine-x86-bridge":
+            return False
+        return bool(failure) or age >= STREAM_RESTART_SECONDS
 
     def _clear_pending_gaze_sample(self) -> None:
         with self._sample_lock:

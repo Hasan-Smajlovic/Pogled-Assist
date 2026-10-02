@@ -484,10 +484,9 @@ def test_arabic_phrase_editor_survives_switch_and_preserves_library(qtbot):
 def test_sidebar_pages_fit_and_send_actual_unicode(
     qtbot, monkeypatch, kind, script, letters_per_group
 ):
-    from pogled_assist.ui import controller_window, keyboard_window
+    from pogled_assist.ui import sidebar_panel
 
-    module = keyboard_window if kind == "keyboard" else controller_window
-    monkeypatch.setattr(module, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
     settings = SpeechSettings(keyboard_script=script, letters_per_group=letters_per_group)
     window = (
         KeyboardWindow(settings)
@@ -583,15 +582,13 @@ def test_sidebar_pages_fit_and_send_actual_unicode(
 @pytest.mark.e2e
 def test_keyboard_script_is_global_and_persisted(hotbar_gaze, qtbot, monkeypatch):
     from pogled_assist import toolbar
-    from pogled_assist.ui import controller_window, settings_window
+    from pogled_assist.ui import settings_window
 
     hotbar = hotbar_gaze[0]
     saved = []
     monkeypatch.setattr(
         toolbar, "save_app_settings", lambda gaze, speech: saved.append(replace(speech))
     )
-    monkeypatch.setattr(controller_window, "WindowsAppBar", FakeAppBar)
-    monkeypatch.setattr(controller_window, "WindowsInputController", FakeControllerInput)
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     hotbar._show_keyboard_sidebar()
     hotbar._keyboard_window._script_button.click()
@@ -1608,17 +1605,15 @@ class FakeSpeechService(FakeSpeech):
 @pytest.mark.e2e
 def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     from pogled_assist import toolbar
-    from pogled_assist.ui import controller_window, keyboard_window, settings_window
+    from pogled_assist.ui import settings_window, sidebar_panel
 
     monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
     monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
     monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
     monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
     monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
-    monkeypatch.setattr(keyboard_window, "WindowsAppBar", FakeAppBar)
-    monkeypatch.setattr(keyboard_window, "WindowsInputController", FakeHotbarInput)
-    monkeypatch.setattr(controller_window, "WindowsAppBar", FakeAppBar)
-    monkeypatch.setattr(controller_window, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
 
     window = toolbar.HotbarWindow()
@@ -1660,7 +1655,7 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
 @pytest.fixture(params=[(1920, 1080), (1280, 720)])
 def hotbar_gaze(qtbot, monkeypatch, request):
     from pogled_assist import toolbar
-    from pogled_assist.ui import keyboard_window
+    from pogled_assist.ui import sidebar_panel
     from scripts.ui.capture_ui import PreviewSuggestionService
 
     monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
@@ -1671,8 +1666,8 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
     monkeypatch.setattr(toolbar.HotbarWindow, "_start_services", lambda _self: None)
     monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
-    monkeypatch.setattr(keyboard_window, "WindowsAppBar", FakeAppBar)
-    monkeypatch.setattr(keyboard_window, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
     hotbar = toolbar.HotbarWindow(simulate_gaze=True)
     qtbot.addWidget(hotbar)
     width, height = request.param

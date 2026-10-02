@@ -27,9 +27,8 @@ from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
-from pogled_assist.ui import controller_window as controller_module
-from pogled_assist.ui import keyboard_window as keyboard_module
 from pogled_assist.ui import settings_window as settings_module
+from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsWindow
@@ -261,8 +260,7 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
         patch.object(
             toolbar_module, "load_app_settings", return_value=(gaze_settings, speech_settings)
         ),
-        patch.object(keyboard_module, "WindowsAppBar", PreviewAppBar),
-        patch.object(controller_module, "WindowsAppBar", PreviewAppBar),
+        patch.object(sidebar_module, "WindowsAppBar", PreviewAppBar),
         patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
     )
     widgets: list[QWidget] = []

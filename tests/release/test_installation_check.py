@@ -8,11 +8,12 @@ import pytest
 
 from pogled_assist import installation_check
 from pogled_assist.tracking import tobii_stream_engine_bridge_backend as bridge
+from pogled_assist.tracking.tobii_stream_engine import APP_ROOT_ENV
 from scripts.release import prepare_speech_bundle as bundler
 
 
 def test_bundle_python_is_preferred_to_system_python(monkeypatch, tmp_path):
-    monkeypatch.setenv(bridge.APP_ROOT_ENV, str(tmp_path))
+    monkeypatch.setenv(APP_ROOT_ENV, str(tmp_path))
     monkeypatch.delenv(bridge.X86_PYTHON_ENV, raising=False)
     monkeypatch.delenv(bridge.LEGACY_X86_PYTHON_ENV, raising=False)
     monkeypatch.setattr(bridge, "_py_launcher_candidates", lambda: ["external"])

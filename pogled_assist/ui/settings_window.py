@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QStackedWidget,
-    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -38,6 +37,7 @@ from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechS
 from ..suggestions.service import SuggestionService
 from ..windows.windows_startup import is_windows_startup_enabled, set_windows_startup_enabled
 from .gaze_feedback import set_gaze_feedback
+from .icons import themed_icon
 
 logger = logging.getLogger(__name__)
 
@@ -48,147 +48,7 @@ VALUE_WIDTH = 216
 CHOICE_WIDTH = 260
 CONTROL_SPACING = 12
 
-
-class SettingsWindow(QWidget):
-    """Fullscreen settings surface that can be operated by gaze dwell."""
-
-    closed = Signal()
-    gaze_settings_changed = Signal(object)
-    speech_settings_changed = Signal(object)
-    calibration_requested = Signal()
-    speech_test_requested = Signal()
-    update_requested = Signal()
-    quit_requested = Signal()
-    interaction_progress_changed = Signal(QPoint, float, str)
-    interaction_finished = Signal(QPoint, str)
-    interaction_cancelled = Signal()
-
-    def __init__(
-        self,
-        gaze_settings: GazeSettings,
-        speech_settings: SpeechSettings,
-        parent: QWidget | None = None,
-        *,
-        update_manager: ReleaseUpdateManager | None = None,
-        suggestions: SuggestionService | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Postavke")
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
-        self.setObjectName("settingsRoot")
-
-        self._gaze_settings = replace(gaze_settings)
-        self._speech_settings = replace(speech_settings)
-        self._update_manager = update_manager
-        self._suggestions = suggestions or SuggestionService(self)
-        self._word_page = 0
-        self._chosen_word: str | None = None
-        self._visible_words: list[str] = []
-        self._learning_busy = False
-        self._last_learning_point: QPoint | None = None
-        self._blocked_learning_button: QWidget | None = None
-        self._gaze_actions: dict[QWidget, GazeCallback] = {}
-        self._gaze_names: dict[QWidget, str] = {}
-        self._gaze_target: QWidget | None = None
-        self._gaze_selection = GazeSelectionTimer()
-        self._last_gaze_action_ms = 0.0
-        self._interaction_active = False
-
-        self._sync_startup_setting_from_windows()
-        self._build_ui()
-        self._suggestions.status_changed.connect(self._learning_status_changed)
-        self._suggestions.storage_finished.connect(self._learning_saved)
-        self._install_shortcuts()
-        self._refresh_values()
-        self._initialize_release_update()
-        logger.info("Settings window initialized.")
-
-    def show_fullscreen_on_primary(self) -> None:
-        screen = QGuiApplication.primaryScreen()
-        geometry = screen.geometry()
-        logger.info(
-            "Showing settings fullscreen on primary screen: left=%s top=%s width=%s height=%s.",
-            geometry.left(),
-            geometry.top(),
-            geometry.width(),
-            geometry.height(),
-        )
-        self.setGeometry(geometry)
-        self.showFullScreen()
-        self.raise_()
-        self.activateWindow()
-
-    def closeEvent(self, event: QCloseEvent) -> None:
-        logger.info("Settings window closed.")
-        self.cancel_gaze_interaction()
-        self.closed.emit()
-        super().closeEvent(event)
-
-    def handle_gaze(self, point: QPoint) -> None:
-        self._last_learning_point = QPoint(point)
-        if self._blocked_learning_button is not None:
-            button = self._blocked_learning_button
-            if QRect(button.mapToGlobal(QPoint(0, 0)), button.size()).contains(point):
-                self.cancel_gaze_interaction(require_leave=True)
-                return
-            self._blocked_learning_button = None
-        if not self.isVisible():
-            self.cancel_gaze_interaction()
-            return
-
-        target = self._gaze_action_at(point)
-        now_ms = time.monotonic() * 1000
-        if target is None:
-            self.cancel_gaze_interaction()
-            return
-
-        widget, action = target
-        update = self._gaze_selection.update(
-            widget,
-            now_ms,
-            pause_ms=self._gaze_settings.selection_pause_ms,
-            dwell_ms=self._gaze_settings.dwell_ms,
-        )
-        if update.progress is None:
-            self._set_gaze_target(None)
-            self._cancel_interaction()
-            return
-
-        if widget is not self._gaze_target:
-            self._set_gaze_target(widget)
-            self._set_status(f"Cilj: {self._gaze_names.get(widget, 'kontrola')}")
-        self._emit_interaction_progress(widget, update.progress)
-
-        cooled = now_ms - self._last_gaze_action_ms >= self._gaze_settings.click_cooldown_ms
-        if update.ready and cooled:
-            name = self._gaze_names.get(widget, "kontrola")
-            logger.info("Settings gaze action fired: %s", name)
-            self._last_gaze_action_ms = now_ms
-            self._gaze_selection.complete()
-            self._finish_interaction(widget)
-            self._set_gaze_target(None)
-            action()
-
-    def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
-        self._gaze_selection.cancel(require_leave=require_leave)
-        self._set_gaze_target(None)
-        self._cancel_interaction()
-
-    def pause_gaze_interaction(self) -> None:
-        self._gaze_selection.pause()
-        self._set_gaze_target(None)
-        self._cancel_interaction()
-
-    def set_status(self, text: str) -> None:
-        self._set_status(text)
-
-    def update_speech_settings(self, settings: SpeechSettings) -> None:
-        self._speech_settings = replace(settings)
-        self._refresh_values()
-
-    def _build_ui(self) -> None:
-        self.setStyleSheet(
-            """
+SETTINGS_STYLESHEET = """
             QWidget#settingsRoot {
                 background: #111312;
                 color: #f4f1ea;
@@ -384,13 +244,170 @@ class SettingsWindow(QWidget):
                 border: 4px solid #bbf7d0;
                 color: #ffffff;
             }
-            """.replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
+            """
+
+
+class SettingsWindow(QWidget):
+    """Fullscreen settings surface that can be operated by gaze dwell."""
+
+    closed = Signal()
+    gaze_settings_changed = Signal(object)
+    speech_settings_changed = Signal(object)
+    calibration_requested = Signal()
+    speech_test_requested = Signal()
+    update_requested = Signal()
+    quit_requested = Signal()
+    interaction_progress_changed = Signal(QPoint, float, str)
+    interaction_finished = Signal(QPoint, str)
+    interaction_cancelled = Signal()
+
+    def __init__(
+        self,
+        gaze_settings: GazeSettings,
+        speech_settings: SpeechSettings,
+        parent: QWidget | None = None,
+        *,
+        update_manager: ReleaseUpdateManager | None = None,
+        suggestions: SuggestionService | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Postavke")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
+        self.setObjectName("settingsRoot")
+
+        self._gaze_settings = replace(gaze_settings)
+        self._speech_settings = replace(speech_settings)
+        self._update_manager = update_manager
+        self._suggestions = suggestions or SuggestionService(self)
+        self._word_page = 0
+        self._chosen_word: str | None = None
+        self._visible_words: list[str] = []
+        self._learning_busy = False
+        self._last_learning_point: QPoint | None = None
+        self._blocked_learning_button: QWidget | None = None
+        self._gaze_actions: dict[QWidget, GazeCallback] = {}
+        self._gaze_names: dict[QWidget, str] = {}
+        self._gaze_target: QWidget | None = None
+        self._gaze_selection = GazeSelectionTimer()
+        self._last_gaze_action_ms = 0.0
+        self._interaction_active = False
+
+        self._sync_startup_setting_from_windows()
+        self._build_ui()
+        self._suggestions.status_changed.connect(self._learning_status_changed)
+        self._suggestions.storage_finished.connect(self._learning_saved)
+        self._install_shortcuts()
+        self._refresh_values()
+        self._initialize_release_update()
+        logger.info("Settings window initialized.")
+
+    def show_fullscreen_on_primary(self) -> None:
+        screen = QGuiApplication.primaryScreen()
+        geometry = screen.geometry()
+        logger.info(
+            "Showing settings fullscreen on primary screen: left=%s top=%s width=%s height=%s.",
+            geometry.left(),
+            geometry.top(),
+            geometry.width(),
+            geometry.height(),
+        )
+        self.setGeometry(geometry)
+        self.showFullScreen()
+        self.raise_()
+        self.activateWindow()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        logger.info("Settings window closed.")
+        self.cancel_gaze_interaction()
+        self.closed.emit()
+        super().closeEvent(event)
+
+    def handle_gaze(self, point: QPoint) -> None:
+        self._last_learning_point = QPoint(point)
+        if self._blocked_learning_button is not None:
+            if _global_rect(self._blocked_learning_button).contains(point):
+                self.cancel_gaze_interaction(require_leave=True)
+                return
+            self._blocked_learning_button = None
+        if not self.isVisible():
+            self.cancel_gaze_interaction()
+            return
+
+        target = self._gaze_action_at(point)
+        now_ms = time.monotonic() * 1000
+        if target is None:
+            self.cancel_gaze_interaction()
+            return
+
+        widget, action = target
+        update = self._gaze_selection.update(
+            widget,
+            now_ms,
+            pause_ms=self._gaze_settings.selection_pause_ms,
+            dwell_ms=self._gaze_settings.dwell_ms,
+        )
+        if update.progress is None:
+            self._set_gaze_target(None)
+            self._cancel_interaction()
+            return
+
+        if widget is not self._gaze_target:
+            self._set_gaze_target(widget)
+            self._set_status(f"Cilj: {self._gaze_names.get(widget, 'kontrola')}")
+        self._emit_interaction_progress(widget, update.progress)
+
+        cooled = now_ms - self._last_gaze_action_ms >= self._gaze_settings.click_cooldown_ms
+        if update.ready and cooled:
+            name = self._gaze_names.get(widget, "kontrola")
+            logger.info("Settings gaze action fired: %s", name)
+            self._last_gaze_action_ms = now_ms
+            self._gaze_selection.complete()
+            self._finish_interaction(widget)
+            self._set_gaze_target(None)
+            action()
+
+    def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
+        self._gaze_selection.cancel(require_leave=require_leave)
+        self._set_gaze_target(None)
+        self._cancel_interaction()
+
+    def pause_gaze_interaction(self) -> None:
+        self._gaze_selection.pause()
+        self._set_gaze_target(None)
+        self._cancel_interaction()
+
+    def set_status(self, text: str) -> None:
+        self._set_status(text)
+
+    def update_speech_settings(self, settings: SpeechSettings) -> None:
+        self._speech_settings = replace(settings)
+        self._refresh_values()
+
+    def _build_ui(self) -> None:
+        self.setStyleSheet(
+            SETTINGS_STYLESHEET.replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
         )
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 8, 16, 8)
         root.setSpacing(12)
+        root.addLayout(self._build_top_bar())
 
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        root.addLayout(body, 1)
+        body.addWidget(self._build_nav_panel(), 0)
+
+        self._stack = QStackedWidget(self)
+        self._stack.addWidget(self._build_general_page())
+        self._stack.addWidget(self._build_gaze_page())
+        self._stack.addWidget(self._build_speech_page())
+        self._stack.addWidget(self._build_learning_page())
+        body.addWidget(self._stack, 1)
+
+        self._select_tab(0)
+
+    def _build_top_bar(self) -> QHBoxLayout:
         top_bar = QHBoxLayout()
         top_bar.setSpacing(16)
 
@@ -412,12 +429,9 @@ class SettingsWindow(QWidget):
             minimum_size=QSize(128, 58),
         )
         top_bar.addWidget(self._exit_button, 0, Qt.AlignRight)
-        root.addLayout(top_bar)
+        return top_bar
 
-        body = QHBoxLayout()
-        body.setSpacing(14)
-        root.addLayout(body, 1)
-
+    def _build_nav_panel(self) -> QFrame:
         nav_panel = QFrame(self)
         nav_panel.setObjectName("navPanel")
         nav_panel.setFixedWidth(250)
@@ -463,17 +477,7 @@ class SettingsWindow(QWidget):
         nav_note.setWordWrap(True)
         nav_note.setContentsMargins(8, 0, 8, 6)
         nav_layout.addWidget(nav_note)
-
-        body.addWidget(nav_panel, 0)
-
-        self._stack = QStackedWidget(self)
-        self._stack.addWidget(self._build_general_page())
-        self._stack.addWidget(self._build_gaze_page())
-        self._stack.addWidget(self._build_speech_page())
-        self._stack.addWidget(self._build_learning_page())
-        body.addWidget(self._stack, 1)
-
-        self._select_tab(0)
+        return nav_panel
 
     def _build_general_page(self) -> QWidget:
         page = QFrame(self)
@@ -580,60 +584,41 @@ class SettingsWindow(QWidget):
         description.setObjectName("sectionDescription")
         layout.addWidget(description)
 
-        self._selection_pause_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Pauza prije odabira",
-                "Vrijeme čekanja prije nego što se krug napretka počne puniti.",
-                self._selection_pause_value,
-                lambda: self._adjust_selection_pause(-50),
-                lambda: self._adjust_selection_pause(50),
-            )
+        row, self._selection_pause_value = self._make_adjust_row(
+            "Pauza prije odabira",
+            "Vrijeme čekanja prije nego što se krug napretka počne puniti.",
+            self._adjust_selection_pause,
+            50,
         )
-
-        self._dwell_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Vrijeme zadržavanja pogleda",
-                "Vrijeme punjenja kruga napretka nakon početne pauze.",
-                self._dwell_value,
-                lambda: self._adjust_dwell_ms(-50),
-                lambda: self._adjust_dwell_ms(50),
-            )
+        layout.addWidget(row)
+        row, self._dwell_value = self._make_adjust_row(
+            "Vrijeme zadržavanja pogleda",
+            "Vrijeme punjenja kruga napretka nakon početne pauze.",
+            self._adjust_dwell_ms,
+            50,
         )
-
-        self._radius_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Radijus stabilnog pogleda",
-                "Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.",
-                self._radius_value,
-                lambda: self._adjust_dwell_radius(-2),
-                lambda: self._adjust_dwell_radius(2),
-            )
+        layout.addWidget(row)
+        row, self._radius_value = self._make_adjust_row(
+            "Radijus stabilnog pogleda",
+            "Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.",
+            self._adjust_dwell_radius,
+            2,
         )
-
-        self._cooldown_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Pauza između radnji",
-                "Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.",
-                self._cooldown_value,
-                lambda: self._adjust_click_cooldown(-50),
-                lambda: self._adjust_click_cooldown(50),
-            )
+        layout.addWidget(row)
+        row, self._cooldown_value = self._make_adjust_row(
+            "Pauza između radnji",
+            "Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.",
+            self._adjust_click_cooldown,
+            50,
         )
-
-        self._smoothing_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Uglađivanje pokazivača",
-                "Niže vrijednosti su mirnije, a više brže prate pogled.",
-                self._smoothing_value,
-                lambda: self._adjust_smoothing(-0.05),
-                lambda: self._adjust_smoothing(0.05),
-            )
+        layout.addWidget(row)
+        row, self._smoothing_value = self._make_adjust_row(
+            "Uglađivanje pokazivača",
+            "Niže vrijednosti su mirnije, a više brže prate pogled.",
+            self._adjust_smoothing,
+            0.05,
         )
+        layout.addWidget(row)
 
         actions_label = QLabel("PONAŠANJE I KALIBRACIJA", page)
         actions_label.setObjectName("groupLabel")
@@ -720,27 +705,20 @@ class SettingsWindow(QWidget):
         voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
         layout.addWidget(voice_row)
 
-        self._speed_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Brzina govora",
-                "Broj riječi u minuti koji koristi eSpeak NG.",
-                self._speed_value,
-                lambda: self._adjust_speech_speed(-5),
-                lambda: self._adjust_speech_speed(5),
-            )
+        row, self._speed_value = self._make_adjust_row(
+            "Brzina govora",
+            "Broj riječi u minuti koji koristi eSpeak NG.",
+            self._adjust_speech_speed,
+            5,
         )
-
-        self._letters_group_value = self._make_value_label(page)
-        layout.addWidget(
-            self._make_adjust_row(
-                "Broj slova u grupi",
-                "Broj slova u svakoj grupi na ekranima za govor i tastaturu.",
-                self._letters_group_value,
-                lambda: self._adjust_letters_per_group(-1),
-                lambda: self._adjust_letters_per_group(1),
-            )
+        layout.addWidget(row)
+        row, self._letters_group_value = self._make_adjust_row(
+            "Broj slova u grupi",
+            "Broj slova u svakoj grupi na ekranima za govor i tastaturu.",
+            self._adjust_letters_per_group,
+            1,
         )
+        layout.addWidget(row)
 
         actions_label = QLabel("AKCIJE", page)
         actions_label.setObjectName("groupLabel")
@@ -837,13 +815,7 @@ class SettingsWindow(QWidget):
         self._refresh_learning()
 
     def _refresh_learning(self) -> None:
-        if self._last_learning_point is not None:
-            for button in self._word_buttons:
-                if button.isVisible() and QRect(
-                    button.mapToGlobal(QPoint(0, 0)), button.size()
-                ).contains(self._last_learning_point):
-                    self._blocked_learning_button = button
-                    break
+        self._block_word_button_under_gaze()
         self.cancel_gaze_interaction(require_leave=True)
         learned = self._suggestions.store.learned_words()
         pages = max(1, (len(learned) + 5) // 6)
@@ -851,13 +823,7 @@ class SettingsWindow(QWidget):
         self._visible_words = learned[self._word_page * 6 : self._word_page * 6 + 6]
         if self._chosen_word not in self._visible_words:
             self._chosen_word = None
-        for index, button in enumerate(self._word_buttons):
-            word = self._visible_words[index] if index < len(self._visible_words) else ""
-            button.setText(word.upper() if word else "·")
-            button.setAccessibleName(word.upper() if word else "Nema naučene riječi")
-            button.setChecked(bool(word) and word == self._chosen_word)
-            button.setEnabled(bool(word) and not self._learning_busy)
-            self._gaze_names[button] = word.upper()
+        self._refresh_word_buttons()
         self._word_previous.setEnabled(self._word_page > 0 and not self._learning_busy)
         self._word_next.setEnabled(self._word_page + 1 < pages and not self._learning_busy)
         self._word_page_label.setText(f"{self._word_page + 1} / {pages}")
@@ -867,20 +833,38 @@ class SettingsWindow(QWidget):
         self._retry_learning_button.setEnabled(
             bool(self._suggestions.store.error) and not self._learning_busy
         )
-        self._word_selection_label.setText(
-            f"Odabrano: {self._chosen_word.upper()}"
-            if self._chosen_word
-            else "Odaberite riječ."
-            if learned
-            else "Naučene riječi nisu učitane."
-            if self._suggestions.store.error
-            else "Nema naučenih riječi."
-        )
+        self._word_selection_label.setText(self._word_selection_text(learned))
         self._learning_status_label.setText(
             "Spremam promjenu…"
             if self._learning_busy
             else self._suggestions.store.error or "Učenje je sačuvano."
         )
+
+    def _block_word_button_under_gaze(self) -> None:
+        if self._last_learning_point is None:
+            return
+        for button in self._word_buttons:
+            if button.isVisible() and _global_rect(button).contains(self._last_learning_point):
+                self._blocked_learning_button = button
+                return
+
+    def _refresh_word_buttons(self) -> None:
+        for index, button in enumerate(self._word_buttons):
+            word = self._visible_words[index] if index < len(self._visible_words) else ""
+            button.setText(word.upper() if word else "·")
+            button.setAccessibleName(word.upper() if word else "Nema naučene riječi")
+            button.setChecked(bool(word) and word == self._chosen_word)
+            button.setEnabled(bool(word) and not self._learning_busy)
+            self._gaze_names[button] = word.upper()
+
+    def _word_selection_text(self, learned: list[str]) -> str:
+        if self._chosen_word:
+            return f"Odabrano: {self._chosen_word.upper()}"
+        if learned:
+            return "Odaberite riječ."
+        if self._suggestions.store.error:
+            return "Naučene riječi nisu učitane."
+        return "Nema naučenih riječi."
 
     def _choose_word(self, index: int) -> None:
         if not self._learning_busy and 0 <= index < len(self._visible_words):
@@ -974,37 +958,33 @@ class SettingsWindow(QWidget):
         return combo
 
     def _make_adjust_row(
-        self,
-        title: str,
-        hint: str,
-        value_label: QLabel,
-        decrease: GazeCallback,
-        increase: GazeCallback,
-    ) -> QFrame:
+        self, title: str, hint: str, adjust: Callable[[float], None], step: float
+    ) -> tuple[QFrame, QLabel]:
         row, layout, _hint = self._make_setting_row(title, hint)
 
         minus_button = self._make_button(
             "Manje",
-            decrease,
+            lambda: adjust(-step),
             icon_name="fa5s.minus",
             object_name="adjustButton",
             minimum_size=QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT),
         )
         plus_button = self._make_button(
             "Više",
-            increase,
+            lambda: adjust(step),
             icon_name="fa5s.plus",
             object_name="adjustButton",
             minimum_size=QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT),
         )
         minus_button.setFixedWidth(ADJUST_BUTTON_WIDTH)
         plus_button.setFixedWidth(ADJUST_BUTTON_WIDTH)
+        value_label = self._make_value_label(row)
 
         layout.addWidget(minus_button, 0, 1, 2, 1)
         layout.addWidget(value_label, 0, 2, 2, 1)
         layout.addWidget(plus_button, 0, 3, 2, 1)
 
-        return row
+        return row, value_label
 
     def _make_value_label(self, parent: QWidget) -> QLabel:
         label = QLabel(parent)
@@ -1045,7 +1025,7 @@ class SettingsWindow(QWidget):
         if object_name:
             button.setObjectName(object_name)
         if icon_name:
-            button.setIcon(self._icon(icon_name))
+            button.setIcon(themed_icon(icon_name, "#f8f7f2", self.style()))
         button.pressed.connect(lambda: self.cancel_gaze_interaction(require_leave=True))
         button.clicked.connect(lambda _checked=False, item=callback: item())
         self._register_gaze(button, callback, text)
@@ -1074,10 +1054,7 @@ class SettingsWindow(QWidget):
         for widget, action in self._gaze_actions.items():
             if not widget.isVisible() or not widget.isEnabled():
                 continue
-
-            top_left = widget.mapToGlobal(QPoint(0, 0))
-            rect = QRect(top_left, widget.size())
-            if rect.contains(point):
+            if _global_rect(widget).contains(point):
                 return widget, action
 
         return None
@@ -1120,8 +1097,7 @@ class SettingsWindow(QWidget):
         self.interaction_cancelled.emit()
 
     def _widget_global_center(self, widget: QWidget) -> QPoint:
-        top_left = widget.mapToGlobal(QPoint(0, 0))
-        return QRect(top_left, widget.size()).center()
+        return _global_rect(widget).center()
 
     def _select_tab(self, index: int) -> None:
         self.cancel_gaze_interaction(require_leave=True)
@@ -1431,15 +1407,6 @@ class SettingsWindow(QWidget):
         self._escape_shortcut = QShortcut(QKeySequence("Esc"), self)
         self._escape_shortcut.activated.connect(self.close)
 
-    def _icon(self, icon_name: str) -> QIcon:
-        try:
-            import qtawesome as qta
-
-            return qta.icon(icon_name, color="#f8f7f2")
-        except Exception:
-            logger.exception("Could not load qtawesome icon %s; using fallback.", icon_name)
-            return self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
-
     def _sync_startup_setting_from_windows(self) -> None:
         try:
             self._gaze_settings = replace(
@@ -1448,6 +1415,10 @@ class SettingsWindow(QWidget):
             )
         except Exception:
             logger.exception("Could not sync Windows startup state.")
+
+
+def _global_rect(widget: QWidget) -> QRect:
+    return QRect(widget.mapToGlobal(QPoint(0, 0)), widget.size())
 
 
 def _clamp_int(value: int, minimum: int, maximum: int) -> int:
