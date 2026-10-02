@@ -14,7 +14,7 @@
     "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
     "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
     "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
-    "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+    "tokenizer_sha256": "5799d0f76faadb8ddb2b7ca5e825b01c4bb4780d92359aeae24aa6331537312c",
     "preparation_sha256": "0880ae30aabd0434edc36c5303993a5cd5e3299e7daf11d2683a40b93483a20c",
     "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
     "sample": {
@@ -98,7 +98,7 @@
       "supplement_sha256": "c0145e445976e02f9496d318333e4a8d979c4c4d7fc4b2b3ca18371733f9bc45",
       "starters_sha256": "80fec8d62aeb323f499283cc444dedd8a8b695b6f01233e291d1715a6e04a4c2",
       "spelling_sha256": "1ec9a1bf34591995c106f5aa5feeae5167e3565ee06d9b657143ea8befaa884f",
-      "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
+      "tokenizer_sha256": "5799d0f76faadb8ddb2b7ca5e825b01c4bb4780d92359aeae24aa6331537312c",
       "preparation_sha256": "0880ae30aabd0434edc36c5303993a5cd5e3299e7daf11d2683a40b93483a20c",
       "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
       "sample": {
@@ -172,7 +172,7 @@
     },
     {
       "version": 1,
-      "model_id": "bs-islamic-reviewed-1-286a103a6519",
+      "model_id": "bs-islamic-reviewed-1-5c25ee0596db",
       "source": "Reviewed synthetic Bosnian Islamic terminology and conversation phrases",
       "text_origin": "Project-authored examples; reference pages were used for terminology only",
       "source_references": [
@@ -186,9 +186,9 @@
         }
       ],
       "supplement_sha256": "bfee0ed0c5e551824e228d36795294047298a792b55de4b587891d5edb1b4c6d",
-      "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
-      "preparation_sha256": "fcb1d384462d8e6924a2ea87d5f42a7a71eb3df3987d92f0da6eff0c391928e2",
-      "model_sha256": "286a103a6519cfaa7758ec5e074a9fdffa563b6bc55a9c44c664e683dd133aa4",
+      "tokenizer_sha256": "5799d0f76faadb8ddb2b7ca5e825b01c4bb4780d92359aeae24aa6331537312c",
+      "preparation_sha256": "36bd628ed9b21ce12571337b750771aac6a253c8de6666211cd749af0e2e891e",
+      "model_sha256": "5c25ee0596db08d0673f61e2141c8e72938f0e32214fe7b65da76580db7e0aaa",
       "supplement": {
         "rows": 180,
         "categories": {
@@ -224,7 +224,7 @@
     }
   ],
   "environment": {
-    "platform": "Windows-10-10.0.26200-SP0",
+    "platform": "Windows-10-10.0.26300-SP0",
     "python": "3.10.11"
   },
   "profile": "empty per message",
@@ -232,9 +232,9 @@
   "ranking": {
     "method": "adaptive context interpolation",
     "context_discount": 10.0,
-    "implementation_sha256": "b2d4da014a8f2dd34e88b5878340b35d6c990298cdf5322222dc4b434fee8384",
-    "tokenizer_sha256": "ba408fca919887bff15ca5ff36973c88be8a5502cb1fc39f77bdb3c3fdae03dd",
-    "evaluator_sha256": "92defe50db9289e217c6684128ac9f54e3a6176087875b6c15f28ad5d0ee3cfb"
+    "implementation_sha256": "5fd672c3e50927920895f20264c6cf3e65cac570b94d98db263000efd4be908b",
+    "tokenizer_sha256": "5799d0f76faadb8ddb2b7ca5e825b01c4bb4780d92359aeae24aa6331537312c",
+    "evaluator_sha256": "8c18c2362818972519dc8c85d41d69aba4c58ae293862b53611453b1795792ba"
   },
   "metric_notes": {
     "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
@@ -242,17 +242,17 @@
     "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
     "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending."
   },
-  "loading_ms": 1472.59,
+  "loading_ms": 1887.18,
   "latency": {
     "frequency": {
-      "mean_ms": 1.24,
-      "p95_ms": 4.64,
-      "max_ms": 12.69
+      "mean_ms": 1.71,
+      "p95_ms": 6.99,
+      "max_ms": 16.67
     },
     "contextual": {
-      "mean_ms": 1.4,
-      "p95_ms": 6.11,
-      "max_ms": 15.96
+      "mean_ms": 1.93,
+      "p95_ms": 8.9,
+      "max_ms": 20.11
     }
   },
   "totals": {

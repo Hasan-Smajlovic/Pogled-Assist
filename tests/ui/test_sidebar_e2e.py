@@ -106,9 +106,9 @@ class _Sidebar:
         for button in window._action_buttons.values():
             if not button.isVisible():
                 continue
-            assert bounds.contains(
-                QRect(button.mapTo(window, QPoint(0, 0)), button.size())
-            ), button.text()
+            assert bounds.contains(QRect(button.mapTo(window, QPoint(0, 0)), button.size())), (
+                button.text()
+            )
             assert button.height() >= (
                 46
                 if self.kind == "controller" and button.objectName() == "keyboardSubTabButton"

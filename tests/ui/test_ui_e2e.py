@@ -676,7 +676,9 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot, make_speech_win
 
 @pytest.mark.e2e
 def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot, make_speech_window):
-    window = make_speech_window(FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore())
+    window = make_speech_window(
+        FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore()
+    )
     window.resize(1280, 720)
     window.show()
     qtbot.waitUntil(window.isVisible)

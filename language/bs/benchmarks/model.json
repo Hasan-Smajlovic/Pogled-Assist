@@ -3,14 +3,14 @@
   "dataset": "development",
   "selection_rule": "p95 model latency at most 50 ms; then within 0.5% of the fewest activations prefer fewer missing development words and a smaller model",
   "environment": {
-    "platform": "Windows-10-10.0.26200-SP0",
+    "platform": "Windows-10-10.0.26300-SP0",
     "python": "3.10.11"
   },
-  "preparation_seconds": 262.52,
+  "preparation_seconds": 304.75,
   "recommended_vocabulary": 60000,
   "ranking": {
     "context_discount": 10.0,
-    "implementation_sha256": "b2d4da014a8f2dd34e88b5878340b35d6c990298cdf5322222dc4b434fee8384"
+    "implementation_sha256": "5fd672c3e50927920895f20264c6cf3e65cac570b94d98db263000efd4be908b"
   },
   "candidates": [
     {
@@ -33,11 +33,11 @@
         "žurio"
       ],
       "development_missing_word_count": 10,
-      "loading_ms": 1210.07,
+      "loading_ms": 1345.25,
       "latency": {
-        "mean_ms": 0.62,
-        "p95_ms": 2.5,
-        "max_ms": 7.07
+        "mean_ms": 0.69,
+        "p95_ms": 2.81,
+        "max_ms": 7.37
       },
       "activations": 1063,
       "activation_reduction_percent": 54.02,
@@ -58,11 +58,11 @@
         "žurio"
       ],
       "development_missing_word_count": 4,
-      "loading_ms": 1386.47,
+      "loading_ms": 1720.95,
       "latency": {
-        "mean_ms": 1.26,
-        "p95_ms": 5.09,
-        "max_ms": 17.11
+        "mean_ms": 1.49,
+        "p95_ms": 6.28,
+        "max_ms": 17.64
       },
       "activations": 1043,
       "activation_reduction_percent": 54.89,
@@ -82,11 +82,11 @@
         "žurio"
       ],
       "development_missing_word_count": 3,
-      "loading_ms": 1705.96,
+      "loading_ms": 2167.66,
       "latency": {
-        "mean_ms": 1.7,
-        "p95_ms": 7.03,
-        "max_ms": 18.19
+        "mean_ms": 2.19,
+        "p95_ms": 9.2,
+        "max_ms": 33.02
       },
       "activations": 1042,
       "activation_reduction_percent": 54.93,
