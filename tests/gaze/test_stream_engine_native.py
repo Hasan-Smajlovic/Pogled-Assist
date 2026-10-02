@@ -93,7 +93,9 @@ def test_native_start_subscribes_eyes_before_gaze_and_stop_releases_resources(na
     assert backend._api.value == 10
     assert backend._device.value == 20
     assert library.calls[-3:] == [
-        "tobii_eye_position_normalized_subscribe", "tobii_gaze_point_subscribe", "pump"
+        "tobii_eye_position_normalized_subscribe",
+        "tobii_gaze_point_subscribe",
+        "pump",
     ]
 
     backend.stop()
@@ -141,8 +143,9 @@ def test_native_eye_subscription_falls_back_to_gaze_origin(native_backend):
     backend, library, _gaze, eyes = native_backend
     library.errors["tobii_eye_position_normalized_subscribe"] = 7
     backend.start()
-    assert library.calls[-4:] == [
+    assert library.calls[-5:] == [
         "tobii_eye_position_normalized_subscribe",
+        "tobii_error_message",
         "tobii_gaze_origin_subscribe",
         "tobii_gaze_point_subscribe",
         "pump",

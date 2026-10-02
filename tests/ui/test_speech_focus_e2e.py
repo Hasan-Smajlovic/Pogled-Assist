@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 import pytest
-from _speech_fixtures import make_speech_window as make_speech_window, speech_focus as speech_focus
+from _speech_fixtures import make_speech_window as make_speech_window
+from _speech_fixtures import speech_focus as speech_focus
 from _ui_fakes import FakeLibraryStore, FakeSpeech, click_speech_action
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLineEdit
