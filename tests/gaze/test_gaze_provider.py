@@ -13,6 +13,7 @@ from pogled_assist.tracking.gaze_provider import (
     _tracker_label,
     _valid_gaze_point,
 )
+from pogled_assist.tracking.status import TrackingState, TrackingStatus
 
 
 def test_valid_gaze_point_requires_valid_finite_coordinates():
@@ -160,6 +161,8 @@ def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkey
     provider = TobiiGazeProvider()
     provider._start_requested = True
     statuses = []
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     provider.status_changed.connect(statuses.append)
     monkeypatch.setattr(provider, "_start_with_tobii_research", lambda: False)
     monkeypatch.setattr(provider, "_start_with_stream_engine", lambda: False)
@@ -168,7 +171,12 @@ def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkey
 
     assert provider._retry_timer.isActive()
     assert statuses[-1] == "Tobii uređaj nije pronađen. Pokušavam ponovo."
+    assert [status.state for status in tracking] == [
+        TrackingState.CONNECTING,
+        TrackingState.RETRYING,
+    ]
     provider.stop()
+    assert tracking[-1] == TrackingStatus(TrackingState.STOPPED)
 
 
 def test_provider_stop_closes_active_stream_engine_backend(qapp):
@@ -208,9 +216,109 @@ def active_stream(qapp, monkeypatch):
     provider._running = True
     provider._start_requested = True
     provider._backend_name = "stream-engine-x86-bridge"
+    provider._set_tracking_status(TrackingState.CONNECTED, "Fake tracker")
     provider._stream_started_at = now[0]
     provider._on_stream_engine_eye_status(True, True, 1)
     yield provider, now, stopped
+    provider.stop()
+
+
+@pytest.mark.parametrize("backend_name", ["research", "native", "bridge"])
+@pytest.mark.parametrize("worker_thread", [False, True])
+def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend(
+    qapp, monkeypatch, backend_name, worker_thread
+):
+    from pogled_assist.tracking import gaze_provider
+
+    callbacks = []
+
+    class FakeBackend:
+        label = "Synthetic tracker"
+
+        def __init__(self, _gaze, eyes):
+            callbacks.append(lambda: eyes(False, False, 1))
+
+        def start(self):
+            if backend_name == "bridge" and type(self) is FakeBackend:
+                raise gaze_provider.TobiiStreamEngineError("Synthetic fallback")
+
+        def stop(self):
+            pass
+
+    class FakeBridge(FakeBackend):
+        pass
+
+    tracker = SimpleNamespace(
+        model="Synthetic tracker",
+        device_name="",
+        serial_number="",
+        subscribe_to=lambda _event, callback, **_kwargs: callbacks.append(lambda: callback({})),
+        unsubscribe_from=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tobii_research",
+        SimpleNamespace(
+            find_all_eyetrackers=lambda: [tracker] if backend_name == "research" else [],
+            EYETRACKER_GAZE_DATA="gaze",
+        ),
+    )
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", FakeBackend)
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBridgeBackend", FakeBridge)
+    provider = TobiiGazeProvider()
+    statuses = []
+    eyes = []
+    provider.tracking_status_changed.connect(statuses.append)
+    provider.eye_status_changed.connect(lambda *status: eyes.append(status))
+    provider.start()
+    assert [status.state for status in statuses] == [
+        TrackingState.CONNECTING,
+        TrackingState.CONNECTED,
+    ]
+    assert statuses[-1].detail == "Synthetic tracker"
+    assert eyes == [(False, False)]
+
+    def deliver_invalid():
+        if worker_thread:
+            worker = threading.Thread(target=callbacks[-1])
+            worker.start()
+            worker.join(timeout=1)
+            assert not worker.is_alive()
+            qapp.processEvents()
+        else:
+            callbacks[-1]()
+
+    deliver_invalid()
+    assert eyes == [(False, False), (False, False)]
+    deliver_invalid()
+    assert eyes == [(False, False), (False, False)]
+    provider.stop()
+    assert statuses[-1] == TrackingStatus(TrackingState.STOPPED)
+    provider.start()
+    before_first_sample = len(eyes)
+    deliver_invalid()
+    assert len(eyes) == before_first_sample + 1
+    deliver_invalid()
+    assert len(eyes) == before_first_sample + 1
+    provider.stop()
+
+
+def test_queued_first_invalid_eyes_are_discarded_on_stop_and_old_callbacks_stay_invalid(qapp):
+    provider = TobiiGazeProvider()
+    events = []
+    provider.eye_status_changed.connect(lambda *status: events.append(status))
+    _gaze, old_eyes = provider._new_stream_callbacks()
+    worker = threading.Thread(target=lambda: old_eyes(False, False, 1))
+    worker.start()
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+    provider.stop()
+    _gaze, current_eyes = provider._new_stream_callbacks()
+    qapp.processEvents()
+    old_eyes(False, False, 2)
+    assert events == [(False, False)]
+    current_eyes(False, False, 3)
+    assert events == [(False, False), (False, False)]
     provider.stop()
 
 
@@ -221,6 +329,8 @@ def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stre
 
     provider, now, stopped = active_stream
     statuses = []
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     provider.status_changed.connect(statuses.append)
     controller = GazeMouseController(
         lambda _point: "speech",
@@ -244,6 +354,7 @@ def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stre
     assert controller._both_eyes_open is False
     assert controller._toolbar_selection.target is None
     assert stopped == []
+    assert tracking[-1] == TrackingStatus(TrackingState.WAITING, "Fake tracker")
     now[0] = 10.7
     provider._on_stream_engine_gaze(0.5, 0.5, 4)
     provider._emit_latest_gaze_sample()
@@ -252,6 +363,7 @@ def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stre
     provider._on_stream_engine_gaze(0.5, 0.5, 6)
     provider._emit_latest_gaze_sample()
     assert statuses[-1] == "Praćenje je aktivno. Podaci o očima ponovo stižu."
+    assert tracking[-1] == TrackingStatus(TrackingState.CONNECTED, "Fake tracker")
     assert not provider._stream_stale
     now[0] = 11.1
     provider._on_stream_engine_eye_status(True, True, 7)
@@ -280,6 +392,8 @@ def test_stream_outage_stops_backend_and_schedules_retry(active_stream, failure)
 
 def test_live_invalid_eyes_do_not_restart_backend(active_stream):
     provider, now, stopped = active_stream
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     for _index in range(20):
         now[0] += 0.2
         provider._on_stream_engine_eye_status(False, False, 1)
@@ -287,6 +401,7 @@ def test_live_invalid_eyes_do_not_restart_backend(active_stream):
     assert stopped == []
     assert provider._running is True
     assert not provider._retry_timer.isActive()
+    assert tracking == []
 
 
 def test_watchdog_does_not_restart_after_shutdown(active_stream):
@@ -555,6 +670,8 @@ def test_queued_stream_resumption_cannot_override_retry_status(active_stream, qa
     from PySide6.QtWidgets import QLabel
 
     provider, now, _stopped = active_stream
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     label = QLabel()
     provider.status_changed.connect(label.setText)
     now[0] += 0.6
@@ -567,4 +684,5 @@ def test_queued_stream_resumption_cannot_override_retry_status(active_stream, qa
     provider._emit_latest_gaze_sample()
     qapp.processEvents()
     assert label.text() == "Veza s Tobii uređajem je prekinuta. Pokušavam ponovo."
+    assert tracking[-1].state == TrackingState.RETRYING
     label.deleteLater()

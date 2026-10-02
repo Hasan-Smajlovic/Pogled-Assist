@@ -28,6 +28,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..keyboard_layouts import (
+    ARABIC_SCRIPT,
+    key_label,
+    letters_for_script,
+    other_script,
+    switch_label,
+    symbols_for_script,
+)
+from ..keyboard_layouts import BOSNIAN_LETTERS as BOSNIAN_LETTERS
+from ..keyboard_layouts import group_keys as _group_letters
 from ..logging_setup import get_project_root
 from ..speech.alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from ..speech.speech_library import (
@@ -49,38 +59,6 @@ logger = logging.getLogger(__name__)
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
 
-BOSNIAN_LETTERS = [
-    "A",
-    "B",
-    "C",
-    "Č",
-    "Ć",
-    "D",
-    "DŽ",
-    "Đ",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "J",
-    "K",
-    "L",
-    "LJ",
-    "M",
-    "N",
-    "NJ",
-    "O",
-    "P",
-    "R",
-    "S",
-    "Š",
-    "T",
-    "U",
-    "V",
-    "Z",
-    "Ž",
-]
 MULTI_CHARACTER_LETTERS = ("DŽ", "LJ", "NJ")
 SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 GROUP_GRID_MAX_COLUMNS = 6
@@ -109,6 +87,7 @@ class SpeechWindow(QWidget):
     interaction_context_changed = Signal()
     mouse_action_started = Signal()
     quit_requested = Signal()
+    keyboard_script_changed = Signal(str)
 
     def __init__(
         self,
@@ -133,7 +112,11 @@ class SpeechWindow(QWidget):
 
         self._speech_settings = initial_settings
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
+        self._letter_groups = _group_letters(
+            letters_for_script(initial_settings.keyboard_script), self._letters_per_group
+        )
+        self._symbols = symbols_for_script(initial_settings.keyboard_script, SYMBOLS)
+        self._symbol_groups = _group_letters(self._symbols, max(5, self._letters_per_group))
         self._action_buttons: dict[str, QPushButton] = {}
         self._main_dynamic_actions: set[str] = set()
         self._letter_dialog_actions: set[str] = set()
@@ -163,6 +146,7 @@ class SpeechWindow(QWidget):
 
         self._build_ui()
         self._build_dialogs()
+        self._sync_script_controls()
         self._input.textChanged.connect(self._text_changed)
         self._input.cursorPositionChanged.connect(self._refresh_suggestions)
         self._input.selectionChanged.connect(self._refresh_suggestions)
@@ -193,19 +177,44 @@ class SpeechWindow(QWidget):
 
     def update_settings(self, settings: SpeechSettings) -> None:
         old_letters_per_group = self._letters_per_group
+        old_script = self._speech_settings.keyboard_script
         self._speech_settings = replace(settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        if self._letters_per_group != old_letters_per_group:
+        if (
+            self._letters_per_group != old_letters_per_group
+            or old_script != settings.keyboard_script
+        ):
             self._close_dialog()
-            self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
+            self._letter_groups = _group_letters(
+                letters_for_script(settings.keyboard_script), self._letters_per_group
+            )
+            self._symbols = symbols_for_script(settings.keyboard_script, SYMBOLS)
+            self._symbol_groups = _group_letters(self._symbols, max(5, self._letters_per_group))
             if self._is_list_mode():
                 self._show_list_level()
             elif self._symbols_mode:
                 self._show_symbols_level()
             else:
                 self._show_group_level()
+            self._sync_script_controls()
+            self._refresh_suggestions()
 
         logger.info("Speech window settings updated: %s", self._speech_settings)
+
+    def _sync_script_controls(self) -> None:
+        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
+        direction = Qt.RightToLeft if arabic else Qt.LeftToRight
+        self._input.setLayoutDirection(direction)
+        self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
+        self._letter_grid_host.setLayoutDirection(Qt.LeftToRight)
+        self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
+        for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
+            widget.setVisible(not arabic)
+
+    def _switch_keyboard_script(self) -> None:
+        script = other_script(self._speech_settings.keyboard_script)
+        self.update_settings(replace(self._speech_settings, keyboard_script=script))
+        self.keyboard_script_changed.emit(script)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Speech window close event received.")
@@ -686,6 +695,13 @@ class SpeechWindow(QWidget):
         utility_row.addWidget(self._space_button, 14)
         utility_row.addWidget(self._backspace_button, 10)
         utility_row.addWidget(self._keyboard_toggle_button, 10)
+        self._script_button = self._make_button(
+            switch_label(self._speech_settings.keyboard_script),
+            "script-toggle",
+            "utilityButton",
+            minimum_height=76,
+        )
+        utility_row.addWidget(self._script_button, 8)
 
         root.addLayout(topbar)
         root.addLayout(predictions)
@@ -850,6 +866,11 @@ class SpeechWindow(QWidget):
         return dialog
 
     def _show_group_level(self) -> None:
+        self._key_grid_host.setLayoutDirection(
+            Qt.RightToLeft
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT
+            else Qt.LeftToRight
+        )
         self._symbols_mode = False
         if self._editor is None:
             self._view_mode = "keyboard"
@@ -860,6 +881,8 @@ class SpeechWindow(QWidget):
 
         group_count = len(self._letter_groups)
         columns = self._group_column_count(group_count)
+        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+            columns = max(columns, math.ceil(group_count / 5))
         self._set_grid_stretch(group_count, columns)
         for index, group in enumerate(self._letter_groups):
             action = self._action(f"group:{index}")
@@ -871,6 +894,11 @@ class SpeechWindow(QWidget):
         self._context_changed()
 
     def _show_symbols_level(self) -> None:
+        self._key_grid_host.setLayoutDirection(
+            Qt.RightToLeft
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT
+            else Qt.LeftToRight
+        )
         if self._editor is None:
             self._view_mode = "keyboard"
         self._symbols_mode = True
@@ -878,17 +906,24 @@ class SpeechWindow(QWidget):
         self._view_title.setText(
             self._editor_title() if self._editor is not None else "Brojevi i znakovi"
         )
-        self._set_grid_stretch(len(SYMBOLS), 4)
-        for index, symbol in enumerate(SYMBOLS):
-            action = self._action(f"symbol:{index}")
-            button = self._make_dynamic_button(symbol, action, "symbolButton")
-            self._key_grid.addWidget(button, index // 4, index % 4)
+        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
+        keys = self._symbol_groups if arabic else self._symbols
+        columns = self._group_column_count(len(keys)) if arabic else 4
+        self._set_grid_stretch(len(keys), columns)
+        for index, symbol in enumerate(keys):
+            action = self._action(f"symbol-group:{index}" if arabic else f"symbol:{index}")
+            label = " ".join(key_label(key) for key in symbol) if arabic else symbol
+            button = self._make_dynamic_button(
+                label, action, "groupButton" if arabic else "symbolButton"
+            )
+            self._key_grid.addWidget(button, index // columns, index % columns)
 
         self._update_view_controls()
         self._set_status("")
         self._context_changed()
 
     def _show_list_level(self) -> None:
+        self._key_grid_host.setLayoutDirection(Qt.LeftToRight)
         self._symbols_mode = False
         self._clamp_list_page()
         self._clear_main_grid()
@@ -955,10 +990,10 @@ class SpeechWindow(QWidget):
             return None
         return self._library.categories[self._category_index]
 
-    def _populate_letter_dialog(self, group_index: int) -> None:
+    def _populate_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
         self._clear_letter_dialog()
-        group = self._letter_groups[group_index]
-        self._letter_dialog_title.setText("Odaberite slovo")
+        group = (self._symbol_groups if symbols else self._letter_groups)[group_index]
+        self._letter_dialog_title.setText("Odaberite znak" if symbols else "Odaberite slovo")
         item_count = len(group) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
@@ -970,16 +1005,24 @@ class SpeechWindow(QWidget):
             self._letter_grid.setRowStretch(row, 1 if row < rows else 0)
 
         for index, letter in enumerate(group):
-            action = self._action(f"letter:{group_index}:{index}")
+            action = self._action(
+                f"symbol:{group_index * max(5, self._letters_per_group) + index}"
+                if symbols
+                else f"letter:{group_index}:{index}"
+            )
             button = self._make_button(
-                letter,
+                key_label(letter),
                 action,
                 "dialogCompactLetterButton" if compact else "dialogLetterButton",
                 parent=self._letter_dialog,
                 minimum_height=100 if compact else 120,
             )
             self._letter_dialog_actions.add(action)
-            self._letter_grid.addWidget(button, index // columns, index % columns)
+            column = index % columns
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+                row_keys = min(columns, len(group) - (index // columns) * columns)
+                column = row_keys - 1 - column
+            self._letter_grid.addWidget(button, index // columns, column)
 
         back_action = self._action("letters:close")
         back = self._make_button(
@@ -993,12 +1036,13 @@ class SpeechWindow(QWidget):
         back_index = len(group)
         self._letter_grid.addWidget(back, back_index // columns, back_index % columns)
 
-    def _open_letter_dialog(self, group_index: int) -> None:
-        if group_index < 0 or group_index >= len(self._letter_groups):
+    def _open_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
+        groups = self._symbol_groups if symbols else self._letter_groups
+        if group_index < 0 or group_index >= len(groups):
             return
-        self._populate_letter_dialog(group_index)
+        self._populate_letter_dialog(group_index, symbols=symbols)
         self._dialog_actions = set(self._letter_dialog_actions)
-        item_count = len(self._letter_groups[group_index]) + 1
+        item_count = len(groups[group_index]) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
         self._open_dialog(self._letter_dialog, min(820, 210 + rows * 150))
@@ -1176,7 +1220,7 @@ class SpeechWindow(QWidget):
                 widget.deleteLater()
 
     def _set_grid_stretch(self, item_count: int, columns: int) -> None:
-        for column in range(GROUP_GRID_MAX_COLUMNS):
+        for column in range(max(8, GROUP_GRID_MAX_COLUMNS)):
             self._key_grid.setColumnStretch(column, 0)
         for row in range(KEY_GRID_MAX_ROWS):
             self._key_grid.setRowStretch(row, 0)
@@ -1219,7 +1263,15 @@ class SpeechWindow(QWidget):
         button_type = (
             _WrappedButton
             if object_name
-            in ("groupButton", "phraseButton", "deleteItemButton", "predictionButton")
+            in (
+                "groupButton",
+                "phraseButton",
+                "deleteItemButton",
+                "predictionButton",
+                "systemAlarm",
+                "systemSleep",
+                "systemExit",
+            )
             else QPushButton
         )
         button = button_type(text, self if parent is None else parent)
@@ -1368,6 +1420,8 @@ class SpeechWindow(QWidget):
             self._backspace()
         elif command == "keyboard-toggle":
             self._toggle_keyboard_view()
+        elif command == "script-toggle":
+            self._switch_keyboard_script()
         elif command == "letters:close":
             self._close_dialog()
         elif command.startswith("group:"):
@@ -1378,8 +1432,11 @@ class SpeechWindow(QWidget):
             letter_index = int(letter_text)
             self._append_text(self._letter_groups[group_index][letter_index])
             self._close_dialog()
+        elif command.startswith("symbol-group:"):
+            self._open_letter_dialog(int(command.split(":", 1)[1]), symbols=True)
         elif command.startswith("symbol:"):
-            self._append_text(SYMBOLS[int(command.split(":", 1)[1])])
+            self._append_text(self._symbols[int(command.split(":", 1)[1])])
+            self._close_dialog()
         elif command == "list:add":
             self._start_editor()
         elif command == "editor:save":
@@ -1511,7 +1568,10 @@ class SpeechWindow(QWidget):
             return
 
         self._library = candidate
-        if editor.kind in ("phrase", "answer"):
+        if (
+            editor.kind in ("phrase", "answer")
+            and self._speech_settings.keyboard_script != ARABIC_SCRIPT
+        ):
             self._suggestions.store.learn_text(text)
             self._suggestions.persist()
         self._composition = self._conversation
@@ -1701,7 +1761,8 @@ class SpeechWindow(QWidget):
     def _suggestion_allowed(self) -> bool:
         # Qt exposes cursor offsets as UTF-16 code units, unlike Python string indexes.
         return (
-            (self._editor is None or self._editor.kind != "category")
+            self._speech_settings.keyboard_script != ARABIC_SCRIPT
+            and (self._editor is None or self._editor.kind != "category")
             and not self._input.hasSelectedText()
             and self._input.cursorPosition() == len(self._input.text().encode("utf-16-le")) // 2
         )
@@ -1719,7 +1780,10 @@ class SpeechWindow(QWidget):
         self._prediction_revision += 1
         for button in self._prediction_buttons:
             button.setEnabled(False)
-        self._undo_word_button.setEnabled(self._composition.undo is not None)
+        self._undo_word_button.setEnabled(
+            self._speech_settings.keyboard_script != ARABIC_SCRIPT
+            and self._composition.undo is not None
+        )
         self._context_changed()
         if self._suggestion_allowed():
             self._prediction_text = self._input.text()
@@ -1795,8 +1859,9 @@ class SpeechWindow(QWidget):
             self._set_status("Prvo sastavite poruku.")
             return
         logger.info("Speech playback requested: source=%s.", source)
-        self._composition.submit()
-        self._suggestions.persist()
+        if self._speech_settings.keyboard_script != ARABIC_SCRIPT:
+            self._composition.submit()
+            self._suggestions.persist()
         if self._speech.speak(text, self._speech_settings):
             self._set_status("Poruka se izgovara.")
         else:
@@ -1835,13 +1900,6 @@ class _WrappedButton(QPushButton):
             text,
             QPalette.ColorRole.ButtonText,
         )
-
-
-def _group_letters(letters: list[str], letters_per_group: int) -> list[list[str]]:
-    return [
-        letters[index : index + letters_per_group]
-        for index in range(0, len(letters), letters_per_group)
-    ]
 
 
 def _list_mode(kind: EditorKind) -> str:

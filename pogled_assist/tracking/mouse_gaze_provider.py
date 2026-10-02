@@ -9,6 +9,8 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication
 
+from .status import TrackingState, TrackingStatus
+
 logger = logging.getLogger(__name__)
 
 MOUSE_GAZE_INTERVAL_MS = 20
@@ -21,6 +23,7 @@ class MouseGazeProvider(QObject):
     eye_status_changed = Signal(bool, bool)
     status_changed = Signal(str)
     tracker_changed = Signal(str)
+    tracking_status_changed = Signal(object)
 
     def __init__(
         self,
@@ -42,10 +45,12 @@ class MouseGazeProvider(QObject):
 
         self._screen_geometry = _primary_screen_geometry()
         if self._screen_geometry is None:
+            self.tracking_status_changed.emit(TrackingStatus(TrackingState.UNAVAILABLE))
             self.status_changed.emit("Simulacija pogleda nije dostupna jer nema glavnog ekrana.")
             return
 
         self._running = True
+        self.tracking_status_changed.emit(TrackingStatus(TrackingState.SIMULATING))
         self.tracker_changed.emit("Simulator pogleda mišem")
         self.eye_status_changed.emit(True, True)
         self.status_changed.emit("Praćenje simulacijom miša je aktivno.")
@@ -59,6 +64,7 @@ class MouseGazeProvider(QObject):
             return
 
         self._running = False
+        self.tracking_status_changed.emit(TrackingStatus(TrackingState.STOPPED))
         self.eye_status_changed.emit(False, False)
         logger.info("Mouse gaze simulator stopped.")
 

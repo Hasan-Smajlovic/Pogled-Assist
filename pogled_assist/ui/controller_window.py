@@ -20,12 +20,19 @@ from PySide6.QtWidgets import (
 )
 
 from ..interaction.mouse_controller import GazeSettings
+from ..keyboard_layouts import (
+    ARABIC_SCRIPT,
+    group_label,
+    key_label,
+    keyboard_group_page,
+    other_script,
+    sidebar_key_groups,
+    switch_label,
+)
 from ..speech.speech_service import SpeechSettings
 from ..windows.appbar import ABE_RIGHT, WindowsAppBar
 from ..windows.windows_input import WindowsInputController
 from .gaze_feedback import set_gaze_feedback
-from .keyboard_window import NUMPAD_KEYS, SYMBOL_KEYS, _group_letters
-from .speech_window import BOSNIAN_LETTERS
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +76,7 @@ class ControllerWindow(QWidget):
     gaze_settings_changed = Signal(object)
     interaction_context_changed = Signal()
     mouse_action_started = Signal()
+    keyboard_script_changed = Signal(str)
 
     def __init__(
         self,
@@ -86,9 +94,8 @@ class ControllerWindow(QWidget):
         self._gaze_settings = replace(gaze_settings)
         self._speech_settings = replace(speech_settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
-        self._numpad_groups = _group_letters(NUMPAD_KEYS, self._letters_per_group)
-        self._symbol_groups = _group_letters(SYMBOL_KEYS, self._letters_per_group)
+        self._rebuild_key_groups()
+        self._keyboard_group_page = 0
         self._active_tab = TAB_GENERAL
         self._keyboard_active_tab = KEYBOARD_TAB_LETTERS
         self._keyboard_active_group_index: int | None = None
@@ -182,17 +189,31 @@ class ControllerWindow(QWidget):
 
     def update_speech_settings(self, settings: SpeechSettings) -> None:
         old_letters_per_group = self._letters_per_group
+        old_script = self._speech_settings.keyboard_script
         self._speech_settings = replace(settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        if old_letters_per_group != self._letters_per_group:
-            self._letter_groups = _group_letters(BOSNIAN_LETTERS, self._letters_per_group)
-            self._numpad_groups = _group_letters(NUMPAD_KEYS, self._letters_per_group)
-            self._symbol_groups = _group_letters(SYMBOL_KEYS, self._letters_per_group)
+        if (
+            old_letters_per_group != self._letters_per_group
+            or old_script != settings.keyboard_script
+        ):
+            self._rebuild_key_groups()
+            self._keyboard_group_page = 0
+            self._script_button.setText(switch_label(settings.keyboard_script))
             self._keyboard_active_group_index = None
             if self._active_tab == TAB_KEYBOARD:
                 self._show_keyboard_current_group_level()
 
         logger.info("Controller sidebar speech settings updated: %s", self._speech_settings)
+
+    def _rebuild_key_groups(self) -> None:
+        self._letter_groups, self._numpad_groups, self._symbol_groups = sidebar_key_groups(
+            self._speech_settings.keyboard_script, self._letters_per_group
+        )
+
+    def _switch_keyboard_script(self) -> None:
+        script = other_script(self._speech_settings.keyboard_script)
+        self.update_speech_settings(replace(self._speech_settings, keyboard_script=script))
+        self.keyboard_script_changed.emit(script)
 
     def action_at_global_point(self, point: QPoint) -> str | None:
         for action, button in self._action_buttons.items():
@@ -346,6 +367,14 @@ class ControllerWindow(QWidget):
         self._content_layout.setVerticalSpacing(8)
 
         root.addLayout(tab_row)
+        self._script_button = self._make_button(
+            switch_label(self._speech_settings.keyboard_script),
+            self._action("script-toggle"),
+            "tabButton",
+            minimum_height=TAB_HEIGHT,
+            dynamic=False,
+        )
+        root.addWidget(self._script_button)
         root.addWidget(self._content_host, 1)
 
     def _show_general_tab(self) -> None:
@@ -366,32 +395,15 @@ class ControllerWindow(QWidget):
             self._content_layout.addWidget(button, index // 2, index % 2)
 
     def _show_keyboard_tab(self) -> None:
+        self._keyboard_group_page = 0
         self._keyboard_active_tab = KEYBOARD_TAB_LETTERS
         self._keyboard_active_group_index = None
         self._show_keyboard_letter_groups()
 
     def _show_keyboard_letter_groups(self) -> None:
-        self._active_tab = TAB_KEYBOARD
-        self._keyboard_active_tab = KEYBOARD_TAB_LETTERS
-        self._keyboard_active_group_index = None
-        self._clear_dynamic_buttons()
-        self._sync_tabs()
-        self._add_keyboard_subtabs()
-
-        columns = 2
-        start_row = 1
-        rows = self._set_grid_stretch(len(self._letter_groups), columns, start_row=start_row)
-        for index, group in enumerate(self._letter_groups):
-            button = self._make_button(
-                " ".join(group),
-                self._action(f"keyboard_group:{index}"),
-                "groupButton",
-                minimum_height=KEY_MIN_HEIGHT,
-                dynamic=True,
-            )
-            self._content_layout.addWidget(button, start_row + index // columns, index % columns)
-
-        self._add_keyboard_utility_row(start_row + rows, groups_visible=False)
+        self._show_keyboard_group_buttons(
+            KEYBOARD_TAB_LETTERS, self._letter_groups, "keyboard_group", columns=2
+        )
 
     def _show_keyboard_letter_group(self, group_index: int) -> None:
         if group_index < 0 or group_index >= len(self._letter_groups):
@@ -416,7 +428,12 @@ class ControllerWindow(QWidget):
                 minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
-            self._content_layout.addWidget(button, start_row + index // columns, index % columns)
+            column = (
+                columns - 1 - index % columns
+                if self._speech_settings.keyboard_script == ARABIC_SCRIPT
+                else index % columns
+            )
+            self._content_layout.addWidget(button, start_row + index // columns, column)
 
         self._add_keyboard_utility_row(start_row + rows, groups_visible=True)
 
@@ -460,6 +477,8 @@ class ControllerWindow(QWidget):
         *,
         columns: int,
     ) -> None:
+        if self._keyboard_active_tab != tab:
+            self._keyboard_group_page = 0
         self._active_tab = TAB_KEYBOARD
         self._keyboard_active_tab = tab
         self._keyboard_active_group_index = None
@@ -468,16 +487,35 @@ class ControllerWindow(QWidget):
         self._add_keyboard_subtabs()
 
         start_row = 1
-        rows = self._set_grid_stretch(len(groups), columns, start_row=start_row)
-        for index, group in enumerate(groups):
+        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
+        page = keyboard_group_page(groups, self._keyboard_group_page)
+        self._keyboard_group_page = page.index
+        rows = self._set_grid_stretch(len(page.groups), columns, start_row=start_row)
+        for offset, group in enumerate(page.groups):
+            index = page.start + offset
             button = self._make_button(
-                " ".join(group),
+                group_label(group, self._speech_settings.keyboard_script),
                 self._action(f"{action_prefix}:{index}"),
                 "groupButton",
                 minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
-            self._content_layout.addWidget(button, start_row + index // columns, index % columns)
+            button.setLayoutDirection(Qt.RightToLeft if arabic else Qt.LeftToRight)
+            column = columns - 1 - offset % columns if arabic else offset % columns
+            self._content_layout.addWidget(button, start_row + offset // columns, column)
+
+        if page.count > 1:
+            for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
+                button = self._make_button(
+                    label,
+                    self._action(f"keyboard-page:{delta}"),
+                    "keyboardSubTabButton",
+                    minimum_height=KEYBOARD_SUBTAB_HEIGHT,
+                    dynamic=True,
+                )
+                button.setEnabled(0 <= page.index + delta < page.count)
+                self._content_layout.addWidget(button, start_row + rows, column)
+            rows += 1
 
         self._add_keyboard_utility_row(start_row + rows, groups_visible=False)
 
@@ -504,7 +542,7 @@ class ControllerWindow(QWidget):
         rows = self._set_grid_stretch(len(group), columns, start_row=start_row)
         for index, label in enumerate(group):
             button = self._make_button(
-                label,
+                key_label(label),
                 self._action(f"{action_prefix}:{index}"),
                 "keyButton",
                 minimum_height=KEY_MIN_HEIGHT,
@@ -600,6 +638,17 @@ class ControllerWindow(QWidget):
 
     def _trigger_action(self, action: str, *, source: str = "unknown") -> None:
         command = action.removeprefix(CONTROLLER_WINDOW_ACTION_PREFIX)
+        if command.startswith("keyboard_tab:"):
+            self._keyboard_group_page = 0
+        if command == "script-toggle":
+            self._switch_keyboard_script()
+            return
+        if command.startswith("keyboard-page:"):
+            self._keyboard_group_page = max(
+                0, self._keyboard_group_page + int(command.split(":", 1)[1])
+            )
+            self._show_keyboard_current_group_level()
+            return
 
         if command == "tab:general":
             self._show_general_tab()
@@ -907,6 +956,7 @@ class ControllerWindow(QWidget):
         return rows
 
     def _sync_tabs(self) -> None:
+        self._script_button.setVisible(self._active_tab == TAB_KEYBOARD)
         for tab, button in self._tab_buttons.items():
             button.setChecked(tab == self._active_tab)
 

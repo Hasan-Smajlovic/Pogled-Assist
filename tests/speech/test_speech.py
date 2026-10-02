@@ -194,6 +194,49 @@ def test_speech_service_rejects_empty_or_missing_engine(monkeypatch):
     assert service.speak("Zdravo", SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE)) is False
 
 
+@pytest.mark.parametrize("preset", ["default", "human_like"])
+def test_arabic_speech_uses_hamed_and_preserves_original_unicode(monkeypatch, tmp_path, preset):
+    from pogled_assist.speech.speech_service import ARABIC_EDGE_PLAYBACK_VOICE
+
+    executable = tmp_path / "edge-playback.exe"
+    monkeypatch.setattr("pogled_assist.speech.speech_service.find_espeak_ng", lambda: None)
+    monkeypatch.setattr(
+        "pogled_assist.speech.speech_service.find_edge_playback", lambda: executable
+    )
+    service = SpeechService()
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "_start_process",
+        lambda command, engine, **kwargs: calls.append((command, engine)) or True,
+    )
+    text = 'سَلَامٌ ١٢٣ " $(synthetic)'
+    settings = SpeechSettings(keyboard_script="arabic", voice_preset=preset)
+    assert service.speak(text, settings)
+    command, engine = calls[0]
+    assert command[command.index("--voice") + 1] == ARABIC_EDGE_PLAYBACK_VOICE
+    assert command[-2:] == ["--text", text]
+    assert engine == "edge-playback"
+    assert settings.voice_preset == preset
+    assert settings.language == "bs"
+
+
+def test_arabic_speech_does_not_fall_back_to_bosnian_when_online_tool_is_missing(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        "pogled_assist.speech.speech_service.find_espeak_ng", lambda: tmp_path / "espeak-ng.exe"
+    )
+    monkeypatch.setattr("pogled_assist.speech.speech_service.find_edge_playback", lambda: None)
+    service = SpeechService()
+    calls = []
+    monkeypatch.setattr(
+        service, "_start_process", lambda *args, **kwargs: calls.append(args) or True
+    )
+    assert not service.speak("سَلَامٌ", SpeechSettings(keyboard_script="arabic"))
+    assert calls == []
+
+
 def test_grouping_letters_splits_and_keeps_remainder():
     assert _group_letters(["A", "B", "C", "D", "E"], 2) == [["A", "B"], ["C", "D"], ["E"]]
 
