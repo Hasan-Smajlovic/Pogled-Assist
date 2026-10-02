@@ -188,56 +188,53 @@ function Get-LauncherWindowVisible {
     if (-not [string]::IsNullOrWhiteSpace($env:POGLED_ASSIST_LOG_ROOT)) {
         $candidates += Join-Path $env:POGLED_ASSIST_LOG_ROOT "data\app_settings.json"
     }
-    if (-not [string]::IsNullOrWhiteSpace($AppRoot)) {
-        $sourceRoot = Get-InstallSourceRoot -AppRoot $AppRoot
-        if (-not [string]::IsNullOrWhiteSpace($sourceRoot)) {
-            $candidates += Join-Path $sourceRoot "data\app_settings.json"
-        }
-        $candidates += Join-Path $AppRoot "data\app_settings.json"
+    foreach ($root in @($AppRoot, $InstallRoot, (Get-DefaultInstallRoot), $ScriptRoot)) {
+        $candidates += Get-AppSettingsPaths -AppRoot $root
     }
-    if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
-        $installSourceRoot = Get-InstallSourceRoot -AppRoot $InstallRoot
-        if (-not [string]::IsNullOrWhiteSpace($installSourceRoot)) {
-            $candidates += Join-Path $installSourceRoot "data\app_settings.json"
-        }
-        $candidates += Join-Path $InstallRoot "data\app_settings.json"
-    }
-    $defaultInstallRoot = Get-DefaultInstallRoot
-    $defaultSourceRoot = Get-InstallSourceRoot -AppRoot $defaultInstallRoot
-    if (-not [string]::IsNullOrWhiteSpace($defaultSourceRoot)) {
-        $candidates += Join-Path $defaultSourceRoot "data\app_settings.json"
-    }
-    $candidates += Join-Path $defaultInstallRoot "data\app_settings.json"
-    $scriptSourceRoot = Get-InstallSourceRoot -AppRoot $ScriptRoot
-    if (-not [string]::IsNullOrWhiteSpace($scriptSourceRoot)) {
-        $candidates += Join-Path $scriptSourceRoot "data\app_settings.json"
-    }
-    $candidates += Join-Path $ScriptRoot "data\app_settings.json"
 
     foreach ($candidate in ($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
         if (-not (Test-Path $candidate)) {
             continue
         }
-
-        try {
-            $settings = Get-Content -Path $candidate -Raw | ConvertFrom-Json
-            $gazeProperty = $settings.PSObject.Properties["gaze"]
-            if ($null -eq $gazeProperty) {
-                continue
-            }
-
-            $launcherProperty = $gazeProperty.Value.PSObject.Properties["show_launcher_window"]
-            if ($null -eq $launcherProperty) {
-                continue
-            }
-
-            return [System.Convert]::ToBoolean($launcherProperty.Value)
-        } catch {
-            continue
+        $visible = Get-LauncherWindowSetting -Path $candidate
+        if ($null -ne $visible) {
+            return $visible
         }
     }
 
     return $false
+}
+
+function Get-AppSettingsPaths {
+    param([string]$AppRoot)
+
+    if ([string]::IsNullOrWhiteSpace($AppRoot)) {
+        return
+    }
+    $sourceRoot = Get-InstallSourceRoot -AppRoot $AppRoot
+    if (-not [string]::IsNullOrWhiteSpace($sourceRoot)) {
+        Join-Path $sourceRoot "data\app_settings.json"
+    }
+    Join-Path $AppRoot "data\app_settings.json"
+}
+
+function Get-LauncherWindowSetting {
+    param([string]$Path)
+
+    try {
+        $settings = Get-Content -Path $Path -Raw | ConvertFrom-Json
+        $gazeProperty = $settings.PSObject.Properties["gaze"]
+        if ($null -eq $gazeProperty) {
+            return $null
+        }
+        $launcherProperty = $gazeProperty.Value.PSObject.Properties["show_launcher_window"]
+        if ($null -eq $launcherProperty) {
+            return $null
+        }
+        return [System.Convert]::ToBoolean($launcherProperty.Value)
+    } catch {
+        return $null
+    }
 }
 
 function Get-InstallSourceRoot {
@@ -385,19 +382,7 @@ function Convert-PngToShortcutIcon {
     $hIcon = [IntPtr]::Zero
 
     try {
-        Add-Type -AssemblyName System.Drawing
-        if ($null -eq ("PogledAssistIconInterop" -as [type])) {
-            Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class PogledAssistIconInterop
-{
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool DestroyIcon(IntPtr hIcon);
-}
-"@
-        }
+        Initialize-ShortcutIconDrawing
 
         $iconDirectory = Split-Path -Parent $IconPath
         if (-not [string]::IsNullOrWhiteSpace($iconDirectory)) {
@@ -422,23 +407,36 @@ public static class PogledAssistIconInterop
         Write-WarningLog "Could not create shortcut icon from $PngPath`: $($_.Exception.Message)"
         return ""
     } finally {
-        if ($null -ne $stream) {
-            $stream.Dispose()
-        }
-        if ($null -ne $icon) {
-            $icon.Dispose()
-        }
+        Close-ShortcutIconResources -Resources @($stream, $icon)
         if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("PogledAssistIconInterop" -as [type])) {
             [PogledAssistIconInterop]::DestroyIcon($hIcon) | Out-Null
         }
-        if ($null -ne $graphics) {
-            $graphics.Dispose()
-        }
-        if ($null -ne $resized) {
-            $resized.Dispose()
-        }
-        if ($null -ne $bitmap) {
-            $bitmap.Dispose()
+        Close-ShortcutIconResources -Resources @($graphics, $resized, $bitmap)
+    }
+}
+
+function Initialize-ShortcutIconDrawing {
+    Add-Type -AssemblyName System.Drawing
+    if ($null -eq ("PogledAssistIconInterop" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class PogledAssistIconInterop
+{
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+}
+"@
+    }
+}
+
+function Close-ShortcutIconResources {
+    param([object[]]$Resources)
+
+    foreach ($resource in $Resources) {
+        if ($null -ne $resource) {
+            $resource.Dispose()
         }
     }
 }
@@ -686,29 +684,8 @@ function Get-Python310X86 {
         $candidates += $env:POGLED_ASSIST_X86_PYTHON
     }
 
-    $installInfoPath = Join-Path $AppRoot "install_info.json"
-    if (Test-Path $installInfoPath) {
-        try {
-            $installInfo = Get-Content -Path $installInfoPath -Raw | ConvertFrom-Json
-            $bridgePython = [string]$installInfo.BridgePythonX86
-            if (-not [string]::IsNullOrWhiteSpace($bridgePython)) {
-                $candidates += $bridgePython
-            }
-        } catch {
-            Write-WarningLog "Could not read bridge Python from install metadata: $($_.Exception.Message)"
-        }
-    }
-
-    $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
-    if ($null -ne $pyLauncher) {
-        $probe = Invoke-NativeProbe `
-            -FilePath "py" `
-            -Arguments @("-3.10-32", "-c", "import sys; print(sys.executable)")
-        $launcherPath = ($probe.Output | Select-Object -First 1)
-        if ($probe.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($launcherPath)) {
-            $candidates += $launcherPath.Trim()
-        }
-    }
+    $candidates += Get-InstalledBridgePython -AppRoot $AppRoot
+    $candidates += Get-LauncherBridgePython
 
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
     if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
@@ -732,6 +709,40 @@ function Get-Python310X86 {
     }
 
     Write-WarningLog "32-bit Python 3.10 was not found. Tobii Core Software 2.x may need rerunning setup_windows.ps1."
+    return $null
+}
+
+function Get-InstalledBridgePython {
+    param([string]$AppRoot)
+
+    $installInfoPath = Join-Path $AppRoot "install_info.json"
+    if (-not (Test-Path $installInfoPath)) {
+        return $null
+    }
+    try {
+        $installInfo = Get-Content -Path $installInfoPath -Raw | ConvertFrom-Json
+        $bridgePython = [string]$installInfo.BridgePythonX86
+        if (-not [string]::IsNullOrWhiteSpace($bridgePython)) {
+            return $bridgePython
+        }
+    } catch {
+        Write-WarningLog "Could not read bridge Python from install metadata: $($_.Exception.Message)"
+    }
+    return $null
+}
+
+function Get-LauncherBridgePython {
+    $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
+    if ($null -eq $pyLauncher) {
+        return $null
+    }
+    $probe = Invoke-NativeProbe `
+        -FilePath "py" `
+        -Arguments @("-3.10-32", "-c", "import sys; print(sys.executable)")
+    $launcherPath = ($probe.Output | Select-Object -First 1)
+    if ($probe.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($launcherPath)) {
+        return $launcherPath.Trim()
+    }
     return $null
 }
 
