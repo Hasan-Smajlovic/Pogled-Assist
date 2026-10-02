@@ -30,9 +30,15 @@ The app tries these tracking backends in order:
 2. A directly loadable Tobii Stream Engine DLL.
 3. The optional 32-bit Python bridge for 32-bit Stream Engine installations.
 
-The connection dot is green while tracking, yellow while waiting or retrying,
-and red after an unavailable or failed backend. The two white dots show left and
-right eye validity. Gaze control pauses when either eye becomes invalid.
+The top-right status uses an icon, color, and visible text. **Praćenje spremno**
+requires a connected tracker, valid data from both eyes, and fresh gaze data.
+**Praćenje pauzirano** keeps both labeled eye indicators visible: a check means
+valid data and a dash means no valid data. This does not identify whether an eye
+is physically open or closed, or confirm calibration accuracy.
+**Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery,
+and **Uređaj nije povezan** reports automatic retry. Source simulation instead
+shows **Simulacija mišem**, without pretending that Tobii eyes were measured.
+Gaze control pauses when either eye becomes invalid.
 It also pauses if Stream Engine stops sending eye status. A prolonged interruption
 in the x86 bridge or a closed bridge starts automatic reconnection; normal
 invalid-eye samples do not restart the connection. A direct native connection
@@ -53,9 +59,12 @@ The left side of the hotbar contains:
 8. Keyboard
 9. Controller
 
-Hide removes the AppBar reservation and leaves a floating Show button near the
-top-left corner. Left, Right, and Double click arm one action. Keep your gaze on
-the target until the progress overlay completes. The mode resets after the click
+Hide removes the AppBar reservation and the entire hotbar, including its tracking
+status. It leaves a floating Show button near the top-left corner. Show restores
+the hotbar and its current status. The status is passive and has no dwell action,
+blinking animation, or sound during eye loss. Left, Right, and Double click arm
+one action. Keep your gaze on the target until the progress overlay completes.
+The mode resets after the click
 to reduce accidental repeats.
 
 Every gaze selection starts with a configurable pause without a progress ring.
@@ -183,6 +192,10 @@ standalone marks visible on buttons; only the actual mark is entered.
 `Obriši slovo` removes the last entered character, so a mark can be corrected
 without removing its letter. Mixed Arabic and Latin text is preserved.
 
+Both Latin and Arabic side-panel keyboards show at most eight groups per page,
+including when **Broj slova u grupi** is set to one or two. Selecting a character
+returns to the same page. Changing the script or keyboard tab returns to page one.
+
 Arabic has no word suggestions or new personal learning in this release.
 Returning to Latin restores the existing Bosnian suggestions and learned data.
 
@@ -236,11 +249,15 @@ Gaze settings uses these values:
 
 The same page controls pointer movement from gaze, gaze bubble and action overlay
 visibility, precision zoom, and Tobii calibration launch.
+These actions use three equal columns. Calibration occupies one cell, and all
+action controls keep the same height for selection by gaze.
 
 Speech settings controls eSpeak speed (155 words per minute by default, 80 to
 320), letters per group (5 by default, 1 to 12), and the voice preset.
 `Pismo tastature` accepts `Latinica` (the default for existing installations)
-or `Arapski`. The voice preset is retained but disabled while Arabic uses Hamed;
+or `Arapski`. `Glas` appears directly below it. Speed and letters-per-group rows
+align their `Manje`, value, and `Više` controls in the same columns.
+The voice preset is retained but disabled while Arabic uses Hamed;
 the speed setting continues to apply to the standard Bosnian eSpeak voice.
 `Naučene riječi` opens the personal vocabulary. Select one word and then
 `Zaboravi riječ` to remove its personal ranking contribution without changing

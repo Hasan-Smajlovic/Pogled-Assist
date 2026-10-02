@@ -37,6 +37,7 @@ from ..keyboard_layouts import (
     symbols_for_script,
 )
 from ..keyboard_layouts import BOSNIAN_LETTERS as BOSNIAN_LETTERS
+from ..keyboard_layouts import group_keys as _group_letters
 from ..logging_setup import get_project_root
 from ..speech.alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from ..speech.speech_library import (
@@ -1899,13 +1900,6 @@ class _WrappedButton(QPushButton):
             text,
             QPalette.ColorRole.ButtonText,
         )
-
-
-def _group_letters(letters: list[str], letters_per_group: int) -> list[list[str]]:
-    return [
-        letters[index : index + letters_per_group]
-        for index in range(0, len(letters), letters_per_group)
-    ]
 
 
 def _list_mode(kind: EditorKind) -> str:

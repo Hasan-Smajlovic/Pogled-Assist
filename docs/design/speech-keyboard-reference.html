@@ -20,14 +20,20 @@
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body { margin: 0; padding: 12px; }
-    .hotbar-reference { position: relative; margin: -12px -12px 18px; height: 76px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: #171d29; }
+    .hotbar-reference { position: relative; margin: -12px -12px 18px; height: 76px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: #111318; }
     .hotbar-reference button { flex: 0 0 104px; min-height: 58px; height: 58px; padding: 4px; font-size: 14px; }
     .hotbar-reference button:first-child { flex-basis: 58px; margin-right: 16px; }
     .hotbar-reference button:nth-child(2) { margin-right: 18px; }
     .hotbar-reference button:nth-child(3) { flex-basis: 112px; margin-right: 8px; }
     .hotbar-reference button:nth-child(6) { margin-right: 26px; }
     .hotbar-reference button::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 9px; }
-    .hotbar-reference small { margin-left: auto; color: #7be5a8; }
+    .hotbar-tracking-status { --tracking-color: #70dfa1; flex: 0 0 210px; margin-left: auto; height: 58px; padding: 7px 0 7px 10px; border-left: 2px solid var(--tracking-color); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+    .hotbar-tracking-title { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+    .hotbar-tracking-icon { width: 18px; text-align: center; color: var(--tracking-color); }
+    .hotbar-tracking-detail { color: #bec9d9; font-size: 13px; white-space: nowrap; }
+    .hotbar-status-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+    .hotbar-status-preview select { padding: 8px; font: inherit; }
+    #hotbar-restore { width: 86px; min-height: 76px; font-size: 13px; }
     .sidebar-reference { width: 380px; height: calc(100dvh - 110px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #171d29; }
     .sidebar-reference nav, .sidebar-reference footer { display: flex; gap: 8px; }
     .sidebar-reference nav button, .sidebar-reference footer button { flex: 1; min-height: 52px; font-size: 18px; }
@@ -237,18 +243,20 @@
     .settings-checkbox {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 10px;
       min-height: 58px;
       width: auto;
-      padding: 14px 18px;
-      border: 1px solid #3a403c;
+      height: 58px;
+      padding: 10px 14px;
+      border: 1px solid #414742;
       border-radius: 10px;
-      background: #222522;
+      background: #272a28;
       color: #f5f3ef;
       font-size: 15px;
       font-weight: 600;
     }
     .settings-checkbox input { width: 28px; height: 28px; accent-color: #1d6f68; }
+    .settings-checkbox:has(input:checked) { background: #1d6f68; border-color: #74d3c6; color: #fff; }
     .update-card {
       display: grid;
       grid-template-columns: minmax(240px, 1fr) auto auto;
@@ -261,12 +269,12 @@
     }
     .update-copy h3 { margin: 0 0 6px; color: #fff; font-size: 17px; font-weight: 600; }
     .update-copy p { margin: 0; color: #d8d3c8; font-size: 15px; }
-    .update-card button { min-height: 64px; }
+    .update-card button { min-height: 58px; height: 58px; }
     .update-card [data-settings-action="check-update"] { min-width: 210px; }
     .update-card [data-settings-action="install-update"] { min-width: 250px; }
     .setting-row {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 104px 148px 104px;
+      grid-template-columns: minmax(260px, 1fr) 104px 216px 104px;
       align-items: center;
       gap: 12px;
       padding: 4px 14px;
@@ -276,11 +284,12 @@
     }
     .setting-copy h3 { margin: 0 0 5px; color: #fff; font-size: 17px; font-weight: 600; }
     .setting-copy p { margin: 0; color: #b9b2a5; font-size: 13px; }
-    .setting-value { display: grid; place-items: center; min-height: 58px; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
+    .setting-row button, .setting-value { height: 58px; }
+    .setting-value { display: grid; place-items: center; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
+    .setting-choice { grid-template-columns: minmax(260px, 1fr) 260px; }
+    .setting-choice button { background: #0f1110; border-color: #4c534e; font-size: 20px; text-align: left; justify-content: flex-start; }
     .settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; min-height: 58px; }
-    .settings-action-grid .wide { grid-column: 2 / -1; }
-    .speech-actions { display: grid; grid-template-columns: repeat(2, minmax(210px, 280px)); gap: 12px; }
+    .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; height: 58px; }
     @media (max-height: 760px) and (min-width: 901px) {
       body { padding: 8px; }
       .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 80px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
@@ -308,7 +317,8 @@
       .settings-options { grid-template-columns: 1fr; }
       .update-card { grid-template-columns: 1fr; }
       .update-card button { width: 100%; }
-      .setting-row { grid-template-columns: minmax(220px, 1fr) 104px 145px 104px; }
+      .setting-row { grid-template-columns: minmax(220px, 1fr) 104px 216px 104px; }
+      .setting-choice { grid-template-columns: minmax(220px, 1fr) 260px; }
     }
     @media (max-width: 560px) {
       :root { --gap: 8px; }
@@ -340,8 +350,8 @@
       .settings-page { padding: 14px; }
       .setting-row { grid-template-columns: 1fr 1fr 1fr; }
       .setting-copy { grid-column: 1 / -1; }
-      .settings-action-grid, .speech-actions { grid-template-columns: 1fr; }
-      .settings-action-grid .wide { grid-column: auto; }
+      .settings-action-grid { grid-template-columns: 1fr; }
+      .setting-choice { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -358,7 +368,7 @@
   </nav>
   <main id="hotbar-screen" hidden>
     <nav class="hotbar-reference" aria-label="Početni meni">
-      <button type="button" data-edge-control>Sakrij</button>
+      <button id="hotbar-hide" type="button" data-edge-control>Sakrij</button>
       <button type="button" data-edge-control data-open-view="settings">Postavke</button>
       <button type="button" data-edge-control>Brze radnje</button>
       <button type="button" data-edge-control>Lijevi klik</button>
@@ -367,13 +377,34 @@
       <button type="button" data-edge-control data-open-view="speech">Govor</button>
       <button type="button" data-edge-control data-open-view="sidebar">Tastatura</button>
       <button type="button" data-edge-control>Upravljač</button>
-      <small>● ● ●</small>
+      <div id="hotbar-tracking-status" class="hotbar-tracking-status" role="status" aria-live="polite">
+        <div class="hotbar-tracking-title"><span id="hotbar-tracking-icon" class="hotbar-tracking-icon" aria-hidden="true">✓</span><span id="hotbar-tracking-title">Praćenje spremno</span></div>
+        <div id="hotbar-tracking-detail" class="hotbar-tracking-detail">Lijevo ✓ &nbsp; Desno ✓</div>
+      </div>
     </nav>
+    <button id="hotbar-restore" type="button" data-edge-control hidden>Prikaži</button>
+    <label class="hotbar-status-preview">Primjer stanja
+      <select id="hotbar-status-preview">
+        <option value="ready">Oba oka i svježi pogled</option>
+        <option value="left">Lijevo oko nije prepoznato</option>
+        <option value="right">Desno oko nije prepoznato</option>
+        <option value="eyes">Nijedno oko nije prepoznato</option>
+        <option value="waiting">Čekanje svježih podataka</option>
+        <option value="connecting">Povezivanje</option>
+        <option value="retrying">Uređaj nije povezan</option>
+        <option value="simulation">Simulacija mišem</option>
+        <option value="unavailable">Simulacija nije dostupna</option>
+        <option value="stopped">Praćenje zaustavljeno</option>
+      </select>
+    </label>
+    <p>Status je dio trake, nije dugme i nije površina odabira pogledom. Sakrij uklanja cijelu traku sa statusom. Prikaži vraća traku; dok je sakrivena, nema izdvojenog statusnog panela.</p>
+    <p>Praćenje spremno zahtijeva aktivnu vezu, validne podatke oba oka i svježi uzorak pogleda. Gubitak oka prikazuje Praćenje pauzirano i zadržava obje oznake oka: ✓ za validan podatak, — kada podatak nije validan. Čekanje podataka se razlikuje od gubitka oka i nepovezanog uređaja. Simulacija mišem ne prikazuje lažnu potvrdu Tobii očiju. Prikaz nema treperenja, animacije ni zvučnih upozorenja pri treptaju.</p>
     <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
     <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
     <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
   </main>
   <main id="sidebar-screen" hidden>
+    <label>Pregled broja slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label>
     <section class="sidebar-reference" aria-label="Samostalna tastatura">
       <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
       <button type="button" data-script-toggle data-edge-control>Arapski</button>
@@ -386,6 +417,7 @@
       <footer><button type="button" data-side-back hidden>Grupe</button><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
     </section>
     <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice, do 120 ms. Izvan dugmeta nema potvrde ni napretka. Novo dugme dobija puno vrijeme odabira; promjena grupe, skrivanje ili gubitak oka poništava prethodni odabir.</p>
+    <p>Oba pisma prikazuju najviše osam grupa po stranici. Prethodna i Sljedeća pojavljuju se samo kada ima više stranica. Duže latinične grupe prikazuju se u više redova kako bi zadržale širinu bočne tastature od 380 px. Odabir znaka vraća istu stranicu; promjena pisma ili kartice vraća prvu stranicu. Isti raspored važi u Upravljaču i staje u radni prostor od 640 logičkih piksela ispod trake.</p>
   </main>
   <main id="controller-screen" hidden>
     <section class="sidebar-reference" aria-label="Tastatura u upravljaču">
@@ -518,7 +550,7 @@
           <button class="settings-primary" type="button">Prikaži oznaku pogleda</button>
           <button class="settings-primary" type="button">Prikaži napredak radnje</button>
           <label class="settings-checkbox"><input type="checkbox" checked>Koristi precizno uvećanje</label>
-          <button class="wide" type="button">Pokreni Tobii kalibraciju</button>
+          <button type="button">Pokreni Tobii kalibraciju</button>
         </div>
       </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>
@@ -526,12 +558,12 @@
           <h2>Postavke govora</h2>
           <p>Podesite glas i raspored tastature za komunikaciju.</p>
         </header>
-        <section class="update-card"><div class="update-copy"><h3>Pismo tastature</h3><p>Izbor važi za Govor, Tastaturu i Upravljač i ostaje sačuvan. Tekst i fraze se ne prevode.</p></div><button type="button" data-script-toggle>Arapski</button></section>
+        <div class="setting-row setting-choice"><div class="setting-copy"><h3>Pismo tastature</h3></div><button id="settings-script-preview" type="button" data-script-toggle>Latinica</button></div>
+        <div class="setting-row setting-choice"><div class="setting-copy"><h3>Glas</h3><p id="voice-hint">Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.</p></div><button id="voice-preview" type="button">Standardni</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Brzina govora</h3><p>Broj riječi u minuti koji koristi eSpeak NG.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">155 riječi/min</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Broj slova u grupi</h3><p>Broj slova u svakoj grupi na ekranima za govor i tastaturu.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">5</strong><button>+&nbsp; Više</button></div>
-        <section class="update-card"><div class="update-copy"><h3>Glas</h3><p id="voice-hint">Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.</p></div><button id="voice-preview" type="button">Standardni</button></section>
         <p class="settings-group-label">Akcije</p>
-        <div class="speech-actions"><button class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
+        <div class="settings-action-grid"><button class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
       </section>
       <section id="learning-settings" class="settings-page settings-panel" hidden>
         <div class="learning-actions"><h2>Naučene riječi</h2><button type="button" data-settings-action="speech-settings">Nazad</button></div>
@@ -556,6 +588,7 @@
         <li>Arapski mijenja samo tastature i smjer unosa. Poruka je vizuelno poravnata uz desni rub polja, uključujući miješani arapski i latinični tekst. Komande ostaju na bosanskom i na istim mjestima. Latinica vraća postojeću tastaturu bez promjene poruke, editorâ ili biblioteke. Arapski režim nema prijedloga riječi. Brojevi i znakovi otvaraju grupe zapadnih i arapskih brojeva, interpunkcije i harekata; oznaka ◌ služi samo za vidljivost harekata i ne unosi se. Prirodni muški arapski glas Hamed zahtijeva internet; nedostupan glas ostavlja poruku sačuvanu i prikazuje grešku. Referentna provjera: 1920 × 1080 fizičkih piksela pri 150%, odnosno 1280 × 720 logičkih piksela.</li>
         <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
         <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
+        <li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Svi redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
         <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
         <li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Sleep blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
@@ -634,10 +667,11 @@
       let activeGroups = GROUPS;
       let arabic = false;
       let sideTab = 'letters', sidePage = 0, sideGroup = null;
+      let sideGroupSize = 5;
       const ARABIC_LETTERS = [...'ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأؤإئةىٱ'];
       const ARABIC_MARKS = Array.from({length: 21}, (_, index) => String.fromCodePoint(0x64b + index)).concat('ٰ', [...'ۣ۪ۭۖۗۘۙۚۛۜ۟۠ۡۢۤۧۨ۫۬']);
       const ARABIC_SYMBOLS = [...'1234567890٠١٢٣٤٥٦٧٨٩.,،؟؛!:%٪-+/=()«»', ...ARABIC_MARKS];
-      const grouped = keys => Array.from({length: Math.ceil(keys.length / 5)}, (_, index) => keys.slice(index * 5, index * 5 + 5));
+      const grouped = (keys, size = 5) => Array.from({length: Math.ceil(keys.length / size)}, (_, index) => keys.slice(index * size, index * size + size));
       const keyLabel = key => /\p{Mark}/u.test(key[0]) ? '◌' + key : key;
       const SYMBOLS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '?'];
       const ARABIC_SPEECH_SYMBOLS = [...new Set([...SYMBOLS, ...ARABIC_SYMBOLS])];
@@ -687,6 +721,9 @@
       activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
       render();
       requestAnimationFrame(restoreMessageFocus);
+      $('sidebar-group-size').addEventListener('change', event => {
+        sideGroupSize = Number(event.target.value); sidePage = 0; sideGroup = null; renderSidebars(); resetGaze();
+      });
       for (const button of document.querySelectorAll('[data-side-tab]')) button.addEventListener('click', () => {
         sideTab = button.dataset.sideTab; sidePage = 0; sideGroup = null; renderSidebars(); resetGaze();
       });
@@ -705,6 +742,36 @@
         symbols = false;
         render();
         restoreMessageFocus();
+      });
+
+      const hotbarStatuses = {
+        ready: ['Praćenje spremno', 'Lijevo ✓   Desno ✓', '✓', '#70dfa1'],
+        left: ['Praćenje pauzirano', 'Lijevo —   Desno ✓', 'Ⅱ', '#f2ce76'],
+        right: ['Praćenje pauzirano', 'Lijevo ✓   Desno —', 'Ⅱ', '#f2ce76'],
+        eyes: ['Praćenje pauzirano', 'Lijevo —   Desno —', 'Ⅱ', '#f2ce76'],
+        waiting: ['Čekam podatke', 'Čekam svježe podatke', '◷', '#f2ce76'],
+        connecting: ['Povezivanje…', 'Tražim Tobii uređaj', '◷', '#f2ce76'],
+        retrying: ['Uređaj nije povezan', 'Pokušavam ponovo', '!', '#ffa0a8'],
+        simulation: ['Simulacija mišem', 'Upravljanje mišem', '↖', '#a0cef3'],
+        unavailable: ['Simulacija nedostupna', 'Glavni ekran nije dostupan', '!', '#ffa0a8'],
+        stopped: ['Praćenje zaustavljeno', 'Praćenje nije pokrenuto', 'Ⅱ', '#bec9d9'],
+      };
+      $('hotbar-status-preview').addEventListener('change', event => {
+        const [title, detail, icon, color] = hotbarStatuses[event.target.value];
+        $('hotbar-tracking-title').textContent = title;
+        $('hotbar-tracking-detail').textContent = detail;
+        $('hotbar-tracking-icon').textContent = icon;
+        $('hotbar-tracking-status').style.setProperty('--tracking-color', color);
+      });
+      $('hotbar-hide').addEventListener('click', () => {
+        document.querySelector('.hotbar-reference').hidden = true;
+        $('hotbar-restore').hidden = false;
+        resetGaze();
+      });
+      $('hotbar-restore').addEventListener('click', () => {
+        document.querySelector('.hotbar-reference').hidden = false;
+        $('hotbar-restore').hidden = true;
+        resetGaze();
       });
 
       for (const button of document.querySelectorAll('[data-reference-view]')) {
@@ -874,10 +941,11 @@
       function render() {
         resetGaze();
         for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
+        $('settings-script-preview').textContent = arabic ? 'Arapski' : 'Latinica';
         message.dir = arabic ? 'rtl' : 'ltr';
         message.style.textAlign = arabic ? 'right' : 'center';
         document.querySelector('.predictions').hidden = arabic;
-        $('voice-hint').textContent = arabic ? 'Prirodni muški arapski glas Hamed zahtijeva internet. Bez njega poruka ostaje sačuvana.' : 'Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.';
+        $('voice-hint').textContent = arabic ? 'Arapski koristi prirodni muški glas Hamed. Potreban je internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.';
         $('voice-preview').textContent = arabic ? 'Prirodni · Hamed' : 'Standardni';
         $('voice-preview').disabled = arabic;
         renderSidebars();
@@ -973,17 +1041,17 @@
       }
 
       function renderSidebars() {
-        const keys = sideTab === 'letters' ? activeGroups : grouped(sideTab === 'numbers' ? [...SIDEBAR_NUMPAD, ...(arabic ? [...'٠١٢٣٤٥٦٧٨٩'] : [])] : arabic ? [...new Set([...SIDEBAR_SYMBOLS, ...ARABIC_SYMBOLS])] : SIDEBAR_SYMBOLS);
-        const pages = arabic ? Math.ceil(keys.length / 8) : 1;
+        const keys = sideTab === 'letters' ? grouped(arabic ? ARABIC_LETTERS : GROUPS.flat(), sideGroupSize) : grouped(sideTab === 'numbers' ? [...SIDEBAR_NUMPAD, ...(arabic ? [...'٠١٢٣٤٥٦٧٨٩'] : [])] : arabic ? [...new Set([...SIDEBAR_SYMBOLS, ...ARABIC_SYMBOLS])] : SIDEBAR_SYMBOLS, arabic ? Math.max(5, sideGroupSize) : sideGroupSize);
+        const pages = Math.max(1, Math.ceil(keys.length / 8));
         sidePage = Math.max(0, Math.min(sidePage, pages - 1));
         for (const grid of document.querySelectorAll('.sidebar-reference-grid')) {
           grid.dir = arabic && (sideGroup === null || sideTab === 'letters') ? 'rtl' : 'ltr';
           grid.style.gridTemplateColumns = `repeat(${sideGroup === null ? 2 : 3}, 1fr)`;
-          const visible = sideGroup === null ? (arabic ? keys.slice(sidePage * 8, sidePage * 8 + 8) : keys) : keys[sideGroup];
+          const visible = sideGroup === null ? keys.slice(sidePage * 8, sidePage * 8 + 8) : keys[sideGroup];
           grid.replaceChildren(...visible.map((item, index) => {
             const button = document.createElement('button'); button.type = 'button';
-            button.textContent = sideGroup === null ? (arabic ? item.map(keyLabel).reduce((rows, label, index) => { if (index % 3 === 0) rows.push([]); rows.at(-1).push(label); return rows; }, []).map(row => row.join(' ')).join('\n') : item.join(' ')) : keyLabel(item);
-            button.onclick = () => { if (sideGroup === null) sideGroup = (arabic ? sidePage * 8 : 0) + index; else { append(item); sideGroup = null; } renderSidebars(); resetGaze(); };
+            button.textContent = sideGroup === null ? (arabic || item.length > 5 ? item.map(keyLabel).reduce((rows, label, index) => { if (index % 3 === 0) rows.push([]); rows.at(-1).push(label); return rows; }, []).map(row => row.join(' ')).join('\n') : item.join(' ')) : keyLabel(item);
+            button.onclick = () => { if (sideGroup === null) sideGroup = sidePage * 8 + index; else { append(item); sideGroup = null; } renderSidebars(); resetGaze(); };
             return button;
           }));
           const navigation = grid.parentElement.querySelector('.sidebar-pages');

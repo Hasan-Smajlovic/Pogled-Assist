@@ -3,6 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint
 
 from pogled_assist.tracking.mouse_gaze_provider import MouseGazeProvider, _normalize_cursor_position
+from pogled_assist.tracking.status import TrackingState, TrackingStatus
 
 
 def test_cursor_position_is_normalized_and_clamped():
@@ -22,6 +23,8 @@ def test_mouse_provider_emits_active_eyes_and_cursor_gaze(qapp, monkeypatch):
     eyes = []
     statuses = []
     trackers = []
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     provider.gaze_updated.connect(lambda x, y, timestamp: gaze.append((x, y, timestamp)))
     provider.eye_status_changed.connect(lambda left, right: eyes.append((left, right)))
     provider.status_changed.connect(statuses.append)
@@ -35,11 +38,13 @@ def test_mouse_provider_emits_active_eyes_and_cursor_gaze(qapp, monkeypatch):
     assert eyes == [(True, True)]
     assert statuses == ["Praćenje simulacijom miša je aktivno."]
     assert trackers == ["Simulator pogleda mišem"]
+    assert tracking == [TrackingStatus(TrackingState.SIMULATING)]
 
     provider.stop()
 
     assert not provider._timer.isActive()
     assert eyes[-1] == (False, False)
+    assert tracking[-1] == TrackingStatus(TrackingState.STOPPED)
 
 
 def test_mouse_provider_reports_missing_primary_screen(qapp, monkeypatch):
@@ -49,9 +54,12 @@ def test_mouse_provider_reports_missing_primary_screen(qapp, monkeypatch):
     )
     provider = MouseGazeProvider(cursor_position=lambda: QPoint())
     statuses = []
+    tracking = []
+    provider.tracking_status_changed.connect(tracking.append)
     provider.status_changed.connect(statuses.append)
 
     provider.start()
 
     assert not provider._timer.isActive()
     assert statuses == ["Simulacija pogleda nije dostupna jer nema glavnog ekrana."]
+    assert tracking == [TrackingStatus(TrackingState.UNAVAILABLE)]

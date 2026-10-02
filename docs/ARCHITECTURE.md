@@ -96,6 +96,13 @@ fresh eye status cannot make a gaze sample older than 500 ms usable again.
 The watchdog publishes recovery status on Qt only after checking the current
 connection, so a delayed worker notification cannot overwrite a newer failure.
 
+Providers publish a typed `TrackingStatus` lifecycle separately from diagnostic
+text. The hotbar status combines that lifecycle with eye validity and the local
+receive time of the last delivered gaze sample. Its own display timer expires
+readiness after 500 ms without gaze; it does not change the input gate, dwell,
+backend subscriptions, or reconnect policy. See the
+[status guide](USER_GUIDE.md#before-starting) for the visible states.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,

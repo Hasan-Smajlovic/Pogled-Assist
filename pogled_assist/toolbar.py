@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QStyle,
     QToolButton,
     QWidget,
@@ -50,6 +49,7 @@ from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
 from .ui.settings_window import SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
+from .ui.tracking_status import TrackingStatusWidget
 from .windows.appbar import WindowsAppBar
 from .windows.windows_input import WindowsInputController
 
@@ -294,20 +294,6 @@ class HotbarWindow(QWidget):
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 12px;
             }
-            QLabel#trackerDot {
-                border-radius: 9px;
-                min-width: 18px;
-                max-width: 18px;
-                min-height: 18px;
-                max-height: 18px;
-            }
-            QLabel#eyeDot {
-                border-radius: 7px;
-                min-width: 14px;
-                max-width: 14px;
-                min-height: 14px;
-                max-height: 14px;
-            }
             QToolButton {
                 background: #1c2029;
                 border: 1px solid #303747;
@@ -471,35 +457,10 @@ class HotbarWindow(QWidget):
             self._buttons[action] = button
             left_layout.addWidget(button)
 
-        self._tracker_dot = QLabel(self)
-        self._tracker_dot.setObjectName("trackerDot")
-        self._tracker_dot.setFixedSize(18, 18)
-        self._tracker_dot.setAlignment(Qt.AlignCenter)
-        self._set_tracker_dot("yellow", "Praćenje: čekanje")
-
-        self._left_eye_dot = QLabel(self)
-        self._left_eye_dot.setObjectName("eyeDot")
-        self._left_eye_dot.setFixedSize(14, 14)
-        self._left_eye_dot.setAlignment(Qt.AlignCenter)
-
-        self._right_eye_dot = QLabel(self)
-        self._right_eye_dot.setObjectName("eyeDot")
-        self._right_eye_dot.setFixedSize(14, 14)
-        self._right_eye_dot.setAlignment(Qt.AlignCenter)
-        self._set_eye_indicators(False, False)
-
-        right_controls = QWidget(self)
-        right_controls.setStyleSheet("background: transparent;")
-        right_layout = QHBoxLayout(right_controls)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(7)
-        right_layout.addWidget(self._left_eye_dot)
-        right_layout.addWidget(self._right_eye_dot)
-        right_layout.addSpacing(8)
-        right_layout.addWidget(self._tracker_dot)
+        self._tracking_status = TrackingStatusWidget(self)
 
         layout.addWidget(left_controls, 0, 0, Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(right_controls, 0, 1, Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(self._tracking_status, 0, 1, Qt.AlignRight | Qt.AlignVCenter)
 
     def _build_restore_button(self) -> None:
         button = QToolButton()
@@ -558,11 +519,11 @@ class HotbarWindow(QWidget):
 
     def _connect_signals(self) -> None:
         self._gaze.gaze_updated.connect(self._mouse.handle_gaze)
+        self._gaze.gaze_updated.connect(self._tracking_status.handle_gaze)
         self._gaze.eye_status_changed.connect(self._mouse.handle_eye_status)
         self._gaze.eye_status_changed.connect(self._handle_eye_status_changed)
         self._gaze.status_changed.connect(self._set_status)
-        self._gaze.status_changed.connect(self._update_tracker_dot_from_status)
-        self._gaze.tracker_changed.connect(self._update_tracker_dot_from_tracker)
+        self._gaze.tracking_status_changed.connect(self._tracking_status.set_tracking_status)
         self._mouse.gaze_position_changed.connect(self._gaze_bubble.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_menu.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_zoom.handle_gaze)
@@ -1235,7 +1196,7 @@ class HotbarWindow(QWidget):
             self._restore_button.setToolTip(text)
 
     def _handle_eye_status_changed(self, left_open: bool, right_open: bool) -> None:
-        self._set_eye_indicators(left_open, right_open)
+        self._tracking_status.set_eye_status(left_open, right_open)
         if left_open and right_open:
             return
 
@@ -1252,42 +1213,6 @@ class HotbarWindow(QWidget):
             self._controller_window.cancel_gaze_interaction()
         if self._settings_window is not None:
             self._settings_window.pause_gaze_interaction()
-
-    def _set_eye_indicators(self, left_open: bool, right_open: bool) -> None:
-        self._set_eye_dot(self._left_eye_dot, bool(left_open), "Lijevo")
-        self._set_eye_dot(self._right_eye_dot, bool(right_open), "Desno")
-
-    def _set_eye_dot(self, dot: QLabel, open_: bool, label: str) -> None:
-        fill = "#ffffff" if open_ else "transparent"
-        border = "#ffffff" if open_ else "transparent"
-        dot.setStyleSheet(
-            f"QLabel#eyeDot {{background: {fill};border: 1px solid {border};border-radius: 7px;}}"
-        )
-        state = "otvoreno" if open_ else "zatvoreno"
-        dot.setToolTip(f"{label} oko: {state}")
-
-    def _update_tracker_dot_from_tracker(self, text: str) -> None:
-        state = "yellow" if text.strip().lower() in {"retrying", "ponovni pokušaj"} else "green"
-        self._set_tracker_dot(state, f"Praćenje: {text}")
-
-    def _update_tracker_dot_from_status(self, text: str) -> None:
-        self._set_tracker_dot(_tracker_dot_state(text), text)
-
-    def _set_tracker_dot(self, state: str, tooltip: str) -> None:
-        colors = {
-            "green": ("#22c55e", "#86efac"),
-            "yellow": ("#f59e0b", "#fde68a"),
-            "red": ("#ef4444", "#fecaca"),
-        }
-        fill, border = colors.get(state, colors["yellow"])
-        self._tracker_dot.setStyleSheet(
-            "QLabel#trackerDot {"
-            f"background: {fill};"
-            f"border: 2px solid {border};"
-            "border-radius: 9px;"
-            "}"
-        )
-        self._tracker_dot.setToolTip(tooltip)
 
     def _icon(self, icon_name: str, action: str) -> QIcon:
         try:
@@ -1310,51 +1235,6 @@ class HotbarWindow(QWidget):
                 SHOW_HOTBAR: QStyle.StandardPixmap.SP_TitleBarNormalButton,
             }.get(action, QStyle.StandardPixmap.SP_FileIcon)
             return self.style().standardIcon(fallback)
-
-
-def _tracker_dot_state(status: str) -> str:
-    normalized = status.strip().lower()
-    if "tracking with" in normalized or "praćenje je aktivno" in normalized:
-        return "green"
-
-    yellow_markers = (
-        "trying",
-        "retrying",
-        "waiting",
-        "scanning",
-        "starting",
-        "pokušavam",
-        "ponovni pokušaj",
-        "čekanje",
-        "pretraga",
-        "pokrećem",
-    )
-    if any(marker in normalized for marker in yellow_markers):
-        return "yellow"
-
-    red_markers = (
-        "failed",
-        "failure",
-        "unavailable",
-        "missing",
-        "not found",
-        "disabled",
-        "error",
-        "nije uspjelo",
-        "nije uspio",
-        "nije dostupno",
-        "nije dostupan",
-        "nije dostupna",
-        "nedostaje",
-        "nije pronađen",
-        "nije pronađena",
-        "isključeno",
-        "greška",
-    )
-    if any(marker in normalized for marker in red_markers):
-        return "red"
-
-    return "yellow"
 
 
 def _no_focus_tool_window_flags() -> Qt.WindowFlags:

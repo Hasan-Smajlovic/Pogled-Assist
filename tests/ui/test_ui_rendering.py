@@ -7,14 +7,20 @@ from scripts.ui.capture_ui import capture_ui
 
 
 @pytest.mark.e2e
-def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch, size):
     from scripts.ui import capture_ui as preview
 
     capture_widget = preview._capture_widget
 
     def capture_with_script_control_check(app, widget, output_dir, name, width, height):
         snapshot = capture_widget(app, widget, output_dir, name, width, height)
-        if name in ("controller-keyboard", "controller-arabic", "controller-arabic-symbols"):
+        if name in (
+            "controller-keyboard",
+            "controller-latin-paged",
+            "controller-arabic",
+            "controller-arabic-symbols",
+        ):
             assert widget._script_button.isVisible(), (
                 name,
                 widget._active_tab,
@@ -33,9 +39,9 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
         return snapshot
 
     monkeypatch.setattr(preview, "_capture_widget", capture_with_script_control_check)
-    snapshots = capture_ui(tmp_path, width=1280, height=720)
+    snapshots = capture_ui(tmp_path, width=size[0], height=size[1])
 
-    assert len(snapshots) == 29
+    assert len(snapshots) == 35
     assert (tmp_path / "index.html").is_file()
     for snapshot in snapshots:
         image = QImage(str(snapshot))
@@ -44,3 +50,5 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
         assert image.height() >= 70, snapshot.name
         if snapshot.name.startswith("settings-"):
             assert (image.width(), image.height()) == (1280, 720), snapshot.name
+        if snapshot.name in ("keyboard-latin-paged.png", "controller-latin-paged.png"):
+            assert (image.width(), image.height()) == (380, 640), snapshot.name

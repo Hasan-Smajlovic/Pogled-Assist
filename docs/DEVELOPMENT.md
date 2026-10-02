@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 29 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 35 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
@@ -276,17 +276,27 @@ Generate the gallery:
 
 The command renders:
 
-- Hotbar
+- Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
+  and mouse-simulation states
 - General, gaze, speech, and learned-word Settings surfaces
 - Speech keyboard, categories, answers, saved phrases, and shared editor
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
+- Latin Keyboard and Controller with two letters per group and page controls
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
+Hotbar snapshots use at most 1280 logical pixels of width, and Settings snapshots
+use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
+scaling. Other surfaces use the requested gallery size. In Settings, check equal
+action cells, the single-cell calibration control, the voice below keyboard
+script, and aligned decrease/value/increase columns.
+The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar
+below the 76-pixel hotbar at 150% scaling.
+
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 29-surface gallery.
+covered by UI interaction tests; it is not part of the 35-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -326,8 +336,11 @@ On a normal development machine, verify:
 
 On the Tobii machine, additionally verify:
 
-- The connection indicator changes from waiting to tracking.
-- Both eye indicators reflect real validity.
+- The hotbar status distinguishes connecting, unavailable device, waiting for
+  fresh data, and ready tracking. Readiness requires both eyes and fresh gaze;
+  it does not certify calibration accuracy.
+- Both labeled eye indicators reflect real validity. Hide removes the whole
+  status with the hotbar; Show restores its current state.
 - Losing one eye cancels dwell progress and stops pointer movement.
 - At 150% scaling, select Speech, Keyboard, and Settings from the top screen edge
   without a mouse. Gaps between buttons must not select either neighbor.

@@ -17,7 +17,12 @@ from pogled_assist.interaction.mouse_controller import (
     SPEECH,
     GazeSettings,
 )
-from pogled_assist.keyboard_layouts import ARABIC_LETTERS, ARABIC_MARKS, ARABIC_SYMBOLS
+from pogled_assist.keyboard_layouts import (
+    ARABIC_LETTERS,
+    ARABIC_MARKS,
+    ARABIC_SYMBOLS,
+    SYMBOL_KEYS,
+)
 from pogled_assist.speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -474,15 +479,16 @@ def test_arabic_phrase_editor_survives_switch_and_preserves_library(qtbot):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("kind", ["keyboard", "controller"])
-@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
-def test_arabic_sidebar_pages_fit_and_send_actual_unicode(
-    qtbot, monkeypatch, kind, letters_per_group
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize("letters_per_group", [1, 2, 5, 12])
+def test_sidebar_pages_fit_and_send_actual_unicode(
+    qtbot, monkeypatch, kind, script, letters_per_group
 ):
     from pogled_assist.ui import controller_window, keyboard_window
 
     module = keyboard_window if kind == "keyboard" else controller_window
     monkeypatch.setattr(module, "WindowsAppBar", FakeAppBar)
-    settings = SpeechSettings(keyboard_script="arabic", letters_per_group=letters_per_group)
+    settings = SpeechSettings(keyboard_script=script, letters_per_group=letters_per_group)
     window = (
         KeyboardWindow(settings)
         if kind == "keyboard"
@@ -517,12 +523,19 @@ def test_arabic_sidebar_pages_fit_and_send_actual_unicode(
             qtbot.wait(1)
             assert window.width() <= 380 and window.height() <= 640, (
                 kind,
+                script,
                 letters_per_group,
                 symbols,
                 page,
                 window.size(),
             )
             assert window._script_button.isVisible()
+            if pages > 1:
+                previous = "group-page:-1" if kind == "keyboard" else "keyboard-page:-1"
+                assert window._action_buttons[prefix + previous].isEnabled() == (page > 0)
+                assert window._action_buttons[prefix + page_action].isEnabled() == (
+                    page + 1 < pages
+                )
             bounds = window.rect()
             for button in window._action_buttons.values():
                 if button.isVisible():
@@ -534,6 +547,11 @@ def test_arabic_sidebar_pages_fit_and_send_actual_unicode(
                         if kind == "controller" and button.objectName() == "keyboardSubTabButton"
                         else 52
                     )
+                    if button.objectName() == "groupButton":
+                        assert all(
+                            button.fontMetrics().horizontalAdvance(line) <= button.width() - 12
+                            for line in button.text().splitlines()
+                        ), button.text()
             for group_index in range(page * 8, min(len(groups), (page + 1) * 8)):
                 window._action_buttons[prefix + group_action + str(group_index)].click()
                 for index, key in enumerate(groups[group_index]):
@@ -554,7 +572,12 @@ def test_arabic_sidebar_pages_fit_and_send_actual_unicode(
                 )()
             if page + 1 < pages:
                 window._action_buttons[prefix + page_action].click()
-    assert set(ARABIC_LETTERS + ARABIC_SYMBOLS) <= set(fake_input.typed)
+    expected = (
+        ARABIC_LETTERS + ARABIC_SYMBOLS if script == "arabic" else BOSNIAN_LETTERS + SYMBOL_KEYS
+    )
+    assert set(expected) <= set(fake_input.typed)
+    window._script_button.click()
+    assert (window._group_page if kind == "keyboard" else window._keyboard_group_page) == 0
 
 
 @pytest.mark.e2e
@@ -1369,6 +1392,112 @@ def test_settings_fit_150_percent_display_with_calibration_visible(qtbot, monkey
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1920, 1080)])
+def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monkeypatch, size):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    assert (window.width(), window.height()) == size
+
+    action_columns = None
+    for tab, controls in (
+        (0, (window._startup_checkbox, window._logging_checkbox, window._launcher_window_checkbox)),
+        (
+            1,
+            (
+                window._move_pointer_button,
+                window._gaze_bubble_button,
+                window._interaction_overlay_button,
+                window._precision_zoom_checkbox,
+                window._calibration_button,
+            ),
+        ),
+        (2, (window._test_speech_button, window._learned_words_button)),
+    ):
+        window._select_tab(tab)
+        qtbot.wait(1)
+        rects = [QRect(control.mapTo(window, QPoint()), control.size()) for control in controls]
+        assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
+        columns = tuple((rect.left(), rect.width()) for rect in rects[:2])
+        assert action_columns is None or columns == action_columns
+        action_columns = columns
+        assert all(rect.height() == 58 and window.rect().contains(rect) for rect in rects)
+        assert len({rect.top() for rect in rects[:3]}) == 1
+        if len(rects) > 3:
+            assert rects[3].left() == rects[0].left()
+            assert abs(rects[4].left() - rects[1].left()) <= 1
+            assert rects[3].top() == rects[4].top() == rects[0].bottom() + 13
+        for index, control in enumerate(controls):
+            assert all(not rects[index].intersects(other) for other in rects[index + 1 :])
+            center = control.mapToGlobal(control.rect().center())
+            assert window._gaze_action_at(center)[0] is control
+            window._set_gaze_target(control)
+            qtbot.wait(1)
+            assert control.height() == 58
+            window._set_gaze_target(None)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1920, 1080)])
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
+    qtbot, monkeypatch, size, script
+):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings(keyboard_script=script))
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window._select_tab(2)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    assert (window.width(), window.height()) == size
+    script_rect = QRect(window._script_combo.mapTo(window, QPoint()), window._script_combo.size())
+    voice_rect = QRect(window._voice_combo.mapTo(window, QPoint()), window._voice_combo.size())
+    assert script_rect.size() == voice_rect.size()
+    assert script_rect.height() == 58
+    assert script_rect.left() == voice_rect.left()
+    assert script_rect.bottom() < voice_rect.top()
+    original_columns = None
+    for speed, letters in ((80, 1), (155, 5), (320, 12)):
+        window.update_speech_settings(
+            SpeechSettings(keyboard_script=script, speed=speed, letters_per_group=letters)
+        )
+        qtbot.wait(1)
+        columns = []
+        for value in (window._speed_value, window._letters_group_value):
+            row = value.parentWidget()
+            controls = tuple(
+                row.layout().itemAtPosition(0, column).widget() for column in (1, 2, 3)
+            )
+            rects = [QRect(control.mapTo(window, QPoint()), control.size()) for control in controls]
+            assert all(rect.height() == 58 and window.rect().contains(rect) for rect in rects)
+            assert len({rect.top() for rect in rects}) == 1
+            assert rects[0].width() == rects[2].width() == 104
+            assert rects[1].width() == 216
+            assert rects[0].right() + 13 == rects[1].left()
+            assert rects[1].right() + 13 == rects[2].left()
+            assert value.fontMetrics().horizontalAdvance(value.text()) + 26 <= value.width()
+            columns.append(tuple((rect.left(), rect.width()) for rect in rects))
+        assert columns[0] == columns[1]
+        assert original_columns is None or columns[0] == original_columns
+        original_columns = columns[0]
+    assert voice_rect.bottom() < window._speed_value.mapTo(window, QPoint()).y()
+    speed_row = window._speed_value.parentWidget().layout()
+    speed_row.itemAtPosition(0, 1).widget().click()
+    assert window._speech_settings.speed == 315
+    letters_row = window._letters_group_value.parentWidget().layout()
+    letters_row.itemAtPosition(0, 1).widget().click()
+    assert window._speech_settings.letters_per_group == 11
+
+
+@pytest.mark.e2e
 def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
@@ -1541,6 +1670,7 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
     monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
     monkeypatch.setattr(toolbar.HotbarWindow, "_start_services", lambda _self: None)
+    monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
     monkeypatch.setattr(keyboard_window, "WindowsAppBar", FakeAppBar)
     monkeypatch.setattr(keyboard_window, "WindowsInputController", FakeHotbarInput)
     hotbar = toolbar.HotbarWindow(simulate_gaze=True)
@@ -1567,6 +1697,222 @@ def hotbar_gaze(qtbot, monkeypatch, request):
         controller.handle_gaze(point.x() / (width - 1), point.y() / (height - 1), milliseconds)
 
     return hotbar, controller, feed, actions, progress
+
+
+@pytest.mark.e2e
+def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hotbar_gaze):
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._gaze.start()
+    status = hotbar._tracking_status
+    assert status._title.text() == "Simulacija mišem"
+    assert status._detail.text() == "Upravljanje mišem"
+    hotbar._gaze.status_changed.emit("Praćenje simulacijom miša je aktivno.")
+    hotbar._gaze.tracker_changed.emit("retrying")
+    hotbar._set_status("Otvoren je izbornik brzih radnji.")
+    assert status._title.text() == "Simulacija mišem"
+    hotbar._gaze.stop()
+    assert status._title.text() == "Praćenje zaustavljeno"
+
+
+@pytest.mark.e2e
+def test_hotbar_status_stays_available_when_icon_fonts_cannot_load(hotbar_gaze, monkeypatch):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import tracking_status
+
+    def unavailable_font(*_args, **_kwargs):
+        raise OSError("Synthetic font-loading failure")
+
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    monkeypatch.setattr(tracking_status.qta, "icon", unavailable_font)
+    status = hotbar._tracking_status
+    status.set_tracking_status(TrackingStatus(TrackingState.SIMULATING))
+    assert status._title.text() == "Simulacija mišem"
+    assert status._icon.text() == "↖"
+    assert status._icon.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    ("eyes", "detail"),
+    [
+        ((False, True), "Lijevo —    Desno ✓"),
+        ((True, False), "Lijevo ✓    Desno —"),
+        ((False, False), "Lijevo —    Desno —"),
+    ],
+)
+def test_hotbar_status_requires_fresh_gaze_and_updates_on_eye_loss(
+    hotbar_gaze, qtbot, eyes, detail
+):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+
+    hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    status = hotbar._tracking_status
+    hotbar._gaze.tracking_status_changed.emit(
+        TrackingStatus(TrackingState.CONNECTED, "Fake tracker")
+    )
+    assert status._title.text() == "Čekam podatke"
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert status._title.text() == "Čekam podatke"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert status._title.text() == "Praćenje spremno"
+    hotbar._gaze.eye_status_changed.emit(*eyes)
+    assert status._title.text() == "Praćenje pauzirano"
+    assert status._detail.text() == detail
+    assert status._detail.isVisible()
+    assert "nema validnog podatka" in status.accessibleName()
+    assert controller._both_eyes_open is False
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 1)
+    assert status._title.text() == "Praćenje pauzirano"
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert status._title.text() == "Čekam podatke"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 2)
+    assert status._title.text() == "Praćenje spremno"
+    # The display watchdog must also cover loss of gaze while eye data stays valid.
+    status._last_gaze_at -= 0.6
+    qtbot.waitUntil(lambda: status._title.text() == "Čekam podatke")
+    assert status._detail.text() == "Podaci o pogledu kasne"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 3)
+    assert status._title.text() == "Praćenje spremno"
+
+
+@pytest.mark.e2e
+def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, monkeypatch):
+    from pogled_assist.tracking import gaze_provider
+    from pogled_assist.ui.tracking_status import TrackingStatusWidget
+
+    callbacks = []
+
+    class FakeBackend:
+        label = "Synthetic tracker"
+
+        def __init__(self, gaze, eyes):
+            callbacks.append((gaze, eyes))
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(
+        gaze_provider.TobiiGazeProvider, "_start_with_tobii_research", lambda _: False
+    )
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", FakeBackend)
+    provider = gaze_provider.TobiiGazeProvider()
+    status = TrackingStatusWidget()
+    qtbot.addWidget(status)
+    status.show()
+    provider.tracking_status_changed.connect(status.set_tracking_status)
+    provider.eye_status_changed.connect(status.set_eye_status)
+    provider.gaze_updated.connect(status.handle_gaze)
+    try:
+        for _connection in range(2):
+            provider.start()
+            assert status._detail.text() == "Čekam stanje očiju"
+            callbacks[-1][1](False, False, 1)
+            assert status._title.text() == "Praćenje pauzirano"
+            assert status._detail.text() == "Lijevo —    Desno —"
+            callbacks[-1][1](True, True, 2)
+            assert status._title.text() == "Čekam podatke"
+            callbacks[-1][0](0.5, 0.5, 2)
+            provider._emit_latest_gaze_sample()
+            assert status._title.text() == "Praćenje spremno"
+            assert "Synthetic tracker" in status.toolTip()
+            provider.stop()
+            assert status._title.text() == "Praćenje zaustavljeno"
+    finally:
+        provider.stop()
+
+
+@pytest.mark.e2e
+def test_hotbar_status_waiting_and_retry_survive_eye_and_text_notifications(hotbar_gaze):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    status = hotbar._tracking_status
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.WAITING))
+    hotbar._gaze.eye_status_changed.emit(False, False)
+    assert status._title.text() == "Čekam podatke"
+    assert status._detail.text() == "Podaci o očima kasne"
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.RETRYING))
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    hotbar._gaze.status_changed.emit("Praćenje je aktivno putem uređaja.")
+    assert status._title.text() == "Uređaj nije povezan"
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    assert status._title.text() == "Čekam podatke"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 1)
+    assert status._title.text() == "Praćenje spremno"
+
+
+@pytest.mark.e2e
+def test_hide_removes_entire_status_and_show_restores_latest_state(hotbar_gaze):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    status = hotbar._tracking_status
+    assert status.isVisible()
+    assert not status.isWindow()
+    assert hotbar.action_at_global_point(status.mapToGlobal(status.rect().center())) is None
+    hotbar._hide_hotbar()
+    assert not status.isVisible()
+    assert not status._title.isVisible()
+    assert not status._detail.isVisible()
+    assert hotbar._restore_button.isVisible()
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.RETRYING))
+    assert not status.isVisible()
+    assert status._title.text() == "Uređaj nije povezan"
+    hotbar._show_hotbar()
+    assert status.isVisible()
+    assert status._title.text() == "Uređaj nije povezan"
+    assert not hotbar._restore_button.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "state",
+    [
+        "connecting",
+        "connected",
+        "waiting",
+        "retrying",
+        "stopped",
+        "simulating",
+        "unavailable",
+        "ready",
+        "gaze-waiting",
+    ],
+)
+def test_hotbar_status_and_all_actions_fit_target_display(hotbar_gaze, state):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    status = hotbar._tracking_status
+    lifecycle = "connected" if state in ("ready", "gaze-waiting") else state
+    status.set_tracking_status(TrackingStatus(TrackingState(lifecycle)))
+    status.set_eye_status(state in ("ready", "gaze-waiting"), True)
+    if state == "ready":
+        status.handle_gaze(0.5, 0.5, 0)
+    hotbar.layout().activate()
+    assert hotbar.BAR_HEIGHT == 76
+    assert hotbar.rect().contains(status.geometry())
+    for button in hotbar._buttons.values():
+        if button is hotbar._restore_button:
+            continue
+        rect = QRect(button.mapTo(hotbar, QPoint()), button.size())
+        assert hotbar.rect().contains(rect)
+        assert not rect.intersects(status.geometry())
+        assert button.height() == 58
+    for label in (status._title, status._detail):
+        assert status.rect().contains(label.geometry()), (state, label.geometry())
+        assert (
+            label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
+        ), (
+            state,
+            label.text(),
+            label.geometry(),
+            label.fontMetrics().horizontalAdvance(label.text()),
+        )
 
 
 @pytest.fixture

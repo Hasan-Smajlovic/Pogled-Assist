@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
-from pogled_assist.toolbar import _tracker_dot_state
 from pogled_assist.ui.interaction_overlay import _compact_label
 from pogled_assist.ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from pogled_assist.ui.quick_action_zoom import _centered_square, _square_around
@@ -41,16 +40,3 @@ def test_radial_menu_maps_each_direction_to_an_action(qapp):
 )
 def test_interaction_labels_are_compact(label, expected):
     assert _compact_label(label) == expected
-
-
-@pytest.mark.parametrize(
-    ("status", "expected"),
-    [
-        ("Praćenje je aktivno putem uređaja Tobii Eye Tracker 4C.", "green"),
-        ("Pokušavam Stream Engine.", "yellow"),
-        ("Uređaj nije pronađen", "red"),
-        ("idle", "yellow"),
-    ],
-)
-def test_tracker_dot_state(status, expected):
-    assert _tracker_dot_state(status) == expected

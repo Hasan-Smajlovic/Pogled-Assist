@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import sys
 import time
 from dataclasses import replace
@@ -23,20 +22,17 @@ from PySide6.QtWidgets import (
 from ..interaction.mouse_controller import GazeSettings
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
-    SIDEBAR_GROUPS_PER_PAGE,
     group_label,
     key_label,
-    letters_for_script,
-    numpad_for_script,
+    keyboard_group_page,
     other_script,
+    sidebar_key_groups,
     switch_label,
-    symbols_for_script,
 )
 from ..speech.speech_service import SpeechSettings
 from ..windows.appbar import ABE_RIGHT, WindowsAppBar
 from ..windows.windows_input import WindowsInputController
 from .gaze_feedback import set_gaze_feedback
-from .keyboard_window import NUMPAD_KEYS, SYMBOL_KEYS, _group_letters
 
 logger = logging.getLogger(__name__)
 
@@ -210,13 +206,9 @@ class ControllerWindow(QWidget):
         logger.info("Controller sidebar speech settings updated: %s", self._speech_settings)
 
     def _rebuild_key_groups(self) -> None:
-        script = self._speech_settings.keyboard_script
-        self._letter_groups = _group_letters(letters_for_script(script), self._letters_per_group)
-        size = (
-            max(5, self._letters_per_group) if script == ARABIC_SCRIPT else self._letters_per_group
+        self._letter_groups, self._numpad_groups, self._symbol_groups = sidebar_key_groups(
+            self._speech_settings.keyboard_script, self._letters_per_group
         )
-        self._numpad_groups = _group_letters(numpad_for_script(script, NUMPAD_KEYS), size)
-        self._symbol_groups = _group_letters(symbols_for_script(script, SYMBOL_KEYS), size)
 
     def _switch_keyboard_script(self) -> None:
         script = other_script(self._speech_settings.keyboard_script)
@@ -496,13 +488,11 @@ class ControllerWindow(QWidget):
 
         start_row = 1
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
-        page_count = math.ceil(len(groups) / SIDEBAR_GROUPS_PER_PAGE) if arabic else 1
-        self._keyboard_group_page = min(self._keyboard_group_page, max(0, page_count - 1))
-        start = self._keyboard_group_page * SIDEBAR_GROUPS_PER_PAGE if arabic else 0
-        visible = groups[start : start + SIDEBAR_GROUPS_PER_PAGE] if arabic else groups
-        rows = self._set_grid_stretch(len(visible), columns, start_row=start_row)
-        for offset, group in enumerate(visible):
-            index = start + offset
+        page = keyboard_group_page(groups, self._keyboard_group_page)
+        self._keyboard_group_page = page.index
+        rows = self._set_grid_stretch(len(page.groups), columns, start_row=start_row)
+        for offset, group in enumerate(page.groups):
+            index = page.start + offset
             button = self._make_button(
                 group_label(group, self._speech_settings.keyboard_script),
                 self._action(f"{action_prefix}:{index}"),
@@ -514,7 +504,7 @@ class ControllerWindow(QWidget):
             column = columns - 1 - offset % columns if arabic else offset % columns
             self._content_layout.addWidget(button, start_row + offset // columns, column)
 
-        if page_count > 1:
+        if page.count > 1:
             for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
                 button = self._make_button(
                     label,
@@ -523,7 +513,7 @@ class ControllerWindow(QWidget):
                     minimum_height=KEYBOARD_SUBTAB_HEIGHT,
                     dynamic=True,
                 )
-                button.setEnabled(0 <= self._keyboard_group_page + delta < page_count)
+                button.setEnabled(0 <= page.index + delta < page.count)
                 self._content_layout.addWidget(button, start_row + rows, column)
             rows += 1
 

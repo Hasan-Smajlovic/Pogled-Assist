@@ -26,6 +26,7 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
+from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import controller_window as controller_module
 from pogled_assist.ui import keyboard_window as keyboard_module
 from pogled_assist.ui import settings_window as settings_module
@@ -161,8 +162,11 @@ class PreviewLibraryStore:
 
 class PreviewHotbar(toolbar_module.HotbarWindow):
     def _start_services(self) -> None:
-        self._set_tracker_dot("green", "UI preview")
-        self._set_eye_indicators(True, True)
+        self._tracking_status.set_tracking_status(
+            TrackingStatus(TrackingState.CONNECTED, "UI preview")
+        )
+        self._tracking_status.set_eye_status(True, True)
+        self._tracking_status.handle_gaze(0.5, 0.5, 0)
         self._set_status("UI preview: hardware and Windows input are disabled.")
 
 
@@ -174,6 +178,8 @@ def _capture_widget(
     width: int,
     height: int,
 ) -> Path:
+    # Re-show each state so reused native windows apply child visibility changes.
+    widget.hide()
     widget.resize(width, height)
     widget.show()
     app.processEvents()
@@ -268,16 +274,36 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
         try:
             hotbar = PreviewHotbar()
             widgets.append(hotbar)
+            hotbar_width = min(width, 1280)
             snapshots.append(
                 (
                     "Hotbar",
-                    _capture_widget(app, hotbar, output_dir, "hotbar", width, hotbar.BAR_HEIGHT),
+                    _capture_widget(
+                        app, hotbar, output_dir, "hotbar", hotbar_width, hotbar.BAR_HEIGHT
+                    ),
                 )
             )
+            for state, name, title in (
+                (TrackingState.CONNECTED, "hotbar-paused", "Hotbar: one eye unavailable"),
+                (TrackingState.WAITING, "hotbar-waiting", "Hotbar: waiting for fresh data"),
+                (TrackingState.RETRYING, "hotbar-retrying", "Hotbar: device not connected"),
+                (TrackingState.SIMULATING, "hotbar-simulation", "Hotbar: mouse simulation"),
+            ):
+                hotbar._tracking_status.set_tracking_status(TrackingStatus(state))
+                hotbar._tracking_status.set_eye_status(False, True)
+                snapshots.append(
+                    (
+                        title,
+                        _capture_widget(
+                            app, hotbar, output_dir, name, hotbar_width, hotbar.BAR_HEIGHT
+                        ),
+                    )
+                )
 
             suggestions = PreviewSuggestionService()
             settings = SettingsWindow(gaze_settings, speech_settings, suggestions=suggestions)
             widgets.append(settings)
+            settings_width, settings_height = min(width, 1280), min(height, 720)
             for index, name, title in (
                 (0, "settings-general", "Settings: general"),
                 (1, "settings-gaze", "Settings: gaze"),
@@ -285,7 +311,12 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
             ):
                 settings._select_tab(index)
                 snapshots.append(
-                    (title, _capture_widget(app, settings, output_dir, name, width, height))
+                    (
+                        title,
+                        _capture_widget(
+                            app, settings, output_dir, name, settings_width, settings_height
+                        ),
+                    )
                 )
             settings._open_learning()
             snapshots.append(
@@ -296,8 +327,8 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                         settings,
                         output_dir,
                         "settings-learned-words",
-                        width,
-                        height,
+                        settings_width,
+                        settings_height,
                     ),
                 )
             )
@@ -446,6 +477,17 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
                         _capture_widget(app, controller, output_dir, name, sidebar_width, height),
                     )
                 )
+            small_groups = replace(speech_settings, letters_per_group=2)
+            keyboard.update_settings(small_groups)
+            controller.update_speech_settings(small_groups)
+            controller._show_keyboard_tab()
+            for widget, name, title in (
+                (keyboard, "keyboard-latin-paged", "Keyboard: Latin, two letters per group"),
+                (controller, "controller-latin-paged", "Controller: Latin, two letters per group"),
+            ):
+                snapshots.append(
+                    (title, _capture_widget(app, widget, output_dir, name, sidebar_width, 640))
+                )
             # Arabic uses the same services and storage fakes, with original Unicode.
             arabic_settings = replace(speech_settings, keyboard_script=ARABIC_SCRIPT)
             settings.update_speech_settings(arabic_settings)
@@ -453,7 +495,14 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
             snapshots.append(
                 (
                     "Settings: Arabic",
-                    _capture_widget(app, settings, output_dir, "settings-arabic", width, height),
+                    _capture_widget(
+                        app,
+                        settings,
+                        output_dir,
+                        "settings-arabic",
+                        settings_width,
+                        settings_height,
+                    ),
                 )
             )
             speech._cancel_editor()
