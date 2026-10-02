@@ -237,17 +237,7 @@ function Test-IsAdministrator {
 }
 
 function Get-SetupPowerShellExecutable {
-    $command = Get-Command "powershell.exe" -ErrorAction SilentlyContinue
-    if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
-        return $command.Source
-    }
-
-    $windowsPowerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-    if (Test-Path $windowsPowerShell) {
-        return $windowsPowerShell
-    }
-
-    return "powershell.exe"
+    return (Get-PowerShellExecutable)
 }
 
 function Format-SetupArgument {
@@ -264,45 +254,49 @@ function Get-ElevatedSetupArguments {
         (Format-SetupArgument -Value $SetupScriptPath)
     )
 
-    if ($InstallPython) {
-        $arguments += "-InstallPython"
+    $switches = [ordered]@{
+        InstallPython = $InstallPython
+        SkipPythonInstall = $SkipPythonInstall
+        SkipX86BridgePythonInstall = $SkipX86BridgePythonInstall
+        Launch = $Launch
+        NoPause = $NoPause
+        UseSourceFolder = $UseSourceFolder
+        NoDesktopShortcut = $NoDesktopShortcut
     }
-    if ($SkipPythonInstall) {
-        $arguments += "-SkipPythonInstall"
+    $arguments += @(Get-ElevatedSwitchArguments -Switches $switches)
+    $overrides = [ordered]@{
+        VenvPath = @($VenvPath, ".venv")
+        PythonInstallerVersion = @($PythonInstallerVersion, "3.10.11")
+        EspeakNgVersion = @($EspeakNgVersion, "1.52.0")
     }
-    if ($SkipX86BridgePythonInstall) {
-        $arguments += "-SkipX86BridgePythonInstall"
-    }
-    if ($Launch) {
-        $arguments += "-Launch"
-    }
-    if ($NoPause) {
-        $arguments += "-NoPause"
-    }
-    if ($UseSourceFolder) {
-        $arguments += "-UseSourceFolder"
-    }
-    if ($NoDesktopShortcut) {
-        $arguments += "-NoDesktopShortcut"
-    }
-    if ($VenvPath -ne ".venv") {
-        $arguments += "-VenvPath"
-        $arguments += (Format-SetupArgument -Value $VenvPath)
-    }
-    if ($PythonInstallerVersion -ne "3.10.11") {
-        $arguments += "-PythonInstallerVersion"
-        $arguments += (Format-SetupArgument -Value $PythonInstallerVersion)
-    }
-    if ($EspeakNgVersion -ne "1.52.0") {
-        $arguments += "-EspeakNgVersion"
-        $arguments += (Format-SetupArgument -Value $EspeakNgVersion)
-    }
+    $arguments += @(Get-ElevatedOverrideArguments -Overrides $overrides)
     if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
         $arguments += "-InstallRoot"
         $arguments += (Format-SetupArgument -Value $InstallRoot)
     }
 
     return ($arguments -join " ")
+}
+
+function Get-ElevatedSwitchArguments {
+    param($Switches)
+
+    foreach ($option in $Switches.GetEnumerator()) {
+        if ($option.Value) {
+            "-$($option.Key)"
+        }
+    }
+}
+
+function Get-ElevatedOverrideArguments {
+    param($Overrides)
+
+    foreach ($option in $Overrides.GetEnumerator()) {
+        if ($option.Value[0] -ne $option.Value[1]) {
+            "-$($option.Key)"
+            Format-SetupArgument -Value $option.Value[0]
+        }
+    }
 }
 
 function Ensure-SetupAdministrator {
@@ -393,56 +387,74 @@ function Copy-ProjectToLocalInstallRoot {
     )
 
     foreach ($relativePath in $itemsToCopy) {
-        $sourceItem = Join-Path $SourcePath $relativePath
-        if (-not (Test-Path $sourceItem)) {
-            Write-Info "Skipping missing optional item: $relativePath"
-            continue
-        }
-
-        $targetItem = Join-Path $TargetPath $relativePath
-        $sourceObject = Get-Item -Path $sourceItem -Force
-
-        if ($sourceObject.PSIsContainer) {
-            if (Test-Path $targetItem) {
-                Remove-Item -Path $targetItem -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            Copy-Item -Path $sourceItem -Destination $TargetPath -Recurse -Force
-        } else {
-            Copy-Item -Path $sourceItem -Destination $targetItem -Force
-        }
-
-        Write-Info "Copied $relativePath"
+        Copy-ProjectItem -SourcePath $SourcePath -TargetPath $TargetPath -RelativePath $relativePath
     }
+    Remove-LegacySourcePackage -TargetPath $TargetPath
+    Write-Success "Project files copied to local install folder."
+}
+
+function Copy-ProjectItem {
+    param([string]$SourcePath, [string]$TargetPath, [string]$RelativePath)
+
+    $sourceItem = Join-Path $SourcePath $RelativePath
+    if (-not (Test-Path $sourceItem)) {
+        Write-Info "Skipping missing optional item: $RelativePath"
+        return
+    }
+    $targetItem = Join-Path $TargetPath $RelativePath
+    $sourceObject = Get-Item -Path $sourceItem -Force
+    if ($sourceObject.PSIsContainer) {
+        if (Test-Path $targetItem) {
+            Remove-Item -Path $targetItem -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Copy-Item -Path $sourceItem -Destination $TargetPath -Recurse -Force
+    } else {
+        Copy-Item -Path $sourceItem -Destination $targetItem -Force
+    }
+    Write-Info "Copied $RelativePath"
+}
+
+function Test-LegacySourcePackage {
+    param([string]$LegacyPath, [string]$TargetPath)
+
+    return (Test-Path -LiteralPath (Join-Path $LegacyPath "__init__.py") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $LegacyPath "main.py") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $TargetPath "pogled_assist\__init__.py") -PathType Leaf)
+}
+
+function Test-LegacyPackageHasDataOrLinks {
+    param([string]$LegacyPath)
+
+    $legacyPackage = Get-Item -LiteralPath $LegacyPath -Force
+    $hasUserData = (Test-Path -LiteralPath (Join-Path $LegacyPath "data")) -or
+        (Test-Path -LiteralPath (Join-Path $LegacyPath "logs"))
+    return $hasUserData -or
+        ($legacyPackage.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        @(Get-ChildItem -LiteralPath $LegacyPath -Recurse -Force -Attributes ReparsePoint).Count -gt 0
+}
+
+function Remove-LegacySourcePackage {
+    param([string]$TargetPath)
 
     $legacyPackagePath = Join-Path $TargetPath "gaze_mouse"
-    $newPackageMarker = Join-Path $TargetPath "pogled_assist\__init__.py"
-    if ((Test-Path -LiteralPath (Join-Path $legacyPackagePath "__init__.py") -PathType Leaf) -and
-        (Test-Path -LiteralPath (Join-Path $legacyPackagePath "main.py") -PathType Leaf) -and
-        (Test-Path -LiteralPath $newPackageMarker -PathType Leaf)) {
-        $targetFullPath = [IO.Path]::GetFullPath($TargetPath).TrimEnd("\")
-        $legacyFullPath = [IO.Path]::GetFullPath($legacyPackagePath)
-        if (-not $legacyFullPath.StartsWith($targetFullPath + "\", [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Legacy package path must stay inside the install folder: $legacyFullPath"
-        }
-
-        $legacyPackage = Get-Item -LiteralPath $legacyPackagePath -Force
-        $hasUserData = (Test-Path -LiteralPath (Join-Path $legacyPackagePath "data")) -or
-            (Test-Path -LiteralPath (Join-Path $legacyPackagePath "logs"))
-        if ($hasUserData -or
-            ($legacyPackage.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-            @(Get-ChildItem -LiteralPath $legacyPackagePath -Recurse -Force -Attributes ReparsePoint).Count -gt 0) {
-            Write-WarningLog "Leaving legacy gaze_mouse folder because it contains user data or links: $legacyPackagePath"
-        } else {
-            try {
-                Remove-Item -LiteralPath $legacyPackagePath -Recurse -Force -ErrorAction Stop
-                Write-Info "Removed the old gaze_mouse package from the source installation."
-            } catch {
-                Write-WarningLog "Could not remove the old gaze_mouse package: $($_.Exception.Message)"
-            }
-        }
+    if (-not (Test-LegacySourcePackage -LegacyPath $legacyPackagePath -TargetPath $TargetPath)) {
+        return
     }
-
-    Write-Success "Project files copied to local install folder."
+    $targetFullPath = [IO.Path]::GetFullPath($TargetPath).TrimEnd("\")
+    $legacyFullPath = [IO.Path]::GetFullPath($legacyPackagePath)
+    if (-not $legacyFullPath.StartsWith($targetFullPath + "\", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Legacy package path must stay inside the install folder: $legacyFullPath"
+    }
+    if (Test-LegacyPackageHasDataOrLinks -LegacyPath $legacyPackagePath) {
+        Write-WarningLog "Leaving legacy gaze_mouse folder because it contains user data or links: $legacyPackagePath"
+        return
+    }
+    try {
+        Remove-Item -LiteralPath $legacyPackagePath -Recurse -Force -ErrorAction Stop
+        Write-Info "Removed the old gaze_mouse package from the source installation."
+    } catch {
+        Write-WarningLog "Could not remove the old gaze_mouse package: $($_.Exception.Message)"
+    }
 }
 
 function Initialize-WorkingRoot {
@@ -515,43 +527,30 @@ function Update-InstallInfoBridgePython {
 }
 
 function Sync-SetupLogToSource {
-    $logFullPath = Get-NormalizedFullPath -Path $LogPath
-    $sourceLogFullPath = Get-NormalizedFullPath -Path $SourceLogPath
-
-    if ($logFullPath -ieq $sourceLogFullPath) {
-        return
-    }
-
-    if (-not (Test-Path $LogPath)) {
-        return
-    }
-
-    try {
-        Copy-Item -Path $LogPath -Destination $SourceLogPath -Force
-        Write-Info "Copied setup log back to source path: $SourceLogPath"
-    } catch {
-        Write-WarningLog "Could not copy setup log back to source path: $($_.Exception.Message)"
-    }
+    Sync-SetupLog -DestinationPath $SourceLogPath -Description "back to source path"
 }
 
 function Sync-SetupLogToInstallRoot {
-    $logFullPath = Get-NormalizedFullPath -Path $LogPath
     $installLogPath = Join-Path $RepoRoot "setup_windows.log"
-    $installLogFullPath = Get-NormalizedFullPath -Path $installLogPath
+    Sync-SetupLog -DestinationPath $installLogPath -Description "to install path"
+}
 
-    if ($logFullPath -ieq $installLogFullPath) {
+function Sync-SetupLog {
+    param([string]$DestinationPath, [string]$Description)
+
+    $logFullPath = Get-NormalizedFullPath -Path $LogPath
+    $destinationFullPath = Get-NormalizedFullPath -Path $DestinationPath
+    if ($logFullPath -ieq $destinationFullPath) {
         return
     }
-
     if (-not (Test-Path $LogPath)) {
         return
     }
-
     try {
-        Copy-Item -Path $LogPath -Destination $installLogPath -Force
-        Write-Info "Copied setup log to install path: $installLogPath"
+        Copy-Item -Path $LogPath -Destination $DestinationPath -Force
+        Write-Info "Copied setup log $Description`: $DestinationPath"
     } catch {
-        Write-WarningLog "Could not copy setup log to install path: $($_.Exception.Message)"
+        Write-WarningLog "Could not copy setup log $Description`: $($_.Exception.Message)"
     }
 }
 
@@ -669,6 +668,7 @@ function Assert-RepositoryFiles {
         "pogled_assist\ui\controller_window.py",
         "pogled_assist\ui\gaze_bubble.py",
         "pogled_assist\ui\gaze_feedback.py",
+        "pogled_assist\ui\hotbar_controls.py",
         "pogled_assist\ui\interaction_overlay.py",
         "pogled_assist\ui\keyboard_window.py",
         "pogled_assist\ui\quick_action_menu.py",
@@ -734,32 +734,65 @@ function Test-Python310Executable {
 
 function Get-Python310 {
     Write-Step "Finding Python 3.10"
-
-    $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
-    if ($null -ne $pyLauncher) {
-        Write-Info "Checking Python launcher: py -3.10"
-        $probe = Invoke-NativeProbe `
-            -FilePath "py" `
-            -Arguments @("-3.10", "-c", "import sys; print(sys.executable)")
-        $pythonPath = ($probe.Output | Select-Object -First 1)
-        if ($probe.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($pythonPath)) {
-            $resolved = Test-Python310Executable -PythonPath $pythonPath.Trim()
-            if ($null -ne $resolved) {
-                Write-Success "Found Python 3.10 through py launcher: $resolved"
-                return $resolved
-            }
-        } else {
-            Write-Info "py launcher did not find Python 3.10."
-        }
+    $resolved = Get-PythonFromLauncher
+    if ($null -ne $resolved) {
+        return $resolved
     }
+    $resolved = Get-Python310FromPath
+    if ($null -ne $resolved) {
+        return $resolved
+    }
+    $resolved = Get-PythonFromCommonPaths
+    if ($null -ne $resolved) {
+        return $resolved
+    }
+    Write-WarningLog "Python 3.10 was not found."
+    return $null
+}
 
+function Get-PythonFromLauncher {
+    param([switch]$X86)
+
+    if ($null -eq (Get-Command "py" -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+    $selector = "-3.10"
+    $description = "Python 3.10"
+    if ($X86) {
+        $selector = "-3.10-32"
+        $description = "32-bit Python 3.10"
+    }
+    Write-Info "Checking Python launcher: py $selector"
+    $probe = Invoke-NativeProbe -FilePath "py" -Arguments @($selector, "-c", "import sys; print(sys.executable)")
+    $pythonPath = ($probe.Output | Select-Object -First 1)
+    if ($probe.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($pythonPath)) {
+        Write-Info "py launcher did not find $description."
+        return $null
+    }
+    $resolved = Test-PythonCandidate -PythonPath $pythonPath.Trim() -X86:$X86
+    if ($null -ne $resolved) {
+        Write-Success "Found $description through py launcher: $resolved"
+        return $resolved
+    }
+    return $null
+}
+
+function Test-PythonCandidate {
+    param([string]$PythonPath, [switch]$X86)
+
+    if ($X86) {
+        return (Test-Python310X86Executable -PythonPath $PythonPath)
+    }
+    return (Test-Python310Executable -PythonPath $PythonPath)
+}
+
+function Get-Python310FromPath {
     foreach ($commandName in @("python3.10", "python")) {
         $command = Get-Command $commandName -ErrorAction SilentlyContinue
         if ($null -eq $command) {
             Write-Info "$commandName was not found in PATH."
             continue
         }
-
         Write-Info "Checking $($command.Source)"
         $resolved = Test-Python310Executable -PythonPath $command.Source
         if ($null -ne $resolved) {
@@ -767,34 +800,50 @@ function Get-Python310 {
             return $resolved
         }
     }
+    return $null
+}
 
-    $commonPaths = @()
+function Get-CommonPythonPaths {
+    param([switch]$X86)
 
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
-        $commonPaths += Join-Path $localAppData "Programs\Python\Python310\python.exe"
+    if ($X86) {
+        $locations = @(
+            @($localAppData, @("Programs\Python\Python310-32\python.exe", "Programs\Python\Python310-32bit\python.exe")),
+            @(${env:ProgramFiles(x86)}, @("Python310-32\python.exe", "Python310\python.exe"))
+        )
+    } else {
+        $locations = @(
+            @($localAppData, @("Programs\Python\Python310\python.exe")),
+            @([Environment]::GetFolderPath("ProgramFiles"), @("Python310\python.exe")),
+            @(${env:ProgramFiles(x86)}, @("Python310\python.exe"))
+        )
     }
-
-    $programFiles = [Environment]::GetFolderPath("ProgramFiles")
-    if (-not [string]::IsNullOrWhiteSpace($programFiles)) {
-        $commonPaths += Join-Path $programFiles "Python310\python.exe"
+    foreach ($location in $locations) {
+        if ([string]::IsNullOrWhiteSpace($location[0])) {
+            continue
+        }
+        foreach ($relativePath in $location[1]) {
+            Join-Path $location[0] $relativePath
+        }
     }
+}
 
-    $programFilesX86 = ${env:ProgramFiles(x86)}
-    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        $commonPaths += Join-Path $programFilesX86 "Python310\python.exe"
+function Get-PythonFromCommonPaths {
+    param([switch]$X86)
+
+    $description = "Python"
+    if ($X86) {
+        $description = "32-bit Python"
     }
-
-    foreach ($path in $commonPaths) {
-        Write-Info "Checking common Python path: $path"
-        $resolved = Test-Python310Executable -PythonPath $path
+    foreach ($path in (Get-CommonPythonPaths -X86:$X86)) {
+        Write-Info "Checking common $description path: $path"
+        $resolved = Test-PythonCandidate -PythonPath $path -X86:$X86
         if ($null -ne $resolved) {
-            Write-Success "Found Python 3.10: $resolved"
+            Write-Success "Found $description 3.10: $resolved"
             return $resolved
         }
     }
-
-    Write-WarningLog "Python 3.10 was not found."
     return $null
 }
 
@@ -896,29 +945,54 @@ function Confirm-DownloadedFile {
 
 function Install-Python310FromOfficialInstaller {
     Write-Step "Installing Python $PythonInstallerVersion with official Python.org installer"
+    Install-OfficialPython
+}
 
+function Install-OfficialPython {
+    param([switch]$X86)
+
+    $fileName = $PythonInstallerFileName
+    $url = $PythonInstallerUrl
+    $label = "Python installer"
+    $unblockLabel = "installer"
+    if ($X86) {
+        $fileName = $PythonX86InstallerFileName
+        $url = $PythonX86InstallerUrl
+        $label = "32-bit Python bridge installer"
+        $unblockLabel = "32-bit Python installer"
+    }
     $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "PogledAssistSetup"
-    $installerPath = Join-Path $downloadDir $PythonInstallerFileName
-    Download-FileWithPowerShell `
-        -Url $PythonInstallerUrl `
-        -DestinationPath $installerPath `
-        -Label "Python installer"
-
+    $installerPath = Join-Path $downloadDir $fileName
+    Download-FileWithPowerShell -Url $url -DestinationPath $installerPath -Label $label
     try {
         Unblock-File -Path $installerPath -ErrorAction SilentlyContinue
     } catch {
-        Write-WarningLog "Could not unblock installer file: $($_.Exception.Message)"
+        Write-WarningLog "Could not unblock $unblockLabel file: $($_.Exception.Message)"
     }
-
-    $targetDir = Get-PythonInstallTargetDir
+    if ($X86) {
+        $targetDir = Get-PythonX86InstallTargetDir
+    } else {
+        $targetDir = Get-PythonInstallTargetDir
+    }
     New-Item -Path (Split-Path -Parent $targetDir) -ItemType Directory -Force | Out-Null
+    Invoke-OfficialPythonInstaller -InstallerPath $installerPath -TargetDir $targetDir -X86:$X86
+}
 
-    $installerArguments = @(
+function Get-OfficialPythonInstallerArguments {
+    param([string]$TargetDir, [switch]$X86)
+
+    $includePip = 1
+    $prependPath = 1
+    if ($X86) {
+        $includePip = 0
+        $prependPath = 0
+    }
+    return @(
         "/quiet",
         "InstallAllUsers=0",
-        "TargetDir=`"$targetDir`"",
-        "PrependPath=1",
-        "Include_pip=1",
+        "TargetDir=`"$TargetDir`"",
+        "PrependPath=$prependPath",
+        "Include_pip=$includePip",
         "Include_launcher=1",
         "InstallLauncherAllUsers=0",
         "Include_test=0",
@@ -926,31 +1000,31 @@ function Install-Python310FromOfficialInstaller {
         "Shortcuts=0",
         "SimpleInstall=1"
     )
+}
 
-    Write-Info "Installer path: $installerPath"
-    Write-Info "Install target: $targetDir"
-    Write-Info "Running official Python installer silently."
+function Invoke-OfficialPythonInstaller {
+    param([string]$InstallerPath, [string]$TargetDir, [switch]$X86)
 
-    $process = Start-Process `
-        -FilePath $installerPath `
-        -ArgumentList $installerArguments `
-        -Wait `
-        -PassThru
-
-    if ($null -eq $process) {
-        throw "Python installer process did not return a process object."
+    $description = "Python"
+    if ($X86) {
+        $description = "32-bit Python"
     }
-
+    $installerArguments = Get-OfficialPythonInstallerArguments -TargetDir $TargetDir -X86:$X86
+    Write-Info "Installer path: $InstallerPath"
+    Write-Info "Install target: $TargetDir"
+    Write-Info "Running official $description installer silently."
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList $installerArguments -Wait -PassThru
+    if ($null -eq $process) {
+        throw "$description installer process did not return a process object."
+    }
     if ($process.ExitCode -eq 3010) {
-        Write-WarningLog "Python installer requested a reboot, but installation may still be usable now."
+        Write-WarningLog "$description installer requested a reboot, but installation may still be usable now."
         return
     }
-
     if ($process.ExitCode -ne 0) {
-        throw "Python installer failed with exit code $($process.ExitCode)."
+        throw "$description installer failed with exit code $($process.ExitCode)."
     }
-
-    Write-Success "Official Python installer completed successfully."
+    Write-Success "Official $description installer completed successfully."
 }
 
 function Install-Python310 {
@@ -1051,61 +1125,35 @@ function Test-Python310X86Executable {
 
 function Get-Python310X86 {
     Write-Step "Finding 32-bit Python 3.10 for Tobii bridge"
+    $resolved = Get-Python310X86FromEnvironment
+    if ($null -ne $resolved) {
+        return $resolved
+    }
+    $resolved = Get-PythonFromLauncher -X86
+    if ($null -ne $resolved) {
+        return $resolved
+    }
+    $resolved = Get-PythonFromCommonPaths -X86
+    if ($null -ne $resolved) {
+        return $resolved
+    }
+    Write-WarningLog "32-bit Python 3.10 was not found."
+    return $null
+}
 
+function Get-Python310X86FromEnvironment {
     foreach ($envName in @("POGLED_ASSIST_X86_PYTHON", "TOBII_GAZE_MOUSE_X86_PYTHON")) {
         $configuredPath = [Environment]::GetEnvironmentVariable($envName)
-        if (-not [string]::IsNullOrWhiteSpace($configuredPath)) {
-            Write-Info "Checking ${envName}: $configuredPath"
-            $resolvedEnvPath = Test-Python310X86Executable -PythonPath $configuredPath
-            if ($null -ne $resolvedEnvPath) {
-                Write-Success "Found 32-bit Python 3.10 from environment: $resolvedEnvPath"
-                return $resolvedEnvPath
-            }
+        if ([string]::IsNullOrWhiteSpace($configuredPath)) {
+            continue
         }
-    }
-
-    $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
-    if ($null -ne $pyLauncher) {
-        Write-Info "Checking Python launcher: py -3.10-32"
-        $probe = Invoke-NativeProbe `
-            -FilePath "py" `
-            -Arguments @("-3.10-32", "-c", "import sys; print(sys.executable)")
-        $pythonPath = ($probe.Output | Select-Object -First 1)
-        if ($probe.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($pythonPath)) {
-            $resolved = Test-Python310X86Executable -PythonPath $pythonPath.Trim()
-            if ($null -ne $resolved) {
-                Write-Success "Found 32-bit Python 3.10 through py launcher: $resolved"
-                return $resolved
-            }
-        } else {
-            Write-Info "py launcher did not find 32-bit Python 3.10."
-        }
-    }
-
-    $commonPaths = @()
-
-    $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
-        $commonPaths += Join-Path $localAppData "Programs\Python\Python310-32\python.exe"
-        $commonPaths += Join-Path $localAppData "Programs\Python\Python310-32bit\python.exe"
-    }
-
-    $programFilesX86 = ${env:ProgramFiles(x86)}
-    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        $commonPaths += Join-Path $programFilesX86 "Python310-32\python.exe"
-        $commonPaths += Join-Path $programFilesX86 "Python310\python.exe"
-    }
-
-    foreach ($path in $commonPaths) {
-        Write-Info "Checking common 32-bit Python path: $path"
-        $resolved = Test-Python310X86Executable -PythonPath $path
+        Write-Info "Checking ${envName}: $configuredPath"
+        $resolved = Test-Python310X86Executable -PythonPath $configuredPath
         if ($null -ne $resolved) {
-            Write-Success "Found 32-bit Python 3.10: $resolved"
+            Write-Success "Found 32-bit Python 3.10 from environment: $resolved"
             return $resolved
         }
     }
-
-    Write-WarningLog "32-bit Python 3.10 was not found."
     return $null
 }
 
@@ -1120,61 +1168,7 @@ function Get-PythonX86InstallTargetDir {
 
 function Install-Python310X86FromOfficialInstaller {
     Write-Step "Installing 32-bit Python $PythonInstallerVersion for Tobii bridge"
-
-    $downloadDir = Join-Path ([IO.Path]::GetTempPath()) "PogledAssistSetup"
-    $installerPath = Join-Path $downloadDir $PythonX86InstallerFileName
-    Download-FileWithPowerShell `
-        -Url $PythonX86InstallerUrl `
-        -DestinationPath $installerPath `
-        -Label "32-bit Python bridge installer"
-
-    try {
-        Unblock-File -Path $installerPath -ErrorAction SilentlyContinue
-    } catch {
-        Write-WarningLog "Could not unblock 32-bit Python installer file: $($_.Exception.Message)"
-    }
-
-    $targetDir = Get-PythonX86InstallTargetDir
-    New-Item -Path (Split-Path -Parent $targetDir) -ItemType Directory -Force | Out-Null
-
-    $installerArguments = @(
-        "/quiet",
-        "InstallAllUsers=0",
-        "TargetDir=`"$targetDir`"",
-        "PrependPath=0",
-        "Include_pip=0",
-        "Include_launcher=1",
-        "InstallLauncherAllUsers=0",
-        "Include_test=0",
-        "Include_doc=0",
-        "Shortcuts=0",
-        "SimpleInstall=1"
-    )
-
-    Write-Info "Installer path: $installerPath"
-    Write-Info "Install target: $targetDir"
-    Write-Info "Running official 32-bit Python installer silently."
-
-    $process = Start-Process `
-        -FilePath $installerPath `
-        -ArgumentList $installerArguments `
-        -Wait `
-        -PassThru
-
-    if ($null -eq $process) {
-        throw "32-bit Python installer process did not return a process object."
-    }
-
-    if ($process.ExitCode -eq 3010) {
-        Write-WarningLog "32-bit Python installer requested a reboot, but installation may still be usable now."
-        return
-    }
-
-    if ($process.ExitCode -ne 0) {
-        throw "32-bit Python installer failed with exit code $($process.ExitCode)."
-    }
-
-    Write-Success "Official 32-bit Python installer completed successfully."
+    Install-OfficialPython -X86
 }
 
 function Resolve-OrInstallPython310X86 {
@@ -1228,7 +1222,7 @@ function Test-EspeakNgBosnianVoice {
         -Arguments @("--voices=bs")
     $voiceText = ($voiceProbe.Output -join "`n")
 
-    if ($voiceProbe.ExitCode -eq 0 -and $voiceText -match "(?im)(^|\s)(bs|bosnian)(\s|$)") {
+    if (Test-BosnianVoiceProbe -Probe $voiceProbe -Text $voiceText) {
         Write-Success "Bosnian eSpeak NG voice was detected."
         return $true
     }
@@ -1239,13 +1233,19 @@ function Test-EspeakNgBosnianVoice {
         -Arguments @("--voices")
     $allVoiceText = ($allVoicesProbe.Output -join "`n")
 
-    if ($allVoicesProbe.ExitCode -eq 0 -and $allVoiceText -match "(?im)(^|\s)(bs|bosnian)(\s|$)") {
+    if (Test-BosnianVoiceProbe -Probe $allVoicesProbe -Text $allVoiceText) {
         Write-Success "Bosnian eSpeak NG voice was detected in full voice list."
         return $true
     }
 
     Write-WarningLog "Bosnian eSpeak NG voice was not detected from $EspeakExe."
     return $false
+}
+
+function Test-BosnianVoiceProbe {
+    param($Probe, [string]$Text)
+
+    return $Probe.ExitCode -eq 0 -and $Text -match "(?im)(^|\s)(bs|bosnian)(\s|$)"
 }
 
 function Get-EspeakNgCandidatePaths {
@@ -1535,38 +1535,24 @@ print("Dependency check passed.")
 
 function Get-EdgePlaybackExecutableFromVenv {
     param([string]$VenvPython)
-
-    $scriptsDir = Split-Path -Parent $VenvPython
-    $candidates = @(
-        (Join-Path $scriptsDir "edge-playback.exe"),
-        (Join-Path $scriptsDir "edge-playback")
-    )
-
-    foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) {
-            return $candidate
-        }
-    }
-
-    throw "edge-playback CLI was not found in the virtual environment Scripts folder: $scriptsDir"
+    return (Get-VenvCommand -VenvPython $VenvPython -Name "edge-playback")
 }
 
 function Get-EdgeTtsExecutableFromVenv {
     param([string]$VenvPython)
+    return (Get-VenvCommand -VenvPython $VenvPython -Name "edge-tts")
+}
+
+function Get-VenvCommand {
+    param([string]$VenvPython, [string]$Name)
 
     $scriptsDir = Split-Path -Parent $VenvPython
-    $candidates = @(
-        (Join-Path $scriptsDir "edge-tts.exe"),
-        (Join-Path $scriptsDir "edge-tts")
-    )
-
-    foreach ($candidate in $candidates) {
+    foreach ($candidate in @((Join-Path $scriptsDir "$Name.exe"), (Join-Path $scriptsDir $Name))) {
         if (Test-Path $candidate) {
             return $candidate
         }
     }
-
-    throw "edge-tts CLI was not found in the virtual environment Scripts folder: $scriptsDir"
+    throw "$Name CLI was not found in the virtual environment Scripts folder: $scriptsDir"
 }
 
 function Verify-EdgeTtsVoiceSupport {
@@ -1594,7 +1580,33 @@ function Verify-EdgeTtsVoiceSupport {
         -Arguments @("--help") `
         -TimeoutSeconds 20
 
-    $verifyCode = @'
+    $verifyCode = Get-EdgeTtsVoiceVerificationCode
+
+    $verifyScriptPath = Join-Path ([IO.Path]::GetTempPath()) ("tobii_verify_edge_tts_{0}.py" -f [Guid]::NewGuid().ToString("N"))
+    Write-Info "Writing Edge TTS verification script: $verifyScriptPath"
+    Set-Content -Path $verifyScriptPath -Value $verifyCode -Encoding ASCII
+
+    try {
+        Invoke-NativeCommandWithTimeout `
+            -Label "Verifying $EdgeTtsVoice voice can synthesize audio" `
+            -FilePath $VenvPython `
+            -Arguments @($verifyScriptPath, $EdgeTtsVoice, $EdgeTtsRate, $EdgeTtsPitch, $EdgeTtsTestText) `
+            -TimeoutSeconds 90
+    } finally {
+        Remove-Item -Path $verifyScriptPath -Force -ErrorAction SilentlyContinue
+    }
+
+    Invoke-NativeCommandWithTimeout `
+        -Label "Running edge-playback smoke test for $EdgeTtsVoice" `
+        -FilePath $EdgePlaybackExe `
+        -Arguments @("--voice", $EdgeTtsVoice, "--rate=$EdgeTtsRate", "--pitch=$EdgeTtsPitch", "--text", $EdgeTtsTestText) `
+        -TimeoutSeconds 90
+
+    Write-Success "Edge playback and $EdgeTtsVoice were verified successfully."
+}
+
+function Get-EdgeTtsVoiceVerificationCode {
+    return @'
 import asyncio
 import sys
 import tempfile
@@ -1636,28 +1648,6 @@ async def main() -> None:
 
 asyncio.run(main())
 '@
-
-    $verifyScriptPath = Join-Path ([IO.Path]::GetTempPath()) ("tobii_verify_edge_tts_{0}.py" -f [Guid]::NewGuid().ToString("N"))
-    Write-Info "Writing Edge TTS verification script: $verifyScriptPath"
-    Set-Content -Path $verifyScriptPath -Value $verifyCode -Encoding ASCII
-
-    try {
-        Invoke-NativeCommandWithTimeout `
-            -Label "Verifying $EdgeTtsVoice voice can synthesize audio" `
-            -FilePath $VenvPython `
-            -Arguments @($verifyScriptPath, $EdgeTtsVoice, $EdgeTtsRate, $EdgeTtsPitch, $EdgeTtsTestText) `
-            -TimeoutSeconds 90
-    } finally {
-        Remove-Item -Path $verifyScriptPath -Force -ErrorAction SilentlyContinue
-    }
-
-    Invoke-NativeCommandWithTimeout `
-        -Label "Running edge-playback smoke test for $EdgeTtsVoice" `
-        -FilePath $EdgePlaybackExe `
-        -Arguments @("--voice", $EdgeTtsVoice, "--rate=$EdgeTtsRate", "--pitch=$EdgeTtsPitch", "--text", $EdgeTtsTestText) `
-        -TimeoutSeconds 90
-
-    Write-Success "Edge playback and $EdgeTtsVoice were verified successfully."
 }
 
 function New-LauncherScripts {
@@ -1814,6 +1804,42 @@ function Resolve-ShortcutIconLocation {
     return ""
 }
 
+function Initialize-ShortcutIconInterop {
+    Add-Type -AssemblyName System.Drawing
+    if ($null -eq ("PogledAssistIconInterop" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class PogledAssistIconInterop
+{
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+}
+"@
+    }
+}
+
+function Close-ShortcutIconResources {
+    param([hashtable]$Resources)
+
+    Close-ShortcutIconObjects -Objects @($Resources.Stream, $Resources.Icon)
+    if ($Resources.Handle -ne [IntPtr]::Zero -and $null -ne ("PogledAssistIconInterop" -as [type])) {
+        [PogledAssistIconInterop]::DestroyIcon($Resources.Handle) | Out-Null
+    }
+    Close-ShortcutIconObjects -Objects @($Resources.Graphics, $Resources.Resized, $Resources.Bitmap)
+}
+
+function Close-ShortcutIconObjects {
+    param([object[]]$Objects)
+
+    foreach ($item in $Objects) {
+        if ($null -ne $item) {
+            $item.Dispose()
+        }
+    }
+}
+
 function Convert-PngToShortcutIcon {
     param(
         [string]$PngPath,
@@ -1828,69 +1854,42 @@ function Convert-PngToShortcutIcon {
         return $IconPath
     }
 
-    $bitmap = $null
-    $resized = $null
-    $graphics = $null
-    $icon = $null
-    $stream = $null
-    $hIcon = [IntPtr]::Zero
+    $resources = @{
+        Bitmap = $null
+        Resized = $null
+        Graphics = $null
+        Icon = $null
+        Stream = $null
+        Handle = [IntPtr]::Zero
+    }
 
     try {
-        Add-Type -AssemblyName System.Drawing
-        if ($null -eq ("PogledAssistIconInterop" -as [type])) {
-            Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class PogledAssistIconInterop
-{
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool DestroyIcon(IntPtr hIcon);
-}
-"@
-        }
+        Initialize-ShortcutIconInterop
 
         $iconDirectory = Split-Path -Parent $IconPath
         if (-not [string]::IsNullOrWhiteSpace($iconDirectory)) {
             New-Item -Path $iconDirectory -ItemType Directory -Force | Out-Null
         }
 
-        $bitmap = [System.Drawing.Bitmap]::FromFile($PngPath)
-        $resized = New-Object System.Drawing.Bitmap -ArgumentList 256, 256
-        $graphics = [System.Drawing.Graphics]::FromImage($resized)
-        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-        $graphics.Clear([System.Drawing.Color]::Transparent)
-        $graphics.DrawImage($bitmap, 0, 0, 256, 256)
+        $resources.Bitmap = [System.Drawing.Bitmap]::FromFile($PngPath)
+        $resources.Resized = New-Object System.Drawing.Bitmap -ArgumentList 256, 256
+        $resources.Graphics = [System.Drawing.Graphics]::FromImage($resources.Resized)
+        $resources.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $resources.Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $resources.Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $resources.Graphics.Clear([System.Drawing.Color]::Transparent)
+        $resources.Graphics.DrawImage($resources.Bitmap, 0, 0, 256, 256)
 
-        $hIcon = $resized.GetHicon()
-        $icon = [System.Drawing.Icon]::FromHandle($hIcon)
-        $stream = [System.IO.File]::Open($IconPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
-        $icon.Save($stream)
+        $resources.Handle = $resources.Resized.GetHicon()
+        $resources.Icon = [System.Drawing.Icon]::FromHandle($resources.Handle)
+        $resources.Stream = [System.IO.File]::Open($IconPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        $resources.Icon.Save($resources.Stream)
         return $IconPath
     } catch {
         Write-WarningLog "Could not create shortcut icon from $PngPath`: $($_.Exception.Message)"
         return ""
     } finally {
-        if ($null -ne $stream) {
-            $stream.Dispose()
-        }
-        if ($null -ne $icon) {
-            $icon.Dispose()
-        }
-        if ($hIcon -ne [IntPtr]::Zero -and $null -ne ("PogledAssistIconInterop" -as [type])) {
-            [PogledAssistIconInterop]::DestroyIcon($hIcon) | Out-Null
-        }
-        if ($null -ne $graphics) {
-            $graphics.Dispose()
-        }
-        if ($null -ne $resized) {
-            $resized.Dispose()
-        }
-        if ($null -ne $bitmap) {
-            $bitmap.Dispose()
-        }
+        Close-ShortcutIconResources -Resources $resources
     }
 }
 
@@ -1970,82 +1969,96 @@ function Show-FinalInstructions {
     Write-Host "  - Human-like voice verified during setup: $EdgeTtsVoice"
 }
 
-try {
-    Assert-Windows
-    Ensure-SetupAdministrator
-    Start-SetupTranscript
-    Initialize-WorkingRoot
-    Write-InstallInfo
+function Write-SetupContext {
     Write-Step "Starting Pogled Assist setup"
     Write-Info "Source root: $SourceRoot"
     Write-Info "Repository root: $RepoRoot"
     Write-Info "Virtual environment path: $VenvPath"
     Write-Info "Install root override: $InstallRoot"
     Write-Info "Bytecode generation disabled for this setup run."
+}
 
-    Assert-RepositoryFiles
-    $pythonExe = Resolve-OrInstallPython310
-    Write-Success "Using Python 3.10 executable: $pythonExe"
-    $x86PythonExe = Resolve-OrInstallPython310X86
-    if (-not [string]::IsNullOrWhiteSpace($x86PythonExe)) {
-        $env:POGLED_ASSIST_X86_PYTHON = $x86PythonExe
-        Update-InstallInfoBridgePython -X86Python $x86PythonExe
-        Write-Success "Using 32-bit Python 3.10 bridge executable: $x86PythonExe"
-    } else {
-        Write-WarningLog "32-bit Python bridge executable is not configured. Tobii Core 2.x DLLs may not load."
+function Invoke-Setup {
+    try {
+        Assert-Windows
+        Ensure-SetupAdministrator
+        Start-SetupTranscript
+        Initialize-WorkingRoot
+        Write-InstallInfo
+        Write-SetupContext
+
+        Assert-RepositoryFiles
+        $pythonExe = Resolve-OrInstallPython310
+        Write-Success "Using Python 3.10 executable: $pythonExe"
+        $x86PythonExe = Resolve-OrInstallPython310X86
+        if (-not [string]::IsNullOrWhiteSpace($x86PythonExe)) {
+            $env:POGLED_ASSIST_X86_PYTHON = $x86PythonExe
+            Update-InstallInfoBridgePython -X86Python $x86PythonExe
+            Write-Success "Using 32-bit Python 3.10 bridge executable: $x86PythonExe"
+        } else {
+            Write-WarningLog "32-bit Python bridge executable is not configured. Tobii Core 2.x DLLs may not load."
+        }
+        $espeakExe = Resolve-OrInstallEspeakNg
+        $env:ESPEAK_NG_EXE = $espeakExe
+        Write-Success "Using eSpeak NG executable: $espeakExe"
+
+        $venvPython = Ensure-VirtualEnvironment -PythonExe $pythonExe
+        Install-PythonPackages -VenvPython $venvPython
+        Verify-PythonPackages -VenvPython $venvPython
+        $edgePlaybackExe = Get-EdgePlaybackExecutableFromVenv -VenvPython $venvPython
+        $edgeTtsExe = Get-EdgeTtsExecutableFromVenv -VenvPython $venvPython
+        $env:EDGE_PLAYBACK_EXE = $edgePlaybackExe
+        Write-Success "Using Edge TTS executable: $edgeTtsExe"
+        Write-Success "Using Edge playback executable: $edgePlaybackExe"
+        Verify-EdgeTtsVoiceSupport -VenvPython $venvPython -EdgeTtsExe $edgeTtsExe -EdgePlaybackExe $edgePlaybackExe
+        New-LauncherScripts -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
+        Show-ExternalPrerequisiteNotes
+        Remove-BytecodeCaches
+        Show-FinalInstructions -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
+
+        Start-SetupApplication -VenvPython $venvPython
+    } catch {
+        $script:ExitCode = 1
+        Write-Host ""
+        Write-ErrorLog "Setup failed: $($_.Exception.Message)"
+        Write-Info "Review the console output above and setup log if available: $LogPath"
+    } finally {
+        if ($script:ElevationRequested) {
+            exit 0
+        }
+
+        if (-not $script:CacheCleaned) {
+            try {
+                Remove-BytecodeCaches
+            } catch {
+                Write-WarningLog "Cache cleanup failed: $($_.Exception.Message)"
+            }
+        }
+
+        if ($script:ExitCode -eq 0) {
+            Write-Success "Setup script finished successfully."
+        } else {
+            Write-ErrorLog "Setup script finished with errors."
+        }
+
+        Stop-SetupTranscript
+        Sync-SetupLogToInstallRoot
+        Sync-SetupLogToSource
+        Wait-BeforeExit
+        exit $script:ExitCode
     }
-    $espeakExe = Resolve-OrInstallEspeakNg
-    $env:ESPEAK_NG_EXE = $espeakExe
-    Write-Success "Using eSpeak NG executable: $espeakExe"
+}
 
-    $venvPython = Ensure-VirtualEnvironment -PythonExe $pythonExe
-    Install-PythonPackages -VenvPython $venvPython
-    Verify-PythonPackages -VenvPython $venvPython
-    $edgePlaybackExe = Get-EdgePlaybackExecutableFromVenv -VenvPython $venvPython
-    $edgeTtsExe = Get-EdgeTtsExecutableFromVenv -VenvPython $venvPython
-    $env:EDGE_PLAYBACK_EXE = $edgePlaybackExe
-    Write-Success "Using Edge TTS executable: $edgeTtsExe"
-    Write-Success "Using Edge playback executable: $edgePlaybackExe"
-    Verify-EdgeTtsVoiceSupport -VenvPython $venvPython -EdgeTtsExe $edgeTtsExe -EdgePlaybackExe $edgePlaybackExe
-    New-LauncherScripts -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
-    Show-ExternalPrerequisiteNotes
-    Remove-BytecodeCaches
-    Show-FinalInstructions -VenvPython $venvPython -EspeakExe $espeakExe -X86Python $x86PythonExe -EdgePlaybackExe $edgePlaybackExe
+function Start-SetupApplication {
+    param([string]$VenvPython)
 
     if ($Launch) {
         Write-Step "Launching Pogled Assist"
         Invoke-NativeCommand `
             -Label "Starting application" `
-            -FilePath $venvPython `
+            -FilePath $VenvPython `
             -Arguments @((Join-Path $RepoRoot "run_gaze_mouse.py"))
     }
-} catch {
-    $script:ExitCode = 1
-    Write-Host ""
-    Write-ErrorLog "Setup failed: $($_.Exception.Message)"
-    Write-Info "Review the console output above and setup log if available: $LogPath"
-} finally {
-    if ($script:ElevationRequested) {
-        exit 0
-    }
-
-    if (-not $script:CacheCleaned) {
-        try {
-            Remove-BytecodeCaches
-        } catch {
-            Write-WarningLog "Cache cleanup failed: $($_.Exception.Message)"
-        }
-    }
-
-    if ($script:ExitCode -eq 0) {
-        Write-Success "Setup script finished successfully."
-    } else {
-        Write-ErrorLog "Setup script finished with errors."
-    }
-
-    Stop-SetupTranscript
-    Sync-SetupLogToInstallRoot
-    Sync-SetupLogToSource
-    Wait-BeforeExit
-    exit $script:ExitCode
 }
+
+Invoke-Setup
