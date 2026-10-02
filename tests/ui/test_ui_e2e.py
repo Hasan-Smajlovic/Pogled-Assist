@@ -1432,7 +1432,7 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
         for index, control in enumerate(controls):
             assert all(not rects[index].intersects(other) for other in rects[index + 1 :])
             center = control.mapToGlobal(control.rect().center())
-            assert window._gaze_action_at(center)[0] is control
+            assert window._controls.action_at(center)[0] is control
             window._set_gaze_target(control)
             qtbot.wait(1)
             assert control.height() == 58
