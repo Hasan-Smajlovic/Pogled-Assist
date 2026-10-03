@@ -222,6 +222,13 @@ vulnerabilities. Its threshold and GitHub setup are documented in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); it is not currently
 listed as a required branch check.
 
+The separate **UI gallery** workflow publishes screenshots and PR comments after
+CI completes. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery`
+jobs are not required PR checks. Pages setup and permissions are documented in
+[CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication), and visual review is
+documented in [the development guide](DEVELOPMENT.md#ui-review). Screenshots do not
+replace the software checks or manual Windows and Tobii validation.
+
 After an approved merge to `master`, **Publish release** checks out exactly
 `github.sha`, repeats all software checks, builds the package, and creates the
 `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft,

@@ -191,6 +191,9 @@ and Tobii hardware still requires manual validation. The complete list is in the
 Pull requests run dependency-review, code-quality, hardware-independent test,
 and Windows packaging checks. Merges to `master` publish an immutable versioned
 release from the exact merged commit.
+After CI, the UI gallery workflow publishes screenshot galleries and updates a
+PR bot comment with previews and links. The repository owner must complete the
+[Pages setup](CONTRIBUTING.md#ui-gallery-publication) before the first publication.
 
 Release construction, manual hardware validation, and rollback are documented in
 the [Windows release guide](docs/WINDOWS_RELEASE.md).

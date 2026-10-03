@@ -300,6 +300,46 @@ a protected-branch bypass. The full packaging and recovery procedure is in
 Local commands and the UI review checklist are in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
+### UI gallery publication
+
+The **UI gallery** workflow runs after a pull request's **CI** run completes,
+including failed runs that produced screenshots. It publishes a GitHub Pages
+site with both available resolutions and updates one `github-actions[bot]`
+comment per PR. The comment includes up to six main screenshots in a collapsible
+section, links to the full gallery and ZIP artifact, the rendered commit, and
+the CI result. It identifies the screenshots as synthetic previews without
+hardware validation.
+
+The workflow rebuilds the site from available `ui-gallery` artifacts for all
+open PRs targeting `development` or `master`. Each artifact has a distinct URL,
+so reruns cannot show a cached image from an older artifact. If a new commit has
+not produced screenshots, an earlier commit still in that PR can remain visible
+with an explicit label. Closed PRs and expired artifacts are removed on the next
+publication. Run **UI gallery** manually from the default branch to refresh the
+site without a new CI run. A removed or expired gallery comment is updated when
+that PR is still open; the workflow does not create empty gallery comments.
+
+The workflow and its script must first reach the default branch, currently
+`master`. Before the first publication, Hasan or another repository administrator
+must select **Settings > Pages > Build and deployment > Source > GitHub Actions**.
+The `github-pages` environment must allow deployments from the default branch.
+If Pages is already configured for another site, review that use before selecting
+this gallery as the repository's Pages site. No PAT or extra secret is required.
+
+The jobs `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` run
+after CI in a separate workflow. They are not required PR checks and must not be
+added to the branch rulesets. A Pages or comment failure does not replace or
+bypass any software, packaging, or human review requirement. After setup or a
+failed deployment, rerun **UI gallery** to retry publication.
+
+PR CI keeps its read-only token. The gallery build checks out the trusted workflow
+revision, reads artifact data, and rebuilds its own HTML; it never checks out or
+executes PR code. ZIP path, file type, size, PNG header, and chunk checksum checks
+reject unsafe images, and PNG text metadata is removed. Only the deployment job
+can write Pages and request an OIDC token; only the comment job can write PR
+comments. Neither job can push repository contents. The local Actions check
+validates every YAML workflow under `.github/workflows/`.
+
 ## GitHub plan limitations
 
 The personal account currently shows the GitHub Pro plan. The repository is public

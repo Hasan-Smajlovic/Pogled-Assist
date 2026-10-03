@@ -78,9 +78,11 @@ if (-not (Test-Path -LiteralPath $ToolPath -PathType Leaf)) {
     Install-Actionlint
 }
 
-& $ToolPath -color `
-    (Join-Path $RepoRoot ".github\workflows\ci.yml") `
-    (Join-Path $RepoRoot ".github\workflows\release.yml")
+$workflowPaths = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot ".github\workflows") -File |
+    Where-Object { $_.Extension -in ".yml", ".yaml" } |
+    Sort-Object Name |
+    Select-Object -ExpandProperty FullName)
+& $ToolPath -color @workflowPaths
 if ($LASTEXITCODE -ne 0) {
     throw "actionlint failed with exit code $LASTEXITCODE."
 }
