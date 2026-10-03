@@ -198,8 +198,9 @@ the bundled Bosnian model checksum, and a word completion from that model.
 
 ## Automated release
 
-After normal changes have reached `development`, use the manual **Release**
-workflow on `master` with a new version number. It prepares
+After normal changes have reached `development`, use the manual **Prepare release**
+workflow on `master` and select `patch`, `minor`, or `major`. It calculates the
+next version from `master`'s `VERSION` and prepares
 `release/v<version>` from the latest `master`, merges `development`, updates
 `VERSION`, and opens a draft release PR. Complete its verification and review
 before merging with a merge commit. The full branch and first-run procedure is
@@ -207,6 +208,7 @@ in [CONTRIBUTING.md](../CONTRIBUTING.md#release-process).
 
 Pull requests targeting `development` or `master` run:
 
+- `dependency-review` (pull request events only)
 - `code-quality`
 - `tests`
 - `windows-package`
@@ -215,8 +217,19 @@ The active branch rulesets, checked on 23 September 2026, require
 `code-quality`, `tests`, and `windows-package`. Verify live rulesets before a
 release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules,
 hardware-independent UI rendering, and the enforced Python coverage floor.
+`dependency-review` additionally checks changed dependencies for known
+vulnerabilities. Its threshold and GitHub setup are documented in
+[CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); it is not currently
+listed as a required branch check.
 
-After an approved merge to `master`, the release workflow checks out exactly
+The separate **UI gallery** workflow publishes screenshots and PR comments after
+CI completes. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery`
+jobs are not required PR checks. Pages setup and permissions are documented in
+[CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication), and visual review is
+documented in [the development guide](DEVELOPMENT.md#ui-review). Screenshots do not
+replace the software checks or manual Windows and Tobii validation.
+
+After an approved merge to `master`, **Publish release** checks out exactly
 `github.sha`, repeats all software checks, builds the package, and creates the
 `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft,
 then publishes the draft only after both assets exist.

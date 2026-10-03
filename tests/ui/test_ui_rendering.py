@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 from PySide6.QtGui import QImage
 
@@ -39,10 +42,12 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch, size):
         return snapshot
 
     monkeypatch.setattr(preview, "_capture_widget", capture_with_script_control_check)
-    snapshots = capture_ui(tmp_path, width=size[0], height=size[1])
+    gallery_root = os.environ.get("POGLED_ASSIST_UI_GALLERY")
+    output_dir = Path(gallery_root) / f"{size[0]}x{size[1]}" if gallery_root else tmp_path
+    snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
     assert len(snapshots) == 38
-    assert (tmp_path / "index.html").is_file()
+    assert (output_dir / "index.html").is_file()
     for snapshot in snapshots:
         image = QImage(str(snapshot))
         assert not image.isNull(), snapshot.name
