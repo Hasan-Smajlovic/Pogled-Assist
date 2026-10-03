@@ -11,6 +11,7 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..keyboard_layouts import ARABIC_SCRIPT, LATIN_SCRIPT
 from ..tracking.tobii_stream_engine import APP_ROOT_ENV
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ VOICE_PRESETS: tuple[tuple[str, str], ...] = (
 )
 VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
 EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
+ARABIC_EDGE_PLAYBACK_VOICE = "ar-SA-HamedNeural"
 EDGE_PLAYBACK_RATE = "-10%"
 EDGE_PLAYBACK_PITCH = "-2Hz"
 STARTUP_ERROR_GRACE_SECONDS = 0.25
@@ -37,6 +39,7 @@ class SpeechSettings:
     amplitude: int = 120
     letters_per_group: int = 5
     voice_preset: str = VOICE_PRESET_DEFAULT
+    keyboard_script: str = LATIN_SCRIPT
 
 
 class SpeechService:
@@ -79,6 +82,8 @@ class SpeechService:
             logger.warning("Speech request skipped because text is empty.")
             return False
 
+        if settings.keyboard_script == ARABIC_SCRIPT:
+            return self._speak_edge_playback(text, voice=ARABIC_EDGE_PLAYBACK_VOICE)
         if settings.voice_preset == VOICE_PRESET_HUMAN_LIKE:
             return self._speak_edge_playback(text)
 
@@ -111,7 +116,7 @@ class SpeechService:
             return self._start_process(command, "espeak-ng", environment=environment)
         return self._start_process(command, "espeak-ng")
 
-    def _speak_edge_playback(self, text: str) -> bool:
+    def _speak_edge_playback(self, text: str, *, voice: str = EDGE_PLAYBACK_VOICE) -> bool:
         if self._edge_playback_executable is None:
             self._edge_playback_executable = find_edge_playback()
 
@@ -124,7 +129,7 @@ class SpeechService:
         command = [
             str(self._edge_playback_executable),
             "--voice",
-            EDGE_PLAYBACK_VOICE,
+            voice,
             f"--rate={EDGE_PLAYBACK_RATE}",
             f"--pitch={EDGE_PLAYBACK_PITCH}",
             "--text",

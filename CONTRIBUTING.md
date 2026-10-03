@@ -177,15 +177,19 @@ remains an ancestor of `master`. The release branch can contain merge commits;
 ## Release process
 
 1. Confirm that all intended changes have already been merged into `development`.
-2. Decide the next Semantic Versioning number. Until the project declares a
-   stable public version, use `v0.MINOR.PATCH`. The number must be newer than
-   `master`'s `VERSION` and its tag must not already exist.
-3. On GitHub, run **Actions > Release > Run workflow** from `master` and enter
-   the version without `v`. The workflow creates `release/v<version>` from the
-   latest `master`, merges `development` into it, commits the new `VERSION`,
-   and opens a draft pull request to `master`. It never updates either
-   protected branch. If it stops after pushing the branch, rerun the same
-   version to open the missing PR. A stale branch requires manual review.
+2. Choose a Semantic Versioning increase: `patch`, `minor`, or `major`.
+   The workflow calculates the new number from `master`'s `VERSION`. A minor
+   increase resets patch to zero; a major increase resets both minor and patch
+   to zero. Major increases are allowed, including from `0.x` to `1.0.0`.
+   The version tag must not already exist.
+3. On GitHub, run **Actions > Prepare release > Run workflow** from `master`
+   and select the increase; the default is `patch`. The workflow creates
+   `release/v<version>`, merges `development` into it, commits the new `VERSION`,
+   and opens a draft pull request to `master`. It runs preparation code from the
+   exact dispatched `master` commit and refuses to prepare if `master` has moved.
+   It never updates either protected branch. If it stops after pushing the
+   branch, rerun that workflow run to open the missing PR. A stale branch or a
+   changed `master` requires review before starting a new preparation run.
 4. Review and complete the draft PR: summarize the changes, link relevant
    issues and pull requests, list verification, and document known limitations.
    The automated text marks manual checks Not run until their results are added.
@@ -193,19 +197,23 @@ remains an ancestor of `master`. The release branch can contain merge commits;
    review after the required checks and applicable manual validation.
 6. Obtain one independent approval and resolve every review conversation.
 7. Hasan merges the release pull request with a merge commit.
-8. The release workflow builds the exact merged `master` commit and creates the
+8. **Publish release** builds the exact merged `master` commit and creates the
    immutable version tag, release artifact, release notes, and checksum.
-9. A failed release workflow must not create a partial or duplicate release.
+9. A failed publication workflow must not create a partial or duplicate release.
    Rerun the failed workflow for the same commit. If the version tag belongs to a
    different commit, bump `VERSION` in a new reviewed pull request.
 
-The manual workflow must first reach the default `master` branch before
-GitHub can show its **Run workflow** button. For the first release using this
+The **Prepare release** workflow must first reach the default `master` branch
+before GitHub can show its **Run workflow** button. For the first release using this
 process, prepare a release branch from the latest `master` manually, merge
 `development` into that branch, commit the new `VERSION`, and open a reviewed
 PR to `master`. Do not use **Update branch** on a direct
 `development`-to-`master` PR: it tries to add a merge commit to the protected
 linear `development` branch.
+
+If `master` still has the older **Release** workflow with a version input, use
+it once to prepare the release that introduces these workflow changes. After
+that release merges, use **Prepare release** with the increase selector.
 
 The repository owner must enable **Settings > Actions > General > Allow GitHub
 Actions to create and approve pull requests** for the preparation workflow's
@@ -220,7 +228,7 @@ to run** before CI starts. Keep the independent review and required checks.
 3. Open a reviewed pull request from the hotfix branch to `master`.
 4. Obtain one approval, resolve every review conversation, and let Hasan merge it
    with a merge commit.
-5. The release workflow publishes the patch release from that exact merge commit.
+5. **Publish release** publishes the patch release from that exact merge commit.
 6. Identify the actual hotfix commit inside the merged hotfix branch, not the merge
    commit.
 7. Create `backport/<issue>-<short-description>` from the latest `development`.
@@ -255,6 +263,9 @@ permission may merge after the active rules are satisfied.
 
 Pull requests targeting `development` or `master` run these checks:
 
+- `dependency-review`: known vulnerabilities introduced by dependency changes;
+  moderate, high, and critical findings fail the job for runtime, development,
+  and unknown dependency scopes. This job runs only on pull request events.
 - `code-quality`: Ruff lint and format checks, Python bytecode compilation,
   PowerShell parsing, and focused PSScriptAnalyzer rules.
 - `tests`: the hardware-independent pytest suite with the Qt offscreen backend
@@ -264,9 +275,23 @@ Pull requests targeting `development` or `master` run these checks:
 
 The active branch rulesets, checked on 23 September 2026, require
 `code-quality`, `tests`, and `windows-package`. Verify the live rulesets before
-relying on this list. The release workflow repeats the checks after a merge to
+relying on this list. `dependency-review` is an additional CI check; Hasan decides
+whether to add it to the required checks after its first successful run.
+**Publish release** repeats the software and packaging checks after a merge to
 `master`; it is not a pull request check and must not be selected as a required
 status check.
+
+Dependency review requires the GitHub dependency graph. A repository administrator
+must enable the dependency graph and Dependabot alerts in the repository's
+security settings, or run this command with an administrator account:
+
+```text
+gh api --method PUT repos/Hasan-Smajlovic/Pogled-Assist/vulnerability-alerts
+```
+
+Alerts cover known vulnerabilities discovered in existing dependencies after a
+pull request has merged. They do not require a separate repository workflow.
+Enabling alerts does not enable automatic update PRs.
 
 Release automation creates tags and GitHub Releases from the exact merged
 `master` commit without pushing directly to `master`. It therefore does not need
@@ -274,6 +299,50 @@ a protected-branch bypass. The full packaging and recovery procedure is in
 [`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md).
 Local commands and the UI review checklist are in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+### UI gallery publication
+
+The **UI gallery** workflow runs after a pull request's **CI** run completes,
+including failed runs that produced screenshots. It publishes a GitHub Pages
+site with both available resolutions and updates one `github-actions[bot]`
+comment per PR. The comment includes up to six main screenshots in a collapsible
+section, links to the full gallery and ZIP artifact, the rendered commit, and
+the CI result. It identifies the screenshots as synthetic previews without
+hardware validation.
+
+The workflow rebuilds the site from available `ui-gallery` artifacts for all
+open PRs targeting `development` or `master`. Each artifact has a distinct URL,
+so reruns cannot show a cached image from an older artifact. If a new commit has
+not produced screenshots, an earlier commit still in that PR can remain visible
+with an explicit label. Closed PRs and expired artifacts are removed on the next
+publication. Run **UI gallery** manually from the default branch to refresh the
+site without a new CI run. A removed or expired gallery comment is updated when
+that PR is still open; the workflow does not create empty gallery comments.
+
+The workflow and its script must first reach the default branch, currently
+`master`. A merge into `development` alone does not activate publication, and
+the PR introducing the workflow will not receive its gallery comment until
+activation. Until then, review the `ui-gallery` ZIP artifact in the PR's CI run.
+Before the first publication, Hasan or another repository administrator
+must select **Settings > Pages > Build and deployment > Source > GitHub Actions**.
+The `github-pages` environment must allow deployments from the default branch.
+If Pages is already configured for another site, review that use before selecting
+this gallery as the repository's Pages site. No PAT or extra secret is required.
+
+The jobs `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` run
+after CI in a separate workflow. They are not required PR checks and must not be
+added to the branch rulesets. A Pages or comment failure does not replace or
+bypass any software, packaging, or human review requirement. After setup or a
+failed deployment, run **UI gallery** manually from the default branch to publish
+the still-available artifacts and update PR comments without a new CI run.
+
+PR CI keeps its read-only token. The gallery build checks out the trusted workflow
+revision, reads artifact data, and rebuilds its own HTML; it never checks out or
+executes PR code. ZIP path, file type, size, PNG header, and chunk checksum checks
+reject unsafe images, and PNG text metadata is removed. Only the deployment job
+can write Pages and request an OIDC token; only the comment job can write PR
+comments. Neither job can push repository contents. The local Actions check
+validates every YAML workflow under `.github/workflows/`.
 
 ## GitHub plan limitations
 
