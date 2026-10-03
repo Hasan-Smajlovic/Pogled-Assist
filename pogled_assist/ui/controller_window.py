@@ -336,10 +336,10 @@ class ControllerWindow(SidebarPanel):
         self._keyboard_active_group_index = group_index
         self._clear_dynamic_buttons()
         self._sync_tabs()
-        self._add_keyboard_subtabs()
+        columns = 3
+        self._add_keyboard_subtabs(columns)
 
         group = self._letter_groups[group_index]
-        columns = 3
         start_row = 1
         rows = self._set_grid_stretch(len(group), columns, start_row=start_row)
         for index, letter in enumerate(group):
@@ -356,7 +356,7 @@ class ControllerWindow(SidebarPanel):
             )
             self._content_layout.addWidget(button, start_row + index // columns, column)
 
-        self._add_keyboard_utility_row(start_row + rows, groups_visible=True)
+        self._add_keyboard_utility_row(start_row + rows, columns, groups_visible=True)
 
     def _show_keyboard_numpad(self) -> None:
         self._show_keyboard_group_buttons(
@@ -405,7 +405,7 @@ class ControllerWindow(SidebarPanel):
         self._keyboard_active_group_index = None
         self._clear_dynamic_buttons()
         self._sync_tabs()
-        self._add_keyboard_subtabs()
+        self._add_keyboard_subtabs(columns)
 
         start_row = 1
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
@@ -428,7 +428,7 @@ class ControllerWindow(SidebarPanel):
             self._add_keyboard_page_buttons(page, start_row + rows)
             rows += 1
 
-        self._add_keyboard_utility_row(start_row + rows, groups_visible=False)
+        self._add_keyboard_utility_row(start_row + rows, columns, groups_visible=False)
 
     def _add_keyboard_page_buttons(self, page: KeyboardGroupPage, row: int) -> None:
         for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
@@ -453,10 +453,10 @@ class ControllerWindow(SidebarPanel):
         self._keyboard_active_group_index = group_index
         self._clear_dynamic_buttons()
         self._sync_tabs()
-        self._add_keyboard_subtabs()
+        columns = 3
+        self._add_keyboard_subtabs(columns)
 
         group = groups[group_index]
-        columns = 3
         start_row = 1
         rows = self._set_grid_stretch(len(group), columns, start_row=start_row)
         for index, label in enumerate(group):
@@ -468,16 +468,24 @@ class ControllerWindow(SidebarPanel):
             )
             self._content_layout.addWidget(button, start_row + index // columns, index % columns)
 
-        self._add_keyboard_utility_row(start_row + rows, groups_visible=True)
+        self._add_keyboard_utility_row(start_row + rows, columns, groups_visible=True)
 
-    def _add_keyboard_subtabs(self) -> None:
+    def _add_keyboard_row(self, row: int, columns: int) -> QHBoxLayout:
+        host = QWidget(self._content_host)
+        host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(host)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self._content_layout.addWidget(host, row, 0, 1, columns)
+        return layout
+
+    def _add_keyboard_subtabs(self, columns: int) -> None:
+        layout = self._add_keyboard_row(0, columns)
         self._keyboard_tab_buttons = {}
-        for index, (tab, label) in enumerate(
-            (
-                (KEYBOARD_TAB_LETTERS, "Slova"),
-                (KEYBOARD_TAB_NUMPAD, "Brojevi"),
-                (KEYBOARD_TAB_SYMBOLS, "Znakovi"),
-            )
+        for tab, label in (
+            (KEYBOARD_TAB_LETTERS, "Slova"),
+            (KEYBOARD_TAB_NUMPAD, "Brojevi"),
+            (KEYBOARD_TAB_SYMBOLS, "Znakovi"),
         ):
             button = self._make_button(
                 label,
@@ -488,9 +496,10 @@ class ControllerWindow(SidebarPanel):
             button.setCheckable(True)
             button.setChecked(tab == self._keyboard_active_tab)
             self._keyboard_tab_buttons[tab] = button
-            self._content_layout.addWidget(button, 0, index)
+            layout.addWidget(button, 1)
 
-    def _add_keyboard_utility_row(self, row: int, *, groups_visible: bool) -> None:
+    def _add_keyboard_utility_row(self, row: int, columns: int, *, groups_visible: bool) -> None:
+        layout = self._add_keyboard_row(row, columns)
         groups_button = self._make_button(
             "Grupe",
             self._action("keyboard_groups"),
@@ -510,9 +519,8 @@ class ControllerWindow(SidebarPanel):
             "utilityButton",
             dynamic=True,
         )
-        self._content_layout.addWidget(groups_button, row, 0)
-        self._content_layout.addWidget(space_button, row, 1)
-        self._content_layout.addWidget(backspace_button, row, 2)
+        for button in (groups_button, space_button, backspace_button):
+            layout.addWidget(button, 1)
 
     def _show_keyboard_current_group_level(self) -> None:
         if self._keyboard_active_tab == KEYBOARD_TAB_NUMPAD:

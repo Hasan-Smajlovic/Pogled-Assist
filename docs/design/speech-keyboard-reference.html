@@ -43,6 +43,8 @@
     .sidebar-reference > [data-script-toggle] { min-height: 52px; font-size: 18px; padding: 6px; }
     .sidebar-reference-grid button { white-space: pre-line; font-size: 19px; padding: 6px; }
     .sidebar-reference .sidebar-pages button { min-height: 52px; font-size: 16px; }
+    #controller-screen .sidebar-reference nav, #controller-screen .sidebar-reference footer, #controller-screen .sidebar-reference-grid { width: 100%; min-width: 0; }
+    #controller-screen .sidebar-reference nav button, #controller-screen .sidebar-reference footer button { flex: 1 1 0; }
     .system-actions button { white-space: normal; }
     button, input { font: inherit; }
     button {
@@ -429,6 +431,7 @@
       <footer><button type="button" data-side-back hidden>Grupe</button><button type="button">Razmak</button><button type="button">Obriši</button></footer>
     </section>
     <p>Globalni izbor pisma važi i za tastaturu Upravljača. Komande ostaju na istim mjestima; arapske grupe čitaju se zdesna nalijevo. Znakovi uključuju sve harekate i dodatne kur'anske oznake.</p>
+    <p>Slova, brojevi i znakovi koriste cijelu unutrašnju širinu Upravljača: dvije jednake kolone grupa i tri jednake kolone pojedinačnih tipki. Kartice su jednake širine. Razmak i Obriši dijele cijeli donji red kada Grupe nije prikazano; unutar grupe sve tri komande dijele red jednako. Prethodna i Sljedeća također koriste cijelu širinu.</p>
   </main>
   <main id="installation-screen" aria-label="Provjera instalacije" hidden style="max-width:900px;margin:24px auto;padding:24px;background:#1c2029;border-radius:12px">
     <h1>Provjera instalacije</h1>

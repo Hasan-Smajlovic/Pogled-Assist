@@ -2,10 +2,100 @@ from __future__ import annotations
 
 import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
-from _ui_fakes import FakeLibraryStore, FakeSpeech
+from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
 
+from pogled_assist.interaction.mouse_controller import GazeSettings
+from pogled_assist.speech.speech_service import SpeechSettings
+from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize("letters_per_group", [2, 5])
+@pytest.mark.parametrize("size", [(320, 640), (380, 640), (380, 950)])
+def test_controller_keyboard_rows_fill_sidebar_width(
+    qtbot, monkeypatch, script, letters_per_group, size
+):
+    from pogled_assist.ui import sidebar_panel
+
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    window = ControllerWindow(
+        GazeSettings(),
+        SpeechSettings(keyboard_script=script, letters_per_group=letters_per_group),
+    )
+    qtbot.addWidget(window)
+    window._input = FakeControllerInput()
+    window.resize(*size)
+    window.show()
+    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
+
+    def check_row(buttons):
+        qtbot.wait(1)
+        rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
+        assert min(rect.left() for rect in rects) == 10
+        assert max(rect.right() for rect in rects) == window.width() - 11
+        assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
+        assert all(window.rect().contains(rect) for rect in rects)
+        for button in buttons:
+            center = button.mapToGlobal(button.rect().center())
+            expected = (
+                next(
+                    action for action, target in window._action_buttons.items() if target is button
+                )
+                if button.isEnabled()
+                else None
+            )
+            assert window.action_at_global_point(center) == expected
+
+    window._tab_buttons["keyboard"].click()
+    for tab, group_command, key_command in (
+        ("letters", "keyboard_group", "keyboard_letter:0"),
+        ("numpad", "keyboard_numpad_group", "keyboard_numpad"),
+        ("symbols", "keyboard_symbol_group", "keyboard_symbol"),
+    ):
+        window._keyboard_tab_buttons[tab].click()
+        check_row(list(window._keyboard_tab_buttons.values()))
+        check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
+        check_row(
+            [
+                window._action_buttons[f"{prefix}{command}"]
+                for command in ("keyboard_space", "keyboard_backspace")
+            ]
+        )
+        if f"{prefix}keyboard-page:1" in window._action_buttons:
+            check_row([window._action_buttons[f"{prefix}keyboard-page:{i}"] for i in (-1, 1)])
+            window._action_buttons[f"{prefix}keyboard-page:1"].click()
+            check_row(list(window._keyboard_tab_buttons.values()))
+            window._action_buttons[f"{prefix}keyboard-page:-1"].click()
+
+        window._action_buttons[f"{prefix}{group_command}:0"].click()
+        check_row(list(window._keyboard_tab_buttons.values()))
+        if f"{prefix}{key_command}:2" in window._action_buttons:
+            check_row([window._action_buttons[f"{prefix}{key_command}:{i}"] for i in range(3)])
+        check_row(
+            [
+                window._action_buttons[f"{prefix}{command}"]
+                for command in ("keyboard_groups", "keyboard_space", "keyboard_backspace")
+            ]
+        )
+        window.handle_gaze_action(f"{prefix}{key_command}:0")
+        check_row(list(window._keyboard_tab_buttons.values()))
+        check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
+
+    for tab in ("general", "settings"):
+        window._tab_buttons[tab].click()
+        qtbot.wait(1)
+        buttons = [
+            button
+            for button in window._action_buttons.values()
+            if button.isVisible() and button.objectName() in ("shortcutButton", "checkButton")
+        ]
+        first_row = [
+            button for button in buttons if button.y() == min(target.y() for target in buttons)
+        ]
+        check_row(first_row)
 
 
 @pytest.mark.e2e
