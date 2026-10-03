@@ -40,23 +40,9 @@ def load_rows(path: Path) -> tuple[list[tuple[str, int, str]], dict]:
         categories: Counter[str] = Counter()
         weighted_rows: Counter[str] = Counter()
         for line_number, row in enumerate(reader, 2):
-            category = (row.get("category") or "").strip()
-            text = (row.get("text") or "").strip()
-            try:
-                weight = int(row.get("weight") or "")
-            except ValueError as error:
-                raise ValueError(
-                    f"Invalid weight on Islamic supplement line {line_number}"
-                ) from error
+            text, weight, category = _parse_row(row, line_number)
             normalized = " ".join(token.text for token in words(text))
-            if (
-                None in row
-                or not category
-                or not text
-                or not 1 <= weight <= 10
-                or not normalized
-                or normalized in seen
-            ):
+            if not normalized or normalized in seen:
                 raise ValueError(f"Invalid or duplicate Islamic supplement line {line_number}")
             seen.add(normalized)
             rows.append((text, weight, category))
@@ -69,6 +55,27 @@ def load_rows(path: Path) -> tuple[list[tuple[str, int, str]], dict]:
         "categories": dict(sorted(categories.items())),
         "weighted_rows": dict(sorted(weighted_rows.items())),
     }
+
+
+def _parse_row(row: dict, line_number: int) -> tuple[str, int, str]:
+    category = (row.get("category") or "").strip()
+    text = (row.get("text") or "").strip()
+    weight = _row_weight(row, line_number)
+    if None in row:
+        raise ValueError(f"Invalid or duplicate Islamic supplement line {line_number}")
+    if not category or not text:
+        raise ValueError(f"Invalid or duplicate Islamic supplement line {line_number}")
+    return text, weight, category
+
+
+def _row_weight(row: dict, line_number: int) -> int:
+    try:
+        weight = int(row.get("weight") or "")
+    except ValueError as error:
+        raise ValueError(f"Invalid weight on Islamic supplement line {line_number}") from error
+    if not 1 <= weight <= 10:
+        raise ValueError(f"Invalid or duplicate Islamic supplement line {line_number}")
+    return weight
 
 
 def metadata_path(model_path: Path) -> Path:

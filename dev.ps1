@@ -42,29 +42,24 @@ function Get-DevPython {
 function Get-PythonVersion {
     param([string]$Executable)
 
-    if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
-        return $null
-    }
-    try {
-        # Legacy PowerShell drops quotes inside arguments passed to native commands.
-        $probe = & $Executable -c 'import sys; print(str(sys.version_info.major)+chr(46)+str(sys.version_info.minor) if sys.maxsize > 2**32 else 32)' 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return $null
-        }
-        return ([string]($probe | Select-Object -First 1)).Trim()
-    } catch {
-        return $null
-    }
+    # Legacy PowerShell drops quotes inside arguments passed to native commands.
+    return Invoke-PythonProbe -Executable $Executable -Code 'import sys; print(str(sys.version_info.major)+chr(46)+str(sys.version_info.minor) if sys.maxsize > 2**32 else 32)'
 }
 
 function Get-PythonBaseExecutable {
     param([string]$Executable)
 
+    return Invoke-PythonProbe -Executable $Executable -Code 'import sys; print(sys._base_executable)'
+}
+
+function Invoke-PythonProbe {
+    param([string]$Executable, [string]$Code)
+
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
         return $null
     }
     try {
-        $probe = & $Executable -c 'import sys; print(sys._base_executable)' 2>$null
+        $probe = & $Executable -c $Code 2>$null
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
@@ -90,30 +85,12 @@ function Test-SamePythonBase {
 
 function Resolve-BasePython {
     if (-not [string]::IsNullOrWhiteSpace($BasePython)) {
-        $command = Get-Command $BasePython -ErrorAction SilentlyContinue
-        if ($null -eq $command) {
-            throw "Base Python was not found: $BasePython"
-        }
-        $version = Get-PythonVersion -Executable $command.Source
-        if ($version -ne $RequiredPythonVersion) {
-            throw "Base Python must be 64-bit Python 3.10. Found: $version"
-        }
-        return $command.Source
+        return Get-RequestedPython
     }
 
-    $launcher = Get-Command "py.exe" -ErrorAction SilentlyContinue
-    if ($null -ne $launcher) {
-        try {
-            $candidate = & $launcher.Source "-$RequiredPythonVersion" -c 'import sys; print(sys.executable)' 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                $candidatePath = ([string]($candidate | Select-Object -First 1)).Trim()
-                if ((Get-PythonVersion -Executable $candidatePath) -eq $RequiredPythonVersion) {
-                    return $candidatePath
-                }
-            }
-        } catch {
-            Write-Verbose "Python launcher probe failed: $($_.Exception.Message)"
-        }
+    $candidate = Get-LauncherPython
+    if ($null -ne $candidate) {
+        return $candidate
     }
 
     $command = Get-Command "python.exe" -ErrorAction SilentlyContinue
@@ -123,30 +100,49 @@ function Resolve-BasePython {
     throw "Python 3.10 x64 was not found. Install it or pass -BasePython <path> to setup."
 }
 
+function Get-RequestedPython {
+    $command = Get-Command $BasePython -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        throw "Base Python was not found: $BasePython"
+    }
+    $version = Get-PythonVersion -Executable $command.Source
+    if ($version -ne $RequiredPythonVersion) {
+        throw "Base Python must be 64-bit Python 3.10. Found: $version"
+    }
+    return $command.Source
+}
+
+function Get-LauncherPython {
+    $launcher = Get-Command "py.exe" -ErrorAction SilentlyContinue
+    if ($null -eq $launcher) {
+        return $null
+    }
+    try {
+        $candidate = & $launcher.Source "-$RequiredPythonVersion" -c 'import sys; print(sys.executable)' 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        $candidatePath = ([string]($candidate | Select-Object -First 1)).Trim()
+        if ((Get-PythonVersion -Executable $candidatePath) -eq $RequiredPythonVersion) {
+            return $candidatePath
+        }
+    } catch {
+        Write-Verbose "Python launcher probe failed: $($_.Exception.Message)"
+    }
+    return $null
+}
+
 function Install-DevEnvironment {
     $currentVersion = Get-PythonVersion -Executable $PythonPath
     $base = $null
     if (-not [string]::IsNullOrWhiteSpace($BasePython)) {
         $base = Resolve-BasePython
     }
-    if ($currentVersion -ne $RequiredPythonVersion -or
-        ($null -ne $base -and -not (Test-SamePythonBase -ExistingEnvironment $PythonPath -RequestedInterpreter $base))) {
+    if (-not (Test-DevEnvironmentMatches -Version $currentVersion -Base $base)) {
         if ($null -eq $base) {
             $base = Resolve-BasePython
         }
-        if (Test-Path -LiteralPath $VenvRoot) {
-            $backupRoot = Join-Path $RepoRoot ".dev-tools\venv-backups"
-            $repoPrefix = [IO.Path]::GetFullPath($RepoRoot).TrimEnd("\") + "\"
-            foreach ($path in @($VenvRoot, $backupRoot)) {
-                if (-not [IO.Path]::GetFullPath($path).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-                    throw "Virtual environment path must stay inside the repository: $path"
-                }
-            }
-            New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
-            $backupPath = Join-Path $backupRoot ("venv-{0}-{1}" -f (Get-Date -Format "yyyyMMdd-HHmmss"), [Guid]::NewGuid().ToString("N"))
-            Move-Item -LiteralPath $VenvRoot -Destination $backupPath
-            Write-Output "Saved the old .venv at $backupPath"
-        }
+        Backup-DevEnvironment
         Invoke-ExternalCommand -FilePath $base -ArgumentList @("-m", "venv", $VenvRoot)
         Get-DevPython | Out-Null
     }
@@ -171,6 +167,35 @@ function Install-DevEnvironment {
     & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1") -Install
 
     Write-Output "Development environment is ready. Run .\dev.ps1 check."
+}
+
+function Test-DevEnvironmentMatches {
+    param([string]$Version, $Base)
+
+    if ($Version -ne $RequiredPythonVersion) {
+        return $false
+    }
+    if ($null -eq $Base) {
+        return $true
+    }
+    return Test-SamePythonBase -ExistingEnvironment $PythonPath -RequestedInterpreter $Base
+}
+
+function Backup-DevEnvironment {
+    if (-not (Test-Path -LiteralPath $VenvRoot)) {
+        return
+    }
+    $backupRoot = Join-Path $RepoRoot ".dev-tools\venv-backups"
+    $repoPrefix = [IO.Path]::GetFullPath($RepoRoot).TrimEnd("\") + "\"
+    foreach ($path in @($VenvRoot, $backupRoot)) {
+        if (-not [IO.Path]::GetFullPath($path).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Virtual environment path must stay inside the repository: $path"
+        }
+    }
+    New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    $backupPath = Join-Path $backupRoot ("venv-{0}-{1}" -f (Get-Date -Format "yyyyMMdd-HHmmss"), [Guid]::NewGuid().ToString("N"))
+    Move-Item -LiteralPath $VenvRoot -Destination $backupPath
+    Write-Output "Saved the old .venv at $backupPath"
 }
 
 function Invoke-LintChecks {

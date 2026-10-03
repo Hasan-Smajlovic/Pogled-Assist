@@ -26,7 +26,11 @@ run_gaze_mouse.py
        -> WindowsAppBar
 ```
 
-`pogled_assist/main.py` enables Windows DPI awareness, configures logging, creates
+`pogled_assist/main.py` acquires a per-user Qt lock before logging or services;
+a second interactive launch exits without activating any window. Qt recovers
+locks left by terminated processes. Package and installation diagnostics bypass
+this interactive lock. Startup failure and normal exit release it.
+The entry point then enables Windows DPI awareness, configures logging, creates
 the Qt application, and shows `HotbarWindow`. The hotbar is the composition root:
 it creates the runtime services, connects their Qt signals, starts them after the
 window appears, and stops child windows, Tobii backends, speech, overlays, and the
@@ -43,8 +47,8 @@ and shortcuts continue to launch after an update.
 | Entry points | `run_gaze_mouse.py`, `pogled_assist/main.py` | Source and packaged startup, Qt setup, package smoke test |
 | Runtime composition | `pogled_assist/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
 | Gaze acquisition | `pogled_assist/tracking/` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge, calibration |
-| Gaze interaction | `pogled_assist/interaction/` | Coordinate mapping, smoothing, shared selection timing, click and Quick action requests |
-| Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, focus, z-order |
+| Gaze interaction | `pogled_assist/interaction/` | Logical/physical coordinate mapping in `screen_mapping.py`, UI target lookup through `GazeTarget`, smoothing, shared selection timing, click and Quick action requests |
+| Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, external foreground/cursor tracking, focus, z-order |
 | User surfaces | `pogled_assist/ui/` | Settings, speech, keyboard, controller, radial menu, precision zoom, gaze feedback |
 | Speech | `pogled_assist/speech/` | eSpeak NG and Edge playback, saved categories, answers and phrases, and the repeating local alarm |
 | Suggestions | `pogled_assist/suggestions/`, `pogled_assist/assets/bosnian-*-model.*` | Offline Bosnian tokenisation, general and reviewed Islamic vocabulary layers, completion and next-word ranking, input-scoped undo, and reversible personal learning |
@@ -142,8 +146,9 @@ Controller panels, the radial Quick actions menu, and precision zoom. Keyboard
 and Controller panels are mutually exclusive. Feedback windows remain topmost
 without taking focus from the application the user is controlling.
 
-Settings changes update the live mouse and speech services and are saved
-immediately. `SuggestionService` is also owned by the hotbar and shared by Speech
+Settings changes update the live mouse and speech services and attempt to save
+immediately. The hotbar tracks failed saves across surfaces; retries use the
+latest live values. `SuggestionService` is also owned by the hotbar and shared by Speech
 and Settings. It loads and queries the immutable base model away from the Qt event
 loop, coalesces pending requests, and writes personal counts through a separate
 worker. The prediction worker builds a personal prefix and context index only
@@ -156,9 +161,26 @@ selection before displaying a result. Closing the hotbar closes every child
 surface, flushes suggestion learning, stops speech and gaze workers, and
 unregisters the AppBar so Windows restores the full work area.
 
+`SpeechPredictions` owns the Speech input's request identity, revision, displayed
+text, and the guard for a suggestion replaced beneath gaze. It is a Qt object
+owned by that input, so prediction delivery remains on the UI thread.
+`SpeechDialogs` owns the Speech modal windows, backdrop, and active actions;
+the Speech window retains the conversation and library editing behavior.
+
+`ForegroundTracker` owns the polling timer and the last external window and
+physical cursor position. It ignores foreground windows belonging to this
+process and cursor samples over application controls. The hotbar passes these
+targets to Keyboard and Controller and stops polling during shutdown.
+
 Speech playback logs identify whether the request came from gaze, button
 activation, or Return in the message field, without recording the message.
 Process startup and UI acknowledgement do not confirm audible playback.
+Speech launch, exit monitoring, and cleanup run on a serialized worker boundary.
+Cancelling a request invalidates queued notifications and closes its process
+tree before a replacement starts. On Windows a suspended child is assigned to
+a private kill-on-close job before execution. Engine output is discarded because
+it can include typed text; diagnostics record the engine and exit code. No UI
+thread waits for speech completion or stderr EOF.
 
 `SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
 The hotbar propagates Settings and keyboard switch signals to all three input
@@ -186,6 +208,10 @@ logs/latest.txt          current application log when logging is enabled
 Missing or malformed settings fall back safely to defaults, with supported
 values clamped to the same ranges as the Settings UI. Installation, update, and
 rollback work must preserve `data/` and `logs/`.
+
+Unreadable speech-library files block all library writes, including rollback
+synchronization and phrase use counts. Only a successful reload clears this
+guard; fallback categories must never overwrite the original after a read error.
 
 The bundled suggestion model and writable learning profile have independent
 version 1 schemas. A base-model release can therefore be replaced without

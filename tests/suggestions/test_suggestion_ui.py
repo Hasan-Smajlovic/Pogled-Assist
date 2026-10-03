@@ -17,8 +17,12 @@ from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 
 
-class FakeSpeech:
+class FakeSpeech(QObject):
+    playback_changed = Signal(int, str)
+
     def __init__(self, *, successful: bool = True) -> None:
+        super().__init__()
+        self.request_id = 0
         self._settings = SpeechSettings()
         self.successful = successful
         self.requests: list[str] = []
@@ -28,6 +32,7 @@ class FakeSpeech:
         return replace(self._settings)
 
     def speak(self, text: str, _settings: SpeechSettings | None = None) -> bool:
+        self.request_id += 1
         self.requests.append(text)
         return self.successful
 
@@ -36,6 +41,8 @@ class FakeSpeech:
 
 
 class FakeLibraryStore:
+    read_error = False
+
     def __init__(self) -> None:
         self.library = SpeechLibrary(categories=default_categories())
         self.fail_saves = False
@@ -345,31 +352,31 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
         window._learned_words_button.click()
         assert window._stack.currentIndex() == 3
 
-        index = window._visible_words.index("čaj")
-        window._word_buttons[index].click()
+        index = window._learning_page._visible_words.index("čaj")
+        window._learning_page._word_buttons[index].click()
         original_write = service.store._write
         monkeypatch.setattr(
             service.store,
             "_write",
             lambda _payload: (_ for _ in ()).throw(OSError("disk full")),
         )
-        window._forget_word_button.click()
-        qtbot.waitUntil(lambda: not window._learning_busy)
+        window._learning_page._forget_button.click()
+        qtbot.waitUntil(lambda: not window._learning_page._busy)
         assert service.store.error == WRITE_ERROR
-        assert window._retry_learning_button.isEnabled()
+        assert window._learning_page._retry_button.isEnabled()
         assert "čaj" not in service.store.learned_words()
         assert LearningStore(path).snapshot()[("čaj",)] == 1
 
         monkeypatch.setattr(service.store, "_write", original_write)
-        window._retry_learning_button.click()
-        qtbot.waitUntil(lambda: not window._learning_busy)
+        window._learning_page._retry_button.click()
+        qtbot.waitUntil(lambda: not window._learning_page._busy)
         assert service.store.error == ""
         assert ("čaj",) not in LearningStore(path).snapshot()
         assert ("vodu",) in LearningStore(path).snapshot()
 
-        first_visible = window._word_buttons[0]
+        first_visible = window._learning_page._word_buttons[0]
         center = first_visible.mapToGlobal(first_visible.rect().center())
-        assert window._gaze_action_at(QPoint(center)) is not None
+        assert window._controls.action_at(QPoint(center)) is not None
     finally:
         service.close()
 

@@ -18,10 +18,12 @@ the prepared models under `pogled_assist/assets`.
 These TSV files are maintained by hand. Rebuild the corresponding prepared
 model and rerun its tests and evaluations after changing one of them.
 
-The bundled general model was rebuilt from the verified CLASSLA archive with
-the current preparation script and tokenizer. Its metadata records the archive,
-input, script, tokenizer, and model checksums. The Islamic model uses the same
-current tokenizer.
+The prepared models' metadata records the archive or reviewed source, inputs,
+preparation script, tokenizer, and model checksums used for each build. Compare
+those hashes with the current files before review. Refactoring or formatting a
+preparation script can require a rebuild even without an intended behavior change;
+follow the [development guide](../../docs/DEVELOPMENT.md#command-reference) for
+the rebuild order and commands.
 
 ## Evaluation
 

@@ -10,9 +10,13 @@ import subprocess
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
+from threading import Event, Lock, Thread
+
+from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from ..keyboard_layouts import ARABIC_SCRIPT, LATIN_SCRIPT
 from ..tracking.tobii_stream_engine import APP_ROOT_ENV
+from ..windows.speech_process import start_speech_process
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,6 @@ EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
 ARABIC_EDGE_PLAYBACK_VOICE = "ar-SA-HamedNeural"
 EDGE_PLAYBACK_RATE = "-10%"
 EDGE_PLAYBACK_PITCH = "-2Hz"
-STARTUP_ERROR_GRACE_SECONDS = 0.25
 
 
 @dataclass
@@ -42,11 +45,18 @@ class SpeechSettings:
     keyboard_script: str = LATIN_SCRIPT
 
 
-class SpeechService:
+class SpeechService(QObject):
     """Small Python wrapper around the configured speech command-line tools."""
 
+    playback_changed = Signal(int, str)
+    _worker_state = Signal(int, str)
+
     def __init__(self) -> None:
-        self._process: subprocess.Popen | None = None
+        super().__init__()
+        self.request_id = 0
+        self._cancel: Event | None = None
+        self._process_lock = Lock()
+        self._worker_state.connect(self._deliver_state, Qt.QueuedConnection)
         self._executable = find_espeak_ng()
         self._edge_playback_executable = find_edge_playback()
         self._settings = SpeechSettings()
@@ -90,17 +100,8 @@ class SpeechService:
         return self._speak_espeak(text, settings)
 
     def _speak_espeak(self, text: str, settings: SpeechSettings) -> bool:
-        if self._executable is None:
-            self._executable = find_espeak_ng()
-
-        if self._executable is None:
-            logger.error("Speech request failed because espeak-ng was not found.")
-            return False
-
-        self.stop()
-
         command = [
-            str(self._executable),
+            str(self._executable) if self._executable is not None else "",
             "-v",
             settings.language,
             "-s",
@@ -111,23 +112,18 @@ class SpeechService:
             str(settings.amplitude),
             text,
         ]
-        environment = _espeak_environment(self._executable)
+        environment = (
+            _espeak_environment(self._executable) if self._executable is not None else None
+        )
         if environment is not None:
             return self._start_process(command, "espeak-ng", environment=environment)
         return self._start_process(command, "espeak-ng")
 
     def _speak_edge_playback(self, text: str, *, voice: str = EDGE_PLAYBACK_VOICE) -> bool:
-        if self._edge_playback_executable is None:
-            self._edge_playback_executable = find_edge_playback()
-
-        if self._edge_playback_executable is None:
-            logger.error("Speech request failed because edge-playback was not found.")
-            return False
-
-        self.stop()
-
         command = [
-            str(self._edge_playback_executable),
+            str(self._edge_playback_executable)
+            if self._edge_playback_executable is not None
+            else "",
             "--voice",
             voice,
             f"--rate={EDGE_PLAYBACK_RATE}",
@@ -135,7 +131,11 @@ class SpeechService:
             "--text",
             text,
         ]
-        environment = _environment_with_executable_directory(self._edge_playback_executable)
+        environment = (
+            _environment_with_executable_directory(self._edge_playback_executable)
+            if self._edge_playback_executable is not None
+            else None
+        )
         return self._start_process(command, "edge-playback", environment=environment)
 
     def _start_process(
@@ -147,78 +147,97 @@ class SpeechService:
     ) -> bool:
         logger.info("Starting speech command (%s): %s", engine_name, [*command[:-1], "<text>"])
 
-        startupinfo = None
-        creationflags = 0
-        if sys.platform == "win32":
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
+        self.stop()
+        self.request_id += 1
+        request_id = self.request_id
+        cancel = Event()
+        self._cancel = cancel
+        worker = Thread(
+            target=self._run_process,
+            args=(request_id, cancel, command, engine_name, environment),
+            name="speech-playback",
+            daemon=True,
+        )
         try:
-            self._process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                startupinfo=startupinfo,
-                creationflags=creationflags,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=environment,
-            )
-        except Exception:
-            logger.exception("Failed to start %s.", engine_name)
-            self._process = None
+            worker.start()
+        except RuntimeError:
+            self._cancel = None
+            logger.error("Could not start speech worker.")
             return False
-
-        try:
-            exit_code = self._process.wait(timeout=STARTUP_ERROR_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            return True
-
-        if exit_code != 0:
-            logger.error("%s exited immediately with code %s.", engine_name, exit_code)
-            self._log_process_error()
-            self._process = None
-            return False
-
-        self._log_process_error()
-        self._process = None
         return True
 
+    def _run_process(
+        self,
+        request_id: int,
+        cancel: Event,
+        command: list[str],
+        engine_name: str,
+        environment: dict[str, str] | None,
+    ) -> None:
+        # Serialize replacement: the previous process tree is closed before a
+        # new voice can start. Queued requests cancelled meanwhile never launch.
+        with self._process_lock:
+            if cancel.is_set():
+                return
+            process = None
+            state = "failed"
+            try:
+                if not command[0]:
+                    if engine_name == "espeak-ng":
+                        self._executable = executable = find_espeak_ng()
+                        environment = _espeak_environment(executable) if executable else None
+                    else:
+                        self._edge_playback_executable = executable = find_edge_playback()
+                        environment = (
+                            _environment_with_executable_directory(executable)
+                            if executable
+                            else None
+                        )
+                    if cancel.is_set():
+                        return
+                    if executable is None:
+                        logger.error("Speech engine was not found: %s.", engine_name)
+                        self._worker_state.emit(request_id, "failed")
+                        return
+                    command[0] = str(executable)
+                process = start_speech_process(command, environment)
+                if not cancel.is_set():
+                    self._worker_state.emit(request_id, "speaking")
+                while not cancel.is_set():
+                    exit_code = process.poll()
+                    if exit_code is not None:
+                        state = "finished" if exit_code == 0 else "failed"
+                        if exit_code:
+                            logger.error("%s exited with code %s.", engine_name, exit_code)
+                        break
+                    cancel.wait(0.05)
+            except Exception as error:
+                # Exceptions and engine stderr may echo the private command.
+                logger.error("Speech process failed (%s): %s.", engine_name, type(error).__name__)
+            finally:
+                if process is not None:
+                    try:
+                        process.close()
+                    except Exception as error:
+                        logger.error("Speech cleanup failed: %s.", type(error).__name__)
+                        state = "failed"
+            if not cancel.is_set():
+                self._worker_state.emit(request_id, state)
+
+    @Slot(int, str)
+    def _deliver_state(self, request_id: int, state: str) -> None:
+        if request_id == self.request_id and self._cancel is not None:
+            if state in ("finished", "failed"):
+                self._cancel = None
+            self.playback_changed.emit(request_id, state)
+
     def stop(self) -> None:
-        if self._process is None:
-            return
-
-        if self._process.poll() is not None:
-            self._log_process_error()
-            self._process = None
-            return
-
-        logger.info("Stopping active speech process.")
-        self._process.terminate()
-        try:
-            self._process.wait(timeout=1.5)
-        except subprocess.TimeoutExpired:
-            logger.warning("Speech process did not exit after terminate; killing it.")
-            self._process.kill()
-            self._process.wait(timeout=1.5)
-        finally:
-            self._log_process_error()
-            self._process = None
-
-    def _log_process_error(self) -> None:
-        if self._process is None or self._process.stderr is None:
-            return
-
-        try:
-            stderr = self._process.stderr.read()
-        except Exception:
-            return
-
-        if stderr.strip():
-            logger.warning("Speech process stderr: %s", stderr.strip())
+        if self._cancel is not None:
+            self._cancel.set()
+            self._cancel = None
+            self.playback_changed.emit(self.request_id, "stopped")
+        # Invalidate already queued worker notifications without waiting on Qt.
+        self.request_id += 1
 
 
 def _environment_with_executable_directory(executable: Path) -> dict[str, str]:
@@ -264,12 +283,7 @@ def find_edge_playback() -> Path | None:
 
 
 def _candidate_paths() -> list[Path]:
-    candidates: list[Path] = []
-
-    env_path = os.environ.get("ESPEAK_NG_EXE", "").strip()
-    if env_path:
-        candidates.append(Path(env_path))
-
+    candidates = _environment_candidates("ESPEAK_NG_EXE")
     candidates.append(_application_root() / "speech" / "espeak-ng" / "espeak-ng.exe")
 
     path_match = shutil.which("espeak-ng") or shutil.which("espeak-ng.exe")
@@ -281,41 +295,12 @@ def _candidate_paths() -> list[Path]:
     if tools_root.exists():
         candidates.extend(sorted(tools_root.rglob("espeak-ng.exe")))
 
-    if sys.platform == "win32":
-        for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
-            base = os.environ.get(env_name)
-            if not base:
-                continue
-
-            root = Path(base)
-            candidates.extend(
-                [
-                    root / "eSpeak NG" / "espeak-ng.exe",
-                    root / "eSpeak NG" / "command_line" / "espeak-ng.exe",
-                    root / "eSpeak NG" / "bin" / "espeak-ng.exe",
-                    root / "Programs" / "eSpeak NG" / "espeak-ng.exe",
-                    root / "Programs" / "eSpeak NG" / "command_line" / "espeak-ng.exe",
-                ]
-            )
-
-    deduped: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate).lower()
-        if key not in seen:
-            seen.add(key)
-            deduped.append(candidate)
-
-    return deduped
+    candidates.extend(_espeak_system_paths())
+    return _unique_paths(candidates)
 
 
 def _edge_playback_candidate_paths() -> list[Path]:
-    candidates: list[Path] = []
-
-    env_path = os.environ.get("EDGE_PLAYBACK_EXE", "").strip()
-    if env_path:
-        candidates.append(Path(env_path))
-
+    candidates = _environment_candidates("EDGE_PLAYBACK_EXE")
     candidates.append(_application_root() / "speech" / "edge" / "edge-playback.exe")
 
     for name in ("edge-playback", "edge-playback.exe"):
@@ -341,15 +326,44 @@ def _edge_playback_candidate_paths() -> list[Path]:
         ]
     )
 
-    deduped: list[Path] = []
+    return _unique_paths(candidates)
+
+
+def _environment_candidates(name: str) -> list[Path]:
+    value = os.environ.get(name, "").strip()
+    return [Path(value)] if value else []
+
+
+def _espeak_system_paths() -> list[Path]:
+    if sys.platform != "win32":
+        return []
+    paths: list[Path] = []
+    for name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
+        base = os.environ.get(name)
+        if base:
+            paths.extend(_espeak_paths_under(Path(base)))
+    return paths
+
+
+def _espeak_paths_under(root: Path) -> list[Path]:
+    return [
+        root / "eSpeak NG" / "espeak-ng.exe",
+        root / "eSpeak NG" / "command_line" / "espeak-ng.exe",
+        root / "eSpeak NG" / "bin" / "espeak-ng.exe",
+        root / "Programs" / "eSpeak NG" / "espeak-ng.exe",
+        root / "Programs" / "eSpeak NG" / "command_line" / "espeak-ng.exe",
+    ]
+
+
+def _unique_paths(candidates: list[Path]) -> list[Path]:
+    paths: list[Path] = []
     seen: set[str] = set()
     for candidate in candidates:
         key = str(candidate).lower()
         if key not in seen:
             seen.add(key)
-            deduped.append(candidate)
-
-    return deduped
+            paths.append(candidate)
+    return paths
 
 
 def _application_root() -> Path:

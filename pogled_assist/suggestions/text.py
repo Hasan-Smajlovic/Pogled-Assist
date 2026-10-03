@@ -68,11 +68,15 @@ def query(text: str) -> tuple[str, tuple[str, ...], int] | None:
         last = tokens[-1]
         return last.text, last.context, last.start
     tail = text[tokens[-1].end :] if tokens else text
-    if tail and not all(character.isspace() or character in ".,?!" for character in tail):
+    if not _valid_query_tail(tail):
         return None
     if not tokens or BOUNDARY.search(tail):
         return "", (START,), len(text)
     return "", (*tokens[-1].context, tokens[-1].text)[-2:], len(text)
+
+
+def _valid_query_tail(text: str) -> bool:
+    return all(character.isspace() or character in ".,?!" for character in text)
 
 
 def insert_word(text: str, candidate: str) -> str:
@@ -81,9 +85,12 @@ def insert_word(text: str, candidate: str) -> str:
         return text
     prefix, _context, start = request
     before = text[:start]
-    if not prefix and before and not before[-1].isspace():
+    replacement = spelling(candidate).upper() + " "
+    if prefix:
+        return before + replacement
+    if before and not before[-1].isspace():
         before += " "
-    return before + spelling(candidate).upper() + " "
+    return before + replacement
 
 
 def index_key(value: str) -> str:

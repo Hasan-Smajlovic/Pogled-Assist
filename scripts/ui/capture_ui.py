@@ -27,9 +27,8 @@ from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
-from pogled_assist.ui import controller_window as controller_module
-from pogled_assist.ui import keyboard_window as keyboard_module
 from pogled_assist.ui import settings_window as settings_module
+from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsWindow
@@ -60,10 +59,13 @@ class PreviewInput:
         return 640, 360
 
 
-class PreviewSpeech:
+class PreviewSpeech(QObject):
+    playback_changed = Signal(int, str)
     available = True
 
     def __init__(self) -> None:
+        super().__init__()
+        self.request_id = 0
         self._settings = SpeechSettings()
 
     @property
@@ -147,6 +149,8 @@ class PreviewSuggestionService(QObject):
 
 
 class PreviewLibraryStore:
+    read_error = False
+
     def __init__(self, phrases: list[PhraseRecord]) -> None:
         self._library = SpeechLibrary(
             categories=default_categories(),
@@ -245,386 +249,253 @@ def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
 def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(["capture-ui"])
-    gaze_settings = GazeSettings()
-    speech_settings = SpeechSettings()
-    sample_phrases = [
-        PhraseRecord("Trebam pomoć", 8),
-        PhraseRecord("Molim vas sačekajte", 5),
-        PhraseRecord("Hvala", 3),
-    ]
-
-    patches = (
-        patch.object(toolbar_module, "WindowsAppBar", PreviewAppBar),
-        patch.object(toolbar_module, "WindowsInputController", PreviewInput),
-        patch.object(toolbar_module, "SpeechService", PreviewSpeech),
-        patch.object(toolbar_module, "SuggestionService", PreviewSuggestionService),
-        patch.object(
-            toolbar_module, "load_app_settings", return_value=(gaze_settings, speech_settings)
-        ),
-        patch.object(keyboard_module, "WindowsAppBar", PreviewAppBar),
-        patch.object(controller_module, "WindowsAppBar", PreviewAppBar),
-        patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
-    )
-    widgets: list[QWidget] = []
-    snapshots: list[tuple[str, Path]] = []
+    session = _CaptureSession(app, output_dir, (width, height))
     with ExitStack() as stack:
-        for active_patch in patches:
+        for active_patch in session.patches():
             stack.enter_context(active_patch)
-
         try:
-            hotbar = PreviewHotbar()
-            widgets.append(hotbar)
-            hotbar_width = min(width, 1280)
-            snapshots.append(
-                (
-                    "Hotbar",
-                    _capture_widget(
-                        app, hotbar, output_dir, "hotbar", hotbar_width, hotbar.BAR_HEIGHT
-                    ),
-                )
-            )
-            for state, name, title in (
-                (TrackingState.CONNECTED, "hotbar-paused", "Hotbar: one eye unavailable"),
-                (TrackingState.WAITING, "hotbar-waiting", "Hotbar: waiting for fresh data"),
-                (TrackingState.RETRYING, "hotbar-retrying", "Hotbar: device not connected"),
-                (TrackingState.SIMULATING, "hotbar-simulation", "Hotbar: mouse simulation"),
-            ):
-                hotbar._tracking_status.set_tracking_status(TrackingStatus(state))
-                hotbar._tracking_status.set_eye_status(False, True)
-                snapshots.append(
-                    (
-                        title,
-                        _capture_widget(
-                            app, hotbar, output_dir, name, hotbar_width, hotbar.BAR_HEIGHT
-                        ),
-                    )
-                )
-
-            suggestions = PreviewSuggestionService()
-            settings = SettingsWindow(gaze_settings, speech_settings, suggestions=suggestions)
-            widgets.append(settings)
-            settings_width, settings_height = min(width, 1280), min(height, 720)
-            for index, name, title in (
-                (0, "settings-general", "Settings: general"),
-                (1, "settings-gaze", "Settings: gaze"),
-                (2, "settings-speech", "Settings: speech"),
-            ):
-                settings._select_tab(index)
-                snapshots.append(
-                    (
-                        title,
-                        _capture_widget(
-                            app, settings, output_dir, name, settings_width, settings_height
-                        ),
-                    )
-                )
-            settings._open_learning()
-            snapshots.append(
-                (
-                    "Settings: learned words",
-                    _capture_widget(
-                        app,
-                        settings,
-                        output_dir,
-                        "settings-learned-words",
-                        settings_width,
-                        settings_height,
-                    ),
-                )
-            )
-
-            speech_suggestions = PreviewSuggestionService()
-            speech_suggestions.store = LearningStore()
-            speech = SpeechWindow(
-                PreviewSpeech(),
-                library_store=PreviewLibraryStore(sample_phrases),
-                alarm_sound=PreviewAlarmSound(),
-                suggestions=speech_suggestions,
-            )
-            widgets.append(speech)
-            snapshots.append(
-                (
-                    "Speech keyboard",
-                    _capture_widget(app, speech, output_dir, "speech", width, height),
-                )
-            )
-            speech._view_mode = "categories"
-            speech._show_list_level()
-            snapshots.append(
-                (
-                    "Speech categories",
-                    _capture_widget(
-                        app,
-                        speech,
-                        output_dir,
-                        "speech-categories",
-                        width,
-                        height,
-                    ),
-                )
-            )
-            speech._category_index = 0
-            speech._view_mode = "answers"
-            speech._show_list_level()
-            snapshots.append(
-                (
-                    "Speech category answers",
-                    _capture_widget(
-                        app,
-                        speech,
-                        output_dir,
-                        "speech-answers",
-                        width,
-                        height,
-                    ),
-                )
-            )
-            speech._view_mode = "phrases"
-            speech._category_index = None
-            speech._show_list_level()
-            snapshots.append(
-                (
-                    "Saved phrases",
-                    _capture_widget(app, speech, output_dir, "phrases", width, height),
-                )
-            )
-            speech._start_editor()
-            snapshots.append(
-                (
-                    "Speech shared editor",
-                    _capture_widget(
-                        app,
-                        speech,
-                        output_dir,
-                        "speech-editor",
-                        width,
-                        height,
-                    ),
-                )
-            )
-            speech._start_alarm()
-            snapshots.append(
-                (
-                    "Speech alarm",
-                    _capture_widget(
-                        app,
-                        speech._alarm_dialog,
-                        output_dir,
-                        "speech-alarm",
-                        speech._alarm_dialog.width(),
-                        speech._alarm_dialog.height(),
-                    ),
-                )
-            )
-            speech._stop_alarm()
-            speech._start_sleep()
-            snapshots.append(
-                (
-                    "Speech sleep",
-                    _capture_widget(
-                        app,
-                        speech._sleep_dialog,
-                        output_dir,
-                        "speech-sleep",
-                        width,
-                        height,
-                    ),
-                )
-            )
-            speech._wake_from_sleep()
-            speech._open_exit_dialog()
-            snapshots.append(
-                (
-                    "Speech exit confirmation",
-                    _capture_widget(
-                        app,
-                        speech._exit_dialog,
-                        output_dir,
-                        "speech-exit",
-                        speech._exit_dialog.width(),
-                        speech._exit_dialog.height(),
-                    ),
-                )
-            )
-            speech._close_dialog()
-
-            sidebar_width = 380
-            keyboard = KeyboardWindow(speech_settings)
-            widgets.append(keyboard)
-            for show, name, title in (
-                (None, "keyboard-letters", "Keyboard: letters"),
-                (keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
-                (keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
-            ):
-                if show is not None:
-                    show()
-                snapshots.append(
-                    (title, _capture_widget(app, keyboard, output_dir, name, sidebar_width, height))
-                )
-
-            controller = ControllerWindow(gaze_settings, speech_settings)
-            widgets.append(controller)
-            for show, name, title in (
-                (None, "controller-general", "Controller: general"),
-                (controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
-                (controller._show_settings_tab, "controller-settings", "Controller: settings"),
-            ):
-                if show is not None:
-                    show()
-                snapshots.append(
-                    (
-                        title,
-                        _capture_widget(app, controller, output_dir, name, sidebar_width, height),
-                    )
-                )
-            small_groups = replace(speech_settings, letters_per_group=2)
-            keyboard.update_settings(small_groups)
-            controller.update_speech_settings(small_groups)
-            controller._show_keyboard_tab()
-            for widget, name, title in (
-                (keyboard, "keyboard-latin-paged", "Keyboard: Latin, two letters per group"),
-                (controller, "controller-latin-paged", "Controller: Latin, two letters per group"),
-            ):
-                snapshots.append(
-                    (title, _capture_widget(app, widget, output_dir, name, sidebar_width, 640))
-                )
-            # Arabic uses the same services and storage fakes, with original Unicode.
-            arabic_settings = replace(speech_settings, keyboard_script=ARABIC_SCRIPT)
-            settings.update_speech_settings(arabic_settings)
-            settings._select_tab(2)
-            snapshots.append(
-                (
-                    "Settings: Arabic",
-                    _capture_widget(
-                        app,
-                        settings,
-                        output_dir,
-                        "settings-arabic",
-                        settings_width,
-                        settings_height,
-                    ),
-                )
-            )
-            speech._cancel_editor()
-            speech.update_settings(arabic_settings)
-            speech._view_mode = "keyboard"
-            speech._show_group_level()
-            speech._input.setText("سَلَامٌ · SELAM · ١٢٣")
-            snapshots.append(
-                (
-                    "Speech: Arabic",
-                    _capture_widget(app, speech, output_dir, "speech-arabic", width, height),
-                )
-            )
-            speech._open_letter_dialog(0)
-            snapshots.append(
-                (
-                    "Speech: Arabic letters",
-                    _capture_widget(
-                        app,
-                        speech._letter_dialog,
-                        output_dir,
-                        "speech-arabic-letters",
-                        speech._letter_dialog.width(),
-                        speech._letter_dialog.height(),
-                    ),
-                )
-            )
-            speech._close_dialog()
-            speech._show_symbols_level()
-            snapshots.append(
-                (
-                    "Speech: Arabic symbols",
-                    _capture_widget(
-                        app, speech, output_dir, "speech-arabic-symbols", width, height
-                    ),
-                )
-            )
-            mark_group = next(
-                index
-                for index, keys in enumerate(speech._symbol_groups)
-                if all(key in ARABIC_MARKS for key in keys)
-            )
-            speech._open_letter_dialog(mark_group, symbols=True)
-            snapshots.append(
-                (
-                    "Speech: Arabic vowel marks",
-                    _capture_widget(
-                        app,
-                        speech._letter_dialog,
-                        output_dir,
-                        "speech-arabic-marks",
-                        speech._letter_dialog.width(),
-                        speech._letter_dialog.height(),
-                    ),
-                )
-            )
-            speech._close_dialog()
-            speech._view_mode = "phrases"
-            speech._show_list_level()
-            speech._start_editor()
-            speech._input.setText("سَلَامٌ")
-            snapshots.append(
-                (
-                    "Speech: Arabic editor",
-                    _capture_widget(app, speech, output_dir, "speech-arabic-editor", width, height),
-                )
-            )
-            keyboard.update_settings(arabic_settings)
-            keyboard._show_letter_groups()
-            snapshots.append(
-                (
-                    "Keyboard: Arabic",
-                    _capture_widget(
-                        app, keyboard, output_dir, "keyboard-arabic", sidebar_width, height
-                    ),
-                )
-            )
-            keyboard._show_symbols()
-            keyboard._group_page = 1
-            keyboard._show_symbols()
-            snapshots.append(
-                (
-                    "Keyboard: Arabic symbols, page 2",
-                    _capture_widget(
-                        app, keyboard, output_dir, "keyboard-arabic-symbols", sidebar_width, height
-                    ),
-                )
-            )
-            controller.update_speech_settings(arabic_settings)
-            controller._show_keyboard_tab()
-            snapshots.append(
-                (
-                    "Controller: Arabic keyboard",
-                    _capture_widget(
-                        app, controller, output_dir, "controller-arabic", sidebar_width, height
-                    ),
-                )
-            )
-            controller._show_keyboard_symbols()
-            controller._keyboard_group_page = 1
-            controller._show_keyboard_symbols()
-            snapshots.append(
-                (
-                    "Controller: Arabic symbols, page 2",
-                    _capture_widget(
-                        app,
-                        controller,
-                        output_dir,
-                        "controller-arabic-symbols",
-                        sidebar_width,
-                        height,
-                    ),
-                )
-            )
+            session.capture_hotbar()
+            session.capture_settings()
+            session.capture_speech()
+            session.capture_sidebars()
+            session.capture_arabic()
         finally:
-            for widget in reversed(widgets):
-                widget.close()
-                widget.deleteLater()
-            app.processEvents()
+            session.close()
+    _write_gallery(output_dir, session.snapshots)
+    return [path for _, path in session.snapshots]
 
-    _write_gallery(output_dir, snapshots)
-    return [path for _, path in snapshots]
+
+class _CaptureSession:
+    """Keep preview windows alive until all states have been captured."""
+
+    def __init__(self, app: QApplication, output_dir: Path, size: tuple[int, int]) -> None:
+        self.app = app
+        self.output_dir = output_dir
+        self.size = size
+        self.gaze_settings = GazeSettings()
+        self.speech_settings = SpeechSettings()
+        self.widgets: list[QWidget] = []
+        self.snapshots: list[tuple[str, Path]] = []
+
+    def patches(self) -> tuple:
+        return (
+            patch.object(toolbar_module, "WindowsAppBar", PreviewAppBar),
+            patch.object(toolbar_module, "WindowsInputController", PreviewInput),
+            patch.object(toolbar_module, "SpeechService", PreviewSpeech),
+            patch.object(toolbar_module, "SuggestionService", PreviewSuggestionService),
+            patch.object(
+                toolbar_module,
+                "load_app_settings",
+                return_value=(self.gaze_settings, self.speech_settings),
+            ),
+            patch.object(sidebar_module, "WindowsAppBar", PreviewAppBar),
+            patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
+        )
+
+    def capture(
+        self, widget: QWidget, name: str, title: str, *, size: tuple[int, int] | None = None
+    ) -> None:
+        width, height = self.size if size is None else size
+        path = _capture_widget(self.app, widget, self.output_dir, name, width, height)
+        self.snapshots.append((title, path))
+
+    def capture_hotbar(self) -> None:
+        hotbar = PreviewHotbar()
+        self.widgets.append(hotbar)
+        size = min(self.size[0], 1280), hotbar.BAR_HEIGHT
+        self.capture(hotbar, "hotbar", "Hotbar", size=size)
+        with patch.object(toolbar_module, "save_app_settings", return_value=False):
+            hotbar._save_settings()
+        self.capture(hotbar, "hotbar-unsaved-settings", "Hotbar: settings not saved", size=size)
+        hotbar._settings_button.setText("Postavke")
+        for state, name, title in (
+            (TrackingState.CONNECTED, "hotbar-paused", "Hotbar: one eye unavailable"),
+            (TrackingState.WAITING, "hotbar-waiting", "Hotbar: waiting for fresh data"),
+            (TrackingState.RETRYING, "hotbar-retrying", "Hotbar: device not connected"),
+            (TrackingState.SIMULATING, "hotbar-simulation", "Hotbar: mouse simulation"),
+        ):
+            hotbar._tracking_status.set_tracking_status(TrackingStatus(state))
+            hotbar._tracking_status.set_eye_status(False, True)
+            self.capture(hotbar, name, title, size=size)
+
+    def capture_settings(self) -> None:
+        suggestions = PreviewSuggestionService()
+        self.settings = SettingsWindow(
+            self.gaze_settings, self.speech_settings, suggestions=suggestions
+        )
+        self.widgets.append(self.settings)
+        size = min(self.size[0], 1280), min(self.size[1], 720)
+        for index, name, title in (
+            (0, "settings-general", "Settings: general"),
+            (1, "settings-gaze", "Settings: gaze"),
+            (2, "settings-speech", "Settings: speech"),
+        ):
+            self.settings._select_tab(index)
+            self.capture(self.settings, name, title, size=size)
+        self.settings._open_learning()
+        self.capture(self.settings, "settings-learned-words", "Settings: learned words", size=size)
+        self.settings._select_tab(1)
+        self.settings.set_save_error(True)
+        self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
+        self.settings.set_save_error(False)
+
+    def capture_speech(self) -> None:
+        sample_phrases = [
+            PhraseRecord("Trebam pomoć", 8),
+            PhraseRecord("Molim vas sačekajte", 5),
+            PhraseRecord("Hvala", 3),
+        ]
+        suggestions = PreviewSuggestionService()
+        suggestions.store = LearningStore()
+        self.speech = SpeechWindow(
+            PreviewSpeech(),
+            library_store=PreviewLibraryStore(sample_phrases),
+            alarm_sound=PreviewAlarmSound(),
+            suggestions=suggestions,
+        )
+        self.widgets.append(self.speech)
+        self.capture(self.speech, "speech", "Speech keyboard")
+        self.speech._view_mode = "categories"
+        self.speech._show_list_level()
+        self.capture(self.speech, "speech-categories", "Speech categories")
+        self.speech._category_index = 0
+        self.speech._view_mode = "answers"
+        self.speech._show_list_level()
+        self.capture(self.speech, "speech-answers", "Speech category answers")
+        self.speech._view_mode = "phrases"
+        self.speech._category_index = None
+        self.speech._show_list_level()
+        self.capture(self.speech, "phrases", "Saved phrases")
+        self.speech._library_store.read_error = True
+        self.speech._show_list_level()
+        self.capture(
+            self.speech, "speech-library-read-error", "Speech: library not loaded", size=(1280, 720)
+        )
+        self.speech._library_store.read_error = False
+        self.speech._show_list_level()
+        self.speech._start_editor()
+        self.capture(self.speech, "speech-editor", "Speech shared editor")
+        self.capture_speech_dialogs()
+
+    def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
+        self.capture(dialog, name, title, size=(dialog.width(), dialog.height()))
+
+    def capture_speech_dialogs(self) -> None:
+        self.speech._start_alarm()
+        self.capture_dialog(self.speech._dialogs.alarm, "speech-alarm", "Speech alarm")
+        self.speech._stop_alarm()
+        self.speech._start_sleep()
+        self.capture(self.speech._dialogs.sleep, "speech-sleep", "Speech sleep")
+        self.speech._wake_from_sleep()
+        self.speech._open_exit_dialog()
+        self.capture_dialog(self.speech._dialogs.exit, "speech-exit", "Speech exit confirmation")
+        self.speech._close_dialog()
+
+    def capture_sidebars(self) -> None:
+        size = 380, self.size[1]
+        self.keyboard = KeyboardWindow(self.speech_settings)
+        self.widgets.append(self.keyboard)
+        for show, name, title in (
+            (None, "keyboard-letters", "Keyboard: letters"),
+            (self.keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
+            (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
+        ):
+            if show is not None:
+                show()
+            self.capture(self.keyboard, name, title, size=size)
+        self.controller = ControllerWindow(self.gaze_settings, self.speech_settings)
+        self.widgets.append(self.controller)
+        for show, name, title in (
+            (None, "controller-general", "Controller: general"),
+            (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
+            (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
+        ):
+            if show is not None:
+                show()
+            self.capture(self.controller, name, title, size=size)
+        small_groups = replace(self.speech_settings, letters_per_group=2)
+        self.keyboard.update_settings(small_groups)
+        self.controller.update_speech_settings(small_groups)
+        self.controller._show_keyboard_tab()
+        for widget, name, title in (
+            (self.keyboard, "keyboard-latin-paged", "Keyboard: Latin, two letters per group"),
+            (
+                self.controller,
+                "controller-latin-paged",
+                "Controller: Latin, two letters per group",
+            ),
+        ):
+            self.capture(widget, name, title, size=(380, 640))
+
+    def capture_arabic(self) -> None:
+        # Arabic uses the same services and storage fakes, with original Unicode.
+        arabic_settings = replace(self.speech_settings, keyboard_script=ARABIC_SCRIPT)
+        self.settings.update_speech_settings(arabic_settings)
+        self.settings._select_tab(2)
+        size = min(self.size[0], 1280), min(self.size[1], 720)
+        self.capture(self.settings, "settings-arabic", "Settings: Arabic", size=size)
+        self.capture_arabic_speech(arabic_settings)
+        self.capture_arabic_sidebars(arabic_settings)
+
+    def capture_arabic_speech(self, settings: SpeechSettings) -> None:
+        self.speech._cancel_editor()
+        self.speech.update_settings(settings)
+        self.speech._view_mode = "keyboard"
+        self.speech._show_group_level()
+        self.speech._input.setText("سَلَامٌ · SELAM · ١٢٣")
+        self.capture(self.speech, "speech-arabic", "Speech: Arabic")
+        self.speech._open_letter_dialog(0)
+        self.capture_dialog(
+            self.speech._dialogs.letter, "speech-arabic-letters", "Speech: Arabic letters"
+        )
+        self.speech._close_dialog()
+        self.speech._show_symbols_level()
+        self.capture(self.speech, "speech-arabic-symbols", "Speech: Arabic symbols")
+        mark_group = next(
+            index
+            for index, keys in enumerate(self.speech._symbol_groups)
+            if all(key in ARABIC_MARKS for key in keys)
+        )
+        self.speech._open_letter_dialog(mark_group, symbols=True)
+        self.capture_dialog(
+            self.speech._dialogs.letter, "speech-arabic-marks", "Speech: Arabic vowel marks"
+        )
+        self.speech._close_dialog()
+        self.speech._view_mode = "phrases"
+        self.speech._show_list_level()
+        self.speech._start_editor()
+        self.speech._input.setText("سَلَامٌ")
+        self.capture(self.speech, "speech-arabic-editor", "Speech: Arabic editor")
+
+    def capture_arabic_sidebars(self, settings: SpeechSettings) -> None:
+        size = 380, self.size[1]
+        self.keyboard.update_settings(settings)
+        self.keyboard._show_letter_groups()
+        self.capture(self.keyboard, "keyboard-arabic", "Keyboard: Arabic", size=size)
+        self.keyboard._show_symbols()
+        self.keyboard._group_page = 1
+        self.keyboard._show_symbols()
+        self.capture(
+            self.keyboard, "keyboard-arabic-symbols", "Keyboard: Arabic symbols, page 2", size=size
+        )
+        self.controller.update_speech_settings(settings)
+        self.controller._show_keyboard_tab()
+        self.capture(self.controller, "controller-arabic", "Controller: Arabic keyboard", size=size)
+        self.controller._show_keyboard_symbols()
+        self.controller._keyboard_group_page = 1
+        self.controller._show_keyboard_symbols()
+        self.capture(
+            self.controller,
+            "controller-arabic-symbols",
+            "Controller: Arabic symbols, page 2",
+            size=size,
+        )
+
+    def close(self) -> None:
+        for widget in reversed(self.widgets):
+            widget.close()
+            widget.deleteLater()
+        self.app.processEvents()
 
 
 def main() -> int:

@@ -23,6 +23,9 @@ click after you hold your gaze on a stable target.
 
 ## Before starting
 
+Opening the app again keeps the existing instance and its current focus. It
+does not start another tracker, keyboard, or copy of the saved data.
+
 Connect and calibrate the Tobii Eye Tracker 4C with the matching Tobii software.
 The app tries these tracking backends in order:
 
@@ -97,6 +100,18 @@ With precision zoom disabled, the radial menu opens directly at the stable gaze
 point. Gaze does not move the real pointer while the zoom or menu is open.
 
 ## Speech
+
+**Izgovori** reports when speech is starting, running, finished, or failed.
+A failure leaves the message available for another attempt. Process completion
+does not verify audible playback. Starting a new message stops the previous
+speech and its helper processes.
+
+If a library file cannot be read, **Kategorije** and **Fraze** show
+**Biblioteka nije učitana** and **Učitaj ponovo**. Available entries still work
+for composing a message, but adding, deleting, and saving usage counts are
+blocked to protect the original files. Retry after restoring access to the
+file; a successful reload restores the library without changing your message.
+A damaged file must be repaired or restored from a backup before retrying.
 
 Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter.
 The message field is ready for typing when Speech opens, after its controls or
@@ -232,6 +247,12 @@ The embedded Keyboard tab contains the same letters, numpad, and symbols control
 Only Keyboard or Controller can reserve the right work area at one time.
 
 ## Settings
+
+Changes apply immediately. If saving fails, **Postavke \*** on the hotbar and
+a persistent notice in Settings indicate that the current values are only
+active until the app closes. **Pokušaj sačuvati** retries saving the latest
+values. Changing tabs or reopening Settings keeps the notice until saving
+succeeds. This also applies to settings changed from the sidebars or Speech.
 
 General settings controls startup, logging, and whether the PowerShell launcher
 window stays visible. Start with Windows creates a per-user Scheduled Task that

@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .tobii_stream_engine import APP_ROOT_ENV
+from .tobii_stream_engine import app_root
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,13 @@ class TobiiStreamEngineBridgeBackend:
         self._start_error = ""
         self._label = "Tobii Stream Engine x86 bridge"
         self._python_path = ""
+        self._message_handlers: dict[str, Callable[[dict], None]] = {
+            "started": self._on_started,
+            "gaze": self._on_gaze,
+            "eyes": self._on_eyes,
+            "error": self._on_error,
+            "stopped": self._on_stopped,
+        }
 
     @property
     def label(self) -> str:
@@ -138,19 +145,7 @@ class TobiiStreamEngineBridgeBackend:
     def _wait_for_start(self) -> None:
         deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
-            process = self._process
-            if process is not None and process.poll() is not None:
-                self._join_reader_threads()
-                self._process = None
-                raise TobiiStreamEngineBridgeError(
-                    f"32-bit Tobii bridge exited before startup with code {process.returncode}."
-                )
-
-            if self._error_event.is_set():
-                message = self._start_error or "Bridge startup failed."
-                self.stop()
-                raise TobiiStreamEngineBridgeError(message)
-
+            self._raise_if_start_failed()
             if self._started_event.is_set():
                 logger.info(
                     "Tobii Stream Engine x86 bridge started with %s via %s.",
@@ -165,6 +160,20 @@ class TobiiStreamEngineBridgeBackend:
         raise TobiiStreamEngineBridgeError(
             f"32-bit Tobii bridge did not report ready within {START_TIMEOUT_SECONDS:.0f} seconds."
         )
+
+    def _raise_if_start_failed(self) -> None:
+        process = self._process
+        if process is not None and process.poll() is not None:
+            self._join_reader_threads()
+            self._process = None
+            raise TobiiStreamEngineBridgeError(
+                f"32-bit Tobii bridge exited before startup with code {process.returncode}."
+            )
+
+        if self._error_event.is_set():
+            message = self._start_error or "Bridge startup failed."
+            self.stop()
+            raise TobiiStreamEngineBridgeError(message)
 
     def _read_stdout(self) -> None:
         process = self._process
@@ -226,61 +235,60 @@ class TobiiStreamEngineBridgeBackend:
             logger.warning("Tobii x86 bridge payload was not an object.")
             return
         message_type = message.get("type")
-        if message_type == "started":
-            label = str(message.get("label") or self._label)
-            dll_path = str(message.get("dll_path") or "")
-            self._label = f"{label} (x86 bridge)"
-            logger.info("Tobii x86 bridge loaded DLL: %s", dll_path)
-            self._started_event.set()
+        handler = (
+            self._message_handlers.get(message_type) if isinstance(message_type, str) else None
+        )
+        if handler is None:
+            logger.info("Tobii x86 bridge ignored an unknown message type.")
             return
+        handler(message)
 
-        if message_type == "gaze":
-            try:
-                x = float(message["x"])
-                y = float(message["y"])
-                timestamp = int(message.get("timestamp") or 0)
-            except (KeyError, TypeError, ValueError, OverflowError):
-                logger.warning("Tobii x86 bridge gaze payload was invalid.")
-                return
-            if not math.isfinite(x) or not math.isfinite(y):
-                logger.warning("Tobii x86 bridge gaze coordinates were not finite.")
-                return
-            self._gaze_callback(x, y, timestamp)
+    def _on_started(self, message: dict) -> None:
+        label = str(message.get("label") or self._label)
+        dll_path = str(message.get("dll_path") or "")
+        self._label = f"{label} (x86 bridge)"
+        logger.info("Tobii x86 bridge loaded DLL: %s", dll_path)
+        self._started_event.set()
+
+    def _on_gaze(self, message: dict) -> None:
+        try:
+            x = float(message["x"])
+            y = float(message["y"])
+            timestamp = int(message.get("timestamp") or 0)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            logger.warning("Tobii x86 bridge gaze payload was invalid.")
             return
-
-        if message_type == "eyes":
-            try:
-                left_open = message["left_open"]
-                right_open = message["right_open"]
-                if not isinstance(left_open, bool) or not isinstance(right_open, bool):
-                    raise ValueError("Eye validity must be boolean.")
-                timestamp = int(message.get("timestamp") or 0)
-            except (KeyError, TypeError, ValueError, OverflowError):
-                logger.warning("Tobii x86 bridge eye-status payload was invalid.")
-                self._eye_status_callback(False, False, 0)
-                return
-            self._eye_status_callback(left_open, right_open, timestamp)
+        if not math.isfinite(x) or not math.isfinite(y):
+            logger.warning("Tobii x86 bridge gaze coordinates were not finite.")
             return
+        self._gaze_callback(x, y, timestamp)
 
-        if message_type == "error":
-            self._connection_failed("Tobii x86 bridge reported an error.")
+    def _on_eyes(self, message: dict) -> None:
+        try:
+            left_open = message["left_open"]
+            right_open = message["right_open"]
+            if not isinstance(left_open, bool) or not isinstance(right_open, bool):
+                raise ValueError("Eye validity must be boolean.")
+            timestamp = int(message.get("timestamp") or 0)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            logger.warning("Tobii x86 bridge eye-status payload was invalid.")
+            self._eye_status_callback(False, False, 0)
             return
+        self._eye_status_callback(left_open, right_open, timestamp)
 
-        if message_type == "stopped":
-            if not self._stop_event.is_set():
-                self._connection_failed("Tobii x86 bridge stopped unexpectedly.")
-            return
+    def _on_error(self, _message: dict) -> None:
+        self._connection_failed("Tobii x86 bridge reported an error.")
 
-        logger.info("Tobii x86 bridge ignored an unknown message type.")
+    def _on_stopped(self, _message: dict) -> None:
+        if not self._stop_event.is_set():
+            self._connection_failed("Tobii x86 bridge stopped unexpectedly.")
 
 
 def _find_x86_python() -> str:
-    candidates: list[str] = []
-    for name in (X86_PYTHON_ENV, LEGACY_X86_PYTHON_ENV):
-        configured = os.environ.get(name, "").strip()
-        if configured:
-            candidates.append(configured)
-
+    configured = (
+        os.environ.get(name, "").strip() for name in (X86_PYTHON_ENV, LEGACY_X86_PYTHON_ENV)
+    )
+    candidates = [value for value in configured if value]
     candidates.append(str(bundled_x86_python()))
     candidates.extend(_py_launcher_candidates())
     candidates.extend(_common_python_candidates())
@@ -297,14 +305,7 @@ def _find_x86_python() -> str:
 
 
 def bundled_x86_python() -> Path:
-    configured = os.environ.get(APP_ROOT_ENV, "").strip()
-    if configured:
-        root = Path(configured)
-    elif getattr(sys, "frozen", False):
-        root = Path(sys.executable).resolve().parent
-    else:
-        root = Path(__file__).resolve().parents[2]
-    return root / "runtime" / "python-x86" / "python.exe"
+    return app_root() / "runtime" / "python-x86" / "python.exe"
 
 
 def verify_bundled_bridge(root: Path) -> None:

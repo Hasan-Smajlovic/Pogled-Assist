@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 35 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 38 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
@@ -97,9 +97,10 @@ The verified CLASSLA archive is a local development input and is not downloaded
 by setup or included in a release. Its source URL and integrity hashes are in the
 bundled model metadata. Candidate selection uses only the development set; run
 the held-out evaluation once after the model choice is fixed.
-The bundled general model was rebuilt from the verified archive with the current
-preparation script and tokenizer. Its source and code checksums are recorded in
-the [model metadata](../pogled_assist/assets/bosnian-model.meta.json). Keep the
+The [model metadata](../pogled_assist/assets/bosnian-model.meta.json) records the
+archive, inputs, preparation script, and tokenizer used for that build. Compare
+those recorded checksums with the files being reviewed; the presence of a bundled
+model does not establish that it was built from the current source. Keep the
 archive outside the repository's tracked files for future rebuilds.
 
 `language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv`
@@ -111,6 +112,12 @@ reserves space for reviewed words, and reviewed word combinations survive the
 web-only pruning limits. Run the commands above to refresh the generated model,
 metadata, and comparison reports before review. An old report does not validate
 a model with a different checksum.
+
+Preparation and tokenizer checksums cover the complete source files. A refactor
+or formatting change therefore requires rebuilding the affected model even when
+prediction behavior is intended to stay the same. Run `.\dev.ps1 format` before
+preparation so formatting cannot immediately invalidate the new metadata. Never
+replace a recorded checksum by hand to make a test pass.
 
 The reviewed Islamic terminology is a separate offline layer, so it can be
 rebuilt without downloading the 2.63 GB CLASSLA archive:
@@ -206,18 +213,37 @@ Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
 data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from
 the repository root; pytest discovers all of these folders through `tests/`.
 
+Use these existing fakes and regression tests when changing a runtime boundary:
+
+| Boundary or flow | Tests and reusable inputs |
+| --- | --- |
+| Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
+| Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
+| Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
+| x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
+| AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
+| External window and cursor tracking | `tests/ui/test_foreground_tracker.py` |
+| Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |
+| Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py` and `tests/ui/test_speech_predictions.py` |
+| Learning checkpoints and ranking selection rules | `tests/suggestions/test_speech_evaluation.py` |
+
+Shared UI service fakes live in `tests/ui/_ui_fakes.py`. Speech window fixtures
+live in `tests/ui/_speech_fixtures.py` and are imported by the Speech test modules;
+global pytest setup remains in `tests/conftest.py`. `.\dev.ps1 test-ui` selects
+tests marked `e2e`; use `.\dev.ps1 test` or `.\dev.ps1 check` to include the
+unmarked prediction, tracker, and native API tests as well.
+
 Coverage is a regression floor, not a quality score. The initial floor is 60
 percent because hardware DLL calls and Windows shell behavior cannot run safely
 in a normal test process. New pure-Python behavior should include tests, and the
 floor should only move upward as meaningful cases are added.
 
-High-value future test work:
-
-- Fake the Stream Engine C API to cover device creation, subscriptions, reconnect,
-  and shutdown without loading a Tobii DLL.
-- Add failure-path tests around the x86 subprocess protocol and timeouts.
-- Add dedicated tests for AppBar registration and cleanup behind a fake `user32`
-  boundary.
+The native API fakes check arguments, callback filtering, failure cleanup, and
+resource ownership. They do not load a real DLL, exercise a native streaming
+thread, reserve an actual Windows work area, or prove cross-application focus.
+Provider and bridge tests cover delivery gaps, terminal protocol failures, and
+reconnect decisions separately. Use the manual checks below for the real Windows
+and Tobii boundaries.
 
 Pixel baselines are intentionally not enforced in CI. Qt rendering changes with
 Windows fonts, scaling, and GPU backends, which would make strict image diffs
@@ -282,7 +308,7 @@ and a download link. Setup, publication permissions, and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 35 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 38 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -294,9 +320,9 @@ is visual evidence, not a passing test or a Windows/Tobii verification result.
 The command renders:
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
-  and mouse-simulation states
-- General, gaze, speech, and learned-word Settings surfaces
-- Speech keyboard, categories, answers, saved phrases, and shared editor
+  mouse-simulation, and unsaved-settings states
+- General, gaze, speech, and learned-word Settings surfaces, including save failure
+- Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
@@ -313,7 +339,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 35-surface gallery.
+covered by UI interaction tests; it is not part of the 38-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.

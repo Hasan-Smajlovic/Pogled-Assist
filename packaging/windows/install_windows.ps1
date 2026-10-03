@@ -178,13 +178,21 @@ function Assert-PackageLayout {
 
     $versionText = (Get-Content -LiteralPath (Join-Path $SourceRoot "VERSION") -Raw).Trim()
     $packageVersion = ConvertTo-StableVersion -Value $versionText -Label "Package VERSION"
-    if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
-        $requiredVersion = ConvertTo-StableVersion -Value $ExpectedVersion -Label "ExpectedVersion"
-        if ($packageVersion -ne $requiredVersion) {
-            throw "Package VERSION $packageVersion does not match expected release $requiredVersion."
-        }
-    }
+    Assert-ExpectedPackageVersion -PackageVersion $packageVersion
     return $packageVersion
+}
+
+function Assert-ExpectedPackageVersion {
+    param([version]$PackageVersion)
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+        return
+    }
+
+    $requiredVersion = ConvertTo-StableVersion -Value $ExpectedVersion -Label "ExpectedVersion"
+    if ($PackageVersion -ne $requiredVersion) {
+        throw "Package VERSION $PackageVersion does not match expected release $requiredVersion."
+    }
 }
 
 function Get-InstallPaths {
@@ -435,7 +443,7 @@ function Restore-PreviousInstallation {
     Remove-OperationDirectory -Path $failedPath
 }
 
-function Recover-InterruptedInstallation {
+function Get-InstallRecoveryPaths {
     param(
         [string]$TransactionPath,
         [string]$InstallPath,
@@ -443,11 +451,6 @@ function Recover-InterruptedInstallation {
         [string]$InstallName
     )
 
-    if (-not (Test-Path -LiteralPath $TransactionPath -PathType Leaf)) {
-        return
-    }
-
-    Write-Warning "An interrupted installation was found. Recovering it before continuing."
     try {
         $transaction = Get-Content -LiteralPath $TransactionPath -Raw | ConvertFrom-Json
     } catch {
@@ -469,19 +472,59 @@ function Recover-InterruptedInstallation {
         -ExpectedPrefix ".$InstallName.backup-" `
         -Label "backup"
 
+    return [PSCustomObject]@{
+        Staging = $stagingPath
+        Backup = $backupPath
+    }
+}
+
+function Repair-InterruptedUpdate {
+    param(
+        [string]$InstallPath,
+        [string]$BackupPath,
+        [string]$InstallName
+    )
+
+    try {
+        Invoke-PackageSmokeTest -Root $InstallPath -Label "Interrupted update verification"
+        Write-Host "Recovered a completed installation after an interrupted cleanup."
+    } catch {
+        Restore-PreviousInstallation `
+            -InstallPath $InstallPath `
+            -BackupPath $BackupPath `
+            -InstallName $InstallName
+        Write-Host "Restored the previous installation after an interrupted update."
+    }
+}
+
+function Recover-InterruptedInstallation {
+    param(
+        [string]$TransactionPath,
+        [string]$InstallPath,
+        [string]$InstallParent,
+        [string]$InstallName
+    )
+
+    if (-not (Test-Path -LiteralPath $TransactionPath -PathType Leaf)) {
+        return
+    }
+
+    Write-Warning "An interrupted installation was found. Recovering it before continuing."
+    $recoveryPaths = Get-InstallRecoveryPaths `
+        -TransactionPath $TransactionPath `
+        -InstallPath $InstallPath `
+        -InstallParent $InstallParent `
+        -InstallName $InstallName
+    $stagingPath = $recoveryPaths.Staging
+    $backupPath = $recoveryPaths.Backup
+
     $installExists = Test-Path -LiteralPath $InstallPath -PathType Container
     $backupExists = Test-Path -LiteralPath $backupPath -PathType Container
     if ($installExists -and $backupExists) {
-        try {
-            Invoke-PackageSmokeTest -Root $InstallPath -Label "Interrupted update verification"
-            Write-Host "Recovered a completed installation after an interrupted cleanup."
-        } catch {
-            Restore-PreviousInstallation `
-                -InstallPath $InstallPath `
-                -BackupPath $backupPath `
-                -InstallName $InstallName
-            Write-Host "Restored the previous installation after an interrupted update."
-        }
+        Repair-InterruptedUpdate `
+            -InstallPath $InstallPath `
+            -BackupPath $backupPath `
+            -InstallName $InstallName
     } elseif (-not $installExists -and $backupExists) {
         Move-Item -LiteralPath $backupPath -Destination $InstallPath
         Write-Host "Restored the previous installation after an interrupted directory swap."
@@ -494,6 +537,94 @@ function Recover-InterruptedInstallation {
     Remove-OperationDirectory -Path $stagingPath
     Remove-OperationDirectory -Path $backupPath
     Remove-Item -LiteralPath $TransactionPath -Force
+}
+
+function Copy-InstallStaging {
+    param(
+        [PSCustomObject]$Paths,
+        [string]$StagingRoot,
+        [bool]$HadExistingInstallation
+    )
+
+    Invoke-RobocopyMirror -Source $Paths.Source -Destination $StagingRoot
+    if (-not $HadExistingInstallation) {
+        return
+    }
+
+    Copy-PersistentContent -ExistingRoot $Paths.Install -StagingRoot $StagingRoot
+    $preservedExternalPaths = @(
+        Get-ExternalComponentPaths | Where-Object {
+            Test-Path -LiteralPath (Join-Path $Paths.Install $_)
+        }
+    )
+    Copy-ExternalComponents `
+        -ExistingRoot $Paths.Install `
+        -StagingRoot $StagingRoot `
+        -RelativePaths $preservedExternalPaths
+    return $preservedExternalPaths
+}
+
+function Move-InstallBackup {
+    param(
+        [string]$InstallPath,
+        [string]$BackupRoot
+    )
+
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            [IO.Directory]::Move($InstallPath, $BackupRoot)
+            return
+        } catch [IO.IOException] {
+            if (
+                -not (Test-Path -LiteralPath $InstallPath -PathType Container) -or
+                (Test-Path -LiteralPath $BackupRoot)
+            ) {
+                throw
+            }
+            if ($attempt -eq 3) {
+                $script:InstallMoveFailed = $true
+                throw "Could not move the installation folder $InstallPath. Close File Explorer windows showing this folder or its subfolders and other programs using it, then try the update again. The previous installation is unchanged. Windows error: $($_.Exception.Message)"
+            }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
+function Assert-InstalledPackage {
+    param(
+        [string]$InstallPath,
+        [string[]]$PreservedExternalPaths,
+        [version]$PackageVersion
+    )
+
+    Assert-PreservedPaths -Root $InstallPath -RelativePaths $PreservedExternalPaths
+    Invoke-PackageSmokeTest -Root $InstallPath -Label "Installed application verification"
+    $installedVersionText = (Get-Content -LiteralPath (Join-Path $InstallPath "VERSION") -Raw).Trim()
+    $installedVersion = ConvertTo-StableVersion `
+        -Value $installedVersionText `
+        -Label "Installed VERSION"
+    if ($installedVersion -ne $PackageVersion) {
+        throw "Installed VERSION $installedVersion does not match package VERSION $PackageVersion."
+    }
+}
+
+function Undo-InstallSwap {
+    param(
+        [PSCustomObject]$Paths,
+        [string]$BackupRoot,
+        [bool]$HadExistingInstallation
+    )
+
+    if ($HadExistingInstallation -and (Test-Path -LiteralPath $BackupRoot)) {
+        Restore-PreviousInstallation `
+            -InstallPath $Paths.Install `
+            -BackupPath $BackupRoot `
+            -InstallName $Paths.Name
+    } elseif ($HadExistingInstallation -and -not (Test-Path -LiteralPath $Paths.Install -PathType Container)) {
+        throw "The previous installation is missing and no backup is available."
+    } elseif (-not $HadExistingInstallation) {
+        Remove-OperationDirectory -Path $Paths.Install
+    }
 }
 
 function Invoke-TransactionalInstall {
@@ -519,21 +650,16 @@ function Invoke-TransactionalInstall {
     $stagingRoot = Join-Path $Paths.Parent ".$($Paths.Name).install-$operationId"
     $backupRoot = Join-Path $Paths.Parent ".$($Paths.Name).backup-$operationId"
     $hadExistingInstallation = Test-Path -LiteralPath $Paths.Install -PathType Container
-    $preservedExternalPaths = @()
     $swapStarted = $false
     $keepRecoveryFiles = $false
 
     try {
-        Invoke-RobocopyMirror -Source $Paths.Source -Destination $stagingRoot
-        if ($hadExistingInstallation) {
-            Copy-PersistentContent -ExistingRoot $Paths.Install -StagingRoot $stagingRoot
-            $preservedExternalPaths = @(
-                Get-ExternalComponentPaths | Where-Object {
-                    Test-Path -LiteralPath (Join-Path $Paths.Install $_)
-                }
-            )
-            Copy-ExternalComponents -ExistingRoot $Paths.Install -StagingRoot $stagingRoot -RelativePaths $preservedExternalPaths
-        }
+        $preservedExternalPaths = @(
+            Copy-InstallStaging `
+                -Paths $Paths `
+                -StagingRoot $stagingRoot `
+                -HadExistingInstallation $hadExistingInstallation
+        )
         Invoke-PackageSmokeTest -Root $stagingRoot -Label "Staged application verification"
 
         Write-InstallTransaction `
@@ -545,36 +671,14 @@ function Invoke-TransactionalInstall {
         Assert-AppNotRunning -InstallRoot $Paths.Install
         $swapStarted = $true
         if ($hadExistingInstallation) {
-            for ($attempt = 1; $attempt -le 3; $attempt++) {
-                try {
-                    [IO.Directory]::Move($Paths.Install, $backupRoot)
-                    break
-                } catch [IO.IOException] {
-                    if (
-                        -not (Test-Path -LiteralPath $Paths.Install -PathType Container) -or
-                        (Test-Path -LiteralPath $backupRoot)
-                    ) {
-                        throw
-                    }
-                    if ($attempt -eq 3) {
-                        $script:InstallMoveFailed = $true
-                        throw "Could not move the installation folder $($Paths.Install). Close File Explorer windows showing this folder or its subfolders and other programs using it, then try the update again. The previous installation is unchanged. Windows error: $($_.Exception.Message)"
-                    }
-                    Start-Sleep -Milliseconds 500
-                }
-            }
+            Move-InstallBackup -InstallPath $Paths.Install -BackupRoot $backupRoot
         }
         Move-Item -LiteralPath $stagingRoot -Destination $Paths.Install
 
-        Assert-PreservedPaths -Root $Paths.Install -RelativePaths $preservedExternalPaths
-        Invoke-PackageSmokeTest -Root $Paths.Install -Label "Installed application verification"
-        $installedVersionText = (Get-Content -LiteralPath (Join-Path $Paths.Install "VERSION") -Raw).Trim()
-        $installedVersion = ConvertTo-StableVersion `
-            -Value $installedVersionText `
-            -Label "Installed VERSION"
-        if ($installedVersion -ne $PackageVersion) {
-            throw "Installed VERSION $installedVersion does not match package VERSION $PackageVersion."
-        }
+        Assert-InstalledPackage `
+            -InstallPath $Paths.Install `
+            -PreservedExternalPaths $preservedExternalPaths `
+            -PackageVersion $PackageVersion
 
         Remove-OperationDirectory -Path $backupRoot
         Remove-Item -LiteralPath $transactionPath -Force -ErrorAction SilentlyContinue
@@ -582,18 +686,13 @@ function Invoke-TransactionalInstall {
         $installError = $_
         if ($swapStarted) {
             try {
-                if ($hadExistingInstallation -and (Test-Path -LiteralPath $backupRoot)) {
-                    Restore-PreviousInstallation `
-                        -InstallPath $Paths.Install `
-                        -BackupPath $backupRoot `
-                        -InstallName $Paths.Name
-                } elseif ($hadExistingInstallation -and -not (Test-Path -LiteralPath $Paths.Install -PathType Container)) {
-                    throw "The previous installation is missing and no backup is available."
-                } elseif (-not $hadExistingInstallation) {
-                    Remove-OperationDirectory -Path $Paths.Install
-                }
+                Undo-InstallSwap `
+                    -Paths $Paths `
+                    -BackupRoot $backupRoot `
+                    -HadExistingInstallation $hadExistingInstallation
             } catch {
                 $script:InstallMoveFailed = $false
+                # Keep the backup and marker so the next run can retry rollback.
                 $keepRecoveryFiles = $true
                 throw "Installation failed: $($installError.Exception.Message) Automatic rollback also failed: $($_.Exception.Message) Recovery data remains at $transactionPath."
             }
@@ -648,7 +747,11 @@ function Start-InstalledApplication {
         -WindowStyle Hidden | Out-Null
 }
 
-if (-not (Test-IsAdministrator) -and -not $NoElevation) {
+function Ensure-Administrator {
+    if ((Test-IsAdministrator) -or $NoElevation) {
+        return
+    }
+
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
@@ -677,44 +780,50 @@ if (-not (Test-IsAdministrator) -and -not $NoElevation) {
     exit 0
 }
 
-$installerExitCode = 0
-try {
-    Assert-DedicatedInstallRoot
-    $packageVersion = Assert-PackageLayout
-    $paths = Get-InstallPaths
-    Assert-AppNotRunning -InstallRoot $paths.Install
-    Enter-InstallLock
-    Assert-AppNotRunning -InstallRoot $paths.Install
-    Invoke-TransactionalInstall -Paths $paths -PackageVersion $packageVersion
+function Invoke-Installer {
+    Ensure-Administrator
 
-    if (-not $NoDesktopShortcut) {
-        New-DesktopShortcut -InstalledRoot $paths.Install
-    }
+    $installerExitCode = 0
+    try {
+        Assert-DedicatedInstallRoot
+        $packageVersion = Assert-PackageLayout
+        $paths = Get-InstallPaths
+        Assert-AppNotRunning -InstallRoot $paths.Install
+        Enter-InstallLock
+        Assert-AppNotRunning -InstallRoot $paths.Install
+        Invoke-TransactionalInstall -Paths $paths -PackageVersion $packageVersion
 
-    Write-Host "Installed Pogled Assist v$($packageVersion.ToString(3)) to $($paths.Install)"
-    Write-Host "Speech tools and the 32-bit Tobii bridge runtime are included and verified."
-    Write-Host "Tobii device software and personal calibration still need to be configured."
-    Write-Host "Run PogledAssist.exe --installation-check to review readiness and setup actions."
-
-    if (-not $NoSetupWindow -and -not $NoDesktopShortcut) {
-        try {
-            Start-Process `
-                -FilePath (Join-Path $paths.Install "PogledAssist.exe") `
-                -ArgumentList "--installation-check" `
-                -WorkingDirectory $paths.Install | Out-Null
-        } catch {
-            Write-Warning "Installation succeeded, but the setup check could not be opened: $($_.Exception.Message)"
+        if (-not $NoDesktopShortcut) {
+            New-DesktopShortcut -InstalledRoot $paths.Install
         }
+
+        Write-Host "Installed Pogled Assist v$($packageVersion.ToString(3)) to $($paths.Install)"
+        Write-Host "Speech tools and the 32-bit Tobii bridge runtime are included and verified."
+        Write-Host "Tobii device software and personal calibration still need to be configured."
+        Write-Host "Run PogledAssist.exe --installation-check to review readiness and setup actions."
+
+        if (-not $NoSetupWindow -and -not $NoDesktopShortcut) {
+            try {
+                Start-Process `
+                    -FilePath (Join-Path $paths.Install "PogledAssist.exe") `
+                    -ArgumentList "--installation-check" `
+                    -WorkingDirectory $paths.Install | Out-Null
+            } catch {
+                Write-Warning "Installation succeeded, but the setup check could not be opened: $($_.Exception.Message)"
+            }
+        }
+
+        if ($Launch) {
+            Start-InstalledApplication -InstalledRoot $paths.Install
+        }
+    } catch {
+        $installerExitCode = if ($script:InstallMoveFailed) { 2 } else { 1 }
+        Write-Error "Installation failed: $($_.Exception.Message)" -ErrorAction Continue
+    } finally {
+        Exit-InstallLock
     }
 
-    if ($Launch) {
-        Start-InstalledApplication -InstalledRoot $paths.Install
-    }
-} catch {
-    $installerExitCode = if ($script:InstallMoveFailed) { 2 } else { 1 }
-    Write-Error "Installation failed: $($_.Exception.Message)" -ErrorAction Continue
-} finally {
-    Exit-InstallLock
+    exit $installerExitCode
 }
 
-exit $installerExitCode
+Invoke-Installer
