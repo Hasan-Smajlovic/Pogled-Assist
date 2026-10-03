@@ -53,6 +53,41 @@ def test_official_release_rejects_assets_from_the_previous_repository_name() -> 
         )
 
 
+@pytest.mark.parametrize("flag", ["draft", "prerelease"])
+@pytest.mark.parametrize("value", [True, None, 0, "false"])
+def test_release_requires_explicit_false_stability_flags(flag, value):
+    payload = _release_payload(RELEASE_DOWNLOAD_ROOT)
+    payload[flag] = value
+
+    with pytest.raises(ReleaseUpdateError, match="stabilno izdanje"):
+        _validate_release(payload, release_api_url=RELEASE_API_URL)
+
+
+@pytest.mark.parametrize("asset_index", [0, 1])
+@pytest.mark.parametrize("change", ["missing", "duplicate", "wrong_url"])
+def test_release_checks_both_assets_and_rejects_duplicates(asset_index, change):
+    payload = _release_payload(RELEASE_DOWNLOAD_ROOT)
+    asset = payload["assets"][asset_index]
+    if change == "missing":
+        payload["assets"].pop(asset_index)
+    elif change == "duplicate":
+        payload["assets"].append(dict(asset))
+    else:
+        asset["browser_download_url"] = "https://example.invalid/untrusted.zip"
+
+    with pytest.raises(ReleaseUpdateError, match=asset["name"]):
+        _validate_release(payload, release_api_url=RELEASE_API_URL)
+
+
+def test_injected_release_endpoint_keeps_local_server_asset_urls():
+    payload = _release_payload("http://127.0.0.1:1234")
+    payload["assets"].append(None)
+
+    assert _validate_release(
+        payload, release_api_url="http://127.0.0.1:1234/latest"
+    ) == StableVersion(0, 1, 0)
+
+
 def test_in_app_updater_starts_outside_install_folder(tmp_path, monkeypatch) -> None:
     install_root = tmp_path / "PogledAssist"
     install_root.mkdir()

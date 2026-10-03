@@ -77,10 +77,14 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
 )
 def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simulate_gaze):
     import PySide6.QtWidgets
+    from PySide6.QtCore import QLockFile
 
     from pogled_assist import toolbar
 
     calls = []
+    monkeypatch.setattr(
+        main_module, "application_lock", lambda: QLockFile(str(tmp_path / "app.lock"))
+    )
     test_app = PySide6.QtWidgets.QApplication.instance()
 
     class FakeIcon:

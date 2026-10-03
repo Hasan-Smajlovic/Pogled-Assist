@@ -87,9 +87,22 @@ class SpeechLibraryStore:
             raise ValueError("The v2 library and legacy phrase paths must differ.")
         self.path = path
         self.legacy_path = legacy_path
+        self._unreadable_paths: set[Path] = set()
+
+    @property
+    def read_error(self) -> bool:
+        return bool(self._unreadable_paths)
+
+    def _read(self, path: Path) -> object:
+        data = _read_json(path)
+        if data is _INVALID:
+            self._unreadable_paths.add(path)
+        elif data is not _MISSING:
+            self._unreadable_paths.discard(path)
+        return data
 
     def load(self) -> SpeechLibrary:
-        data = _read_json(self.path)
+        data = self._read(self.path)
         if data is _MISSING:
             return self._load_legacy_for_migration()
         if data is _INVALID:
@@ -97,11 +110,17 @@ class SpeechLibraryStore:
 
         library = _parse_library(data, self.path)
         if library is None:
+            self._unreadable_paths.add(self.path)
             return self._fallback_after_invalid_primary()
         self._sync_legacy_file(library)
         return library
 
     def save(self, library: SpeechLibrary) -> bool:
+        # Only load() can recover this state, so a fallback shown in the UI can
+        # never replace the original library, even after disk access returns.
+        if self.read_error:
+            logger.warning("Speech library write blocked until unreadable data is reloaded.")
+            return False
         payload = _library_payload(library)
         targets: list[tuple[Path, object]] = [(self.path, payload)]
         if self.legacy_path is not None:
@@ -142,11 +161,12 @@ class SpeechLibraryStore:
         if self.legacy_path is None:
             return SpeechLibrary(categories=default_categories())
 
-        data = _read_json(self.legacy_path)
+        data = self._read(self.legacy_path)
         if data is _MISSING or data is _INVALID:
             return SpeechLibrary(categories=default_categories())
         library = _parse_library(data, self.legacy_path)
         if library is None:
+            self._unreadable_paths.add(self.legacy_path)
             return SpeechLibrary(categories=default_categories())
 
         if not self.save(library):
@@ -157,7 +177,7 @@ class SpeechLibraryStore:
         if self.legacy_path is None:
             return SpeechLibrary(categories=default_categories())
 
-        legacy_data = _read_json(self.legacy_path)
+        legacy_data = self._read(self.legacy_path)
         if not isinstance(legacy_data, list):
             return SpeechLibrary(categories=default_categories())
         return SpeechLibrary(
@@ -169,7 +189,12 @@ class SpeechLibraryStore:
         if self.legacy_path is None:
             return
 
-        legacy_data = _read_json(self.legacy_path)
+        legacy_data = self._read(self.legacy_path)
+        if legacy_data is _INVALID:
+            return
+        if legacy_data is not _MISSING and not isinstance(legacy_data, (list, dict)):
+            self._unreadable_paths.add(self.legacy_path)
+            return
         if isinstance(legacy_data, list):
             legacy_phrases = _parse_phrases(legacy_data)
             if legacy_phrases == library.phrases:
@@ -200,10 +225,10 @@ _INVALID = object()
 
 
 def _read_json(path: Path) -> object:
-    if not path.exists():
-        return _MISSING
     try:
         return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return _MISSING
     except Exception:
         logger.exception("Could not load the speech library from %s.", path)
         return _INVALID

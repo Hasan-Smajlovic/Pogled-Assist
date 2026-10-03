@@ -12,23 +12,22 @@ pytestmark = pytest.mark.skipif(
 
 SETUP_SCRIPT = Path(__file__).resolve().parents[2] / "setup_windows.ps1"
 
-# Exercise the real copy function without starting the elevated setup flow.
+# Load helper definitions as well as the copy function, without running setup.
 COPY_RUNNER = r"""
 param([string]$SetupScript, [string]$SourcePath, [string]$TargetPath)
 
+$ErrorActionPreference = "Stop"
 $tokens = $null
 $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     $SetupScript, [ref]$tokens, [ref]$errors
 )
 if ($errors.Count -gt 0) { throw "Could not parse setup script." }
-$copyFunction = $ast.Find({
-    param($node)
-    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq "Copy-ProjectToLocalInstallRoot"
-}, $false)
-if ($null -eq $copyFunction) { throw "Source copy function was not found." }
-. ([scriptblock]::Create($copyFunction.Extent.Text))
+foreach ($statement in $ast.EndBlock.Statements) {
+    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        . ([scriptblock]::Create($statement.Extent.Text))
+    }
+}
 
 function Write-Step { param([string]$Message) }
 function Write-Info { param([string]$Message) }

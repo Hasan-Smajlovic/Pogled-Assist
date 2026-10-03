@@ -8,6 +8,9 @@ from difflib import SequenceMatcher
 from .learning import Contribution, Key, LearningStore
 from .text import Word, insert_word, words
 
+PUNCTUATION = frozenset(".,?!")
+SENTENCE_ENDINGS = frozenset(".?")
+
 
 @dataclass
 class Occurrence:
@@ -37,51 +40,16 @@ class Composition:
     def edit(self, text: str) -> str:
         if text == self.text:
             return text
-        if (
-            len(text) == len(self.text) + 1
-            and text.startswith(self.text)
-            and text[-1].isspace()
-            and self.text.endswith((". ", "? "))
-        ):
+        typed = _appended_character(self.text, text)
+        if typed.isspace() and self.text.endswith((". ", "? ")):
             return self.text
-        appended_sentence_boundary = (
-            len(text) == len(self.text) + 1 and text.startswith(self.text) and text[-1] in ".?"
-        )
-        if (
-            self.automatic_space == self.text
-            and len(text) == len(self.text) + 1
-            and text.startswith(self.text)
-            and text[-1] in ".,?!"
-        ):
-            text = self.text[:-1] + text[-1]
-        if appended_sentence_boundary:
+        if typed in PUNCTUATION and self.automatic_space == self.text:
+            text = self.text[:-1] + typed
+        if typed in SENTENCE_ENDINGS:
             text += " "
         self.undo = None
         self.automatic_space = None
-        tokens = words(text)
-        old = self.occurrences
-        matching = SequenceMatcher(
-            a=[item.word.text for item in old], b=[token.text for token in tokens], autojunk=False
-        )
-        kept = {}
-        for block in matching.get_matching_blocks():
-            for offset in range(block.size):
-                kept[block.b + offset] = block.a + offset
-        retained = set(kept.values())
-        for index, occurrence in enumerate(old):
-            if index not in retained and not occurrence.submitted:
-                for credit in occurrence.credits.values():
-                    self.store.revoke(credit)
-        updated = []
-        for index, token in enumerate(tokens):
-            occurrence = old[kept[index]] if index in kept else Occurrence(token)
-            if not occurrence.submitted:
-                for key in list(occurrence.credits):
-                    if key not in token.keys:
-                        self.store.revoke(occurrence.credits.pop(key))
-            occurrence.word = token
-            updated.append(occurrence)
-        self.occurrences = updated
+        self._reconcile(words(text))
         self.text = text
         return text
 
@@ -91,16 +59,12 @@ class Composition:
             return result
         before = self.text
         previous = list(self.occurrences)
-        occurrences = [replace(item, credits=item.credits.copy()) for item in self.occurrences]
-        active = [
-            credit for item in occurrences for credit in item.credits.values() if credit.active
-        ]
+        copies = [replace(item, credits=item.credits.copy()) for item in previous]
+        active = [credit for item in copies for credit in item.credits.values() if credit.active]
         automatic_space = self.automatic_space
         self.edit(result)
         selected = self.occurrences[-1]
-        for index, item in enumerate(previous):
-            if item is not selected and any(item is current for current in self.occurrences):
-                occurrences[index] = item
+        occurrences = self._undo_occurrences(previous, copies, selected)
         if self.learn:
             self._credit(selected)
         self.undo = Undo(
@@ -138,7 +102,58 @@ class Composition:
             self._credit(occurrence)
             occurrence.submitted = True
 
+    def _reconcile(self, tokens: list[Word]) -> None:
+        previous = _previous_positions(self.occurrences, tokens)
+        retained = set(previous.values())
+        for index, occurrence in enumerate(self.occurrences):
+            if index not in retained:
+                self._revoke_credits(occurrence)
+        updated = []
+        for index, token in enumerate(tokens):
+            occurrence = (
+                self.occurrences[previous[index]] if index in previous else Occurrence(token)
+            )
+            self._revoke_credits(occurrence, keep=token.keys)
+            occurrence.word = token
+            updated.append(occurrence)
+        self.occurrences = updated
+
+    def _revoke_credits(self, occurrence: Occurrence, keep: tuple[Key, ...] = ()) -> None:
+        if occurrence.submitted:
+            return
+        for key in list(occurrence.credits):
+            if key not in keep:
+                self.store.revoke(occurrence.credits.pop(key))
+
+    def _undo_occurrences(
+        self, previous: list[Occurrence], copies: list[Occurrence], selected: Occurrence
+    ) -> list[Occurrence]:
+        surviving = {id(item) for item in self.occurrences if item is not selected}
+        return [
+            item if id(item) in surviving else copy
+            for item, copy in zip(previous, copies, strict=True)
+        ]
+
     def _credit(self, occurrence: Occurrence) -> None:
         for key in occurrence.word.keys:
             if key not in occurrence.credits:
                 occurrence.credits[key] = self.store.credit(key)
+
+
+def _appended_character(before: str, after: str) -> str:
+    if len(after) == len(before) + 1 and after.startswith(before):
+        return after[-1]
+    return ""
+
+
+def _previous_positions(occurrences: list[Occurrence], tokens: list[Word]) -> dict[int, int]:
+    matching = SequenceMatcher(
+        a=[item.word.text for item in occurrences],
+        b=[token.text for token in tokens],
+        autojunk=False,
+    )
+    return {
+        block.b + offset: block.a + offset
+        for block in matching.get_matching_blocks()
+        for offset in range(block.size)
+    }

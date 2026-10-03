@@ -3,6 +3,20 @@
 This guide covers common problems when running the checks in the
 [development guide](DEVELOPMENT.md#verification-before-a-pull-request).
 
+## Bundled model metadata has an outdated source checksum
+
+If `tests/suggestions/test_suggestion_text.py` fails on `preparation_sha256` or
+`tokenizer_sha256`, compare the recorded hash in the corresponding model metadata
+with the source file. Refactoring or formatting changes the hash even when the
+intended model behavior is unchanged. A model copied from another checkout can
+also have metadata for different source files.
+
+Rebuild the affected model and regenerate its reports following the
+[model command reference](DEVELOPMENT.md#command-reference), then
+run `.\dev.ps1 check` again. The general model needs the verified local CLASSLA
+archive; the Islamic layer uses the reviewed TSV already in the repository.
+Do not edit metadata hashes by hand or weaken the checksum assertions.
+
 ## Pytest cannot access `pytest-of-<username>`
 
 If many otherwise unrelated tests fail during setup with `PermissionError:

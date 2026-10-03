@@ -145,6 +145,23 @@ def test_save_failure_does_not_escape(monkeypatch, tmp_path):
         type(path), "write_text", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("full"))
     )
 
-    save_app_settings(GazeSettings(), SpeechSettings())
+    assert save_app_settings(GazeSettings(), SpeechSettings()) is False
 
     assert not path.exists()
+
+
+def test_failed_replace_preserves_settings_and_retry_saves_latest_values(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    assert save_app_settings(GazeSettings(dwell_ms=500), SpeechSettings())
+    original = path.read_bytes()
+    with monkeypatch.context() as patch:
+
+        def fail(*_args):
+            raise PermissionError("Synthetic locked file")
+
+        patch.setattr(type(path), "replace", fail)
+        assert not save_app_settings(GazeSettings(dwell_ms=800), SpeechSettings(speed=180))
+    assert path.read_bytes() == original
+    assert save_app_settings(GazeSettings(dwell_ms=800), SpeechSettings(speed=180))
+    gaze, speech = load_app_settings()
+    assert gaze.dwell_ms == 800 and speech.speed == 180

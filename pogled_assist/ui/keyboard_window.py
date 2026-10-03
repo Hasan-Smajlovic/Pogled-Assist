@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 import math
-import sys
-import time
+from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -21,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
+    KeyboardGroupPage,
     group_label,
     key_label,
     keyboard_group_page,
@@ -29,17 +28,12 @@ from ..keyboard_layouts import (
     switch_label,
 )
 from ..speech.speech_service import SpeechSettings
-from ..windows.appbar import ABE_RIGHT, WindowsAppBar
-from ..windows.windows_input import WindowsInputController
-from .gaze_feedback import set_gaze_feedback
+from .sidebar_panel import SidebarPanel
 
 logger = logging.getLogger(__name__)
 
 KEYBOARD_WINDOW_ACTION_PREFIX = "keyboard_window:"
 
-SIDEBAR_WIDTH = 380
-MIN_SIDEBAR_WIDTH = 320
-MAX_SIDEBAR_WIDTH_FRACTION = 0.36
 KEY_MIN_HEIGHT = 54
 UTILITY_MIN_HEIGHT = 58
 TAB_HEIGHT = 52
@@ -48,185 +42,14 @@ TAB_LETTERS = "letters"
 TAB_NUMPAD = "numpad"
 TAB_SYMBOLS = "symbols"
 
+BUTTON_HEIGHTS = {
+    "tabButton": TAB_HEIGHT,
+    "groupButton": KEY_MIN_HEIGHT,
+    "keyButton": KEY_MIN_HEIGHT,
+    "utilityButton": UTILITY_MIN_HEIGHT,
+}
 
-class KeyboardWindow(QWidget):
-    """Right-side AppBar keyboard that can be selected by mouse or gaze."""
-
-    closed = Signal()
-    status_changed = Signal(str)
-    interaction_context_changed = Signal()
-    mouse_action_started = Signal()
-    keyboard_script_changed = Signal(str)
-
-    def __init__(
-        self,
-        settings: SpeechSettings,
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setObjectName("keyboardWindow")
-        self.setWindowTitle("Tastatura")
-        self.setWindowFlags(_keyboard_window_flags())
-        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
-        self.setFocusPolicy(Qt.NoFocus)
-
-        self._settings = replace(settings)
-        self._letters_per_group = max(1, self._settings.letters_per_group)
-        self._rebuild_key_groups()
-        self._group_page = 0
-        self._active_tab = TAB_LETTERS
-        self._active_group_index: int | None = None
-        self._action_buttons: dict[str, QToolButton] = {}
-        self._dynamic_actions: set[str] = set()
-        self._gaze_target_action: str | None = None
-        self._appbar = WindowsAppBar()
-        self._input: WindowsInputController | None = None
-        self._target_window: int | None = None
-        self._full_height = False
-        self._reserved_top_height = 0
-
-        self._build_ui()
-        self._show_letter_groups()
-        logger.info("Keyboard sidebar initialized.")
-
-    def show_sidebar(self, *, full_height: bool = False) -> None:
-        self._full_height = bool(full_height)
-        self._ensure_input_controller()
-        self._remember_foreground_target()
-        if self._full_height:
-            self._appbar.unregister()
-        self._position_on_primary_screen()
-        self.show()
-        self.raise_()
-        self._register_appbar()
-        self._restore_target_window()
-        logger.info("Keyboard sidebar shown.")
-
-    def hide_sidebar(self) -> None:
-        self._set_gaze_target_action(None)
-        self._appbar.unregister()
-        self.hide()
-        logger.info("Keyboard sidebar hidden.")
-
-    def hideEvent(self, event) -> None:
-        self.interaction_context_changed.emit()
-        super().hideEvent(event)
-
-    def resizeEvent(self, event) -> None:
-        self.interaction_context_changed.emit()
-        super().resizeEvent(event)
-
-    def set_full_height(self, full_height: bool) -> None:
-        full_height = bool(full_height)
-        if self._full_height == full_height:
-            return
-
-        self._full_height = full_height
-        if not self.isVisible():
-            return
-
-        if self._full_height:
-            self._appbar.unregister()
-        self._position_on_primary_screen()
-        self._register_appbar()
-        mode = "full screen height" if self._full_height else "available work area height"
-        logger.info("Keyboard sidebar resized to %s.", mode)
-
-    def set_reserved_top_height(self, height: int) -> None:
-        height = max(0, int(height))
-        if height == self._reserved_top_height:
-            return
-
-        self._reserved_top_height = height
-        if self.isVisible() and not self._full_height:
-            self._position_on_primary_screen()
-            self._register_appbar()
-
-    def set_target_window(self, hwnd: int | None) -> None:
-        if hwnd is None:
-            return
-        if hwnd == self._target_window:
-            return
-
-        self._target_window = hwnd
-        logger.info("Keyboard target window set externally: hwnd=%s.", hwnd)
-
-    def update_settings(self, settings: SpeechSettings) -> None:
-        old_letters_per_group = self._letters_per_group
-        old_script = self._settings.keyboard_script
-        self._settings = replace(settings)
-        self._letters_per_group = max(1, self._settings.letters_per_group)
-        if (
-            old_letters_per_group != self._letters_per_group
-            or old_script != settings.keyboard_script
-        ):
-            self._rebuild_key_groups()
-            self._group_page = 0
-            self._script_button.setText(switch_label(settings.keyboard_script))
-            self._active_group_index = None
-            self._show_current_group_level()
-
-        logger.info("Keyboard sidebar settings updated: %s", self._settings)
-
-    def _rebuild_key_groups(self) -> None:
-        self._letter_groups, self._numpad_groups, self._symbol_groups = sidebar_key_groups(
-            self._settings.keyboard_script, self._letters_per_group
-        )
-
-    def _switch_keyboard_script(self) -> None:
-        script = other_script(self._settings.keyboard_script)
-        self.update_settings(replace(self._settings, keyboard_script=script))
-        self.keyboard_script_changed.emit(script)
-
-    def action_at_global_point(self, point: QPoint) -> str | None:
-        for action in self._action_buttons:
-            rect = self.action_bounds(action)
-            if rect is not None and rect.contains(point):
-                return action
-
-        return None
-
-    def action_center_at_global_point(self, action: str, point: QPoint) -> QPoint | None:
-        rect = self.action_bounds(action)
-        return rect.center() if rect is not None and rect.contains(point) else None
-
-    def action_bounds(self, action: str) -> QRect | None:
-        if not self.isVisible():
-            return None
-        button = self._action_buttons.get(action)
-        if button is None or not button.isVisible() or not button.isEnabled():
-            return None
-        return QRect(button.mapToGlobal(QPoint(0, 0)), button.size())
-
-    def contains_global_point(self, point: QPoint) -> bool:
-        if not self.isVisible():
-            return False
-
-        top_left = self.mapToGlobal(QPoint(0, 0))
-        return QRect(top_left, self.size()).contains(point)
-
-    def handle_gaze_action(self, action: str) -> None:
-        if not action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX):
-            return
-
-        logger.info("Keyboard sidebar gaze action requested: %s", action)
-        self._trigger_action(action)
-
-    def cancel_gaze_interaction(self) -> None:
-        self._set_gaze_target_action(None)
-
-    def set_gaze_target_action(self, action: str | None) -> None:
-        self._set_gaze_target_action(action)
-
-    def closeEvent(self, event: QCloseEvent) -> None:
-        logger.info("Keyboard sidebar close event received.")
-        self.hide_sidebar()
-        self.closed.emit()
-        super().closeEvent(event)
-
-    def _build_ui(self) -> None:
-        self.setStyleSheet(
-            """
+KEYBOARD_STYLESHEET = """
             QWidget#keyboardWindow {
                 background: #111318;
                 color: #f6f7fb;
@@ -275,7 +98,99 @@ class KeyboardWindow(QWidget):
                 color: #ffffff;
             }
             """
+
+
+class KeyboardWindow(SidebarPanel):
+    """Right-side AppBar keyboard that can be selected by mouse or gaze."""
+
+    log_name = "Keyboard"
+    full_height_status = "Tastatura koristi punu visinu ekrana."
+    reserved_status = "Tastatura je zauzela desni dio radne površine."
+    unreserved_status = "Tastatura je prikazana bez rezervacije radne površine."
+    input_unavailable_status = "Unos putem tastature nije dostupan."
+
+    def __init__(
+        self,
+        settings: SpeechSettings,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("keyboardWindow")
+        self.setWindowTitle("Tastatura")
+
+        self._settings = replace(settings)
+        self._letters_per_group = max(1, self._settings.letters_per_group)
+        self._rebuild_key_groups()
+        self._group_page = 0
+        self._active_tab = TAB_LETTERS
+        self._active_group_index: int | None = None
+        self._commands: dict[str, Callable[[], None]] = {
+            "script-toggle": self._switch_keyboard_script,
+            "tab:letters": self._show_letter_groups,
+            "tab:numpad": self._show_numpad,
+            "tab:symbols": self._show_symbols,
+            "groups": self._show_current_group_level,
+            "space": lambda: self._type_text(" "),
+            "backspace": lambda: self._press_key("backspace"),
+        }
+        self._argument_commands: dict[str, Callable[[str], None]] = {
+            "group-page": self._turn_group_page,
+            "group": lambda index: self._show_letter_group(int(index)),
+            "letter": self._type_letter,
+            "numpad_group": lambda index: self._show_numpad_group(int(index)),
+            "symbol_group": lambda index: self._show_symbol_group(int(index)),
+            "numpad": self._type_numpad_key,
+            "symbol": self._type_symbol,
+        }
+
+        self._build_ui()
+        self._show_letter_groups()
+        logger.info("Keyboard sidebar initialized.")
+
+    def hideEvent(self, event) -> None:
+        self.interaction_context_changed.emit()
+        super().hideEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        self.interaction_context_changed.emit()
+        super().resizeEvent(event)
+
+    def update_settings(self, settings: SpeechSettings) -> None:
+        old_letters_per_group = self._letters_per_group
+        old_script = self._settings.keyboard_script
+        self._settings = replace(settings)
+        self._letters_per_group = max(1, self._settings.letters_per_group)
+        if (
+            old_letters_per_group != self._letters_per_group
+            or old_script != settings.keyboard_script
+        ):
+            self._rebuild_key_groups()
+            self._group_page = 0
+            self._script_button.setText(switch_label(settings.keyboard_script))
+            self._active_group_index = None
+            self._show_current_group_level()
+
+        logger.info("Keyboard sidebar settings updated: %s", self._settings)
+
+    def _rebuild_key_groups(self) -> None:
+        self._letter_groups, self._numpad_groups, self._symbol_groups = sidebar_key_groups(
+            self._settings.keyboard_script, self._letters_per_group
         )
+
+    def _switch_keyboard_script(self) -> None:
+        script = other_script(self._settings.keyboard_script)
+        self.update_settings(replace(self._settings, keyboard_script=script))
+        self.keyboard_script_changed.emit(script)
+
+    def handle_gaze_action(self, action: str) -> None:
+        if not action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX):
+            return
+
+        logger.info("Keyboard sidebar gaze action requested: %s", action)
+        self._trigger_action(action)
+
+    def _build_ui(self) -> None:
+        self.setStyleSheet(KEYBOARD_STYLESHEET)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
@@ -294,7 +209,6 @@ class KeyboardWindow(QWidget):
                 label,
                 self._action(f"tab:{tab}"),
                 "tabButton",
-                minimum_height=TAB_HEIGHT,
                 dynamic=False,
             )
             button.setCheckable(True)
@@ -315,21 +229,18 @@ class KeyboardWindow(QWidget):
             "Grupe",
             self._action("groups"),
             "utilityButton",
-            minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=False,
         )
         self._space_button = self._make_button(
             "Razmak",
             self._action("space"),
             "utilityButton",
-            minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=False,
         )
         self._backspace_button = self._make_button(
             "Obriši",
             self._action("backspace"),
             "utilityButton",
-            minimum_height=UTILITY_MIN_HEIGHT,
             dynamic=False,
         )
         utility_row.addWidget(self._groups_button, 1)
@@ -341,7 +252,6 @@ class KeyboardWindow(QWidget):
             switch_label(self._settings.keyboard_script),
             self._action("script-toggle"),
             "tabButton",
-            minimum_height=TAB_HEIGHT,
             dynamic=False,
         )
         root.addWidget(self._script_button)
@@ -371,7 +281,6 @@ class KeyboardWindow(QWidget):
                 letter,
                 self._action(f"letter:{group_index}:{index}"),
                 "keyButton",
-                minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
             column = (
@@ -417,24 +326,21 @@ class KeyboardWindow(QWidget):
                 group_label(group, self._settings.keyboard_script),
                 self._action(f"{action_prefix}:{index}"),
                 "groupButton",
-                minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
             button.setLayoutDirection(Qt.RightToLeft if arabic else Qt.LeftToRight)
             column = columns - 1 - offset % columns if arabic else offset % columns
             self._key_layout.addWidget(button, offset // columns, column)
         if page.count > 1:
-            row = math.ceil(len(page.groups) / columns)
-            for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
-                button = self._make_button(
-                    label,
-                    self._action(f"group-page:{delta}"),
-                    "tabButton",
-                    minimum_height=TAB_HEIGHT,
-                    dynamic=True,
-                )
-                button.setEnabled(0 <= page.index + delta < page.count)
-                self._key_layout.addWidget(button, row, column)
+            self._add_page_buttons(page, math.ceil(len(page.groups) / columns))
+
+    def _add_page_buttons(self, page: KeyboardGroupPage, row: int) -> None:
+        for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
+            button = self._make_button(
+                label, self._action(f"group-page:{delta}"), "tabButton", dynamic=True
+            )
+            button.setEnabled(0 <= page.index + delta < page.count)
+            self._key_layout.addWidget(button, row, column)
 
     def _show_key_group(
         self,
@@ -460,7 +366,6 @@ class KeyboardWindow(QWidget):
                 key_label(label),
                 self._action(f"{action_prefix}:{index}"),
                 "keyButton",
-                minimum_height=KEY_MIN_HEIGHT,
                 dynamic=True,
             )
             self._key_layout.addWidget(button, index // columns, index % columns)
@@ -470,156 +375,42 @@ class KeyboardWindow(QWidget):
         if command.startswith("tab:"):
             self._group_page = 0
 
-        if command == "script-toggle":
-            self._switch_keyboard_script()
-        elif command.startswith("group-page:"):
-            self._group_page = max(0, self._group_page + int(command.split(":", 1)[1]))
-            self._show_current_group_level()
-        elif command == "tab:letters":
-            self._show_letter_groups()
-        elif command == "tab:numpad":
-            self._show_numpad()
-        elif command == "tab:symbols":
-            self._show_symbols()
-        elif command == "groups":
-            self._show_current_group_level()
-        elif command == "space":
-            self._type_text(" ")
-        elif command == "backspace":
-            self._press_key("backspace")
-        elif command.startswith("group:"):
-            self._show_letter_group(int(command.split(":", 1)[1]))
-        elif command.startswith("letter:"):
-            _prefix, group_text, letter_text = command.split(":", 2)
-            group_index = int(group_text)
-            letter_index = int(letter_text)
-            self._type_text(self._letter_groups[group_index][letter_index])
-            self._show_letter_groups()
-        elif command.startswith("numpad_group:"):
-            self._show_numpad_group(int(command.split(":", 1)[1]))
-        elif command.startswith("symbol_group:"):
-            self._show_symbol_group(int(command.split(":", 1)[1]))
-        elif command.startswith("numpad:"):
-            key = self._numpad_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
-            self._type_key_label(key)
-            self._show_numpad()
-        elif command.startswith("symbol:"):
-            key = self._symbol_groups[self._active_group_index or 0][int(command.split(":", 1)[1])]
-            self._type_text(key)
-            self._show_symbols()
-
-    def _type_key_label(self, label: str) -> None:
-        if label == "Potvrdi":
-            self._press_key("enter")
-        else:
-            self._type_text(label)
-
-    def _type_text(self, text: str) -> None:
-        self._ensure_input_controller()
-        if self._input is None:
-            self._emit_status("Unos putem tastature nije dostupan.")
+        handler = self._commands.get(command)
+        if handler is not None:
+            handler()
             return
 
-        try:
-            self._restore_target_window()
-            self._input.type_text(text)
-            self._emit_status(f"Uneseno je {text!r}.")
-        except Exception:
-            logger.exception("Keyboard text input failed.")
-            self._emit_status("Unos putem tastature nije uspio.")
+        name, separator, argument = command.partition(":")
+        argument_handler = self._argument_commands.get(name) if separator else None
+        if argument_handler is not None:
+            argument_handler(argument)
 
-    def _press_key(self, key: str) -> None:
-        self._ensure_input_controller()
-        if self._input is None:
-            self._emit_status("Unos putem tastature nije dostupan.")
-            return
+    def _turn_group_page(self, delta: str) -> None:
+        self._group_page = max(0, self._group_page + int(delta))
+        self._show_current_group_level()
 
-        try:
-            self._restore_target_window()
-            self._input.press_key(key)
-            key_name = {"backspace": "brisanje", "enter": "potvrda"}.get(key, key)
-            self._emit_status(f"Pritisnuta je tipka za {key_name}.")
-        except Exception:
-            logger.exception("Keyboard key press failed.")
-            self._emit_status("Pritisak tipke nije uspio.")
+    def _type_letter(self, position: str) -> None:
+        group_text, letter_text = position.split(":", 1)
+        group_index, letter_index = int(group_text), int(letter_text)
+        self._type_text(self._letter_groups[group_index][letter_index])
+        self._show_letter_groups()
 
-    def _ensure_input_controller(self) -> None:
-        if self._input is not None:
-            return
+    def _type_numpad_key(self, index: str) -> None:
+        self._type_key_label(self._numpad_groups[self._active_group_index or 0][int(index)])
+        self._show_numpad()
 
-        try:
-            self._input = WindowsInputController()
-        except Exception:
-            logger.exception("Could not initialize keyboard input backend.")
-            self._emit_status("Unos putem tastature nije dostupan.")
+    def _type_symbol(self, index: str) -> None:
+        self._type_text(self._symbol_groups[self._active_group_index or 0][int(index)])
+        self._show_symbols()
 
-    def _emit_status(self, text: str) -> None:
-        logger.info("Keyboard sidebar status: %s", text)
-        self.setToolTip(text)
-        self.status_changed.emit(text)
-
-    def _remember_foreground_target(self) -> None:
-        if self._input is None:
-            return
-
-        hwnd = self._input.foreground_window()
-        if hwnd is None:
-            return
-        if self._input.belongs_to_current_process(hwnd):
-            logger.info("Keyboard foreground target is an app window; keeping previous target.")
-            return
-
-        self._target_window = hwnd
-        logger.info("Keyboard target window captured: hwnd=%s.", hwnd)
-
-    def _restore_target_window(self) -> bool:
-        if self._input is None:
-            return False
-
-        current = self._input.foreground_window()
-        if current is not None and not self._input.belongs_to_current_process(current):
-            self._target_window = current
-            return True
-
-        if self._target_window is None:
-            logger.warning("Keyboard has no external target window to restore.")
-            return False
-
-        if not self._input.is_window(self._target_window):
-            logger.warning(
-                "Keyboard target window is no longer valid: hwnd=%s.", self._target_window
-            )
-            self._target_window = None
-            return False
-
-        if current == self._target_window:
-            return True
-
-        restored = self._input.set_foreground_window(self._target_window)
-        if restored:
-            time.sleep(0.01)
-        else:
-            logger.warning(
-                "Could not restore keyboard target window: hwnd=%s.", self._target_window
-            )
-        return restored
-
-    def _make_button(
-        self,
-        text: str,
-        action: str,
-        object_name: str,
-        *,
-        minimum_height: int,
-        dynamic: bool,
-    ) -> QToolButton:
+    def _make_button(self, text: str, action: str, role: str, *, dynamic: bool) -> QToolButton:
         button = QToolButton(self._key_host if dynamic else self)
-        button.setObjectName(object_name)
+        button.setObjectName(role)
         button.setText(text)
         button.setToolButtonStyle(Qt.ToolButtonTextOnly)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFocusPolicy(Qt.NoFocus)
-        button.setMinimumHeight(minimum_height)
+        button.setMinimumHeight(BUTTON_HEIGHTS[role])
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
         button.setProperty("gazePulse", "")
@@ -667,65 +458,5 @@ class KeyboardWindow(QWidget):
         else:
             self._show_letter_groups()
 
-    def _set_gaze_target_action(self, action: str | None) -> None:
-        if action == self._gaze_target_action:
-            return
-
-        if self._gaze_target_action is not None:
-            previous = self._action_buttons.get(self._gaze_target_action)
-            if previous is not None:
-                set_gaze_feedback(previous, False)
-
-        self._gaze_target_action = action
-
-        if self._gaze_target_action is not None:
-            current = self._action_buttons.get(self._gaze_target_action)
-            if current is not None:
-                set_gaze_feedback(current, True)
-
     def _action(self, name: str) -> str:
         return f"{KEYBOARD_WINDOW_ACTION_PREFIX}{name}"
-
-    def _position_on_primary_screen(self) -> None:
-        screen = QGuiApplication.primaryScreen()
-        geometry = screen.geometry() if self._full_height else screen.availableGeometry()
-        if not self._full_height and self._reserved_top_height > 0:
-            screen_geometry = screen.geometry()
-            top = max(geometry.top(), screen_geometry.top() + self._reserved_top_height)
-            geometry = QRect(
-                geometry.left(),
-                top,
-                geometry.width(),
-                max(1, geometry.bottom() - top + 1),
-            )
-        width = min(
-            SIDEBAR_WIDTH,
-            max(MIN_SIDEBAR_WIDTH, int(geometry.width() * MAX_SIDEBAR_WIDTH_FRACTION)),
-        )
-        self.setGeometry(
-            geometry.right() - width + 1,
-            geometry.top(),
-            width,
-            geometry.height(),
-        )
-
-    def _register_appbar(self) -> None:
-        if self._full_height:
-            self._appbar.unregister()
-            self._emit_status("Tastatura koristi punu visinu ekrana.")
-            return
-
-        if self._appbar.register(int(self.winId()), self.width(), edge=ABE_RIGHT):
-            self._emit_status("Tastatura je zauzela desni dio radne površine.")
-        elif sys.platform == "win32":
-            self._emit_status("Tastatura je prikazana bez rezervacije radne površine.")
-
-
-def _keyboard_window_flags() -> Qt.WindowFlags:
-    flags = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
-    no_focus = getattr(Qt, "WindowDoesNotAcceptFocus", None)
-    if no_focus is None:
-        no_focus = getattr(Qt.WindowType, "WindowDoesNotAcceptFocus", None)
-    if no_focus is not None:
-        flags |= no_focus
-    return flags

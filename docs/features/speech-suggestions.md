@@ -236,15 +236,18 @@ reviews, so its results are regression evidence. Fresh independent quality
 validation requires a new, separately authored set frozen before the model is
 selected. Do not train or tune on that set.
 
-The current [development report](../../language/bs/evaluation/reports/development.json),
+The recorded [development report](../../language/bs/evaluation/reports/development.json),
 [held-out regression report](../../language/bs/evaluation/reports/heldout.json),
 [learning report](../../language/bs/evaluation/reports/learning.json),
 [ranking comparison](../../language/bs/benchmarks/ranking.json), and
-[model vocabulary benchmark](../../language/bs/benchmarks/model.json) contain the
-measured regression results for the rebuilt model. Their timings describe the
-machine used for each run, not the reference Tobii setup. The held-out
-regression reports a 46.03% reduction in ideal
-button activations against the grouped keyboard. That simulation does not
+[model vocabulary benchmark](../../language/bs/benchmarks/model.json) contain
+measurements for the models and source checksums recorded in those files. After
+changing model inputs, preparation, tokenisation, ranking, or evaluation code,
+regenerate the affected reports using the
+[development guide](../DEVELOPMENT.md#command-reference) before treating them as
+evidence for that change. Their timings describe the machine used for each run,
+not the reference Tobii setup. The recorded held-out regression reports a 46.03%
+reduction in ideal button activations against the grouped keyboard. That simulation does not
 measure real communication speed or gaze usability.
 
 Full acceptance also requires the following checks on the reference Windows

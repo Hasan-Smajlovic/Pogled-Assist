@@ -15,19 +15,18 @@ PACKAGE_LAUNCHER = ROOT / "packaging" / "windows" / "start_gaze_mouse.ps1"
 SOURCE_DISCOVERY_RUNNER = r"""
 param([string]$SetupScript, [string]$NewPath, [string]$LegacyPath)
 
+$ErrorActionPreference = "Stop"
 $tokens = $null
 $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     $SetupScript, [ref]$tokens, [ref]$errors
 )
 if ($errors.Count -gt 0) { throw "Could not parse source setup." }
-$discovery = $ast.Find({
-    param($node)
-    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq "Get-Python310X86"
-}, $false)
-if ($null -eq $discovery) { throw "Source x86 discovery was not found." }
-. ([scriptblock]::Create($discovery.Extent.Text))
+foreach ($statement in $ast.EndBlock.Statements) {
+    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        . ([scriptblock]::Create($statement.Extent.Text))
+    }
+}
 
 function Write-Step { param([string]$Message) }
 function Write-Info { param([string]$Message) }

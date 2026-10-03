@@ -56,33 +56,19 @@ class GazeSelectionTimer:
                 self._start(target, now_ms)
             return GazeSelectionUpdate()
 
-        if self.target is not None and target != self.target and can_hold and hold_ms > 0:
-            if self._away_since_ms is None:
-                self._away_since_ms = now_ms
-            if now_ms - self._away_since_ms < hold_ms:
-                progress = self._progress(self._last_seen_ms, pause_ms, dwell_ms)
-                return GazeSelectionUpdate(progress=progress.progress)
+        if can_hold and self._holds(target, now_ms, hold_ms):
+            progress = self._progress(self._last_seen_ms, pause_ms, dwell_ms)
+            return GazeSelectionUpdate(progress=progress.progress)
 
-        if self._away_since_ms is not None:
-            if now_ms - self._away_since_ms >= hold_ms:
-                # Departure can expire between samples, including on the return.
-                self._blocked_target = None
-            if target == self._target and target is not None:
-                if now_ms - self._away_since_ms < hold_ms:
-                    # Exclude the interval up to the first returning sample.
-                    self._started_ms += max(0.0, now_ms - self._last_seen_ms)
-                else:
-                    self._clear_target()
-            self._away_since_ms = None
+        self._end_departure(target, now_ms, hold_ms)
 
         if target is None:
             self.cancel()
             return GazeSelectionUpdate()
 
-        if self._blocked_target is not None:
-            if target == self._blocked_target:
-                return GazeSelectionUpdate()
-            self._blocked_target = None
+        if target == self._blocked_target:
+            return GazeSelectionUpdate()
+        self._blocked_target = None
 
         if target != self._target:
             self._start(target, now_ms)
@@ -110,6 +96,28 @@ class GazeSelectionTimer:
         """Drop pending progress without treating invalid gaze as leaving the target."""
 
         self._clear_target()
+
+    def _holds(self, target: object | None, now_ms: float, hold_ms: int) -> bool:
+        if self.target is None or target == self.target or hold_ms <= 0:
+            return False
+        if self._away_since_ms is None:
+            self._away_since_ms = now_ms
+        return now_ms - self._away_since_ms < hold_ms
+
+    def _end_departure(self, target: object | None, now_ms: float, hold_ms: int) -> None:
+        if self._away_since_ms is None:
+            return
+        expired = now_ms - self._away_since_ms >= hold_ms
+        if expired:
+            # Departure can expire between samples, including on the return.
+            self._blocked_target = None
+        if target == self._target and target is not None:
+            if expired:
+                self._clear_target()
+            else:
+                # Exclude the interval up to the first returning sample.
+                self._started_ms += max(0.0, now_ms - self._last_seen_ms)
+        self._away_since_ms = None
 
     def _start(self, target: object, now_ms: float) -> None:
         self._target = target

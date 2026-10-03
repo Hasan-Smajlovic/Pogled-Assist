@@ -7,11 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pogled_assist.speech.alarm_sound import (
-    ALARM_SOUND_FILE,
-    ALARM_UNAVAILABLE_MESSAGE,
-    AlarmSound,
-)
+from pogled_assist.speech.alarm_sound import ALARM_SOUND_FILE, ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from pogled_assist.speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -125,6 +121,29 @@ def test_packaged_speech_candidates_use_the_installed_application_root(monkeypat
     assert edge in _edge_playback_candidate_paths()
 
 
+def test_espeak_candidates_keep_search_priority_and_first_path_spelling(monkeypatch, tmp_path):
+    from pogled_assist.speech import speech_service
+
+    root = tmp_path / "app"
+    override = tmp_path / "ESPEAK-NG.EXE"
+    local = root / "tools" / "espeak-ng" / "bin" / "espeak-ng.exe"
+    local.parent.mkdir(parents=True)
+    local.touch()
+    monkeypatch.setenv(APP_ROOT_ENV, str(root))
+    monkeypatch.setenv("ESPEAK_NG_EXE", str(override))
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "programs"))
+    monkeypatch.setenv("ProgramFiles(x86)", "")
+    monkeypatch.setenv("LocalAppData", "")
+    monkeypatch.setattr(speech_service.sys, "platform", "win32")
+    monkeypatch.setattr(speech_service.shutil, "which", lambda _name: str(override).lower())
+
+    candidates = _candidate_paths()
+
+    assert candidates[:3] == [override, root / "speech" / "espeak-ng" / "espeak-ng.exe", local]
+    assert candidates[3] == tmp_path / "programs" / "eSpeak NG" / "espeak-ng.exe"
+    assert len(candidates) == 8
+
+
 def test_speech_service_builds_espeak_command(monkeypatch, tmp_path):
     executable = tmp_path / "espeak-ng.exe"
     monkeypatch.setattr("pogled_assist.speech.speech_service.find_espeak_ng", lambda: executable)
@@ -184,14 +203,17 @@ def test_speech_service_builds_human_voice_command(monkeypatch, tmp_path):
     assert environment[path_key] == os.pathsep.join((str(executable.parent), existing_path))
 
 
-def test_speech_service_rejects_empty_or_missing_engine(monkeypatch):
+def test_speech_service_rejects_empty_and_reports_missing_engine(monkeypatch, qtbot):
     monkeypatch.setattr("pogled_assist.speech.speech_service.find_espeak_ng", lambda: None)
     monkeypatch.setattr("pogled_assist.speech.speech_service.find_edge_playback", lambda: None)
     service = SpeechService()
-
+    events = []
+    service.playback_changed.connect(lambda request, state: events.append((request, state)))
     assert service.speak("   ") is False
-    assert service.speak("Zdravo") is False
-    assert service.speak("Zdravo", SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE)) is False
+    for settings in (SpeechSettings(), SpeechSettings(voice_preset=VOICE_PRESET_HUMAN_LIKE)):
+        assert service.speak("Zdravo", settings)
+        request_id = service.request_id
+        qtbot.waitUntil(lambda request_id=request_id: (request_id, "failed") in events)
 
 
 @pytest.mark.parametrize("preset", ["default", "human_like"])
@@ -222,7 +244,7 @@ def test_arabic_speech_uses_hamed_and_preserves_original_unicode(monkeypatch, tm
 
 
 def test_arabic_speech_does_not_fall_back_to_bosnian_when_online_tool_is_missing(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, qtbot
 ):
     monkeypatch.setattr(
         "pogled_assist.speech.speech_service.find_espeak_ng", lambda: tmp_path / "espeak-ng.exe"
@@ -230,10 +252,13 @@ def test_arabic_speech_does_not_fall_back_to_bosnian_when_online_tool_is_missing
     monkeypatch.setattr("pogled_assist.speech.speech_service.find_edge_playback", lambda: None)
     service = SpeechService()
     calls = []
+    events = []
+    service.playback_changed.connect(lambda _request, state: events.append(state))
     monkeypatch.setattr(
-        service, "_start_process", lambda *args, **kwargs: calls.append(args) or True
+        "pogled_assist.speech.speech_service.start_speech_process", lambda *args: calls.append(args)
     )
-    assert not service.speak("سَلَامٌ", SpeechSettings(keyboard_script="arabic"))
+    assert service.speak("سَلَامٌ", SpeechSettings(keyboard_script="arabic"))
+    qtbot.waitUntil(lambda: "failed" in events)
     assert calls == []
 
 
