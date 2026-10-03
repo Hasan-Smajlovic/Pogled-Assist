@@ -104,3 +104,83 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, make_speech_window):
 
     qtbot.mouseClick(window._clear_button, Qt.LeftButton)
     assert window._dialogs.active is None
+
+
+@pytest.mark.e2e
+def test_library_retry_is_gaze_selectable_and_preserves_the_message(
+    qtbot, make_speech_window, tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    from pogled_assist.speech.speech_library import (
+        CategoryRecord,
+        PhraseRecord,
+        SpeechLibrary,
+        SpeechLibraryStore,
+    )
+
+    primary, legacy = tmp_path / "library.json", tmp_path / "phrases.json"
+    original = SpeechLibrary(
+        [CategoryRecord("Synthetic custom", ["Synthetic answer"])],
+        [PhraseRecord("Synthetic phrase", 5)],
+    )
+    assert SpeechLibraryStore(primary, legacy_path=legacy).save(original)
+    before = primary.read_bytes()
+    read_text = Path.read_text
+
+    def unavailable(path, *args, **kwargs):
+        if path == primary:
+            raise PermissionError("Synthetic failure")
+        return read_text(path, *args, **kwargs)
+
+    store = SpeechLibraryStore(primary, legacy_path=legacy)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_text", unavailable)
+        window = make_speech_window(FakeSpeech(), library_store=store)
+    window.resize(1280, 720)
+    window.show()
+    window._view_mode = "phrases"
+    window._show_list_level()
+    qtbot.wait(1)
+    window._input.setText("SYNTHETIC MESSAGE")
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}list:select:0")
+    message = window._input.text()
+    assert "SYNTHETIC PHRASE" in message
+    assert primary.read_bytes() == before
+    assert window._add_item_button.isHidden()
+    assert window._delete_mode_button.isHidden()
+    retry = window._retry_library_button
+    assert retry.isVisible() and retry.height() >= 80
+    assert window.rect().contains(QRect(retry.mapTo(window, QPoint()), retry.size()))
+    assert (
+        window.action_at_global_point(retry.mapToGlobal(retry.rect().center()))
+        == f"{SPEECH_WINDOW_ACTION_PREFIX}list:retry"
+    )
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}list:retry")
+    assert not store.read_error
+    assert window._library == original
+    assert window._input.text() == message
+    assert retry.isHidden()
+    assert window._add_item_button.isVisible()
+
+
+@pytest.mark.e2e
+def test_speech_lifecycle_updates_status_and_ignores_previous_request(qtbot, make_speech_window):
+    speech = FakeSpeech()
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.show()
+    window._input.setText("SYNTHETIC MESSAGE")
+    window._play_button.click()
+    first = speech.request_id
+    assert window._status_label.text() == "Pokrećem govor."
+    speech.playback_changed.emit(first, "speaking")
+    assert window._status_label.text() == "Poruka se izgovara."
+    speech.playback_changed.emit(first, "failed")
+    assert window._status_label.text() == "Govor nije uspio. Pokušajte ponovo."
+    assert window._input.text() == "SYNTHETIC MESSAGE"
+    window._play_button.click()
+    second = speech.request_id
+    speech.playback_changed.emit(first, "finished")
+    assert window._status_label.text() == "Pokrećem govor."
+    speech.playback_changed.emit(second, "finished")
+    assert window._status_label.text() == "Čitanje je završeno."

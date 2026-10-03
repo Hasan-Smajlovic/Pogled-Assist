@@ -751,3 +751,67 @@ def test_speech_gaze_can_repeat_after_departure_with_no_expiry_sample(
     assert len(actions) == 1
     feed(center, start + 1001)
     assert len(actions) == 2
+
+
+@pytest.mark.e2e
+def test_failed_settings_save_stays_live_and_retries_from_settings(
+    hotbar_gaze, qtbot, monkeypatch, tmp_path
+):
+    from pathlib import Path
+
+    from pogled_assist import settings_store, toolbar
+    from pogled_assist.ui import settings_window
+
+    hotbar = hotbar_gaze[0]
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(settings_store, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(toolbar, "save_app_settings", settings_store.save_app_settings)
+    assert settings_store.save_app_settings(hotbar._mouse.settings, hotbar._speech.settings)
+    path = tmp_path / "data" / settings_store.SETTINGS_FILE
+    original = path.read_bytes()
+    with monkeypatch.context() as patch:
+
+        def locked(*_args):
+            raise PermissionError("Synthetic locked settings")
+
+        patch.setattr(Path, "replace", locked)
+        hotbar._update_gaze_settings(replace(hotbar._mouse.settings, dwell_ms=850))
+        hotbar._change_keyboard_script("arabic")
+        assert hotbar._mouse.settings.dwell_ms == 850
+        assert hotbar._speech.settings.keyboard_script == "arabic"
+        assert path.read_bytes() == original
+        assert hotbar._settings_button.text() == "Postavke *"
+        hotbar._open_settings()
+        window = hotbar._settings_window
+        window.showNormal()
+        window.resize(1280, 720)
+        qtbot.wait(1)
+        for tab in range(3):
+            window._select_tab(tab)
+            assert "nisu sačuvane" in window._save_note.text()
+            assert window._retry_save_button.isVisible()
+        window._retry_save_button.click()
+        assert window._retry_save_button.isVisible()
+    retry = window._retry_save_button
+    assert retry.height() >= 66
+    assert window.rect().contains(QRect(retry.mapTo(window, QPoint()), retry.size()))
+    target = window._controls.action_at(retry.mapToGlobal(retry.rect().center()))
+    assert target is not None and target[0] is retry
+    target[1]()
+    assert retry.isHidden()
+    assert hotbar._settings_button.text() == "Postavke"
+    gaze, speech = settings_store.load_app_settings()
+    assert gaze.dwell_ms == 850
+    assert speech.keyboard_script == "arabic"
+
+
+@pytest.mark.e2e
+def test_settings_voice_test_reports_late_failure(hotbar_gaze, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar = hotbar_gaze[0]
+    hotbar._open_settings()
+    hotbar._test_current_speech_settings()
+    hotbar._speech.playback_changed.emit(hotbar._speech.request_id, "failed")
+    assert hotbar._settings_window._status_label.text() == "Govor nije uspio. Pokušajte ponovo."

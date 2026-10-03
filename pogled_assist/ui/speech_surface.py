@@ -204,6 +204,12 @@ class SpeechSurface(QWidget):
             minimum_height=LIST_ACTION_MIN_HEIGHT,
             checkable=True,
         )
+        self._retry_library_button = self._make_button(
+            "Učitaj ponovo",
+            "list:retry",
+            "headerActionButton",
+            minimum_height=LIST_ACTION_MIN_HEIGHT,
+        )
         self._cancel_editor_button = self._make_button(
             "Odustani",
             "editor:cancel",
@@ -217,6 +223,7 @@ class SpeechSurface(QWidget):
             self._back_button,
             self._add_item_button,
             self._delete_mode_button,
+            self._retry_library_button,
             self._cancel_editor_button,
             self._save_item_button,
         ):
@@ -225,6 +232,7 @@ class SpeechSurface(QWidget):
         view_header.addWidget(self._back_button)
         view_header.addWidget(self._add_item_button)
         view_header.addWidget(self._delete_mode_button)
+        view_header.addWidget(self._retry_library_button)
         view_header.addWidget(self._cancel_editor_button)
         view_header.addWidget(self._save_item_button)
 

@@ -73,6 +73,8 @@ class SpeechWindow(SpeechSurface):
 
         super().__init__(parent, initial_settings.keyboard_script)
         self._speech = speech
+        self._playback_id: int | None = None
+        self._speech.playback_changed.connect(self._playback_changed)
         self._speech_settings = initial_settings
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         self._letter_groups = _group_letters(
@@ -291,7 +293,9 @@ class SpeechWindow(SpeechSurface):
         self._set_grid_stretch(ITEMS_PER_PAGE, 2)
         if not items:
             empty = QPushButton(
-                "Lista je prazna. Odaberite Dodaj za novi unos.",
+                "Biblioteka nije učitana. Odaberite Učitaj ponovo."
+                if self._library_store.read_error
+                else "Lista je prazna. Odaberite Dodaj za novi unos.",
                 self._key_grid_host,
             )
             empty.setObjectName("phraseButton")
@@ -326,6 +330,8 @@ class SpeechWindow(SpeechSurface):
         return []
 
     def _list_title(self) -> str:
+        if self._library_store.read_error:
+            return "Biblioteka nije učitana"
         if self._view_mode == "phrases":
             return "Moje fraze"
         category = self._active_category()
@@ -529,13 +535,14 @@ class SpeechWindow(SpeechSurface):
         self._phrases_button.setEnabled(not editor_mode)
         self._play_button.setEnabled(not editor_mode)
         self._back_button.setVisible(self._view_mode == "answers" and not editor_mode)
-        self._add_item_button.setVisible(list_mode)
+        self._add_item_button.setVisible(list_mode and not self._library_store.read_error)
+        self._retry_library_button.setVisible(list_mode and self._library_store.read_error)
         self._add_item_button.setText(
             {"phrases": "Dodaj frazu", "answers": "Dodaj odgovor"}.get(
                 self._view_mode, "Dodaj kategoriju"
             )
         )
-        self._delete_mode_button.setVisible(list_mode)
+        self._delete_mode_button.setVisible(list_mode and not self._library_store.read_error)
         self._delete_mode_button.setChecked(self._deletion_mode)
         self._delete_mode_button.setText("Gotovo" if self._deletion_mode else "Obriši")
         self._delete_mode_button.setEnabled(bool(self._list_items()) or self._deletion_mode)
@@ -583,6 +590,7 @@ class SpeechWindow(SpeechSurface):
             "confirm:cancel": self._cancel_confirmation,
             "confirm:accept": self._accept_confirmation,
             "play": lambda: self._play(source=source),
+            "list:retry": self._retry_library,
             "alarm:start": self._start_alarm,
             "alarm:stop": self._stop_alarm,
             "sleep:start": self._start_sleep,
@@ -931,6 +939,31 @@ class SpeechWindow(SpeechSurface):
                 return
         self._input.setText(text[:-1])
 
+    def _retry_library(self) -> None:
+        library = self._library_store.load()
+        if self._library_store.read_error:
+            self._set_status("Učitavanje nije uspjelo. Biblioteka nije promijenjena.")
+            return
+        self._library = library
+        self._category_index = None
+        self._list_page = 0
+        self._deletion_mode = False
+        if self._view_mode == "answers":
+            self._view_mode = "categories"
+        self._show_list_level()
+        self._set_status("Biblioteka je učitana.")
+
+    def _playback_changed(self, request_id: int, state: str) -> None:
+        if request_id != self._playback_id:
+            return
+        message = {
+            "speaking": "Poruka se izgovara.",
+            "finished": "Čitanje je završeno.",
+            "failed": "Govor nije uspio. Pokušajte ponovo.",
+            "stopped": "Govor je zaustavljen.",
+        }[state]
+        self._set_status(message)
+
     def _play(self, *, source: str = "keyboard") -> None:
         if self._editor is not None or self._dialogs.active is not None:
             return
@@ -945,8 +978,10 @@ class SpeechWindow(SpeechSurface):
             self._composition.submit()
             self._suggestions.persist()
         if self._speech.speak(text, self._speech_settings):
-            self._set_status("Poruka se izgovara.")
+            self._playback_id = self._speech.request_id
+            self._set_status("Pokrećem govor.")
         else:
+            self._playback_id = None
             self._set_status("Odabrani glas nije dostupan.")
 
     def _set_status(self, text: str) -> None:

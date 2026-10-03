@@ -59,10 +59,13 @@ class PreviewInput:
         return 640, 360
 
 
-class PreviewSpeech:
+class PreviewSpeech(QObject):
+    playback_changed = Signal(int, str)
     available = True
 
     def __init__(self) -> None:
+        super().__init__()
+        self.request_id = 0
         self._settings = SpeechSettings()
 
     @property
@@ -146,6 +149,8 @@ class PreviewSuggestionService(QObject):
 
 
 class PreviewLibraryStore:
+    read_error = False
+
     def __init__(self, phrases: list[PhraseRecord]) -> None:
         self._library = SpeechLibrary(
             categories=default_categories(),
@@ -299,6 +304,10 @@ class _CaptureSession:
         self.widgets.append(hotbar)
         size = min(self.size[0], 1280), hotbar.BAR_HEIGHT
         self.capture(hotbar, "hotbar", "Hotbar", size=size)
+        with patch.object(toolbar_module, "save_app_settings", return_value=False):
+            hotbar._save_settings()
+        self.capture(hotbar, "hotbar-unsaved-settings", "Hotbar: settings not saved", size=size)
+        hotbar._settings_button.setText("Postavke")
         for state, name, title in (
             (TrackingState.CONNECTED, "hotbar-paused", "Hotbar: one eye unavailable"),
             (TrackingState.WAITING, "hotbar-waiting", "Hotbar: waiting for fresh data"),
@@ -325,6 +334,10 @@ class _CaptureSession:
             self.capture(self.settings, name, title, size=size)
         self.settings._open_learning()
         self.capture(self.settings, "settings-learned-words", "Settings: learned words", size=size)
+        self.settings._select_tab(1)
+        self.settings.set_save_error(True)
+        self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
+        self.settings.set_save_error(False)
 
     def capture_speech(self) -> None:
         sample_phrases = [
@@ -353,6 +366,13 @@ class _CaptureSession:
         self.speech._category_index = None
         self.speech._show_list_level()
         self.capture(self.speech, "phrases", "Saved phrases")
+        self.speech._library_store.read_error = True
+        self.speech._show_list_level()
+        self.capture(
+            self.speech, "speech-library-read-error", "Speech: library not loaded", size=(1280, 720)
+        )
+        self.speech._library_store.read_error = False
+        self.speech._show_list_level()
         self.speech._start_editor()
         self.capture(self.speech, "speech-editor", "Speech shared editor")
         self.capture_speech_dialogs()

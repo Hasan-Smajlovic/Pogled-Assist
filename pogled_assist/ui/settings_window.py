@@ -252,6 +252,7 @@ class SettingsWindow(QWidget):
     closed = Signal()
     gaze_settings_changed = Signal(object)
     speech_settings_changed = Signal(object)
+    save_retry_requested = Signal()
     calibration_requested = Signal()
     speech_test_requested = Signal()
     update_requested = Signal()
@@ -359,6 +360,15 @@ class SettingsWindow(QWidget):
     def set_status(self, text: str) -> None:
         self._set_status(text)
 
+    def set_save_error(self, failed: bool) -> None:
+        self._save_note.setText(
+            "Postavke nisu sačuvane. Važe do zatvaranja aplikacije."
+            if failed
+            else "Promjene se primjenjuju i čuvaju automatski."
+        )
+        self._retry_save_button.setVisible(failed)
+        self.cancel_gaze_interaction(require_leave=True)
+
     def update_speech_settings(self, settings: SpeechSettings) -> None:
         self._speech_settings = replace(settings)
         self._refresh_values()
@@ -442,12 +452,17 @@ class SettingsWindow(QWidget):
             button.setObjectName("navButton")
             nav_layout.addWidget(button)
         nav_layout.addStretch(1)
-        nav_note = styled_label(
+        self._save_note = styled_label(
             "Promjene se primjenjuju i čuvaju automatski.", "navNote", nav_panel
         )
-        nav_note.setWordWrap(True)
-        nav_note.setContentsMargins(8, 0, 8, 6)
-        nav_layout.addWidget(nav_note)
+        self._save_note.setWordWrap(True)
+        self._save_note.setContentsMargins(8, 0, 8, 6)
+        nav_layout.addWidget(self._save_note)
+        self._retry_save_button = self._controls.button(
+            "Pokušaj sačuvati", self.save_retry_requested.emit, QSize(224, 66)
+        )
+        self._retry_save_button.hide()
+        nav_layout.addWidget(self._retry_save_button)
         return nav_panel
 
     def _build_general_page(self) -> QWidget:
@@ -834,13 +849,13 @@ class SettingsWindow(QWidget):
 
     def _emit_gaze_settings(self, status: str) -> None:
         self._refresh_values()
-        self.gaze_settings_changed.emit(replace(self._gaze_settings))
         self._set_status(status)
+        self.gaze_settings_changed.emit(replace(self._gaze_settings))
 
     def _emit_speech_settings(self, status: str) -> None:
         self._refresh_values()
-        self.speech_settings_changed.emit(replace(self._speech_settings))
         self._set_status(status)
+        self.speech_settings_changed.emit(replace(self._speech_settings))
 
     def _request_calibration(self) -> None:
         self._set_status("Pokrećem Tobii kalibraciju.")

@@ -474,6 +474,7 @@
           <button id="back" type="button" data-action="back" hidden>Nazad</button>
           <button id="add" class="primary" type="button" data-action="add" hidden>Dodaj</button>
           <button id="manage" type="button" data-action="manage" aria-pressed="false" hidden>Obriši</button>
+          <button id="retry-library" type="button" data-action="retry-library" hidden>Učitaj ponovo</button>
           <button id="cancel-edit" type="button" data-action="cancel-edit" hidden>Odustani</button>
           <button id="save" class="primary" type="button" data-action="save" hidden>Sačuvaj</button>
         </div>
@@ -510,7 +511,8 @@
         <button type="button" data-settings-action="general-settings" aria-pressed="true">Opće postavke</button>
         <button type="button" data-settings-action="gaze-settings" aria-pressed="false">Postavke pogleda</button>
         <button type="button" data-settings-action="speech-settings" aria-pressed="false">Postavke govora</button>
-        <p class="settings-nav-note">Promjene se primjenjuju i čuvaju automatski.</p>
+        <p id="settings-save-note" class="settings-nav-note">Promjene se primjenjuju i čuvaju automatski.</p>
+        <button id="retry-settings" type="button" data-settings-action="retry-settings" hidden>Pokušaj sačuvati</button>
       </nav>
       <section id="general-settings" class="settings-page settings-panel" aria-labelledby="general-settings-title">
         <header class="settings-page-header">
@@ -610,6 +612,12 @@
       <label><input id="gaze-demo" type="checkbox" checked> Pokazivač miša simulira pogled</label>
       <p class="muted">Za pregled klikom isključite simulaciju. Klik i fizička tastatura rade i bez čekanja.</p>
       <label>Primjer stanja učenja <select id="learning-demo-state"><option value="saved">Sačuvano</option><option value="write">Spremanje nije uspjelo</option><option value="read">Učitavanje nije uspjelo</option><option value="empty">Nema naučenih riječi</option></select></label>
+      <label><input id="settings-save-error" type="checkbox"> Postavke nisu sačuvane</label>
+      <p>Traka označava Postavke * dok čuvanje ne uspije. Otvorite Postavke za ponovni pokušaj.</p>
+      <label><input id="library-read-error" type="checkbox"> Biblioteka nije učitana</label>
+      <p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p>
+      <p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje Dodaj i Obriši. Uspješan pokušaj vraća spremljene stavke bez promjene poruke.</p>
+      <p>Izgovori prikazuje Pokrećem govor., zatim Poruka se izgovara., Čitanje je završeno. ili Govor nije uspio. Pokušajte ponovo. Poruka ostaje sačuvana. Završetak procesa nije potvrda da se zvuk čuo. Novo pokretanje aplikacije zadržava samo postojeću instancu bez promjene fokusa.</p>
     </div>
   </details>
   <dialog id="letters-dialog" aria-labelledby="letters-title">
@@ -797,6 +805,16 @@
       for (const button of document.querySelectorAll('[data-settings-action]')) {
         button.addEventListener('click', () => handleSettingsAction(button.dataset.settingsAction));
       }
+      $('settings-save-error').addEventListener('change', renderStorageState);
+      $('library-read-error').addEventListener('change', () => { deleting = false; render(); });
+      function renderStorageState() {
+        const failed = $('settings-save-error').checked;
+        const hotbarSettings = document.querySelector('[data-open-view="settings"]');
+        hotbarSettings.textContent = failed ? 'Postavke *' : 'Postavke';
+        hotbarSettings.title = failed ? 'Postavke nisu sačuvane. Otvorite Postavke za ponovni pokušaj.' : 'Postavke';
+        $('settings-save-note').textContent = failed ? 'Postavke nisu sačuvane. Važe do zatvaranja aplikacije.' : 'Promjene se primjenjuju i čuvaju automatski.';
+        $('retry-settings').hidden = !failed;
+      }
 
       document.addEventListener('click', event => {
         const button = event.target.closest('button[data-action]');
@@ -885,6 +903,10 @@
       }
 
       function handleSettingsAction(action) {
+        if (action === 'retry-settings') {
+          $('settings-save-error').checked = false; renderStorageState();
+          $('settings-status').textContent = 'Postavke su sačuvane.'; return;
+        }
         if (['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings'].includes(action)) {
           for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
           for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
@@ -964,6 +986,12 @@
         $('add').hidden = !browsing;
         $('add').textContent = view === 'phrases' ? 'Dodaj frazu' : category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
         $('manage').hidden = !browsing;
+        const libraryBlocked = $('library-read-error').checked;
+        $('retry-library').hidden = !browsing || !libraryBlocked;
+        if (browsing && libraryBlocked) {
+          $('add').hidden = true; $('manage').hidden = true;
+          $('view-title').textContent = 'Biblioteka nije učitana';
+        }
         $('manage').textContent = deleting ? 'Gotovo' : 'Obriši';
         $('manage').setAttribute('aria-pressed', String(deleting));
         $('cancel-edit').hidden = !editor;
@@ -1019,6 +1047,7 @@
           case 'add': startEditor(); break;
           case 'cancel-edit': finishEditor(false); break;
           case 'save': finishEditor(true); break;
+          case 'retry-library': $('library-read-error').checked = false; category = null; page = 0; render(); say('Biblioteka je učitana.'); break;
           case 'cancel-confirm': closeDialog($('confirm-dialog')); confirmAction = null; break;
           case 'confirm': {
             const actionToRun = confirmAction;
@@ -1254,9 +1283,10 @@
         utterance.lang = arabic ? 'ar-SA' : 'bs-BA';
         const voice = window.speechSynthesis.getVoices().find(voice => (arabic ? /^ar(?:-|$)/i : /^bs(?:-|$)/i).test(voice.lang));
         if (voice) utterance.voice = voice;
-        utterance.onstart = () => say(`Izgovaram: ${text}`);
-        utterance.onend = () => say('Poruka je izgovorena.');
-        utterance.onerror = () => say('Izgovor nije dostupan. Provjerite glasove i dozvole preglednika.');
+        utterance.onstart = () => say('Poruka se izgovara.');
+        utterance.onend = () => say('Čitanje je završeno.');
+        utterance.onerror = () => say('Govor nije uspio. Pokušajte ponovo.');
+        say('Pokrećem govor.');
         window.speechSynthesis.speak(utterance);
       }
 
@@ -1436,6 +1466,7 @@
       }
 
       function saveLibrary() {
+        if ($('library-read-error').checked) return false;
         try { localStorage.setItem(STORE_KEY, JSON.stringify(library)); return true; }
         catch { return false; }
       }

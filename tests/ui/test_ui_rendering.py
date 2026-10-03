@@ -41,7 +41,7 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch, size):
     monkeypatch.setattr(preview, "_capture_widget", capture_with_script_control_check)
     snapshots = capture_ui(tmp_path, width=size[0], height=size[1])
 
-    assert len(snapshots) == 35
+    assert len(snapshots) == 38
     assert (tmp_path / "index.html").is_file()
     for snapshot in snapshots:
         image = QImage(str(snapshot))

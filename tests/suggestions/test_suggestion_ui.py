@@ -17,8 +17,12 @@ from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 
 
-class FakeSpeech:
+class FakeSpeech(QObject):
+    playback_changed = Signal(int, str)
+
     def __init__(self, *, successful: bool = True) -> None:
+        super().__init__()
+        self.request_id = 0
         self._settings = SpeechSettings()
         self.successful = successful
         self.requests: list[str] = []
@@ -28,6 +32,7 @@ class FakeSpeech:
         return replace(self._settings)
 
     def speak(self, text: str, _settings: SpeechSettings | None = None) -> bool:
+        self.request_id += 1
         self.requests.append(text)
         return self.successful
 
@@ -36,6 +41,8 @@ class FakeSpeech:
 
 
 class FakeLibraryStore:
+    read_error = False
+
     def __init__(self) -> None:
         self.library = SpeechLibrary(categories=default_categories())
         self.fail_saves = False

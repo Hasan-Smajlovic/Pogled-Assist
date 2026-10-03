@@ -44,7 +44,7 @@ def load_app_settings() -> tuple[GazeSettings, SpeechSettings]:
     return gaze, speech
 
 
-def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> None:
+def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> bool:
     """Persist app settings as UTF-8 JSON in the project data folder."""
 
     path = _settings_path()
@@ -63,8 +63,10 @@ def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> None:
         )
         temp_path.replace(path)
         logger.info("Saved app settings to %s.", path)
+        return True
     except Exception:
         logger.exception("Could not save app settings to %s.", path)
+        return False
 
 
 def _settings_path() -> Path:

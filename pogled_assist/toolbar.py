@@ -73,6 +73,9 @@ class HotbarWindow(QWidget):
         self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
         self._speech = SpeechService()
+        self._speech_test_id: int | None = None
+        self._speech.playback_changed.connect(self._speech_playback_changed)
+        self._settings_save_failed = False
         self._speech.update_settings(self._initial_speech_settings)
         self._speech_library_store = speech_library_store(get_project_root())
         self._speech_library_store.load()
@@ -730,6 +733,7 @@ class HotbarWindow(QWidget):
         )
         window.gaze_settings_changed.connect(self._update_gaze_settings)
         window.speech_settings_changed.connect(self._update_speech_settings)
+        window.save_retry_requested.connect(self._save_settings)
         window.calibration_requested.connect(self._launch_tobii_calibration)
         window.speech_test_requested.connect(self._test_current_speech_settings)
         window.update_requested.connect(self._start_release_update)
@@ -741,6 +745,7 @@ class HotbarWindow(QWidget):
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
 
         self._settings_window = window
+        window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
         self._set_status("Postavke su otvorene.")
 
@@ -802,7 +807,7 @@ class HotbarWindow(QWidget):
         )
         if self._controller_window is not None:
             self._controller_window.update_gaze_settings(self._mouse.settings)
-        save_app_settings(self._mouse.settings, self._speech.settings)
+        self._save_settings()
 
     def _update_speech_settings(self, settings: object) -> None:
         self._speech.update_settings(settings)
@@ -814,7 +819,24 @@ class HotbarWindow(QWidget):
             self._controller_window.update_speech_settings(self._speech.settings)
         if self._settings_window is not None:
             self._settings_window.update_speech_settings(self._speech.settings)
-        save_app_settings(self._mouse.settings, self._speech.settings)
+        self._save_settings()
+
+    def _save_settings(self) -> None:
+        self._settings_save_failed = not save_app_settings(
+            self._mouse.settings, self._speech.settings
+        )
+        # Keep this indicator visible even when the change came from a sidebar.
+        self._settings_button.setText("Postavke *" if self._settings_save_failed else "Postavke")
+        self._settings_button.setToolTip(
+            "Postavke nisu sačuvane. Otvorite Postavke za ponovni pokušaj."
+            if self._settings_save_failed
+            else "Postavke"
+        )
+        if self._settings_window is not None:
+            self._settings_window.set_save_error(self._settings_save_failed)
+            self._settings_window.set_status(
+                "Postavke nisu sačuvane." if self._settings_save_failed else "Postavke su sačuvane."
+            )
 
     def _change_keyboard_script(self, script: str) -> None:
         self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
@@ -827,6 +849,7 @@ class HotbarWindow(QWidget):
                 else SPEECH_TEST_TEXT
             )
             if self._speech.speak(text):
+                self._speech_test_id = self._speech.request_id
                 self._set_speech_test_status("Test govora je pokrenut.")
             else:
                 self._set_speech_test_status(
@@ -836,6 +859,17 @@ class HotbarWindow(QWidget):
         except Exception:
             logger.exception("Speech settings test failed.")
             self._set_speech_test_status("Govor nije uspio.")
+
+    def _speech_playback_changed(self, request_id: int, state: str) -> None:
+        if request_id != self._speech_test_id:
+            return
+        message = {
+            "speaking": "Test govora je pokrenut.",
+            "finished": "Test govora je završen.",
+            "failed": "Govor nije uspio. Pokušajte ponovo.",
+            "stopped": "Govor je zaustavljen.",
+        }[state]
+        self._set_speech_test_status(message)
 
     def _set_speech_test_status(self, text: str, settings_text: str | None = None) -> None:
         self._set_status(text)
