@@ -32,9 +32,10 @@ def test_release_publish_and_update_use_the_current_repository() -> None:
     assert download_root in updater
     assert PREVIOUS_REPOSITORY not in updater
 
-    workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    assert f"github.repository == '{OFFICIAL_REPOSITORY}'" in workflow
-    assert PREVIOUS_REPOSITORY not in workflow
+    for path in ("release.yml", "prepare-release.yml"):
+        workflow = (REPO_ROOT / ".github/workflows" / path).read_text(encoding="utf-8")
+        assert f"github.repository == '{OFFICIAL_REPOSITORY}'" in workflow
+        assert PREVIOUS_REPOSITORY not in workflow
 
 
 def test_official_release_rejects_assets_from_the_previous_repository_name() -> None:

@@ -274,6 +274,14 @@ Generate the gallery:
 .\dev.ps1 ui -Open
 ```
 
+The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
+already rendered by `tests/ui/test_ui_rendering.py`. Download and extract it
+from the workflow run, then open `index.html` inside `1280x720` or `1440x900`.
+Each folder contains the same 35 surfaces; the artifact is kept for 14 days and
+any available screenshots are uploaded even when the test suite fails.
+CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
+variable, rendering tests continue to use pytest's temporary directories.
+
 The command renders:
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,

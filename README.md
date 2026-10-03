@@ -188,9 +188,9 @@ and Tobii hardware still requires manual validation. The complete list is in the
 
 ## CI and releases
 
-Pull requests run code-quality, hardware-independent test, and Windows packaging
-checks. Merges to `master` publish an immutable versioned release from the exact
-merged commit.
+Pull requests run dependency-review, code-quality, hardware-independent test,
+and Windows packaging checks. Merges to `master` publish an immutable versioned
+release from the exact merged commit.
 
 Release construction, manual hardware validation, and rollback are documented in
 the [Windows release guide](docs/WINDOWS_RELEASE.md).

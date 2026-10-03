@@ -42,10 +42,10 @@ description: Load before changing any text or data under language/ or tests/fixt
   `update_windows.ps1`.
 - Keep `.github/workflows/ci.yml` on `pull_request` with `contents: read`.
   Only the release job in `.github/workflows/release.yml`, triggered by a push
-  to `master`, gets `contents: write` for publishing. Its manual
-  release-preparation job gets `contents: write` and `pull-requests: write`
-  only to create `release/v<version>` and a draft PR. Do not execute code
-  merged from `development` while that job has a write token.
+  to `master`, gets `contents: write` for publishing. The manual preparation job
+  in `.github/workflows/prepare-release.yml` gets `contents: write` and
+  `pull-requests: write` only to create `release/v<version>` and a draft PR.
+  Do not execute code merged from `development` while that job has a write token.
 - Commit only synthetic or project-authored text under `language/` and
   `tests/fixtures/`, as the language data rules in
   [docs/DEVELOPMENT.md](../../../docs/DEVELOPMENT.md) require.
