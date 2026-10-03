@@ -50,22 +50,34 @@ def is_ancestor(ancestor: str, descendant: str) -> bool:
     return result.returncode == 0
 
 
-def prepare_release(version: str, body_file: Path) -> str:
-    requested = version_parts(version)
-    branch = f"release/v{version}"
+def bump_version(current: str, bump: str) -> str:
+    major, minor, patch = version_parts(current)
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    if bump == "patch":
+        return f"{major}.{minor}.{patch + 1}"
+    raise ValueError("Version increase must be patch, minor, or major.")
+
+
+def prepare_release(bump: str, body_file: Path) -> str:
     if git("status", "--porcelain").stdout.strip():
         raise RuntimeError("The checkout must be clean before preparing a release.")
 
     git("fetch", "origin", "--prune", "--tags")
     master = git("rev-parse", "origin/master").stdout.strip()
     if git("rev-parse", "HEAD").stdout.strip() != master:
-        raise RuntimeError("Run this from the latest master commit, then retry.")
+        raise RuntimeError(
+            "The checkout must be the latest master commit. "
+            "Review the current release state before starting a new run."
+        )
 
     current_version = git("show", "origin/master:VERSION").stdout.strip()
-    if requested <= version_parts(current_version):
-        raise ValueError(f"Version {version} must be newer than master ({current_version}).")
+    version = bump_version(current_version, bump)
+    branch = f"release/v{version}"
     if remote_ref_exists(f"refs/tags/v{version}"):
-        raise ValueError(f"Tag v{version} already exists. Choose a new version.")
+        raise ValueError(f"Tag v{version} already exists. Review the tag and master's VERSION.")
     if is_ancestor("origin/development", "origin/master"):
         raise RuntimeError("Development has no unreleased commits.")
 
@@ -120,7 +132,8 @@ def prepare_release(version: str, body_file: Path) -> str:
         "## Compatibility and risk\n\nReview the merged diff and confirm installation, "
         "update, rollback, gaze, input, speech, and settings compatibility.\n\n"
         "## Verification\n\n"
-        "- Automated: PR code-quality, tests, and windows-package checks pending.\n"
+        "- Automated: PR dependency-review, code-quality, tests, and windows-package "
+        "checks pending.\n"
         "- Manual Windows: Not run. Record results before review is complete.\n"
         "- Manual Tobii hardware: Not run. Record results before review is complete.\n\n"
         "## Release review\n\n"
@@ -134,10 +147,12 @@ def prepare_release(version: str, body_file: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="New semantic version without the v prefix")
+    parser.add_argument(
+        "bump", choices=("patch", "minor", "major"), help="Version increase from master's VERSION"
+    )
     parser.add_argument("--body-file", type=Path, required=True)
     args = parser.parse_args()
-    print(prepare_release(args.version, args.body_file))
+    print(prepare_release(args.bump, args.body_file))
 
 
 if __name__ == "__main__":

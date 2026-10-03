@@ -1,0 +1,64 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version increase from master's VERSION"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: prepare-release-pr
+    if: github.ref == 'refs/heads/master' && github.repository == 'Hasan-Smajlovic/Pogled-Assist'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out the dispatched master commit with release history
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Prepare a release branch from master and development
+        id: prepare
+        env:
+          RELEASE_BUMP: ${{ inputs.bump }}
+        run: |
+          branch=$(python scripts/release/prepare_release.py "$RELEASE_BUMP" --body-file "$RUNNER_TEMP/release-pr-body.md")
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "version=${branch#release/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Open or show the draft release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ steps.prepare.outputs.branch }}
+          RELEASE_VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          url=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base master --head "$RELEASE_BRANCH" --json url --jq '.[0].url // empty')
+          if [ -z "$url" ]; then
+            url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base master --head "$RELEASE_BRANCH" --draft --title "Release v$RELEASE_VERSION" --body-file "$RUNNER_TEMP/release-pr-body.md")
+          fi
+          echo "Version: $RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "Draft release PR: $url" >> "$GITHUB_STEP_SUMMARY"

@@ -15,6 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check changed dependencies for known vulnerabilities
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
+          fail-on-scopes: runtime, development, unknown
+          license-check: false
+          show-openssf-scorecard: false
+
   code-quality:
     name: code-quality
     runs-on: windows-latest
@@ -80,12 +94,23 @@ jobs:
 
       - name: Run automated tests without Tobii hardware
         shell: powershell
+        env:
+          POGLED_ASSIST_UI_GALLERY: ${{ github.workspace }}/dist/ui-gallery
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -B -m pytest -p no:cacheprovider `
             --cov=pogled_assist `
             --cov-report=term-missing:skip-covered `
             --cov-report=xml:coverage.xml
+
+      - name: Upload UI review galleries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-gallery
+          path: dist/ui-gallery
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload coverage report
         if: always()

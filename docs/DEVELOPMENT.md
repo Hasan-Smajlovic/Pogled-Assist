@@ -45,7 +45,7 @@ components.
 
 The supporting scripts are grouped by purpose: `scripts/checks/` validates
 source and workflows, `scripts/release/` builds and publishes releases,
-`scripts/ui/` renders the UI gallery, and `scripts/speech_suggestions/`
+`scripts/ui/` renders and prepares UI galleries, and `scripts/speech_suggestions/`
 prepares and evaluates Bosnian prediction models.
 
 Before running the model commands below in Windows PowerShell, use UTF-8 for
@@ -299,6 +299,23 @@ Generate the gallery:
 ```powershell
 .\dev.ps1 ui -Open
 ```
+
+The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
+already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
+the separate **UI gallery** workflow publishes a browser gallery and updates
+one PR bot comment with main screenshots, resolution links, the rendered commit,
+and a download link. Setup, publication permissions, and cleanup are defined in
+[CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
+To review the artifact offline, download and extract it from the workflow run,
+then open `index.html` inside `1280x720` or `1440x900`.
+Each folder contains the same 35 surfaces; the artifact is kept for 14 days and
+any available screenshots are uploaded even when the test suite fails.
+CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
+variable, rendering tests continue to use pytest's temporary directories.
+The Pages site uses a separate generated index and only checked PNG files; it
+does not publish the HTML supplied by a PR's CI artifact. Available screenshots
+from a failed CI run can appear, with the failure shown in the comment. A gallery
+is visual evidence, not a passing test or a Windows/Tobii verification result.
 
 The command renders:
 
