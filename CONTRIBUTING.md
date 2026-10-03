@@ -320,7 +320,10 @@ site without a new CI run. A removed or expired gallery comment is updated when
 that PR is still open; the workflow does not create empty gallery comments.
 
 The workflow and its script must first reach the default branch, currently
-`master`. Before the first publication, Hasan or another repository administrator
+`master`. A merge into `development` alone does not activate publication, and
+the PR introducing the workflow will not receive its gallery comment until
+activation. Until then, review the `ui-gallery` ZIP artifact in the PR's CI run.
+Before the first publication, Hasan or another repository administrator
 must select **Settings > Pages > Build and deployment > Source > GitHub Actions**.
 The `github-pages` environment must allow deployments from the default branch.
 If Pages is already configured for another site, review that use before selecting
@@ -330,7 +333,8 @@ The jobs `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` run
 after CI in a separate workflow. They are not required PR checks and must not be
 added to the branch rulesets. A Pages or comment failure does not replace or
 bypass any software, packaging, or human review requirement. After setup or a
-failed deployment, rerun **UI gallery** to retry publication.
+failed deployment, run **UI gallery** manually from the default branch to publish
+the still-available artifacts and update PR comments without a new CI run.
 
 PR CI keeps its read-only token. The gallery build checks out the trusted workflow
 revision, reads artifact data, and rebuilds its own HTML; it never checks out or

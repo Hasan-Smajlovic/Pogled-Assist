@@ -110,9 +110,9 @@ class Gallery:
     def card(self) -> str:
         return (
             f'<article><h2><a href="{self.path}/">PR #{self.pull["number"]}: '
-            f'{escape(self.pull["title"])}</a></h2>'
-            f'<p>Commit <code>{self.run["head_sha"][:7]}</code> · '
-            f'{len(self.images)} images · CI: {escape(self.run["conclusion"] or "unknown")}</p>'
+            f"{escape(self.pull['title'])}</a></h2>"
+            f"<p>Commit <code>{self.run['head_sha'][:7]}</code> · "
+            f"{len(self.images)} images · CI: {escape(self.run['conclusion'] or 'unknown')}</p>"
             "</article>"
         )
 
@@ -287,11 +287,12 @@ def _check_archive_size(entries: list) -> None:
 
 
 def _archive_path(entry) -> PurePosixPath:
-    path = PurePosixPath(entry.filename)
+    # ZipInfo.filename rewrites Windows separators; check the original ZIP name.
+    path = PurePosixPath(entry.orig_filename)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError("The UI archive contains an unsafe path or file type.")
     mode = stat.S_IFMT(entry.external_attr >> 16)
-    if "\\" in entry.filename or mode not in (0, stat.S_IFREG, stat.S_IFDIR):
+    if "\\" in entry.orig_filename or mode not in (0, stat.S_IFREG, stat.S_IFDIR):
         raise ValueError("The UI archive contains an unsafe path or file type.")
     return path
 
@@ -420,7 +421,7 @@ def _write_gallery(directory: Path, gallery: Gallery) -> None:
     _write_page(
         directory / "index.html",
         f"PR #{pull['number']}: {pull['title']}",
-        f'<p>Rendered commit <code>{run["head_sha"]}</code>.</p>'
+        f"<p>Rendered commit <code>{run['head_sha']}</code>.</p>"
         '<p><a href="../../">All PR galleries</a></p><ul>' + "".join(links) + "</ul>",
     )
 

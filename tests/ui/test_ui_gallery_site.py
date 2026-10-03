@@ -166,8 +166,11 @@ def test_failed_ci_still_publishes_available_images_and_reports_failure(tmp_path
 
 @pytest.mark.parametrize("path", ["../speech.png", "/speech.png", "1440x900\\speech.png"])
 def test_archive_rejects_paths_that_could_escape_the_output(path):
+    archive = _archive({path: _png()})
+    with ZipFile(io.BytesIO(archive)) as zipped:
+        assert zipped.infolist()[0].orig_filename == path
     with pytest.raises(ValueError, match="unsafe path"):
-        site.read_images(_archive({path: _png()}))
+        site.read_images(archive)
 
 
 def test_archive_rejects_symlinks_and_duplicate_images():
@@ -371,8 +374,11 @@ def _artifact(run_id, sha=FIRST_SHA, number=1):
 def _archive(files):
     output = io.BytesIO()
     with ZipFile(output, "w") as zipped:
-        for path, content in (files.items() if isinstance(files, dict) else files):
-            zipped.writestr(path, content)
+        for path, content in files.items() if isinstance(files, dict) else files:
+            entry = ZipInfo(path)
+            # Keep malformed paths in the fixture even when Windows rewrites them.
+            entry.filename = path
+            zipped.writestr(entry, content)
     return output.getvalue()
 
 
