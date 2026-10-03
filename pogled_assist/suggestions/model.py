@@ -51,8 +51,8 @@ class WordModel:
         pattern = prefix_pattern(prefix)
         return {word for _key, word in self.index[begin:end] if pattern.match(word)}
 
-    def _fallback(self, personal: WordModel | None, limit: int) -> list[str]:
-        if personal is None or not personal.vocabulary:
+    def _fallback(self, personal: WordModel, limit: int) -> list[str]:
+        if not personal.vocabulary:
             return self.unigram_ranking[:limit]
         if self._fallback_cache is not None:
             previous, previous_limit, result = self._fallback_cache
@@ -60,7 +60,7 @@ class WordModel:
                 return result
         base, own = self.contexts[()], personal.contexts[()]
         total, own_total = max(1, self.totals.get((), 0)), personal.totals[()]
-        boost = min(0.25, own_total / (own_total + 40))
+        boost = self._personal_weight((), own_total)
         # Context-free candidates need the blended ranking: a word can rank
         # highly in the blend without being in either source's top five.
         result = nsmallest(
@@ -88,44 +88,15 @@ class WordModel:
         if request is None:
             return []
         prefix, context, _start = request
-        learned = personal
-        if personal is not None and not isinstance(personal, WordModel):
-            learned = WordModel(personal)
-        contexts = [()]
-        if contextual:
-            contexts.extend(context[-size:] for size in range(1, len(context) + 1))
+        learned = _personal_model(personal)
+        contexts = _contexts(context) if contextual else [()]
         if prefix:
-            candidates = self.matching(prefix)
-            if learned is not None:
-                candidates.update(learned.matching(prefix))
+            candidates = self.matching(prefix) | learned.matching(prefix)
         else:
-            candidates = set(self._fallback(learned, limit))
-            for preceding in contexts[1:]:
-                candidates.update(self.contexts.get(preceding, {}))
-                if learned is not None:
-                    candidates.update(learned.contexts.get(preceding, {}))
+            candidates = self._next_word_candidates(contexts, learned, limit)
         if not candidates:
             return []
-
-        rows = []
-        evidence = []
-        for preceding in contexts:
-            base = self.contexts.get(preceding, {})
-            own = learned.contexts.get(preceding, {}) if learned is not None else {}
-            total = self.totals.get(preceding, 0)
-            own_total = learned.totals.get(preceding, 0) if learned is not None else 0
-            if not total and not own_total:
-                continue
-            own_weight = (
-                min(0.8, own_total / (own_total + self.personal_context_blend))
-                if preceding
-                else min(0.25, own_total / (own_total + 40))
-            )
-            distinct = len(base) + sum(word not in base for word in own)
-            evidence.append((preceding, total, own_total, distinct))
-            rows.append((base, own, max(1, total), max(1, own_total), own_weight))
-        weights = self._context_weights(evidence)
-        weighted_rows = [(*row, weight) for row, weight in zip(rows, weights, strict=True)]
+        weighted_rows = self._weighted_rows(contexts, learned)
 
         def score(word: str) -> tuple[float, str]:
             value = sum(
@@ -136,6 +107,39 @@ class WordModel:
             return -value, word
 
         return [word.upper() for word in nsmallest(limit, candidates, key=score)]
+
+    def _next_word_candidates(
+        self, contexts: list[tuple[str, ...]], learned: WordModel, limit: int
+    ) -> set[str]:
+        candidates = set(self._fallback(learned, limit))
+        for preceding in contexts[1:]:
+            candidates.update(self.contexts.get(preceding, {}))
+            candidates.update(learned.contexts.get(preceding, {}))
+        return candidates
+
+    def _weighted_rows(
+        self, contexts: list[tuple[str, ...]], learned: WordModel
+    ) -> list[tuple[dict[str, int], dict[str, int], int, int, float, float]]:
+        rows = []
+        evidence = []
+        for preceding in contexts:
+            base = self.contexts.get(preceding, {})
+            own = learned.contexts.get(preceding, {})
+            total = self.totals.get(preceding, 0)
+            own_total = learned.totals.get(preceding, 0)
+            if not total and not own_total:
+                continue
+            distinct = len(base) + sum(word not in base for word in own)
+            evidence.append((preceding, total, own_total, distinct))
+            own_weight = self._personal_weight(preceding, own_total)
+            rows.append((base, own, max(1, total), max(1, own_total), own_weight))
+        weights = self._context_weights(evidence)
+        return [(*row, weight) for row, weight in zip(rows, weights, strict=True)]
+
+    def _personal_weight(self, preceding: tuple[str, ...], own_total: int) -> float:
+        if preceding:
+            return min(0.8, own_total / (own_total + self.personal_context_blend))
+        return min(0.25, own_total / (own_total + 40))
 
     def _context_weights(
         self, evidence: list[tuple[tuple[str, ...], int, int, int]]
@@ -178,17 +182,33 @@ def load_model_from_paths(model_path: Path, metadata_path: Path) -> WordModel:
     return WordModel(load_counts_from_paths(model_path, metadata_path))
 
 
+def _contexts(preceding: tuple[str, ...]) -> list[tuple[str, ...]]:
+    return [(), *(preceding[-size:] for size in range(1, len(preceding) + 1))]
+
+
+def _personal_model(personal: Counter[tuple[str, ...]] | WordModel | None) -> WordModel:
+    if isinstance(personal, WordModel):
+        return personal
+    return WordModel(personal or ())
+
+
 def _validated_counts(rows: Iterable[tuple[str, int]]) -> Iterable[tuple[tuple[str, ...], int]]:
     for key, count in rows:
         parts = tuple(key.split(" "))
-        if not 1 <= len(parts) <= 3 or not isinstance(count, int) or count <= 0:
+        if not _valid_count(count):
             raise ValueError("Invalid prediction count")
-        if not all(
-            valid_word(word) or (index == 0 and word == START and len(parts) > 1)
-            for index, word in enumerate(parts)
-        ):
+        if not _valid_key(parts):
             raise ValueError("Invalid prediction word")
         yield parts, count
+
+
+def _valid_count(count: object) -> bool:
+    return isinstance(count, int) and count > 0
+
+
+def _valid_key(parts: tuple[str, ...]) -> bool:
+    words = parts[1:] if len(parts) > 1 and parts[0] == START else parts
+    return 1 <= len(parts) <= 3 and all(valid_word(word) for word in words)
 
 
 @lru_cache(maxsize=1)

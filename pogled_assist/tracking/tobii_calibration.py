@@ -36,6 +36,7 @@ _KNOWN_CONFIG_EXES = (
     "TobiiEyeTracking.exe",
     "TobiiExperience.exe",
 )
+_KNOWN_CONFIG_NAMES = frozenset(name.lower() for name in _KNOWN_CONFIG_EXES)
 
 _EXCLUDED_EXE_KEYWORDS = (
     "unins",
@@ -60,6 +61,17 @@ _UI_KEYWORDS = (
     "eyex",
 )
 
+_PATH_KEYWORD_SCORES = (
+    (("tobii eyex config",), 80),
+    (("tobii eye tracking",), 45),
+    (("calibr",), 100),
+    (("config", "setting"), 70),
+    (("profile",), 55),
+    (("testeyetracking",), 35),
+    (("experience",), 30),
+    (_UI_KEYWORDS, 15),
+)
+
 
 def launch_tobii_guest_calibration() -> str:
     """Open Tobii Core/Experience calibration through the installed Tobii UI."""
@@ -67,27 +79,10 @@ def launch_tobii_guest_calibration() -> str:
     if sys.platform != "win32":
         raise RuntimeError("Tobii kalibracija se može pokrenuti samo na Windowsu.")
 
-    launched_methods: list[str] = []
     errors: list[str] = []
-
-    configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
-    if configured and _launch_configured_command(configured, errors):
-        launched_methods.append(f"{CALIBRATION_COMMAND_ENV}")
-
-    if not launched_methods:
-        target = _best_tobii_launch_target()
-        if target is not None and _shell_execute(str(target), errors):
-            launched_methods.append(_short_display_path(target))
-            time.sleep(1.25)
-
-    if not launched_methods:
-        uri = _first_working_protocol(errors)
-        if uri:
-            launched_methods.append(uri)
-            time.sleep(1.0)
-
-    shortcut_sent = _send_calibration_shortcut(errors)
-    if shortcut_sent:
+    opened = _open_calibration_ui(errors)
+    launched_methods = [opened] if opened else []
+    if _send_calibration_shortcut(errors):
         launched_methods.append("Ctrl+Shift+F10")
 
     if launched_methods:
@@ -98,6 +93,22 @@ def launch_tobii_guest_calibration() -> str:
         "Tobii kalibracija se nije mogla pokrenuti. Pokušani su Tobii programi, veze i "
         "prečica Ctrl+Shift+F10."
     )
+
+
+def _open_calibration_ui(errors: list[str]) -> str | None:
+    configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
+    if configured and _launch_configured_command(configured, errors):
+        return CALIBRATION_COMMAND_ENV
+
+    target = _best_tobii_launch_target()
+    if target is not None and _shell_execute(str(target), errors):
+        time.sleep(1.25)
+        return _short_display_path(target)
+
+    uri = _first_working_protocol(errors)
+    if uri:
+        time.sleep(1.0)
+    return uri
 
 
 def _launch_configured_command(command: str, errors: list[str]) -> bool:
@@ -134,85 +145,62 @@ def _best_tobii_launch_target() -> Path | None:
 
 
 def _start_menu_shortcuts() -> list[Path]:
-    roots = []
-    for base in ("ProgramData", "AppData"):
-        value = os.environ.get(base, "").strip()
-        if value:
-            roots.append(Path(value) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
-
-    shortcuts: list[Path] = []
-    for root in roots:
-        if not root.exists():
-            continue
-        try:
-            shortcuts.extend(path for path in root.rglob("*.lnk") if "tobii" in str(path).lower())
-        except OSError:
-            logger.exception("Could not scan Start Menu shortcuts under %s.", root)
-
-    return shortcuts
+    return [
+        shortcut
+        for base in _environment_dirs("ProgramData", "AppData")
+        for shortcut in _tobii_files(
+            base / "Microsoft" / "Windows" / "Start Menu" / "Programs", "*.lnk"
+        )
+    ]
 
 
 def _installed_tobii_executables() -> list[Path]:
     roots = _tobii_search_roots()
-    direct_candidates: list[Path] = []
-    for root in roots:
-        for exe_name in _KNOWN_CONFIG_EXES:
-            direct_candidates.extend(root.glob(f"**/{exe_name}"))
-
-    discovered: list[Path] = []
-    for root in roots:
-        if not root.exists():
-            continue
-        try:
-            discovered.extend(path for path in root.rglob("*.exe") if "tobii" in str(path).lower())
-        except OSError:
-            logger.exception("Could not scan Tobii executable folder: %s.", root)
-
+    direct_candidates = [
+        path for root in roots for name in _KNOWN_CONFIG_EXES for path in root.glob(f"**/{name}")
+    ]
+    discovered = [path for root in roots for path in _tobii_files(root, "*.exe")]
     return _unique_paths(direct_candidates + discovered)
 
 
 def _tobii_search_roots() -> list[Path]:
-    roots: list[Path] = []
-    for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData", "ProgramData"):
-        value = os.environ.get(env_name, "").strip()
-        if value:
-            roots.append(Path(value) / "Tobii")
-
+    bases = _environment_dirs("ProgramFiles", "ProgramFiles(x86)", "LocalAppData", "ProgramData")
+    roots = (base / "Tobii" for base in bases)
     return [root for root in roots if root.exists()]
+
+
+def _environment_dirs(*names: str) -> list[Path]:
+    values = (os.environ.get(name, "").strip() for name in names)
+    return [Path(value) for value in values if value]
+
+
+def _tobii_files(root: Path, pattern: str) -> list[Path]:
+    found: list[Path] = []
+    if not root.exists():
+        return found
+    try:
+        found.extend(path for path in root.rglob(pattern) if "tobii" in str(path).lower())
+    except OSError:
+        logger.exception("Could not scan %s for Tobii launch targets.", root)
+    return found
 
 
 def _target_score(path: Path) -> int:
     text = str(path).lower()
     name = path.name.lower()
-    parent = path.parent.name.lower()
-    score = 0
-
+    score = sum(
+        weight
+        for keywords, weight in _PATH_KEYWORD_SCORES
+        if any(keyword in text for keyword in keywords)
+    )
     if path.suffix.lower() == ".lnk":
         score += 40
-    if name in (item.lower() for item in _KNOWN_CONFIG_EXES):
+    if name in _KNOWN_CONFIG_NAMES:
         score += 120
-    if "tobii eyex config" in text:
-        score += 80
-    if "tobii eye tracking" in text:
-        score += 45
-    if "calibr" in text:
-        score += 100
-    if "config" in text or "setting" in text:
-        score += 70
-    if "profile" in text:
-        score += 55
-    if "testeyetracking" in text:
-        score += 35
-    if "experience" in text:
-        score += 30
-
-    if any(keyword in text for keyword in _UI_KEYWORDS):
-        score += 15
-    if parent == "troubleshooter":
+    if path.parent.name.lower() == "troubleshooter":
         score -= 20
     if any(keyword in name for keyword in _EXCLUDED_EXE_KEYWORDS):
         score -= 140
-
     return score
 
 

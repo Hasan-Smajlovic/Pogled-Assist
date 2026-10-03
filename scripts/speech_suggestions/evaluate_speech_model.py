@@ -24,7 +24,7 @@ from pogled_assist.suggestions.model import (
     load_model,
     load_model_from_paths,
 )
-from pogled_assist.suggestions.text import START, insert_word, words
+from pogled_assist.suggestions.text import START, Word, insert_word, words
 
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "speech_suggestions"
 
@@ -45,115 +45,136 @@ def letters(word: str) -> list[str]:
 
 
 def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> dict:
-    text = text.upper()
-    composed = ""
-    activations = entered = selections = departures = hits = queries = 0
-    prediction = dict.fromkeys(
-        (
-            "sentence_start_queries",
-            "sentence_start_top_one_hits",
-            "sentence_start_top_five_hits",
-            "next_word_queries",
-            "next_word_top_one_hits",
-            "next_word_top_five_hits",
-            "completion_queries",
-            "completion_top_one_hits",
-            "completion_top_five_hits",
-            "completion_selections",
-            "prediction_selections",
-        ),
-        0,
-    )
-    durations = []
-    last_slot = None
-    automatic_space = False
-    offset = 0
+    return _Simulation(model, contextual=contextual).run(text.upper())
 
-    def separator(value: str) -> None:
-        nonlocal composed, activations, automatic_space, last_slot
-        if automatic_space:
-            if value.startswith(" "):
-                value = value[1:]
-            elif value and value[0] in ".,?!":
-                composed = composed[:-1]
-            elif not value:
-                composed = composed[:-1]
-                activations += 1
-            automatic_space = False
-        index = 0
-        while index < len(value):
-            character = value[index]
-            if character == " ":
-                activations += 1
-            elif character in ".?":
-                activations += 3
-                composed += f"{character} "
-                if index + 1 < len(value) and value[index + 1] == " ":
-                    index += 1
-                else:
-                    composed = composed[:-1]
-                    activations += 1
-                last_slot = None
-                index += 1
-                continue
-            else:
-                raise ValueError(f"Unsupported baseline symbol: {character!r}")
-            composed += character
-            last_slot = None
-            index += 1
 
-    for token in words(text):
-        separator(text[offset : token.start])
+class _Simulation:
+    """Count grouped-keyboard actions while preserving the exact target text."""
+
+    def __init__(self, model: WordModel | None, *, contextual: bool) -> None:
+        self.model = model
+        self.contextual = contextual
+        self.composed = ""
+        self.counts = dict.fromkeys(
+            (
+                "activations",
+                "letters",
+                "suggestion_selections",
+                "same_slot_departures",
+                "top_five_hits",
+                "queries",
+                "corrections",
+                "undo",
+                "sentence_start_queries",
+                "sentence_start_top_one_hits",
+                "sentence_start_top_five_hits",
+                "next_word_queries",
+                "next_word_top_one_hits",
+                "next_word_top_five_hits",
+                "completion_queries",
+                "completion_top_one_hits",
+                "completion_top_five_hits",
+                "completion_selections",
+                "prediction_selections",
+            ),
+            0,
+        )
+        self.durations: list[float] = []
+        self.last_slot: int | None = None
+        self.automatic_space = False
+
+    def run(self, text: str) -> dict:
+        offset = 0
+        for token in words(text):
+            self.separator(text[offset : token.start])
+            self.type_word(token, text)
+            offset = token.end
+        self.separator(text[offset:])
+        if self.composed != text:
+            raise AssertionError(
+                f"Simulation did not reproduce its target: {self.composed!r} != {text!r}"
+            )
+        return {**self.counts, "durations_ms": self.durations}
+
+    def type_word(self, token: Word, text: str) -> None:
         target = token.text.upper()
         units = letters(target)
         has_space = token.end < len(text) and text[token.end] == " "
         for index in range(len(units) + 1):
-            candidates = []
-            if model is not None:
-                started = time.perf_counter()
-                candidates = model.predict(composed, contextual=contextual)
-                durations.append((time.perf_counter() - started) * 1000)
-                queries += 1
-                hits += target in candidates
-                kind = (
-                    "completion"
-                    if index
-                    else ("sentence_start" if token.context == (START,) else "next_word")
-                )
-                prediction[f"{kind}_queries"] += 1
-                prediction[f"{kind}_top_one_hits"] += bool(candidates and candidates[0] == target)
-                prediction[f"{kind}_top_five_hits"] += target in candidates
+            candidates = self.predict(token, index)
             if target in candidates and 2 * (len(units) - index) + int(has_space) > 1:
-                slot = candidates.index(target)
-                departures += last_slot == slot
-                composed = insert_word(composed, target)
-                automatic_space = True
-                activations += 1
-                selections += 1
-                prediction["completion_selections" if index else "prediction_selections"] += 1
-                last_slot = slot
+                self.select(target, candidates.index(target), completion=bool(index))
                 break
             if index < len(units):
-                composed += units[index]
-                activations += 2
-                entered += 1
-                last_slot = None
-        offset = token.end
-    separator(text[offset:])
-    if composed != text:
-        raise AssertionError(f"Simulation did not reproduce its target: {composed!r} != {text!r}")
-    return {
-        "activations": activations,
-        "letters": entered,
-        "suggestion_selections": selections,
-        "same_slot_departures": departures,
-        "top_five_hits": hits,
-        "queries": queries,
-        "corrections": 0,
-        "undo": 0,
-        **prediction,
-        "durations_ms": durations,
-    }
+                self.composed += units[index]
+                self.counts["activations"] += 2
+                self.counts["letters"] += 1
+                self.last_slot = None
+
+    def predict(self, token: Word, index: int) -> list[str]:
+        if self.model is None:
+            return []
+        started = time.perf_counter()
+        candidates = self.model.predict(self.composed, contextual=self.contextual)
+        self.durations.append((time.perf_counter() - started) * 1000)
+        target = token.text.upper()
+        self.counts["queries"] += 1
+        self.counts["top_five_hits"] += target in candidates
+        kind = (
+            "completion"
+            if index
+            else ("sentence_start" if token.context == (START,) else "next_word")
+        )
+        self.counts[f"{kind}_queries"] += 1
+        self.counts[f"{kind}_top_one_hits"] += bool(candidates and candidates[0] == target)
+        self.counts[f"{kind}_top_five_hits"] += target in candidates
+        return candidates
+
+    def select(self, target: str, slot: int, *, completion: bool) -> None:
+        self.counts["same_slot_departures"] += self.last_slot == slot
+        self.composed = insert_word(self.composed, target)
+        self.automatic_space = True
+        self.counts["activations"] += 1
+        self.counts["suggestion_selections"] += 1
+        self.counts["completion_selections" if completion else "prediction_selections"] += 1
+        self.last_slot = slot
+
+    def separator(self, value: str) -> None:
+        if self.automatic_space:
+            value = self.trim_automatic_space(value)
+        index = 0
+        while index < len(value):
+            character = value[index]
+            if character == " ":
+                self.counts["activations"] += 1
+                self.composed += character
+                index += 1
+            elif character in ".?":
+                index = self.punctuation(value, index)
+            else:
+                raise ValueError(f"Unsupported baseline symbol: {character!r}")
+            self.last_slot = None
+
+    def trim_automatic_space(self, value: str) -> str:
+        # Selecting a word already inserts one space; punctuation replaces it.
+        if value.startswith(" "):
+            value = value[1:]
+        elif value and value[0] in ".,?!":
+            self.composed = self.composed[:-1]
+        elif not value:
+            self.composed = self.composed[:-1]
+            self.counts["activations"] += 1
+        self.automatic_space = False
+        return value
+
+    def punctuation(self, value: str, index: int) -> int:
+        self.counts["activations"] += 3
+        self.composed += f"{value[index]} "
+        if index + 1 < len(value) and value[index + 1] == " ":
+            return index + 2
+        self.composed = self.composed[:-1]
+        self.counts["activations"] += 1
+        return index + 1
 
 
 def evaluate(
@@ -164,42 +185,7 @@ def evaluate(
     cases_path: Path | None = None,
     expected_sha256: str | None = None,
 ) -> dict:
-    bundled_cases = cases_path is None
-    if cases_path is None:
-        frozen = json.loads((FIXTURES / "frozen.json").read_text())
-        for name, digest in frozen["sha256"].items():
-            if fixture_sha256(FIXTURES / name) != digest:
-                raise ValueError(f"Frozen evaluation file changed: {name}")
-        cases_path = FIXTURES / f"{dataset}.tsv"
-        expected_sha256 = frozen["sha256"][cases_path.name]
-    elif not expected_sha256:
-        raise ValueError("External messages require their previously frozen SHA-256")
-    else:
-        dataset = "external"
-    digest = (
-        fixture_sha256(cases_path)
-        if bundled_cases
-        else hashlib.sha256(cases_path.read_bytes()).hexdigest()
-    )
-    if digest != expected_sha256:
-        raise ValueError("Evaluation messages do not match their frozen SHA-256")
-    with cases_path.open(encoding="utf-8", newline="") as stream:
-        reader = csv.DictReader(stream, delimiter="\t")
-        if reader.fieldnames != ["id", "category", "text"]:
-            raise ValueError("Evaluation messages need id, category, and text columns")
-        cases = list(reader)
-    identifiers = set()
-    for case in cases:
-        if (
-            None in case
-            or not all((case.get(key) or "").strip() for key in ("id", "category", "text"))
-            or case["id"] in identifiers
-            or not words(case["text"])
-        ):
-            raise ValueError(f"Invalid or duplicate evaluation row: {case!r}")
-        identifiers.add(case["id"])
-    if not cases:
-        raise ValueError("Evaluation messages must not be empty")
+    dataset, digest, cases = _load_cases(dataset, cases_path, expected_sha256)
     started = time.perf_counter()
     if model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH:
         model = load_model()
@@ -288,6 +274,55 @@ def evaluate(
     }
 
 
+def _load_cases(
+    dataset: str, cases_path: Path | None, expected_sha256: str | None
+) -> tuple[str, str, list[dict]]:
+    bundled_cases = cases_path is None
+    if cases_path is None:
+        frozen = json.loads((FIXTURES / "frozen.json").read_text())
+        for name, digest in frozen["sha256"].items():
+            if fixture_sha256(FIXTURES / name) != digest:
+                raise ValueError(f"Frozen evaluation file changed: {name}")
+        cases_path = FIXTURES / f"{dataset}.tsv"
+        expected_sha256 = frozen["sha256"][cases_path.name]
+    elif not expected_sha256:
+        raise ValueError("External messages require their previously frozen SHA-256")
+    else:
+        dataset = "external"
+    digest = (
+        fixture_sha256(cases_path)
+        if bundled_cases
+        else hashlib.sha256(cases_path.read_bytes()).hexdigest()
+    )
+    if digest != expected_sha256:
+        raise ValueError("Evaluation messages do not match their frozen SHA-256")
+    return dataset, digest, _read_cases(cases_path)
+
+
+def _read_cases(cases_path: Path) -> list[dict]:
+    with cases_path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["id", "category", "text"]:
+            raise ValueError("Evaluation messages need id, category, and text columns")
+        cases = list(reader)
+    identifiers = set()
+    for case in cases:
+        if not _valid_case(case, identifiers):
+            raise ValueError(f"Invalid or duplicate evaluation row: {case!r}")
+        identifiers.add(case["id"])
+    if not cases:
+        raise ValueError("Evaluation messages must not be empty")
+    return cases
+
+
+def _valid_case(case: dict, identifiers: set[str]) -> bool:
+    if None in case:
+        return False
+    if not all((case.get(key) or "").strip() for key in ("id", "category", "text")):
+        return False
+    return case["id"] not in identifiers and bool(words(case["text"]))
+
+
 def diagnose(model: WordModel, text: str) -> list[dict]:
     """Explain exact-word misses before typing, separately from completion trials."""
     misses = []
@@ -295,26 +330,28 @@ def diagnose(model: WordModel, text: str) -> list[dict]:
         candidates = model.predict(text[: token.start])
         if token.text.upper() in candidates:
             continue
-        has_context = any(
-            token.text in model.contexts.get(token.context[-size:], {})
-            for size in range(1, len(token.context) + 1)
-        )
-        if token.text not in model.vocabulary:
-            reason = "missing_vocabulary"
-        elif not has_context:
-            reason = "missing_context"
-        else:
-            reason = "ranked_below_five"
         misses.append(
             {
                 "target": token.text.upper(),
                 "context": list(token.context),
                 "kind": "sentence_start" if token.context == (START,) else "next_word",
-                "reason": reason,
+                "reason": _miss_reason(model, token),
                 "candidates": candidates,
             }
         )
     return misses
+
+
+def _miss_reason(model: WordModel, token: Word) -> str:
+    has_context = any(
+        token.text in model.contexts.get(token.context[-size:], {})
+        for size in range(1, len(token.context) + 1)
+    )
+    if token.text not in model.vocabulary:
+        return "missing_vocabulary"
+    if not has_context:
+        return "missing_context"
+    return "ranked_below_five"
 
 
 def main() -> None:

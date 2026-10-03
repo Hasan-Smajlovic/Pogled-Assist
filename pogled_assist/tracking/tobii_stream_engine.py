@@ -171,29 +171,35 @@ class TobiiStreamEngineBackend:
     def _destroy_resources(self) -> None:
         if self._lib is None:
             return
-
         if self._device:
-            with contextlib.suppress(Exception):
-                self._lib.tobii_eye_position_normalized_unsubscribe(self._device)
-
-            with contextlib.suppress(Exception):
-                self._lib.tobii_gaze_origin_unsubscribe(self._device)
-
-            with contextlib.suppress(Exception):
-                self._lib.tobii_gaze_point_unsubscribe(self._device)
-
-            try:
-                self._lib.tobii_device_destroy(self._device)
-            except Exception:
-                logger.exception("Tobii Stream Engine device destroy failed.")
-            self._device = ctypes.c_void_p()
-
+            self._destroy_device()
         if self._api:
-            try:
-                self._lib.tobii_api_destroy(self._api)
-            except Exception:
-                logger.exception("Tobii Stream Engine API destroy failed.")
-            self._api = ctypes.c_void_p()
+            self._destroy_api()
+
+    def _destroy_device(self) -> None:
+        assert self._lib is not None
+        with contextlib.suppress(Exception):
+            self._lib.tobii_eye_position_normalized_unsubscribe(self._device)
+
+        with contextlib.suppress(Exception):
+            self._lib.tobii_gaze_origin_unsubscribe(self._device)
+
+        with contextlib.suppress(Exception):
+            self._lib.tobii_gaze_point_unsubscribe(self._device)
+
+        try:
+            self._lib.tobii_device_destroy(self._device)
+        except Exception:
+            logger.exception("Tobii Stream Engine device destroy failed.")
+        self._device = ctypes.c_void_p()
+
+    def _destroy_api(self) -> None:
+        assert self._lib is not None
+        try:
+            self._lib.tobii_api_destroy(self._api)
+        except Exception:
+            logger.exception("Tobii Stream Engine API destroy failed.")
+        self._api = ctypes.c_void_p()
 
     def _configure_signatures(self) -> None:
         assert self._lib is not None
@@ -585,60 +591,63 @@ def _load_stream_engine_library() -> tuple[ctypes.CDLL, str]:
     )
 
 
-def _stream_engine_candidates() -> list[Path]:
-    candidates: list[Path] = []
-
-    configured = os.environ.get(DLL_ENV, "").strip()
+def app_root() -> Path:
+    configured = os.environ.get(APP_ROOT_ENV, "").strip()
     if configured:
-        configured_path = Path(configured)
-        if configured_path.is_dir():
-            candidates.extend(configured_path / dll_name for dll_name in DLL_NAMES)
-        else:
-            candidates.append(configured_path)
+        return Path(configured)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
 
-    configured_app_root = os.environ.get(APP_ROOT_ENV, "").strip()
-    if configured_app_root:
-        app_root = Path(configured_app_root)
-    elif getattr(sys, "frozen", False):
-        app_root = Path(sys.executable).resolve().parent
-    else:
-        app_root = Path(__file__).resolve().parents[2]
-    search_roots = [
-        app_root,
-        app_root / "tools",
-        app_root / "tools" / "tobii",
-        app_root / "tools" / "tobii-stream-engine",
-    ]
 
+def _stream_engine_candidates() -> list[Path]:
+    candidates = _configured_dll_candidates()
+    for root in _dll_search_roots():
+        if root.exists():
+            candidates.extend(_dlls_in(root))
+    return _unique_paths(candidates)
+
+
+def _configured_dll_candidates() -> list[Path]:
+    configured = os.environ.get(DLL_ENV, "").strip()
+    if not configured:
+        return []
+    path = Path(configured)
+    if path.is_dir():
+        return [path / dll_name for dll_name in DLL_NAMES]
+    return [path]
+
+
+def _dll_search_roots() -> list[Path]:
+    root = app_root()
+    roots = [root, root / "tools", root / "tools" / "tobii", root / "tools" / "tobii-stream-engine"]
     for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData", "ProgramData"):
         value = os.environ.get(env_name, "").strip()
         if value:
-            search_roots.append(Path(value) / "Tobii")
+            roots.append(Path(value) / "Tobii")
+    return roots
 
-    for root in search_roots:
-        if not root.exists():
-            continue
 
-        for dll_name in DLL_NAMES:
-            direct = root / dll_name
-            if direct.exists():
-                candidates.append(direct)
+def _dlls_in(root: Path) -> list[Path]:
+    found = [root / dll_name for dll_name in DLL_NAMES if (root / dll_name).exists()]
+    if not root.name.lower().startswith("tobii"):
+        return found
+    for dll_name in DLL_NAMES:
+        try:
+            found.extend(root.rglob(dll_name))
+        except OSError:
+            logger.exception("Could not scan Tobii DLL folder: %s", root)
+    return found
 
-        if root.name.lower() == "tobii" or root.name.lower().startswith("tobii"):
-            for dll_name in DLL_NAMES:
-                try:
-                    candidates.extend(root.rglob(dll_name))
-                except OSError:
-                    logger.exception("Could not scan Tobii DLL folder: %s", root)
 
+def _unique_paths(paths: list[Path]) -> list[Path]:
     unique: list[Path] = []
     seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate).lower()
+    for path in paths:
+        key = str(path).lower()
         if key not in seen:
             seen.add(key)
-            unique.append(candidate)
-
+            unique.append(path)
     return unique
 
 

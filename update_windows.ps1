@@ -202,11 +202,13 @@ function Stop-UpdateTranscript {
 }
 
 function Save-UpdateLog {
-    if (
-        [string]::IsNullOrWhiteSpace($script:UpdateLogPath) -or
-        -not (Test-Path -LiteralPath $script:UpdateLogPath -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $InstallRoot -PathType Container)
-    ) {
+    if ([string]::IsNullOrWhiteSpace($script:UpdateLogPath)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $script:UpdateLogPath -PathType Leaf)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $InstallRoot -PathType Container)) {
         return
     }
 
@@ -237,7 +239,9 @@ function Remove-OperationRoot {
 }
 
 function Wait-BeforeExit {
-    if ($NoPause -and -not ($WaitForProcessId -gt 0 -and $script:ExitCode -ne 0)) {
+    # Keep errors visible when the application started an update with -NoPause.
+    $applicationUpdateFailed = $WaitForProcessId -gt 0 -and $script:ExitCode -ne 0
+    if ($NoPause -and -not $applicationUpdateFailed) {
         return
     }
 
@@ -300,6 +304,27 @@ function Get-InstalledRelease {
     }
 }
 
+function Test-IsInstalledPythonProcess {
+    param(
+        [object]$Process,
+        [string]$InstallPrefix
+    )
+
+    if ($Process.Name -notin @("python.exe", "pythonw.exe")) {
+        return $false
+    }
+    if (
+        -not [string]::IsNullOrWhiteSpace($Process.ExecutablePath) -and
+        $Process.ExecutablePath.StartsWith($InstallPrefix, [StringComparison]::OrdinalIgnoreCase)
+    ) {
+        return $true
+    }
+    return (
+        -not [string]::IsNullOrWhiteSpace($Process.CommandLine) -and
+        $Process.CommandLine.IndexOf($InstallPrefix, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    )
+}
+
 function Assert-AppNotRunning {
     $runningApps = @(Get-Process -Name "PogledAssist" -ErrorAction SilentlyContinue)
     if ($runningApps.Count -gt 0) {
@@ -312,13 +337,7 @@ function Assert-AppNotRunning {
         $sourceProcesses = @(
             Get-CimInstance Win32_Process -ErrorAction Stop |
                 Where-Object {
-                    $_.Name -in @("python.exe", "pythonw.exe") -and
-                    (
-                        (-not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
-                            $_.ExecutablePath.StartsWith($installPrefix, [StringComparison]::OrdinalIgnoreCase)) -or
-                        (-not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
-                            $_.CommandLine.IndexOf($installPrefix, [StringComparison]::OrdinalIgnoreCase) -ge 0)
-                    )
+                    Test-IsInstalledPythonProcess -Process $_ -InstallPrefix $installPrefix
                 }
         )
         if ($sourceProcesses.Count -gt 0) {
@@ -356,7 +375,7 @@ function Wait-ForRequestingApplication {
     }
 }
 
-function Get-LatestStableRelease {
+function Get-ReleaseMetadata {
     if (
         $ReleaseApiUrl -ne $OfficialReleaseApiUrl -and
         $env:POGLED_ASSIST_TESTING -ne "1"
@@ -382,57 +401,94 @@ function Get-LatestStableRelease {
         throw "Could not query the latest stable release: $($_.Exception.Message)"
     }
 
+    return $metadata
+}
+
+function Assert-StableReleaseMetadata {
+    param([object]$Metadata)
+
     $requiredProperties = @("tag_name", "draft", "prerelease", "assets")
     foreach ($property in $requiredProperties) {
-        if ($metadata.PSObject.Properties.Name -notcontains $property) {
+        if ($Metadata.PSObject.Properties.Name -notcontains $property) {
             throw "Latest release metadata is missing '$property'. The installation was not changed."
         }
     }
-    if ([bool]$metadata.draft -or [bool]$metadata.prerelease) {
+    if ([bool]$Metadata.draft -or [bool]$Metadata.prerelease) {
         throw "GitHub returned a draft or prerelease instead of a stable release. The installation was not changed."
     }
 
-    $tag = [string]$metadata.tag_name
+    $tag = [string]$Metadata.tag_name
     $version = ConvertTo-StableVersion -Value $tag -Label "Latest release tag"
     $normalizedTag = "v$($version.ToString(3))"
     if ($tag -ne $normalizedTag) {
         throw "Latest release tag must be exactly $normalizedTag. Found: $tag"
     }
 
-    $artifactName = "PogledAssist-$normalizedTag-windows-x64.zip"
+    return $version
+}
+
+function Get-ReleasePackage {
+    param(
+        [object]$Metadata,
+        [version]$Version
+    )
+
+    $tag = "v$($Version.ToString(3))"
+    $artifactName = "PogledAssist-$tag-windows-x64.zip"
     $checksumName = "$artifactName.sha256"
-    $artifactMatches = @($metadata.assets | Where-Object { $_.name -eq $artifactName })
-    $checksumMatches = @($metadata.assets | Where-Object { $_.name -eq $checksumName })
+    $artifactMatches = @($Metadata.assets | Where-Object { $_.name -eq $artifactName })
+    $checksumMatches = @($Metadata.assets | Where-Object { $_.name -eq $checksumName })
     if ($artifactMatches.Count -ne 1 -or $checksumMatches.Count -ne 1) {
-        throw "Stable release $normalizedTag must contain exactly one $artifactName and one $checksumName asset."
+        throw "Stable release $tag must contain exactly one $artifactName and one $checksumName asset."
     }
 
     foreach ($asset in @($artifactMatches[0], $checksumMatches[0])) {
-        if (
-            $asset.PSObject.Properties.Name -notcontains "browser_download_url" -or
-            [string]::IsNullOrWhiteSpace([string]$asset.browser_download_url)
-        ) {
-            throw "Stable release $normalizedTag contains an asset without a download URL."
-        }
+        Assert-ReleaseAssetUrl -Asset $asset -Tag $tag
     }
-    $artifactUrl = [string]$artifactMatches[0].browser_download_url
-    $checksumUrl = [string]$checksumMatches[0].browser_download_url
-    if ($ReleaseApiUrl -eq $OfficialReleaseApiUrl) {
-        $expectedArtifactUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$artifactName"
-        $expectedChecksumUrl = "$OfficialReleaseAssetRoot/$normalizedTag/$checksumName"
-        if ($artifactUrl -ne $expectedArtifactUrl -or $checksumUrl -ne $expectedChecksumUrl) {
-            throw "Stable release assets did not point to the official Hasan-Smajlovic/Pogled-Assist release."
-        }
+    return [PSCustomObject]@{
+        Version = $Version
+        Tag = $tag
+        ArtifactName = $artifactName
+        ArtifactUrl = [string]$artifactMatches[0].browser_download_url
+        ChecksumName = $checksumName
+        ChecksumUrl = [string]$checksumMatches[0].browser_download_url
+    }
+}
+
+function Assert-ReleaseAssetUrl {
+    param(
+        [object]$Asset,
+        [string]$Tag
+    )
+
+    if (
+        $Asset.PSObject.Properties.Name -notcontains "browser_download_url" -or
+        [string]::IsNullOrWhiteSpace([string]$Asset.browser_download_url)
+    ) {
+        throw "Stable release $Tag contains an asset without a download URL."
+    }
+}
+
+function Assert-OfficialReleaseAssets {
+    param([object]$Release)
+
+    if ($ReleaseApiUrl -ne $OfficialReleaseApiUrl) {
+        return
     }
 
-    return [PSCustomObject]@{
-        Version = $version
-        Tag = $normalizedTag
-        ArtifactName = $artifactName
-        ArtifactUrl = $artifactUrl
-        ChecksumName = $checksumName
-        ChecksumUrl = $checksumUrl
+    $expectedArtifactUrl = "$OfficialReleaseAssetRoot/$($Release.Tag)/$($Release.ArtifactName)"
+    $expectedChecksumUrl = "$OfficialReleaseAssetRoot/$($Release.Tag)/$($Release.ChecksumName)"
+    if ($Release.ArtifactUrl -ne $expectedArtifactUrl -or $Release.ChecksumUrl -ne $expectedChecksumUrl) {
+        throw "Stable release assets did not point to the official Hasan-Smajlovic/Pogled-Assist release."
     }
+}
+
+function Get-LatestStableRelease {
+    $metadata = Get-ReleaseMetadata
+    $version = Assert-StableReleaseMetadata -Metadata $metadata
+    $release = Get-ReleasePackage -Metadata $metadata -Version $version
+    Assert-OfficialReleaseAssets -Release $release
+    return $release
 }
 
 function Save-ReleaseAsset {
@@ -548,6 +604,18 @@ function Invoke-ReleaseInstaller {
     }
 }
 
+function Test-ReleaseAlreadyInstalled {
+    param(
+        [object]$Installed,
+        [object]$Release
+    )
+
+    if ($Installed.IsSourceInstallation -or $null -eq $Installed.Version) {
+        return $false
+    }
+    return $Installed.Version -eq $Release.Version
+}
+
 function Invoke-ReleaseUpdate {
     Assert-AppNotRunning
     $installed = Get-InstalledRelease
@@ -556,11 +624,7 @@ function Invoke-ReleaseUpdate {
     $release = Get-LatestStableRelease
     Write-Info "Latest stable release: $($release.Tag)"
 
-    if (
-        -not $installed.IsSourceInstallation -and
-        $null -ne $installed.Version -and
-        $installed.Version -eq $release.Version
-    ) {
+    if (Test-ReleaseAlreadyInstalled -Installed $installed -Release $release) {
         Write-Success "Pogled Assist v$($installed.Version.ToString(3)) is already up to date."
         return
     }
@@ -602,32 +666,36 @@ function Invoke-ReleaseUpdate {
     Write-Success "Pogled Assist was updated to v$($release.Version.ToString(3))."
 }
 
-try {
-    if ($env:OS -ne "Windows_NT") {
-        throw "The Pogled Assist updater can run only on Windows."
-    }
+function Invoke-Updater {
+    try {
+        if ($env:OS -ne "Windows_NT") {
+            throw "The Pogled Assist updater can run only on Windows."
+        }
 
-    Assert-DedicatedInstallRoot
-    Ensure-Administrator
-    Enter-UpdateLock
-    Start-UpdateTranscript
-    Write-Step "Starting Pogled Assist release update"
-    Write-Info "Install folder: $InstallRoot"
-    Wait-ForRequestingApplication
-    Invoke-ReleaseUpdate
-} catch {
-    $script:ExitCode = 1
-    Write-Host ""
-    Write-ErrorLog "Update failed: $($_.Exception.Message)"
-} finally {
-    if ($script:ElevationRequested) {
-        exit 0
-    }
+        Assert-DedicatedInstallRoot
+        Ensure-Administrator
+        Enter-UpdateLock
+        Start-UpdateTranscript
+        Write-Step "Starting Pogled Assist release update"
+        Write-Info "Install folder: $InstallRoot"
+        Wait-ForRequestingApplication
+        Invoke-ReleaseUpdate
+    } catch {
+        $script:ExitCode = 1
+        Write-Host ""
+        Write-ErrorLog "Update failed: $($_.Exception.Message)"
+    } finally {
+        if ($script:ElevationRequested) {
+            exit 0
+        }
 
-    Stop-UpdateTranscript
-    Save-UpdateLog
-    Remove-OperationRoot
-    Exit-UpdateLock
-    Wait-BeforeExit
-    exit $script:ExitCode
+        Stop-UpdateTranscript
+        Save-UpdateLog
+        Remove-OperationRoot
+        Exit-UpdateLock
+        Wait-BeforeExit
+        exit $script:ExitCode
+    }
 }
+
+Invoke-Updater

@@ -36,6 +36,32 @@ def main() -> int:
         print("Mouse gaze simulation is available only from a development checkout.")
         return 2
 
+    lock = application_lock()
+    if not lock.tryLock(0):
+        from PySide6.QtCore import QLockFile
+
+        if lock.error() == QLockFile.LockError.LockFailedError:
+            return 0
+        print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
+        return 1
+    try:
+        return _run_application(simulate_gaze=simulate_gaze)
+    finally:
+        lock.unlock()
+
+
+def application_lock():
+    """One interactive app per user; diagnostics never acquire this lock."""
+    from PySide6.QtCore import QLockFile, QStandardPaths
+
+    directory = Path(QStandardPaths.writableLocation(QStandardPaths.TempLocation))
+    lock = QLockFile(str(directory / "pogled-assist-interactive.lock"))
+    # A long-running session is not stale. Qt can still recover a dead owner's lock.
+    lock.setStaleLockTime(0)
+    return lock
+
+
+def _run_application(*, simulate_gaze: bool) -> int:
     setup_application_logging()
     enable_windows_dpi_awareness()
 
