@@ -96,6 +96,13 @@ fresh eye status cannot make a gaze sample older than 500 ms usable again.
 The watchdog publishes recovery status on Qt only after checking the current
 connection, so a delayed worker notification cannot overwrite a newer failure.
 
+Providers publish a typed `TrackingStatus` lifecycle separately from diagnostic
+text. The hotbar status combines that lifecycle with eye validity and the local
+receive time of the last delivered gaze sample. Its own display timer expires
+readiness after 500 ms without gaze; it does not change the input gate, dwell,
+backend subscriptions, or reconnect policy. See the
+[status guide](USER_GUIDE.md#before-starting) for the visible states.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
@@ -152,6 +159,15 @@ unregisters the AppBar so Windows restores the full work area.
 Speech playback logs identify whether the request came from gaze, button
 activation, or Return in the message field, without recording the message.
 Process startup and UI acknowledgement do not confirm audible playback.
+
+`SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
+The hotbar propagates Settings and keyboard switch signals to all three input
+surfaces. `keyboard_layouts.py` owns the script-specific Unicode keys and
+display-only combining-mark labels. Qt shapes and displays Arabic; Windows input
+receives the original characters. Arabic bypasses Bosnian suggestions and new
+learning, and selects the existing Edge playback boundary with the Hamed voice.
+The Bosnian voice preference and existing model/profile remain intact. See the
+[Arabic keyboard guide](USER_GUIDE.md#arabic-keyboard) for controls and limitations.
 
 ## Persistent data and logs
 

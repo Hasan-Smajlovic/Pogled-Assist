@@ -31,6 +31,7 @@ from ..interaction.gaze_selection import (
     GazeSelectionTimer,
 )
 from ..interaction.mouse_controller import GazeSettings
+from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from ..logging_setup import set_application_logging_enabled
 from ..release_update import ReleaseCheckResult, ReleaseUpdateManager
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
@@ -41,6 +42,11 @@ from .gaze_feedback import set_gaze_feedback
 logger = logging.getLogger(__name__)
 
 GazeCallback = Callable[[], None]
+CONTROL_HEIGHT = 58
+ADJUST_BUTTON_WIDTH = 104
+VALUE_WIDTH = 216
+CHOICE_WIDTH = 260
+CONTROL_SPACING = 12
 
 
 class SettingsWindow(QWidget):
@@ -176,6 +182,10 @@ class SettingsWindow(QWidget):
     def set_status(self, text: str) -> None:
         self._set_status(text)
 
+    def update_speech_settings(self, settings: SpeechSettings) -> None:
+        self._speech_settings = replace(settings)
+        self._refresh_values()
+
     def _build_ui(self) -> None:
         self.setStyleSheet(
             """
@@ -185,7 +195,7 @@ class SettingsWindow(QWidget):
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
             }
-            QWidget#settingsRoot QLabel { color: #f4f1ea; }
+            QWidget#settingsRoot QLabel { color: #f4f1ea; background: transparent; }
             QLabel#titleLabel {
                 color: #ffffff;
                 font-size: 25px;
@@ -226,14 +236,14 @@ class SettingsWindow(QWidget):
                 color: #d8d3c8;
                 font-size: 15px;
             }
-            QLabel#valueLabel {
+            QWidget#settingsRoot QLabel#valueLabel {
                 background: #0f1110;
                 border: 1px solid #3a3d3b;
                 border-radius: 10px;
                 color: #ffffff;
-                font-size: 24px;
+                font-size: 22px;
                 font-weight: 650;
-                padding: 12px 18px;
+                padding: 4px 12px;
             }
             QFrame#navPanel, QFrame#contentPanel {
                 background: #191c1a;
@@ -245,7 +255,7 @@ class SettingsWindow(QWidget):
                 border: 1px solid #3a403c;
                 border-radius: 10px;
             }
-            QToolButton {
+            QToolButton, QCheckBox {
                 background: #272a28;
                 border: 1px solid #414742;
                 border-radius: 10px;
@@ -254,16 +264,16 @@ class SettingsWindow(QWidget):
                 font-weight: 600;
                 padding: 10px 14px;
             }
-            QToolButton:hover {
+            QToolButton:hover, QCheckBox:hover {
                 background: #323633;
                 border-color: #69736d;
             }
-            QToolButton:disabled {
+            QToolButton:disabled, QCheckBox:disabled {
                 background: #242624;
                 border-color: #363a37;
                 color: #747b76;
             }
-            QToolButton:checked {
+            QToolButton:checked, QCheckBox:checked {
                 background: #1d6f68;
                 border-color: #74d3c6;
                 color: #ffffff;
@@ -285,17 +295,19 @@ class SettingsWindow(QWidget):
             QToolButton#adjustButton {
                 background: #242825;
             }
-            QToolButton[gazeTarget="true"] {
+            QToolButton[gazeTarget="true"], QCheckBox[gazeTarget="true"] {
                 background: #3a3420;
                 border: 3px solid #f0c84a;
                 color: #ffffff;
             }
-            QToolButton[gazeTarget="true"][gazePulse="0"] {
+            QToolButton[gazeTarget="true"][gazePulse="0"],
+            QCheckBox[gazeTarget="true"][gazePulse="0"] {
                 background: #f0c84a;
                 border: 4px solid #ffe58a;
                 color: #14140f;
             }
-            QToolButton[gazeTarget="true"][gazePulse="1"] {
+            QToolButton[gazeTarget="true"][gazePulse="1"],
+            QCheckBox[gazeTarget="true"][gazePulse="1"] {
                 background: #16a34a;
                 border: 4px solid #bbf7d0;
                 color: #ffffff;
@@ -319,22 +331,11 @@ class SettingsWindow(QWidget):
                 color: #ffffff;
             }
             QCheckBox {
-                background: #222522;
-                border: 1px solid #3a403c;
-                border-radius: 10px;
-                color: #f5f3ef;
-                font-size: 15px;
-                font-weight: 600;
-                padding: 14px 18px;
-                spacing: 14px;
-            }
-            QCheckBox:hover {
-                background: #303330;
-                border-color: #69736d;
+                spacing: 10px;
             }
             QCheckBox::indicator {
-                width: 28px;
-                height: 28px;
+                width: 24px;
+                height: 24px;
                 border: 2px solid #8b938d;
                 border-radius: 6px;
                 background: #101010;
@@ -344,21 +345,6 @@ class SettingsWindow(QWidget):
                 border-color: #74d3c6;
                 image: url("__CHECKBOX_X_IMAGE__");
             }
-            QCheckBox[gazeTarget="true"] {
-                background: #3a3420;
-                border: 3px solid #f0c84a;
-                color: #ffffff;
-            }
-            QCheckBox[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #14140f;
-            }
-            QCheckBox[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #bbf7d0;
-                color: #ffffff;
-            }
             QComboBox {
                 background: #0f1110;
                 border: 1px solid #4c534e;
@@ -366,7 +352,6 @@ class SettingsWindow(QWidget):
                 color: #ffffff;
                 font-size: 20px;
                 font-weight: 650;
-                min-height: 46px;
                 padding: 10px 14px;
             }
             QComboBox:hover {
@@ -521,9 +506,6 @@ class SettingsWindow(QWidget):
         options_label = QLabel("POKRETANJE I DIJAGNOSTIKA", page)
         options_label.setObjectName("groupLabel")
         layout.addWidget(options_label)
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(12)
-        actions.setVerticalSpacing(12)
         self._startup_checkbox = self._make_checkbox(
             "Pokreni uz Windows",
             self._toggle_start_with_windows,
@@ -539,12 +521,11 @@ class SettingsWindow(QWidget):
             self._toggle_show_launcher_window,
             minimum_size=QSize(240, 58),
         )
-        actions.addWidget(self._startup_checkbox, 0, 0)
-        actions.addWidget(self._logging_checkbox, 0, 1)
-        actions.addWidget(self._launcher_window_checkbox, 0, 2)
-        for column in range(3):
-            actions.setColumnStretch(column, 1)
-        layout.addLayout(actions)
+        layout.addLayout(
+            self._make_action_grid(
+                (self._startup_checkbox, self._logging_checkbox, self._launcher_window_checkbox)
+            )
+        )
 
         update_label = QLabel("VERZIJA APLIKACIJE", page)
         update_label.setObjectName("groupLabel")
@@ -566,13 +547,13 @@ class SettingsWindow(QWidget):
             "Provjeri ažuriranja",
             self._check_for_updates,
             icon_name="fa5s.sync-alt",
-            minimum_size=QSize(210, 64),
+            minimum_size=QSize(210, CONTROL_HEIGHT),
         )
         self._update_button = self._make_button(
             "Ažuriraj i ponovo pokreni",
             self._request_update,
             icon_name="fa5s.download",
-            minimum_size=QSize(250, 64),
+            minimum_size=QSize(250, CONTROL_HEIGHT),
         )
         self._update_button.hide()
 
@@ -657,9 +638,6 @@ class SettingsWindow(QWidget):
         actions_label = QLabel("PONAŠANJE I KALIBRACIJA", page)
         actions_label.setObjectName("groupLabel")
         layout.addWidget(actions_label)
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(12)
-        actions.setVerticalSpacing(12)
         self._move_pointer_button = self._make_button(
             "Pomjeraj pokazivač pogledom",
             self._toggle_move_pointer,
@@ -692,22 +670,17 @@ class SettingsWindow(QWidget):
             icon_name="fa5s.crosshairs",
             minimum_size=QSize(220, 58),
         )
-        for widget in (
-            self._move_pointer_button,
-            self._gaze_bubble_button,
-            self._interaction_overlay_button,
-            self._precision_zoom_checkbox,
-            self._calibration_button,
-        ):
-            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        actions.addWidget(self._move_pointer_button, 0, 0)
-        actions.addWidget(self._gaze_bubble_button, 0, 1)
-        actions.addWidget(self._interaction_overlay_button, 0, 2)
-        actions.addWidget(self._precision_zoom_checkbox, 1, 0)
-        actions.addWidget(self._calibration_button, 1, 1, 1, 2)
-        for column in range(3):
-            actions.setColumnStretch(column, 1)
-        layout.addLayout(actions)
+        layout.addLayout(
+            self._make_action_grid(
+                (
+                    self._move_pointer_button,
+                    self._gaze_bubble_button,
+                    self._interaction_overlay_button,
+                    self._precision_zoom_checkbox,
+                    self._calibration_button,
+                )
+            )
+        )
         layout.addStretch(1)
 
         return page
@@ -725,6 +698,27 @@ class SettingsWindow(QWidget):
         description = QLabel("Podesite glas i raspored tastature za komunikaciju.", page)
         description.setObjectName("sectionDescription")
         layout.addWidget(description)
+
+        self._script_combo = self._make_choice(
+            KEYBOARD_SCRIPTS,
+            self._script_combo_changed,
+            self._cycle_keyboard_script,
+            "Pismo tastature",
+        )
+        script_row, script_layout, _hint = self._make_setting_row("Pismo tastature")
+        script_layout.addWidget(self._script_combo, 0, 1, 2, 1)
+        layout.addWidget(script_row)
+
+        self._voice_combo = self._make_choice(
+            VOICE_PRESETS, self._voice_combo_changed, self._cycle_voice_preset, "Glas"
+        )
+        voice_row, voice_layout, self._voice_hint = self._make_setting_row(
+            "Glas",
+            "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge "
+            "bs-BA-GoranNeural.",
+        )
+        voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
+        layout.addWidget(voice_row)
 
         self._speed_value = self._make_value_label(page)
         layout.addWidget(
@@ -748,43 +742,9 @@ class SettingsWindow(QWidget):
             )
         )
 
-        voice_row = QFrame(page)
-        voice_row.setObjectName("settingRow")
-        voice_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        voice_layout = QGridLayout(voice_row)
-        voice_layout.setContentsMargins(16, 14, 16, 14)
-        voice_layout.setHorizontalSpacing(16)
-        voice_layout.setVerticalSpacing(6)
-        voice_layout.setColumnStretch(0, 1)
-
-        voice_title = QLabel("Glas", voice_row)
-        voice_title.setObjectName("settingTitle")
-        voice_hint = QLabel(
-            "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge "
-            "bs-BA-GoranNeural.",
-            voice_row,
-        )
-        voice_hint.setObjectName("settingHint")
-        voice_hint.setWordWrap(True)
-
-        self._voice_combo = QComboBox(voice_row)
-        self._voice_combo.setMinimumSize(QSize(260, 58))
-        self._voice_combo.setCursor(Qt.CursorShape.PointingHandCursor)
-        for value, label in VOICE_PRESETS:
-            self._voice_combo.addItem(label, value)
-        self._voice_combo.currentIndexChanged.connect(self._voice_combo_changed)
-        self._register_gaze(self._voice_combo, self._cycle_voice_preset, "Glas")
-
-        voice_layout.addWidget(voice_title, 0, 0)
-        voice_layout.addWidget(voice_hint, 1, 0)
-        voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
-        layout.addWidget(voice_row)
-
         actions_label = QLabel("AKCIJE", page)
         actions_label.setObjectName("groupLabel")
         layout.addWidget(actions_label)
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(12)
         self._test_speech_button = self._make_button(
             "Isprobaj govor",
             self._request_speech_test,
@@ -792,13 +752,12 @@ class SettingsWindow(QWidget):
             object_name="primaryButton",
             minimum_size=QSize(240, 58),
         )
-        actions.addWidget(self._test_speech_button, 0, 0)
         self._learned_words_button = self._make_button(
             "Naučene riječi", self._open_learning, minimum_size=QSize(240, 58)
         )
-        actions.addWidget(self._learned_words_button, 0, 1)
-        actions.setColumnStretch(2, 1)
-        layout.addLayout(actions)
+        layout.addLayout(
+            self._make_action_grid((self._test_speech_button, self._learned_words_button))
+        )
         layout.addStretch(1)
 
         return page
@@ -832,6 +791,7 @@ class SettingsWindow(QWidget):
                 lambda index=index: self._choose_word(index),
                 checkable=True,
                 minimum_size=QSize(170, 68),
+                expand_height=True,
             )
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
             grid.addWidget(button, index // 2, index % 2)
@@ -962,20 +922,26 @@ class SettingsWindow(QWidget):
         if self._stack.currentIndex() == 3:
             self._refresh_learning()
 
-    def _make_adjust_row(
-        self,
-        title: str,
-        hint: str,
-        value_label: QLabel,
-        decrease: GazeCallback,
-        increase: GazeCallback,
-    ) -> QFrame:
+    def _make_action_grid(self, widgets: tuple[QWidget, ...]) -> QGridLayout:
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(0)
+        layout.setVerticalSpacing(CONTROL_SPACING)
+        for column in range(3):
+            layout.setColumnStretch(column * 2, 1)
+            if column < 2:
+                layout.setColumnMinimumWidth(column * 2 + 1, CONTROL_SPACING)
+        for index, widget in enumerate(widgets):
+            layout.addWidget(widget, index // 3, (index % 3) * 2)
+        return layout
+
+    def _make_setting_row(self, title: str, hint: str = "") -> tuple[QFrame, QGridLayout, QLabel]:
         row = QFrame(self)
         row.setObjectName("settingRow")
         row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout(row)
         layout.setContentsMargins(14, 4, 14, 4)
-        layout.setHorizontalSpacing(12)
+        layout.setHorizontalSpacing(CONTROL_SPACING)
         layout.setVerticalSpacing(2)
         layout.setColumnStretch(0, 1)
 
@@ -984,24 +950,56 @@ class SettingsWindow(QWidget):
         hint_label = QLabel(hint, row)
         hint_label.setObjectName("settingHint")
         hint_label.setWordWrap(True)
+        layout.addWidget(title_label, 0, 0, 1 if hint else 2, 1)
+        if hint:
+            layout.addWidget(hint_label, 1, 0)
+        else:
+            hint_label.hide()
+        return row, layout, hint_label
+
+    def _make_choice(
+        self,
+        choices: tuple[tuple[str, str], ...],
+        changed: Callable[[int], None],
+        cycle: GazeCallback,
+        name: str,
+    ) -> QComboBox:
+        combo = QComboBox(self)
+        self._configure_control(combo, QSize(CHOICE_WIDTH, CONTROL_HEIGHT))
+        combo.setFixedWidth(CHOICE_WIDTH)
+        for value, label in choices:
+            combo.addItem(label, value)
+        combo.currentIndexChanged.connect(changed)
+        self._register_gaze(combo, cycle, name)
+        return combo
+
+    def _make_adjust_row(
+        self,
+        title: str,
+        hint: str,
+        value_label: QLabel,
+        decrease: GazeCallback,
+        increase: GazeCallback,
+    ) -> QFrame:
+        row, layout, _hint = self._make_setting_row(title, hint)
 
         minus_button = self._make_button(
             "Manje",
             decrease,
             icon_name="fa5s.minus",
             object_name="adjustButton",
-            minimum_size=QSize(104, 52),
+            minimum_size=QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT),
         )
         plus_button = self._make_button(
             "Više",
             increase,
             icon_name="fa5s.plus",
             object_name="adjustButton",
-            minimum_size=QSize(104, 52),
+            minimum_size=QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT),
         )
+        minus_button.setFixedWidth(ADJUST_BUTTON_WIDTH)
+        plus_button.setFixedWidth(ADJUST_BUTTON_WIDTH)
 
-        layout.addWidget(title_label, 0, 0)
-        layout.addWidget(hint_label, 1, 0)
         layout.addWidget(minus_button, 0, 1, 2, 1)
         layout.addWidget(value_label, 0, 2, 2, 1)
         layout.addWidget(plus_button, 0, 3, 2, 1)
@@ -1012,8 +1010,17 @@ class SettingsWindow(QWidget):
         label = QLabel(parent)
         label.setObjectName("valueLabel")
         label.setAlignment(Qt.AlignCenter)
-        label.setMinimumWidth(148)
+        label.setFixedSize(VALUE_WIDTH, CONTROL_HEIGHT)
         return label
+
+    def _configure_control(
+        self, widget: QWidget, size: QSize, *, expand_height: bool = False
+    ) -> None:
+        widget.setMinimumSize(size)
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        if not expand_height:
+            widget.setFixedHeight(size.height())
+        widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def _make_button(
         self,
@@ -1023,14 +1030,18 @@ class SettingsWindow(QWidget):
         object_name: str = "",
         checkable: bool = False,
         minimum_size: QSize | None = None,
+        expand_height: bool = False,
     ) -> QToolButton:
         button = QToolButton(self)
         button.setText(text)
-        button.setMinimumSize(minimum_size or QSize(150, 58))
+        self._configure_control(
+            button,
+            minimum_size or QSize(150, CONTROL_HEIGHT),
+            expand_height=expand_height,
+        )
         button.setCheckable(checkable)
         button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         button.setIconSize(QSize(22, 22))
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
         if object_name:
             button.setObjectName(object_name)
         if icon_name:
@@ -1047,9 +1058,7 @@ class SettingsWindow(QWidget):
         minimum_size: QSize | None = None,
     ) -> QCheckBox:
         checkbox = QCheckBox(text, self)
-        checkbox.setMinimumSize(minimum_size or QSize(250, 58))
-        checkbox.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._configure_control(checkbox, minimum_size or QSize(250, CONTROL_HEIGHT))
         checkbox.pressed.connect(lambda: self.cancel_gaze_interaction(require_leave=True))
         checkbox.clicked.connect(lambda _checked=False, item=callback: item())
         self._register_gaze(checkbox, callback, text)
@@ -1231,6 +1240,8 @@ class SettingsWindow(QWidget):
         self._emit_speech_settings("Broj slova u grupi je ažuriran.")
 
     def _voice_combo_changed(self, index: int) -> None:
+        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+            return
         value = self._voice_combo.itemData(index)
         if not isinstance(value, str) or not value:
             value = VOICE_PRESET_DEFAULT
@@ -1241,7 +1252,24 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
         self._emit_speech_settings("Glas je ažuriran.")
 
+    def _script_combo_changed(self, index: int) -> None:
+        script = self._script_combo.itemData(index)
+        if script not in dict(KEYBOARD_SCRIPTS):
+            script = LATIN_SCRIPT
+        if script == self._speech_settings.keyboard_script:
+            return
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_settings = replace(self._speech_settings, keyboard_script=script)
+        self._emit_speech_settings("Pismo tastature je ažurirano.")
+
+    def _cycle_keyboard_script(self) -> None:
+        self._script_combo.setCurrentIndex(
+            (self._script_combo.currentIndex() + 1) % self._script_combo.count()
+        )
+
     def _cycle_voice_preset(self) -> None:
+        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+            return
         count = self._voice_combo.count()
         if count <= 0:
             return
@@ -1362,17 +1390,35 @@ class SettingsWindow(QWidget):
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(self._gaze_settings.show_launcher_window)
         self._sync_voice_combo()
+        previous = self._script_combo.blockSignals(True)
+        self._script_combo.setCurrentIndex(
+            max(0, self._script_combo.findData(self._speech_settings.keyboard_script))
+        )
+        self._script_combo.blockSignals(previous)
+        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
+        self._voice_combo.setEnabled(not arabic)
+        self._voice_hint.setText(
+            "Arapski koristi prirodni muški glas Hamed. Potreban je internet. "
+            "Izbor bosanskog glasa ostaje sačuvan."
+            if arabic
+            else "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural."
+        )
 
     def _sync_voice_combo(self) -> None:
-        desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
-        index = self._voice_combo.findData(desired)
-        if index < 0:
-            index = self._voice_combo.findData(VOICE_PRESET_DEFAULT)
-        if index < 0 or index == self._voice_combo.currentIndex():
-            return
-
         previous = self._voice_combo.blockSignals(True)
         try:
+            arabic_index = self._voice_combo.findData("arabic_hamed")
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
+                if arabic_index < 0:
+                    self._voice_combo.addItem("Prirodni · Hamed", "arabic_hamed")
+                index = self._voice_combo.findData("arabic_hamed")
+            else:
+                if arabic_index >= 0:
+                    self._voice_combo.removeItem(arabic_index)
+                desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
+                index = self._voice_combo.findData(desired)
+                if index < 0:
+                    index = self._voice_combo.findData(VOICE_PRESET_DEFAULT)
             self._voice_combo.setCurrentIndex(index)
         finally:
             self._voice_combo.blockSignals(previous)

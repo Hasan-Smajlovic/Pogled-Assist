@@ -1,0 +1,117 @@
+name: UI gallery
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-gallery-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build-ui-gallery
+    if: >-
+      github.repository == 'Hasan-Smajlovic/Pogled-Assist' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      pages: read
+    steps:
+      - name: Check out the trusted default branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Read the configured Pages URL
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build galleries from validated CI images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          python scripts/ui/prepare_ui_gallery_site.py build \
+            --output "$RUNNER_TEMP/ui-gallery-site" \
+            --comments "$RUNNER_TEMP/ui-gallery-comments/comments.json" \
+            --base-url "$PAGES_BASE_URL"
+
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/ui-gallery-site
+
+      - name: Upload the PR comment data
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-gallery-comments
+          path: ${{ runner.temp }}/ui-gallery-comments/comments.json
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: publish-ui-gallery
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the gallery site
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  comment:
+    name: comment-ui-gallery
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Check out the trusted workflow revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Download the trusted comment data from this workflow
+        uses: actions/download-artifact@v5
+        with:
+          name: ui-gallery-comments
+          path: ${{ runner.temp }}/ui-gallery-comments
+
+      - name: Update one bot comment per open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENTS_PATH: ${{ runner.temp }}/ui-gallery-comments/comments.json
+        run: python scripts/ui/prepare_ui_gallery_site.py comment --comments "$COMMENTS_PATH"

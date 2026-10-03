@@ -2,9 +2,45 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.settings_store import load_app_settings, save_app_settings
 from pogled_assist.speech.speech_service import SpeechSettings
+
+
+@pytest.mark.parametrize("value", [None, "", "unknown", 99, [], {}])
+def test_invalid_keyboard_script_loads_as_latin(monkeypatch, tmp_path, value):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {"keyboard_script": value}}), encoding="utf-8")
+    assert load_app_settings()[1].keyboard_script == "latin"
+
+
+def test_arabic_script_round_trip_preserves_latin_voice_and_other_settings(monkeypatch, tmp_path):
+    point_settings_at(monkeypatch, tmp_path)
+    gaze = GazeSettings(dwell_ms=950)
+    speech = SpeechSettings(
+        keyboard_script="arabic",
+        language="bs",
+        voice_preset="human_like",
+        letters_per_group=7,
+        speed=180,
+    )
+    save_app_settings(gaze, speech)
+    assert load_app_settings() == (gaze, speech)
+
+
+def test_legacy_settings_without_script_keep_latin(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps({"speech": {"voice_preset": "human_like", "speed": 180}}), encoding="utf-8"
+    )
+    speech = load_app_settings()[1]
+    assert speech.keyboard_script == "latin"
+    assert speech.voice_preset == "human_like"
+    assert speech.speed == 180
 
 
 def point_settings_at(monkeypatch, tmp_path):

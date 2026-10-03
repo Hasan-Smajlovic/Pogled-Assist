@@ -10,6 +10,7 @@ from typing import Any
 
 from .interaction.gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PAUSE_MS
 from .interaction.mouse_controller import GazeSettings
+from .keyboard_layouts import KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from .logging_setup import get_project_root
 from .speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
@@ -102,6 +103,11 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
     return replace(
         settings,
         language=language,
+        keyboard_script=(
+            settings.keyboard_script
+            if settings.keyboard_script in dict(KEYBOARD_SCRIPTS)
+            else LATIN_SCRIPT
+        ),
         speed=_clamp_int(settings.speed, 80, 320),
         pitch=_clamp_int(settings.pitch, 0, 99),
         amplitude=_clamp_int(settings.amplitude, 0, 200),
