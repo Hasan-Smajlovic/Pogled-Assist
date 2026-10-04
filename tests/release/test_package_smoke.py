@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import pogled_assist.main as main_module
 
 
@@ -17,6 +19,14 @@ def test_package_smoke_loads_the_bundled_suggestion_model(monkeypatch, tmp_path)
     assert "bosnian-islamic-model.json.gz exists=True" in contents
     assert "bosnian-islamic-model.meta.json exists=True" in contents
 
+    monkeypatch.delenv(main_module.PACKAGE_SMOKE_REPORT_ENV)
+
+    def unexpected_write(*_args, **_kwargs):
+        pytest.fail("Smoke diagnostics must not write a report without a requested path")
+
+    monkeypatch.setattr(Path, "write_text", unexpected_write)
+    main_module._write_package_smoke_report(["synthetic smoke result"])
+
 
 def test_windows_package_declares_the_bundled_suggestion_files():
     root = Path(__file__).resolve().parents[2]
@@ -31,7 +41,3 @@ def test_windows_package_declares_the_bundled_suggestion_files():
     ):
         assert name in spec
         assert name in build
-
-
-def test_source_tree_passes_package_smoke_test():
-    assert main_module.package_smoke_test() == 0
