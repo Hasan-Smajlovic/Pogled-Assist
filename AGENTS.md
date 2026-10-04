@@ -94,7 +94,10 @@ equivalent.
 ```
 
 Use the focused commands documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-while iterating. Inspect the full diff before review, and follow the manual
+while iterating, starting with `.\dev.ps1 check-fast` after meaningful changes.
+Run the complete `.\dev.ps1 check` on the final diff before a pull request;
+fast checks do not satisfy the done criteria. Inspect the full diff before review,
+and follow the manual
 checklist in the development guide whenever runtime behavior changes.
 
 ## Done means

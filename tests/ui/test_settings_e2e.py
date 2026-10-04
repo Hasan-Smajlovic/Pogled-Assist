@@ -90,27 +90,6 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
 
 
 @pytest.mark.e2e
-def test_settings_fit_150_percent_display_with_calibration_visible(qtbot, monkeypatch):
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
-    window.show()
-    qtbot.waitUntil(window.isVisible)
-    window._select_tab(1)
-
-    assert window.size().width() <= 1280
-    assert window.size().height() <= 720
-    bounds = QRect(0, 0, 1280, 720)
-    for button in (window._exit_button, window._gaze_tab_button, window._calibration_button):
-        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
-        assert bounds.contains(rect), button.text()
-        assert button.height() >= 58
-
-
-@pytest.mark.e2e
 @pytest.mark.parametrize("size", [(1280, 720), (1920, 1080)])
 def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monkeypatch, size):
     monkeypatch.setattr(
@@ -140,6 +119,10 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
     ):
         window._select_tab(tab)
         qtbot.wait(1)
+        for button in (window._exit_button, window._gaze_tab_button):
+            rect = QRect(button.mapTo(window, QPoint()), button.size())
+            assert window.rect().contains(rect), button.text()
+            assert button.height() >= 58
         columns = _assert_action_cells(qtbot, window, controls)
         assert action_columns is None or columns == action_columns
         action_columns = columns

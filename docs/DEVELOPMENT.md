@@ -35,13 +35,25 @@ components.
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
 | `.\dev.ps1 ui` | Not required | Rendering of 38 main UI surfaces without external services |
-| `.\dev.ps1 test` | Not required | Unit, integration, and UI workflow tests with simulated inputs |
+| `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
+| `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
 | `.\dev.ps1 lint` | Not required | Actions, Ruff, Python compilation, and PowerShell checks |
 | `.\dev.ps1 format` | Not required | Ruff safe fixes, import ordering, and source formatting |
+| `.\dev.ps1 check-fast` | Not required | Complete Python lint/format/compilation and relevant changed tests; no coverage or package |
+| `.\dev.ps1 check-fast -BaseRef origin/development` | Not required | Fast checks using an explicit Git comparison ref |
+| `.\dev.ps1 check-fast -Workers 2` | Not required | Fast checks with two workers even for a small selection |
 | `.\dev.ps1 check` | Not required | Lint, tests, coverage, package build, and frozen executable smoke test |
+| `.\dev.ps1 check -Workers 1` | Not required | The same complete verification with sequential tests |
+| `.\dev.ps1 coverage -Workers 2` | Not required | Explicit parallel coverage measurement; slower Qt runs are possible |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
+
+`coverage` and `check` temporarily clear `PYTEST_ADDOPTS` so environment options
+cannot omit tests or override the coverage floor. This also ignores diagnostic
+options supplied through that variable. The commands restore its original value
+after testing, including on failure. Use `test` or `test-ui` for custom pytest
+options while investigating a failure.
 
 The supporting scripts are grouped by purpose: `scripts/checks/` validates
 source and workflows, `scripts/release/` builds and publishes releases,
@@ -171,9 +183,60 @@ unchanged.
 
 ## Verification before a pull request
 
-Use `.\dev.ps1 check` before pushing a pull request. It runs with Python 3.10
+During development, run `.\dev.ps1 check-fast` after each meaningful change and
+repeat it after fixes. Once the final diff is ready, run `.\dev.ps1 check` once
+before pushing a pull request; rerun it if the diff changes afterwards. It runs
+with Python 3.10
 and covers the same three categories enforced by the required `code-quality`,
 `tests`, and `windows-package` pull request checks.
+
+The fast command compares committed topic-branch changes against the merge base
+of `origin/development`, then adds staged, unstaged and untracked files. It
+includes both paths of a rename and deleted paths. Fetch `origin/development`
+before starting a topic branch; the fast command does not fetch automatically.
+Use `-BaseRef <ref>` when deliberately comparing another base. Missing Git
+history or an unavailable ref selects the full suite instead of skipping tests.
+
+Selection rules live in `scripts/checks/select_tests.py`. Changes to gaze,
+speech, suggestions, UI, Windows or release code select the boundary's tests
+and its application/UI consumers. Changed and new test modules are included.
+Documentation selects repository documentation/link tests. Unknown paths,
+shared test helpers, deleted tests, dependencies, workflow/check configuration,
+model data and bundled assets select every test. Maintain the mapping when
+adding consumers; use the full-suite fallback whenever the impact is uncertain.
+This is a development feedback aid; the final check and CI always run all tests.
+
+`check-fast` prints changed paths, selection reasons and selected test files.
+It runs Ruff lint, formatting and Python compilation across the repository,
+but checks only changed PowerShell scripts and affected Actions workflows.
+A full-suite fallback also checks all PowerShell and Actions files. It omits
+coverage and packaging even when all tests are selected. With no changes, it
+still checks Python source and explicitly reports that no tests were selected.
+All verification commands report stage and total durations, including failures.
+
+Tests without coverage default to two pytest-xdist processes with
+`--dist=loadfile`, keeping each test file on one worker. Each worker has its own
+QApplication and temporary directories. With the default `-Workers 0`, fast
+selections of fewer than four test files use one process to avoid startup
+overhead. `-Workers 1` disables parallel execution for debugging; `-Workers 2`
+uses two processes even for a small selection.
+
+The full `coverage` and `check` commands default to one test process. On the
+measured Windows/Python 3.10 environment, parallel coverage made repeated Qt
+sidebar interactions much slower: the full test stage took about 400 seconds,
+compared with the earlier sequential baseline of 163 seconds. The suites differ
+by 50 new regression cases, so this is diagnostic evidence rather than a precise
+speedup comparison. Keep coverage sequential until a measured alternative helps.
+`-Workers 2` explicitly enables parallel coverage; worker results are combined
+before enforcing the same 60 percent floor and writing the HTML report. PR CI
+continues to run every test with coverage in one process. Its existing quality,
+test and packaging jobs continue to run independently.
+
+For manual focused work, `test` and `test-ui` accept `-TestPaths` (one or more
+pytest paths); add `-Workers 1` for a small selection. `coverage`, `check` and
+`check-fast` reject `-TestPaths` so a partial selection cannot be mistaken for
+their documented checks. Run `.\dev.ps1 setup` once after pulling the new
+development dependency to install the pinned pytest-xdist plugin.
 
 Documentation-only work also runs these checks to confirm the runtime baseline.
 Its links and commands need a manual documentation review. If a required device
@@ -212,6 +275,12 @@ Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`,
 Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
 data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from
 the repository root; pytest discovers all of these folders through `tests/`.
+
+Updater tests use deterministic native and source-process records so another
+worker's installer smoke executable cannot block an unrelated update test.
+They still verify rejection before network access or app-data changes. Installer
+tests retain their real executable/process checks, and the final package build
+also verifies running-source rejection.
 
 Use these existing fakes and regression tests when changing a runtime boundary:
 

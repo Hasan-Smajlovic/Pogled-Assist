@@ -63,6 +63,17 @@ def test_lock_permission_failure_does_not_start_app(monkeypatch, isolated_lock, 
 def test_diagnostics_bypass_interactive_lock(monkeypatch, isolated_lock):
     from pogled_assist.ui import installation_window
 
+    def unexpected_start(*_args, **_kwargs):
+        pytest.fail("Diagnostics must not start the interactive application or its services")
+
+    for name in (
+        "_run_application",
+        "setup_application_logging",
+        "install_qt_message_handler",
+        "enable_windows_dpi_awareness",
+    ):
+        monkeypatch.setattr(main, name, unexpected_start)
+
     assert isolated_lock.tryLock(0)
     try:
         monkeypatch.setattr(main, "package_smoke_test", lambda: 23)
