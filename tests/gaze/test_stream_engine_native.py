@@ -176,6 +176,7 @@ def test_invalid_native_gaze_breaks_check_even_when_eyes_stay_valid(
         backend._eye_status_callback = eyes
     backend.start()
     window = GazeCheckWindow(GazeSettings())
+    provider.setParent(window)
     qtbot.addWidget(window)
     window.show_fullscreen_on_primary()
     qtbot.wait(1)
@@ -226,6 +227,11 @@ def test_invalid_native_gaze_breaks_check_even_when_eyes_stay_valid(
         provider._emit_latest_gaze_sample()
     assert window._trial_results == []
     assert window._target.progress == 0
+    backend.stop()
+    provider.stop()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(1)
 
 
 def test_native_positions_are_copied_without_clamping_or_changing_eye_gate(native_backend):
