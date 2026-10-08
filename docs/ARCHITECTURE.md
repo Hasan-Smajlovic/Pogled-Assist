@@ -181,8 +181,11 @@ alongside coverage, median error and spread. The map clips off-screen centres
 only for painting; it never changes the measured error.
 The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
 constants. Its three groups have 136 × 64, 96 × 88 and 180 × 72 logical-pixel
-controls, each with two neighboring controls. Wrong selections use the same
-leave-before-repeat lock and are counted separately. It never emits Windows input.
+controls, each with two neighboring controls. The edge margin is bounded by a
+quarter of each control dimension, as in the normal controller. Wrong selections
+use the same leave-before-repeat lock and are counted separately. Tracking loss
+cancels pending progress but preserves that lock; it cannot count another wrong
+selection until a fresh gaze sample leaves the neighbor. It never emits Windows input.
 The optional free check paints nine targets and fresh both-eye gaze without
 timing, scoring, smoothing or input. `gaze_check_views.py` owns painting and target
 geometry; `gaze_check_window.py` owns the flow and measurements.
@@ -195,7 +198,9 @@ the pointer during the triggering sample. The hotbar owns signal disconnection,
 Settings return, shutdown and calibration handoff. A minimized calibration
 handoff retains the suspension. This check opens installed Tobii settings with
 instructions for the user's named profile, without the Guest shortcut or the
-operator-set calibration command. Existing calibration entry points retain their
+operator-set calibration command. Maintenance executables and shortcuts are
+excluded before settings-target ranking, regardless of their folder's score.
+Existing calibration entry points retain their
 current behavior. Position capability is separate from freshness and connection
 state. No diagnostic history or result is persisted.
 See the [gaze-check guide](USER_GUIDE.md#gaze-check) for the caregiver flow.

@@ -414,12 +414,14 @@ class _CaptureSession:
         window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
         self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
-        window._target.target_index = 1
+        window._finish_trial_target(True, time.monotonic())
+        window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
         self.capture(
             window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size
         )
-        window._target.target_index = 2
+        window._finish_trial_target(True, time.monotonic())
+        window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
         self.capture(
             window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size

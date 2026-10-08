@@ -37,3 +37,30 @@ def test_missing_settings_reports_manual_route_without_guest_fallback(monkeypatc
     monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [])
     with pytest.raises(RuntimeError, match="ikonu pored sata"):
         calibration.launch_tobii_settings()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "unins000.exe",
+        "Updater.exe",
+        "Tobii.Service.exe",
+        "Uninstall.lnk",
+        "Guest.lnk",
+        "Tobii.Installation.exe",
+        "Setup.exe",
+        "Repair.lnk",
+    ],
+)
+def test_settings_never_launches_maintenance_tools_from_a_high_ranked_folder(monkeypatch, name):
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
+    candidate = Path("C:/Program Files/Tobii/Tobii EyeX Config") / name
+    monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
+    monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [candidate])
+    launched = []
+    monkeypatch.setattr(
+        calibration, "_shell_execute", lambda path, _: launched.append(path) or True
+    )
+    with pytest.raises(RuntimeError, match="ikonu pored sata"):
+        calibration.launch_tobii_settings()
+    assert launched == []

@@ -187,21 +187,23 @@ def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot,
 
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     hotbar, controller, feed, _actions, _progress = hotbar_gaze
+    controller._input = FakeHotbarInput()
+    controller._pointer_movement_enabled = True
+    feed(QPoint(600, 500), 0)
+    assert controller._input.moves  # Exercise the real pointer path, not simulator suppression.
     hotbar._open_settings()
     settings = hotbar._settings_window
     settings._select_tab(1)
     qtbot.wait(1)
     point = settings._gaze_check_button.mapToGlobal(settings._gaze_check_button.rect().center())
-    moves = []
-    monkeypatch.setattr(controller._input, "move_to", lambda *args: moves.append(args))
-    feed(point, 0)
-    feed(point, 500)
+    feed(point, 100)
+    feed(point, 600)
     assert hotbar._gaze_check_window is None
-    moves.clear()
-    feed(point, 1100)
+    controller._input.moves.clear()
+    feed(point, 1200)
     assert hotbar._gaze_check_window is not None
     assert controller._input_suspended
-    assert moves == []
+    assert controller._input.moves == []
 
 
 @pytest.mark.e2e

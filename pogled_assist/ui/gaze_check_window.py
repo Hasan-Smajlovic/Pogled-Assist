@@ -705,9 +705,9 @@ class GazeCheckWindow(QWidget):
         target = next(
             (index for index in range(3) if self._target.button_rect(index).contains(point)), None
         )
-        margin = TOOLBAR_EDGE_MARGIN_PX
         previous = self._selection.target
         hold_rect = self._target.button_rect(previous) if previous is not None else rect
+        margin = min(TOOLBAR_EDGE_MARGIN_PX, hold_rect.width() // 4, hold_rect.height() // 4)
         hold = target is None and hold_rect.adjusted(-margin, -margin, margin, margin).contains(
             point
         )
@@ -732,9 +732,16 @@ class GazeCheckWindow(QWidget):
                 self._trial_wrong_selections += 1
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
-        if self._phase == "trial" and self._selection.target is not None and loss:
-            self._trial_losses += 1
-        self._selection.cancel()
+        if loss:
+            if (
+                self._phase == "trial"
+                and self._selection.target is not None
+                and not self._selection.is_blocked
+            ):
+                self._trial_losses += 1
+            self._selection.pause()
+        else:
+            self._selection.cancel()
         self._target.progress = 0.0
         self._target.progress_target = None
         self._target.update()

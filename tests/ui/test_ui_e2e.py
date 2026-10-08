@@ -277,6 +277,79 @@ def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize("loss", ["eyes", "invalid", "coalesced", "stale"])
+def test_trial_blink_cannot_repeat_an_already_selected_neighbor(gaze_check, loss):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, screen = gaze_check
+    window._start_trial()
+    wrong = window._target.mapToGlobal(window._target.button_rect(0).center())
+    gaze = (
+        (wrong.x() - screen.left()) / (screen.width() - 1),
+        (wrong.y() - screen.top()) / (screen.height() - 1),
+    )
+    interruptions = 0
+
+    def feed(point=gaze):
+        now[0] += 0.02
+        window.handle_snapshot(
+            CheckSnapshot(True, True, gaze=point, gaze_at=now[0], gaze_interruptions=interruptions)
+        )
+
+    for _ in range(60):
+        feed()
+    assert window._trial_wrong_selections == 1
+    if loss == "eyes":
+        window.handle_eye_status(False, True)
+    elif loss == "invalid":
+        window.handle_snapshot(CheckSnapshot(True, True))
+    elif loss == "coalesced":
+        interruptions += 1
+    else:
+        now[0] += 0.6
+        window._tick()
+    for _ in range(60):
+        feed()
+    assert window._trial_wrong_selections == 1
+    assert window._trial_losses == 0  # The completed selection had no pending progress.
+    assert window._selection.is_blocked
+    feed((-0.1, 0.5))  # A fresh off-screen departure does unlock it.
+    for _ in range(60):
+        feed()
+    assert window._trial_wrong_selections == 2
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("scenario", [0, 1, 2])
+def test_trial_edge_hold_matches_normal_control_bounds(gaze_check, scenario):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, screen = gaze_check
+    window._start_trial()
+    window._target.target_index = scenario
+    rect = window._target.button_rect()
+
+    def feed(point, at):
+        now[0] = at
+        global_point = window._target.mapToGlobal(point)
+        gaze = (
+            (global_point.x() - screen.left()) / (screen.width() - 1),
+            (global_point.y() - screen.top()) / (screen.height() - 1),
+        )
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=at))
+
+    for sample in range(41):
+        feed(rect.center(), 10 + sample * 0.02)
+    assert window._target.progress > 0
+    margin = min(24, rect.width() // 4, rect.height() // 4)
+    # Just beyond the real controls' tolerance, but inside the old fixed 24 px.
+    feed(QPoint(rect.center().x(), rect.bottom() + margin + 1), 10.82)
+    assert window._selection.target is None
+    assert window._target.progress == 0
+    assert window._trial_departures == 1
+
+
+@pytest.mark.e2e
 def test_position_copy_distinguishes_unsupported_waiting_and_disconnected(gaze_check):
     from pogled_assist.tracking.gaze_check import CheckSnapshot
     from pogled_assist.tracking.status import TrackingState, TrackingStatus

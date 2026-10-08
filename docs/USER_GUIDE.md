@@ -87,7 +87,8 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    gaze resets progress, while a brief near-edge departure uses the same bounded
    hold as the speech controls. The result counts correct selections, wrong
    neighboring selections, departures and tracking interruptions. A wrong
-   selection counts once until gaze leaves that neighbor. This is a trial;
+   selection counts once until gaze leaves that neighbor; a blink or missing
+   gaze does not count as leaving. This is a trial;
    individual application controls still need to be checked in actual use.
 
 **Slobodna provjera** is optional and has nine targets across the screen. Look at

@@ -143,7 +143,19 @@ def _best_tobii_launch_target(*, settings_only: bool = False) -> Path | None:
         candidates = [
             candidate
             for candidate in candidates
-            if not any(word in candidate.stem.lower() for word in ("calibr", "guest", "test"))
+            # Folder scores must never turn a maintenance executable into a settings UI.
+            if not any(
+                word in candidate.stem.lower()
+                for word in (
+                    *_EXCLUDED_EXE_KEYWORDS,
+                    "install",
+                    "setup",
+                    "repair",
+                    "calibr",
+                    "guest",
+                    "test",
+                )
+            )
         ]
     ranked = sorted(
         ((candidate, _target_score(candidate)) for candidate in candidates),
