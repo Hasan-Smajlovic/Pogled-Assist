@@ -64,11 +64,15 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    A dash means unavailable or stale data, never a successful check. Depth is not
    converted to centimetres. A runtime that supplies only eye validity can still
    run the target tests; use the Tobii app for its positioning display.
+   Fresh eye positions can remain visible while the app waits for a valid gaze
+   point. Recognizing the eyes alone does not enable gaze selection.
 2. **Provjeri preciznost** presents five automatic targets, about three seconds
    each. Look at the small cross in each circle; no gaze click is required. Results
    separate measured misses from insufficient data. They describe these targets
    in this position, not the entire screen or future use. **Prekini test** cancels
    and returns to positioning; **Ponovi provjeru** clears the previous results.
+   Known tracking interruptions do not count toward the required measurement
+   time; a brief blink preserves the valid intervals before and after it.
 3. **Probaj izbor dugmeta** tries three local buttons using the current selection
    pause and dwell time. No click is sent to another program. Eye loss or stale
    gaze resets progress, while a brief near-edge departure uses the same bounded
@@ -86,9 +90,11 @@ labeled; its results are not Tobii measurements.
 **Otvori Tobii kalibraciju** requests the existing Tobii calibration flow and
 minimizes the check while leaving normal gaze input paused. Return using the
 Windows taskbar or **Postavke**, then run a new check. Launching the Tobii app does
-not confirm that calibration completed. The check does not change Tobii software,
-calibration, or saved settings. Measurements stay in memory and are discarded on
-close; no gaze-check recording is saved.
+not confirm that calibration completed. Keep the installed Tobii Core or
+Experience software; this feature does not require switching between them.
+The check does not change Tobii software, calibration, or saved settings.
+Measurements stay in memory and are discarded on close; no gaze-check recording
+is saved.
 
 ## Hotbar controls
 

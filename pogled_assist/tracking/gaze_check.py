@@ -74,8 +74,8 @@ class CheckTelemetry:
         left, right = self.eyes[:2] if eyes_fresh else (None, None)
         left_position = right_position = None
         if self.positions is not None and 0 <= now - self.positions[2] < FRESH_SECONDS:
-            left_position = self.positions[0] if left else None
-            right_position = self.positions[1] if right else None
+            # A valid eye origin does not require a valid gaze point.
+            left_position, right_position = self.positions[:2]
         gaze = gaze_at = None
         if left and right and self.gaze is not None and 0 <= now - self.gaze[2] < FRESH_SECONDS:
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
@@ -141,32 +141,43 @@ class FixationCheck:
         self.results: list[FixationResult] = []
         self._samples: list[tuple[float, float, float]] = []
         self._last_sample_at: float | None = None
+        self._previous_at: float | None = None
+        self._covered_seconds = 0.0
 
     @property
     def finished(self) -> bool:
         return self.index >= len(self.targets)
 
     def add(self, snapshot: CheckSnapshot, now: float) -> None:
+        if self.finished:
+            return
         if (
-            self.finished
-            or snapshot.gaze is None
+            snapshot.gaze is None
             or snapshot.gaze_at is None
             or not (snapshot.left and snapshot.right)
+            or not 0 <= now - snapshot.gaze_at < FRESH_SECONDS
+            or not all(math.isfinite(value) for value in snapshot.gaze)
         ):
+            self.interrupt()
             return
         at = snapshot.gaze_at
         # Count only samples produced while this target is in its measure phase.
         if not (
             self.started_at + SETTLE_SECONDS <= at <= now
             and at < self.started_at + TARGET_SECONDS
-            and now - at < FRESH_SECONDS
             and (self._last_sample_at is None or at > self._last_sample_at)
         ):
             return
         self._last_sample_at = at
+        if self._previous_at is not None:
+            self._covered_seconds += min(0.1, at - self._previous_at)
+        self._previous_at = at
         x, y = snapshot.gaze
-        if math.isfinite(x) and math.isfinite(y):
-            self._samples.append((at, x, y))
+        self._samples.append((at, x, y))
+
+    def interrupt(self) -> None:
+        """Do not bridge a known tracking loss, including coalesced eye events."""
+        self._previous_at = None
 
     def advance(self, now: float) -> bool:
         if self.finished or now - self.started_at < TARGET_SECONDS:
@@ -176,17 +187,13 @@ class FixationCheck:
         self.started_at = now
         self._samples.clear()
         self._last_sample_at = None
+        self._previous_at = None
+        self._covered_seconds = 0.0
         return True
 
     def _result(self) -> FixationResult:
         name, target_x, target_y = self.targets[self.index]
-        coverage = (
-            sum(
-                min(0.1, max(0.0, second[0] - first[0]))
-                for first, second in pairwise(self._samples)
-            )
-            / MEASURE_SECONDS
-        )
+        coverage = self._covered_seconds / MEASURE_SECONDS
         if len(self._samples) < 12 or coverage < 0.6:
             return FixationResult(name, len(self._samples), coverage, None, None, None)
         width, height = self.screen_size

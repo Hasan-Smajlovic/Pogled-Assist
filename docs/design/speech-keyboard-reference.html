@@ -91,7 +91,7 @@
     .check-card { background: #1c2029; border: 1px solid #394253; border-radius: 12px; padding: 22px; }
     .check-line { font-size: 21px; margin: 18px 0; }
     .check-pass { color: #70dfa1; } .check-attention { color: #f0c84a; }
-    .eye-box { height: 190px; margin-top: 18px; border: 2px dashed #58647a; position: relative; border-radius: 12px; }
+    .eye-box { height: min(190px, 15dvh); margin-top: 18px; border: 2px dashed #58647a; position: relative; border-radius: 12px; }
     .eye-dot { position: absolute; top: 46%; left: 39%; width: 24px; height: 24px; border: 3px solid #70dfa1; border-radius: 50%; }
     .eye-dot + .eye-dot { left: 57%; }
     .check-depth { height: 8px; margin: 18px 0; border-radius: 4px; background: #394253; position: relative; }
@@ -693,13 +693,13 @@
     <p id="check-step">1 · Položaj i praćenje</p>
     <div id="check-live" class="check-columns">
       <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth"></div><p class="muted">Okvir: položaj očiju · traka: dubina</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
-      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line check-pass">✓ Položaj pogleda stiže</p><p class="check-line check-pass">✓ Praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i provjerite preciznost na označenim metama.</p><p class="muted">Kratki prekidi mogu biti treptaji. Zelene oznake još ne potvrđuju preciznost.</p></section>
+      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line muted">- Čekam položaj pogleda</p><p class="check-line check-attention">! Praćenje ima prekide</p><p>Oči su prepoznate, ali nema svježeg položaja pogleda. Pogledajte prema ekranu.</p><p class="muted">Kratki prekidi mogu biti treptaji. Zelene oznake još ne potvrđuju preciznost.</p></section>
     </div>
     <div id="check-test" class="check-stage" hidden><p style="padding:18px" class="muted">Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.</p><span class="check-target">+</span></div>
     <div id="check-results" class="check-card" hidden style="flex:1"><h2>Rezultat ove provjere</h2><p class="check-line">Pogled je bio blizu 5 od 5 meta.</p><p>✓ Sredina: pogled uglavnom unutar kruga<br>✓ Gore lijevo: pogled uglavnom unutar kruga<br>✓ Gore desno: pogled uglavnom unutar kruga<br>✓ Dolje lijevo: pogled uglavnom unutar kruga<br>✓ Dolje desno: pogled uglavnom unutar kruga</p><p>Mete su provjerene. Još probajte izbor dugmeta.</p><p class="check-line muted">— Probni izbor nije urađen.</p><p>Ovo je kratka provjera na označenim mjestima. Pomjeranje ekrana ili promjena položaja mogu promijeniti rezultat.</p></div>
     <p class="muted">Upravljanje računarom pogledom je pauzirano dok je ovaj ekran otvoren.</p>
     <footer><button id="check-calibrate">Otvori Tobii kalibraciju</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
-    <small class="muted">Referenca · prikazani podaci su primjer. Nedostupni podaci nemaju zelenu oznaku. Dubina je u području koje prijavljuje uređaj, bez pretvaranja u centimetre.</small>
+    <small class="muted">Referenca · svježi položaji očiju ostaju vidljivi i bez valjanog pogleda; to ne omogućava izbor. Prekidi praćenja ne ulaze u pokrivenost testa preciznosti. Dubina se ne pretvara u centimetre.</small>
   </main>
   <script>
     document.getElementById('check-next').addEventListener('click', event => {

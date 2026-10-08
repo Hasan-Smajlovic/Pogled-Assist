@@ -369,6 +369,8 @@ class GazeCheckWindow(QWidget):
     def handle_eye_status(self, left: bool, right: bool) -> None:
         if not (left and right):
             self._cancel_trial_progress(loss=True)
+            if self._phase == "precision" and self._check is not None:
+                self._check.interrupt()
 
     def tracking_unavailable(self) -> None:
         self._snapshot = CheckSnapshot()
@@ -387,6 +389,8 @@ class GazeCheckWindow(QWidget):
             self._snapshot = CheckSnapshot()
         if self._snapshot.gaze_at is None or now - self._snapshot.gaze_at >= FRESH_SECONDS:
             self._cancel_trial_progress(loss=True)
+            if self._phase == "precision" and self._check is not None:
+                self._check.interrupt()
         if self._phase == "position":
             self._render_position()
         elif self._phase == "precision" and self._check is not None:
@@ -412,9 +416,11 @@ class GazeCheckWindow(QWidget):
 
     def _render_position(self) -> None:
         snapshot = self._snapshot
+        left_visible = snapshot.left_position is not None or snapshot.left
+        right_visible = snapshot.right_position is not None or snapshot.right
         for name, label, state in (
-            ("Lijevo oko", self._left_label, snapshot.left),
-            ("Desno oko", self._right_label, snapshot.right),
+            ("Lijevo oko", self._left_label, left_visible),
+            ("Desno oko", self._right_label, right_visible),
         ):
             detail = {True: "prepoznato", False: "trenutno se ne prati", None: "čekam podatke"}[
                 state
@@ -460,9 +466,9 @@ class GazeCheckWindow(QWidget):
         self._eyes_view.snapshot = snapshot
         self._eyes_view.update()
         guidance = "Zadržite položaj i provjerite preciznost na označenim metama."
-        if snapshot.left is None or snapshot.right is None:
+        if left_visible is None or right_visible is None:
             guidance = "Čekam svježe podatke. Provjerite vezu uređaja i pogledajte prema ekranu."
-        elif not (snapshot.left and snapshot.right):
+        elif not (left_visible and right_visible):
             guidance = "Polako podesite položaj i nagib ekrana dok uređaj ponovo vidi oba oka."
         elif snapshot.gaze is None:
             guidance = (

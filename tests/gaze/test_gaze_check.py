@@ -90,6 +90,7 @@ def test_one_eye_and_out_of_box_coordinates_are_not_passes():
     assert telemetry.snapshot(1).in_box((0, 1)) is True
     assert telemetry.snapshot(1).in_box((2,)) is False
     telemetry.record_eyes(True, False, 1.1)
+    telemetry.positions = ((0.4, 0.5, 0.6), None, 1.1)
     assert telemetry.snapshot(1.1).right_position is None
     assert telemetry.snapshot(1.1).in_box((0, 1)) is None
 
@@ -121,6 +122,49 @@ def test_repeated_sample_or_short_burst_cannot_pass_and_targets_do_not_skip_afte
     assert check.started_at == 30
     assert check.results[0].near is None
     assert check.results[0].samples == 1
+
+
+@pytest.mark.parametrize(
+    "interruption",
+    [
+        CheckSnapshot(),
+        CheckSnapshot(False, True, gaze=(0.5, 0.5)),
+        CheckSnapshot(True, False, gaze=(0.5, 0.5)),
+        CheckSnapshot(True, True, gaze=(float("nan"), 0.5)),
+    ],
+)
+def test_fixation_does_not_count_time_across_invalid_snapshots(interruption):
+    check = FixationCheck([("Center", 0.5, 0.5)], (1280, 720), 36, 0)
+    for sample in range(20):
+        at = 1 + sample * 0.1
+        check.add(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=at), at)
+        check.add(replace(interruption, gaze_at=at + 0.01), at + 0.01)
+    check.advance(3)
+    assert check.results[0].samples == 20
+    assert check.results[0].coverage == 0
+    assert check.results[0].near is None
+
+
+def test_fixation_keeps_valid_intervals_around_a_blink_and_resets_between_targets():
+    check = FixationCheck([("One", 0.5, 0.5), ("Two", 0.5, 0.5)], (1280, 720), 36, 0)
+    for sample in range(100):
+        at = 1 + sample * 0.02
+        if 40 <= sample < 45:
+            check.add(CheckSnapshot(False, True), at)
+        else:
+            check.add(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=at), at)
+    check.advance(3)
+    assert check.results[0].near is True
+    assert check.results[0].coverage == pytest.approx(0.93)
+    sample = CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=4.0)
+    check.add(sample, 4.0)
+    check.interrupt()
+    check.add(sample, 4.01)
+    check.add(replace(sample, gaze_at=4.02), 4.02)
+    check.advance(6)
+    assert check.results[1].samples == 2
+    assert check.results[1].coverage == 0
+    assert check.results[1].near is None
 
 
 def test_fixation_spread_rejects_scattered_gaze_even_with_good_median():
@@ -162,25 +206,41 @@ def test_provider_diagnostics_keep_raw_coordinates_and_expire_positions(qapp, mo
     assert provider.check_snapshot() == CheckSnapshot()
 
 
-def test_research_positions_use_origin_validity_not_gaze_validity(qapp):
+@pytest.mark.parametrize("gaze_valid,origin_valid", [(0, 0), (0, 1), (1, 0), (1, 1)])
+def test_research_positions_use_origin_validity_not_gaze_validity(qapp, gaze_valid, origin_valid):
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     provider._on_gaze_data(
         {
-            "left_gaze_point_validity": 1,
-            "right_gaze_point_validity": 1,
+            "left_gaze_point_validity": gaze_valid,
+            "right_gaze_point_validity": gaze_valid,
             "left_gaze_point_on_display_area": (0.5, 0.5),
             "right_gaze_point_on_display_area": (0.5, 0.5),
-            "left_gaze_origin_validity": 0,
+            "left_gaze_origin_validity": origin_valid,
             "right_gaze_origin_validity": 1,
             "left_gaze_origin_in_trackbox_coordinate_system": (0.4, 0.5, 0.6),
             "right_gaze_origin_in_trackbox_coordinate_system": (0.6, 0.5, 0.6),
         }
     )
     snapshot = provider.check_snapshot()
-    assert snapshot.left is True
-    assert snapshot.left_position is None
+    assert snapshot.left is bool(gaze_valid)
+    assert snapshot.left_position == ((0.4, 0.5, 0.6) if origin_valid else None)
     assert snapshot.right_position == (0.6, 0.5, 0.6)
+    assert snapshot.gaze == ((0.5, 0.5) if gaze_valid else None)
+
+
+def test_positions_expire_and_clear_without_fresh_gaze_validity():
+    telemetry = CheckTelemetry()
+    telemetry.positions = ((0.4, 0.5, 0.6), (0.6, 0.5, 0.6), 1)
+    snapshot = telemetry.snapshot(1)
+    assert snapshot.left is snapshot.right is None
+    assert snapshot.left_position == (0.4, 0.5, 0.6)
+    assert snapshot.in_box((0, 1, 2)) is True
+    assert snapshot.gaze is None
+    assert telemetry.snapshot(1.5).left_position is None
+    assert telemetry.snapshot(1.5).right_position is None
+    telemetry.positions = (None, None, 1.6)
+    assert telemetry.snapshot(1.6).in_box((0, 1, 2)) is None
 
 
 def test_position_expiry_is_independent_of_fresh_eye_and_gaze_stream(qapp, monkeypatch):

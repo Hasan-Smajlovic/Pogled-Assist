@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 44 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 45 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -377,7 +377,7 @@ and a download link. Setup, publication permissions, and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 44 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 45 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -391,8 +391,8 @@ The command renders:
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
   mouse-simulation, and unsaved-settings states
 - General, gaze, speech, and learned-word Settings surfaces, including save failure
-- Gaze check: unavailable data, live position, eye loss, fixation target, results,
-  and local dwell trial
+- Gaze check: unavailable data, live position, eye positions without valid gaze,
+  eye loss, fixation target, results, and local dwell trial
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
@@ -410,7 +410,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 44-surface gallery.
+covered by UI interaction tests; it is not part of the 45-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -459,8 +459,9 @@ On the Tobii machine, additionally verify:
   sideways, verify both eye markers and depth, and confirm unavailable data has
   no checkmark. Test five fixations and the local dwell trial, including a blink,
   sustained one-eye loss, disconnect/reconnect and normal control after closing.
-  Record OS, tracker and installed Tobii app/driver versions; test Windows 11 with
-  the user's existing supported runtime, without switching to Core for this feature.
+  Record OS, tracker, installed Tobii app/driver versions and selected application
+  backend. Test the user's existing Tobii Core installation, including calibration
+  launch and return; this feature must not require a switch to Tobii Experience.
 - The hotbar status distinguishes connecting, unavailable device, waiting for
   fresh data, and ready tracking. Readiness requires both eyes and fresh gaze;
   it does not certify calibration accuracy.

@@ -91,6 +91,90 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
 
 
 @pytest.mark.e2e
+def test_precision_does_not_bridge_coalesced_eye_losses(gaze_check, qtbot):
+    import threading
+
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+    window, now, _screen = gaze_check
+    provider = TobiiGazeProvider()
+    provider.set_check_active(True)
+    gaze, eyes = provider._new_stream_callbacks()
+    provider.eye_status_changed.connect(window.handle_eye_status)
+    provider.diagnostics_updated.connect(window.handle_snapshot)
+    window._primary_button.click()
+    qtbot.wait(1)
+    start = window._check.started_at
+    _name, x, y = window._check.targets[0]
+
+    def feed(at):
+        now[0] = at - 0.09
+        eyes(False, True, 0)
+        now[0] = at
+        eyes(True, True, 0)
+        gaze(x, y, 0)
+
+    for sample in range(20):
+        # Both eye events arrive before Qt delivers the next valid snapshot.
+        thread = threading.Thread(target=feed, args=(start + 1 + sample * 0.1,))
+        thread.start()
+        thread.join(2)
+        assert not thread.is_alive()
+        provider._emit_latest_gaze_sample()
+    now[0] = start + 3.01
+    window._tick()
+    result = window._check.results[0]
+    assert result.samples == 20
+    assert result.coverage == 0
+    assert result.near is None
+    window._show_results()
+    assert "nedovoljno podataka" in window._result_detail.text()
+
+
+@pytest.mark.e2e
+def test_research_eye_positions_remain_visible_without_enabling_gaze(gaze_check):
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+    window, now, _screen = gaze_check
+    provider = TobiiGazeProvider()
+    provider.set_check_active(True)
+    provider.eye_status_changed.connect(window.handle_eye_status)
+    provider.diagnostics_updated.connect(window.handle_snapshot)
+    delivered = []
+    provider.gaze_updated.connect(lambda *sample: delivered.append(sample))
+    data = {
+        "left_gaze_point_validity": 0,
+        "right_gaze_point_validity": 0,
+        "left_gaze_point_on_display_area": (0.5, 0.5),
+        "right_gaze_point_on_display_area": (0.5, 0.5),
+        "left_gaze_origin_validity": 1,
+        "right_gaze_origin_validity": 1,
+        "left_gaze_origin_in_trackbox_coordinate_system": (0.4, 0.5, 0.6),
+        "right_gaze_origin_in_trackbox_coordinate_system": (0.6, 0.5, 0.6),
+    }
+    provider._on_gaze_data(data)
+    provider._emit_latest_gaze_sample()
+    window._tick()
+    assert window._left_label.text().startswith("✓")
+    assert window._right_label.text().startswith("✓")
+    assert window._distance_label.text().startswith("✓")
+    assert window._eyes_view.snapshot.left_position == (0.4, 0.5, 0.6)
+    assert window._gaze_label.text().endswith("Čekam položaj pogleda")
+    assert "Oči su prepoznate" in window._guidance.text()
+    assert window._snapshot.left is window._snapshot.right is False
+    assert window._snapshot.gaze is None
+    assert delivered == []
+    window._start_trial()
+    for _ in range(100):
+        now[0] += 0.02
+        provider._on_gaze_data(data)
+        provider._emit_latest_gaze_sample()
+    assert window._trial_results == []
+    assert window._target.progress == 0
+    assert delivered == []
+
+
+@pytest.mark.e2e
 def test_precision_targets_use_final_geometry_and_unclamped_logical_screen(gaze_check, qtbot):
     window, _now, screen = gaze_check
     window._primary_button.click()

@@ -363,11 +363,23 @@ class _CaptureSession:
         self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
         window._snapshot = replace(
             window._snapshot,
+            left=False,
             right=False,
-            right_position=None,
             gaze=None,
             available_fraction=0.6,
             longest_loss_seconds=1.1,
+        )
+        window._render_position()
+        self.capture(
+            window,
+            "gaze-check-position-without-gaze",
+            "Gaze check: eye positions without valid gaze",
+            size=size,
+        )
+        window._snapshot = replace(
+            window._snapshot,
+            left=True,
+            right_position=None,
         )
         window._render_position()
         self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)

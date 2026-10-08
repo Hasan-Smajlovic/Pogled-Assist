@@ -147,9 +147,13 @@ on the Qt thread after pending eye-loss signals. Diagnostics retain raw normaliz
 gaze separately from the existing clamped control stream. Native Stream Engine
 copies normalized XYZ from its existing eye-position subscription; the x86
 bridge validates and forwards that optional message. Pro SDK origin validity
-gates its normalized track-box coordinates. Millimetre gaze origins are never
-interpreted as normalized positions. No new DLL subscription is required and the
-existing backend/eye-validity fallback order remains intact.
+gates its normalized track-box coordinates independently of gaze-point validity.
+Fresh positions remain visible even when gaze points are invalid. Eye-recognition
+indicators accept either a valid position or the existing per-eye input validity;
+fixation, dwell and normal input still require both eyes to pass the input gate.
+Millimetre gaze origins are never interpreted as normalized positions. No new DLL
+subscription is required and the existing backend/eye-validity fallback order
+remains intact.
 
 Eye, position and gaze samples expire independently after 500 ms. Availability
 uses elapsed time, not the ratio of valid callbacks, over at most ten seconds.
@@ -161,7 +165,10 @@ hard-coded centimetre conversion or invented central zone.
 
 Each fixation target has a one-second settling period and two seconds of
 measurement. At least 12 distinct fresh samples and 60% temporal coverage are
-required; gaps contribute at most 100 ms between samples. A near result requires
+required. Consecutive valid samples contribute at most 100 ms between them;
+invalid or stale snapshots and eye-loss signals break that interval, including
+losses coalesced before the next Qt snapshot. Earlier valid intervals remain
+counted, so a brief blink does not discard the whole target. A near result requires
 90% of samples within the displayed 36 logical-pixel radius. Median error and
 90th-percentile spread are descriptive values, not clinically validated scores.
 The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
