@@ -10,6 +10,28 @@ from pogled_assist.tracking.tobii_stream_engine_bridge_backend import (
 )
 
 
+def test_bridge_forwards_valid_positions_and_never_converts_bad_payloads_into_green():
+    backend = TobiiStreamEngineBridgeBackend(lambda *_args: None, lambda *_args: None)
+    positions = []
+    backend.eye_position_callback = lambda *args: positions.append(args)
+    backend._handle_message(
+        {
+            "type": "eye_position",
+            "left": [0.3, 0.5, 1.2],
+            "right": [0.7, 0.5, 1.2],
+            "timestamp": 12,
+        }
+    )
+    assert positions == [((0.3, 0.5, 1.2), (0.7, 0.5, 1.2), 12)]
+    for malformed in (None, "123", [0.1], [0.1, float("nan"), 0.2], [True, 0.5, 0.5]):
+        backend._handle_message({"type": "eye_position", "left": malformed, "right": malformed})
+        assert positions[-1] == (None, None, 0)
+    count = len(positions)
+    backend._connection_failed("synthetic error")
+    backend._handle_message({"type": "eye_position", "left": [0.5] * 3, "right": [0.5] * 3})
+    assert len(positions) == count
+
+
 def test_unexpected_bridge_eof_invalidates_eyes_and_reports_failure():
     eyes = []
     backend = TobiiStreamEngineBridgeBackend(lambda *_args: None, lambda *args: eyes.append(args))

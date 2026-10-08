@@ -48,6 +48,48 @@ invalid-eye samples do not restart the connection. A direct native connection
 stays paused until fresh data returns. After a gap in gaze delivery, selection
 starts again from zero rather than confirming a target using time spent waiting.
 
+## Gaze check
+
+Open **Postavke > Postavke pogleda > Provjera pogleda** when a household member
+needs to set up the display. This optional screen is operated by mouse or
+keyboard; the gaze user only needs to look at the targets. Normal gaze input is
+paused while the check is open, including while it is minimized. **Zatvori** or
+Escape returns to Settings with fresh dwell state. The speech message is retained.
+
+1. **Položaj i praćenje** shows each eye, fresh gaze delivery, and recent eye
+   availability. Keep the user comfortable and adjust the screen with its attached
+   tracker. If supplied by the installed runtime, the frame shows eye positions
+   and the bar shows depth within the tracker's reported tracking box. A checkmark
+   means inside that reported area; it is not a guarantee of gaze accuracy.
+   A dash means unavailable or stale data, never a successful check. Depth is not
+   converted to centimetres. A runtime that supplies only eye validity can still
+   run the target tests; use the Tobii app for its positioning display.
+2. **Provjeri preciznost** presents five automatic targets, about three seconds
+   each. Look at the small cross in each circle; no gaze click is required. Results
+   separate measured misses from insufficient data. They describe these targets
+   in this position, not the entire screen or future use. **Prekini test** cancels
+   and returns to positioning; **Ponovi provjeru** clears the previous results.
+3. **Probaj izbor dugmeta** tries three local buttons using the current selection
+   pause and dwell time. No click is sent to another program. Eye loss or stale
+   gaze resets progress, while a brief near-edge departure uses the same bounded
+   hold as the speech controls. The result counts selections, departures and
+   tracking interruptions. Its 160 × 110 logical-pixel buttons are a trial, not
+   certification that every letter or suggestion will be selected reliably.
+
+Short eye-validity losses may be blinks; the app does not diagnose tears,
+lighting or illness. The ten-second eye-availability indicator tolerates brief
+gaps, but the actual input gate still cancels on either-eye loss. Tracking loss,
+minimizing an active test, or resizing the window cancels the test. A test without
+enough fresh samples cannot pass. The source mouse simulator is explicitly
+labeled; its results are not Tobii measurements.
+
+**Otvori Tobii kalibraciju** requests the existing Tobii calibration flow and
+minimizes the check while leaving normal gaze input paused. Return using the
+Windows taskbar or **Postavke**, then run a new check. Launching the Tobii app does
+not confirm that calibration completed. The check does not change Tobii software,
+calibration, or saved settings. Measurements stay in memory and are discarded on
+close; no gaze-check recording is saved.
+
 ## Hotbar controls
 
 The left side of the hotbar contains:

@@ -39,6 +39,30 @@ def make_controller():
     return controller
 
 
+def test_diagnostic_suspension_blocks_input_and_cannot_resume_pending_dwell(monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.interaction.mouse_controller.time.monotonic", lambda: now[0])
+    controller = make_controller()
+    controller.update_settings(GazeSettings(use_precision_zoom=False))
+    controller.handle_eye_status(True, True)
+    controller.set_mode(LEFT_CLICK)
+    controller.handle_gaze(0.5, 0.5, 1)
+    moves = list(controller._input.moves)
+    controller.set_input_suspended(True)
+    now[0] = 30
+    controller.handle_gaze(0.5, 0.5, 2)
+    assert controller._input.moves == moves
+    assert controller._input.clicks == []
+    controller.handle_eye_status(False, True)
+    controller.set_input_suspended(False)
+    controller.handle_gaze(0.5, 0.5, 3)
+    assert controller._input.moves == moves
+    controller.handle_eye_status(True, True)
+    controller.handle_gaze(0.6, 0.5, 4)
+    assert len(controller._input.moves) == len(moves) + 1
+    assert controller._input.clicks == []
+
+
 def test_screen_mapping_clamps_and_maps_logical_to_physical():
     controller = make_controller()
 

@@ -139,9 +139,28 @@ def test_native_callbacks_deliver_eye_validity_and_reject_invalid_gaze(native_ba
     assert gaze == [(0.25, 0.75, 42)]
 
 
+def test_native_positions_are_copied_without_clamping_or_changing_eye_gate(native_backend):
+    backend, library, _gaze, eyes = native_backend
+    positions = []
+    backend.eye_position_callback = lambda *args: positions.append(args)
+    backend.start()
+    sample = engine.TobiiEyePositionNormalized()
+    sample.timestamp_us = 45
+    sample.left_validity = sample.right_validity = 1
+    sample.left_xyz[:] = (0.2, 0.4, 1.3)
+    sample.right_xyz[:] = (float("nan"), 0.4, 0.5)
+    library.callbacks["eyes"](ctypes.pointer(sample), None)
+    sample.left_xyz[0] = 0.9  # Callback cannot retain mutable SDK memory.
+    assert positions[0][0] == pytest.approx((0.2, 0.4, 1.3))
+    assert positions[0][1] is None
+    assert eyes == [(True, True, 45)]
+
+
 def test_native_eye_subscription_falls_back_to_gaze_origin(native_backend):
     backend, library, _gaze, eyes = native_backend
     library.errors["tobii_eye_position_normalized_subscribe"] = 7
+    positions = []
+    backend.eye_position_callback = lambda *args: positions.append(args)
     backend.start()
     assert library.calls[-5:] == [
         "tobii_eye_position_normalized_subscribe",
@@ -156,6 +175,7 @@ def test_native_eye_subscription_falls_back_to_gaze_origin(native_backend):
     origin.right_validity = 1
     library.callbacks["origin"](ctypes.pointer(origin), None)
     assert eyes == [(False, True, 43)]
+    assert positions == []  # Millimetre origins are not normalized box positions.
 
 
 @pytest.mark.parametrize("failure", ["eyes", "gaze", "device"])

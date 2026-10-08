@@ -4,11 +4,194 @@ import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtWidgets import QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.fixture
+def gaze_check(qtbot, monkeypatch):
+    from types import SimpleNamespace
+
+    from pogled_assist.ui import gaze_check_window as module
+
+    screen = QRect(-100, 20, 1280, 720)
+    monkeypatch.setattr(
+        module.QGuiApplication, "primaryScreen", lambda: SimpleNamespace(geometry=lambda: screen)
+    )
+    window = module.GazeCheckWindow(GazeSettings())
+    qtbot.addWidget(window)
+    window.setGeometry(screen)
+    window.show()
+    qtbot.wait(1)
+    window._timer.stop()
+    now = [10.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    return window, now, screen
+
+
+@pytest.mark.e2e
+def test_gaze_check_live_states_and_timeout_are_not_false_successes(gaze_check):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window.handle_snapshot(
+        CheckSnapshot(
+            True,
+            True,
+            (0.6, 0.5, 0.5),
+            (0.4, 0.5, 0.5),
+            gaze=(0.5, 0.5),
+            gaze_at=now[0],
+            observed_seconds=5,
+            available_fraction=0.98,
+            longest_loss_seconds=0.1,
+        )
+    )
+    window._tick()
+    assert window._distance_label.text().startswith("✓")
+    assert window._left_label.text().startswith("✓")
+    now[0] += 0.6
+    window._tick()
+    assert window._distance_label.text().startswith("—")
+    assert window._left_label.text().startswith("—")
+    window.handle_snapshot(CheckSnapshot(True, False))
+    window._tick()
+    assert window._right_label.text().startswith("!")
+    assert window._distance_label.text().startswith("—")
+
+
+@pytest.mark.e2e
+def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window._primary_button.click()
+    qtbot.wait(1)
+    assert window._phase == "precision"
+    assert window._check is not None
+    for index in range(5):
+        name, x, y = window._check.targets[index]
+        start = window._check.started_at
+        for sample in range(100):
+            now[0] = start + 1 + sample * 0.02
+            window.handle_snapshot(CheckSnapshot(True, True, gaze=(x, y), gaze_at=now[0]))
+        now[0] = start + 3.01
+        window._tick()
+        assert window._check.results[index].name == name
+        assert window._check.results[index].near is True
+    assert window._phase == "results"
+    assert "5 od 5" in window._result_summary.text()
+    window._repeat_button.click()
+    assert window._check is None
+    assert window._phase == "position"
+
+
+@pytest.mark.e2e
+def test_precision_targets_use_final_geometry_and_unclamped_logical_screen(gaze_check, qtbot):
+    window, _now, screen = gaze_check
+    window._primary_button.click()
+    qtbot.wait(1)
+    for index, (_name, x, y) in enumerate(window._check.targets):
+        window._target.target_index = index
+        painted = window._target.mapToGlobal(window._target.center())
+        assert abs(painted.x() - (screen.left() + x * (screen.width() - 1))) <= 1
+        assert abs(painted.y() - (screen.top() + y * (screen.height() - 1))) <= 1
+    window.resize(1200, 680)
+    qtbot.wait(1)
+    assert window._phase == "position"
+    assert window._check is None
+
+
+@pytest.mark.e2e
+def test_trial_cancels_on_eye_loss_and_uses_fresh_samples_to_complete(gaze_check, qtbot):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, screen = gaze_check
+    window._start_trial()
+    qtbot.wait(1)
+
+    def feed(at):
+        now[0] = at
+        point = window._target.mapToGlobal(window._target.center())
+        x = (point.x() - screen.left()) / (screen.width() - 1)
+        y = (point.y() - screen.top()) / (screen.height() - 1)
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=(x, y), gaze_at=at))
+
+    for i in range(45):
+        feed(10 + i * 0.02)
+    assert window._target.progress > 0
+    window.handle_eye_status(True, False)
+    assert window._target.progress == 0
+    assert window._trial_losses == 1
+    feed(10.91)
+    feed(11.0)
+    assert window._trial_results == []
+    # Repeating the same gaze sample cannot advance selection.
+    now[0] = 11.9
+    window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=11.0))
+    assert window._trial_results == []
+    for i in range(56):
+        feed(12 + i * 0.02)
+    assert window._trial_results == [True]
+    for _ in range(2):
+        start = window._trial_ready_at
+        for i in range(56):
+            feed(start + i * 0.02)
+    assert window._phase == "results"
+    assert "3/3" in window._trial_summary.text()
+
+
+@pytest.mark.e2e
+def test_check_disconnect_and_escape_require_no_valid_gaze(gaze_check, qtbot):
+    window, _now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window.tracking_unavailable()
+    assert window._phase == "position"
+    assert window._check is None
+    assert "prekinuto" in window._notice.text()
+    closed = []
+    window.closed.connect(lambda: closed.append(True))
+    window.activateWindow()
+    qtbot.keyClick(window, Qt.Key_Escape)
+    assert closed == [True]
+
+
+@pytest.mark.e2e
+def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window._start_trial()
+    window.handle_snapshot(CheckSnapshot(True, True, gaze=(1e300, -1e300), gaze_at=now[0]))
+    assert window._trial_results == []
+    assert window._selection.target is None
+
+
+@pytest.mark.e2e
+def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot):
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    window, _now, _screen = gaze_check
+    for phase in ("position", "precision", "results", "trial"):
+        if phase == "precision":
+            window._start_precision()
+        elif phase == "results":
+            window._show_results()
+        elif phase == "trial":
+            window._start_trial()
+        qtbot.wait(1)
+        for child in window.findChildren(QWidget):
+            if not child.isVisible() or not isinstance(child, (QLabel, QPushButton)):
+                continue
+            bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
+            assert window.rect().contains(bounds), (phase, child.text(), bounds)
+            if isinstance(child, QPushButton):
+                assert child.height() >= 60
 
 
 @pytest.mark.e2e

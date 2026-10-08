@@ -17,6 +17,7 @@ and a compact controller panel.
   next-word suggestions, reusable phrases, and local personal learning.
 - Right-side Keyboard and Controller panels for typing and common shortcuts.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
+- An optional caregiver gaze check with live positioning, timed targets, and a local dwell trial.
 - Tobii Pro SDK, Stream Engine, and optional 32-bit Stream Engine bridge support.
 
 ## Install

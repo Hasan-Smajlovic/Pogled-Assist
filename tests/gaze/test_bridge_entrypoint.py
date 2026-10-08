@@ -9,6 +9,7 @@ from pogled_assist.tracking import tobii_stream_engine_bridge
 def test_bridge_emit_helpers_write_json(capsys):
     tobii_stream_engine_bridge._emit_gaze(0.25, 0.75, 10)
     tobii_stream_engine_bridge._emit_eye_status(True, False, 11)
+    tobii_stream_engine_bridge._emit_eye_position((0.3, 0.4, 0.5), None, 12)
 
     lines = capsys.readouterr().out.splitlines()
     assert json.loads(lines[0]) == {"type": "gaze", "x": 0.25, "y": 0.75, "timestamp": 10}
@@ -17,6 +18,12 @@ def test_bridge_emit_helpers_write_json(capsys):
         "left_open": True,
         "right_open": False,
         "timestamp": 11,
+    }
+    assert json.loads(lines[2]) == {
+        "type": "eye_position",
+        "left": [0.3, 0.4, 0.5],
+        "right": None,
+        "timestamp": 12,
     }
 
 

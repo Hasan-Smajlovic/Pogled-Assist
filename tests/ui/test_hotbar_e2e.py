@@ -182,6 +182,73 @@ def hotbar_gaze(qtbot, monkeypatch, request):
 
 
 @pytest.mark.e2e
+def test_gaze_check_suspends_all_input_and_preserves_speech_and_settings(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._open_speech()
+    hotbar._speech_window._input.setText("Synthetic test message")
+    original_message = hotbar._speech_window._input.text()
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    qtbot.wait(1)
+    assert check.isVisible()
+    assert controller._input_suspended
+    assert not settings.isVisible()
+    positions = []
+    controller.gaze_position_changed.connect(positions.append)
+    for at in (0, 500, 1100, 3000):
+        feed(QPoint(500, 400), at)
+    assert positions == actions == []
+    check._start_trial()
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.RETRYING))
+    assert check._phase == "position"
+    check.close()
+    assert hotbar._gaze_check_window is None
+    assert not controller._input_suspended
+    assert settings.isVisible()
+    assert hotbar._speech_window._input.text() == original_message
+    feed(QPoint(500, 400), 3100)
+    assert positions
+    assert actions == []
+
+
+@pytest.mark.e2e
+def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    requests = []
+    monkeypatch.setattr(
+        toolbar, "launch_tobii_guest_calibration", lambda: requests.append(True) or "Requested"
+    )
+    hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    check._calibration_button.click()
+    qtbot.wait(1)
+    assert requests == [True]
+    assert controller._input_suspended
+    assert check.isMinimized()
+    hotbar._open_settings()
+    assert not check.isMinimized()
+    hotbar.close()
+    assert hotbar._gaze_check_window is None
+    assert not settings.isVisible()
+
+
+@pytest.mark.e2e
 def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hotbar_gaze):
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._gaze.start()

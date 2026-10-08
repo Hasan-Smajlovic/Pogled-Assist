@@ -79,6 +79,25 @@
     .danger { background: #4b2224; border-color: #a1535b; color: #ffd6d6; }
     .danger:hover { background: #663034; }
     .muted { color: #bac5d4; }
+    .gaze-check { height: calc(100dvh - 24px); min-height: 640px; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+    .gaze-check header, .gaze-check footer { display: flex; gap: 14px; align-items: center; }
+    .gaze-check header > div { flex: 1; }
+    .gaze-check h1 { margin: 0 0 8px; font-size: 32px; }
+    .gaze-check h2 { margin: 0 0 16px; font-size: 24px; }
+    .gaze-check p { margin: 8px 0; }
+    .gaze-check header button { min-height: 58px; }
+    .gaze-check footer button { flex: 1; min-height: 64px; font-size: 20px; }
+    .check-columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; min-height: 0; }
+    .check-card { background: #1c2029; border: 1px solid #394253; border-radius: 12px; padding: 22px; }
+    .check-line { font-size: 21px; margin: 18px 0; }
+    .check-pass { color: #70dfa1; } .check-attention { color: #f0c84a; }
+    .eye-box { height: 190px; margin-top: 18px; border: 2px dashed #58647a; position: relative; border-radius: 12px; }
+    .eye-dot { position: absolute; top: 46%; left: 39%; width: 24px; height: 24px; border: 3px solid #70dfa1; border-radius: 50%; }
+    .eye-dot + .eye-dot { left: 57%; }
+    .check-depth { height: 8px; margin: 18px 0; border-radius: 4px; background: #394253; position: relative; }
+    .check-depth::after { content: ''; position: absolute; left: 45%; top: -2px; width: 12px; height: 12px; background: #70dfa1; border-radius: 50%; }
+    .check-stage { flex: 1; position: relative; border: 1px solid #394253; border-radius: 12px; }
+    .check-target { position: absolute; left: calc(50% - 36px); top: calc(50% - 36px); width: 72px; height: 72px; border: 2px solid #8bd5f5; border-radius: 50%; background: #1c2029; display: grid; place-items: center; font-size: 26px; }
     .reference-switcher {
       position: fixed;
       right: 18px;
@@ -365,6 +384,7 @@
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
     <button type="button" data-reference-view="settings" aria-pressed="false">Postavke</button>
     <button type="button" data-reference-view="installation" aria-pressed="false">Instalacija</button>
+    <button type="button" data-reference-view="gaze-check" aria-pressed="false">Provjera pogleda</button>
     <button id="single-letter-preview" type="button">1 slovo</button>
     <button id="twelve-letters-preview" type="button">12 slova</button>
   </nav>
@@ -556,6 +576,7 @@
           <button class="settings-primary" type="button">Prikaži napredak radnje</button>
           <label class="settings-checkbox"><input type="checkbox" checked>Koristi precizno uvećanje</label>
           <button type="button">Pokreni Tobii kalibraciju</button>
+          <button type="button" data-open-view="gaze-check">Provjera pogleda</button>
         </div>
       </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>
@@ -667,6 +688,31 @@
     </div>
   </dialog>
   <div id="gaze-ring" aria-hidden="true" hidden></div>
+  <main id="gaze-check-screen" class="gaze-check" hidden aria-label="Provjera pogleda">
+    <header><div><h1>Provjera pogleda</h1><p class="muted">Ukućanin podešava ekran. Korisnik ostaje u udobnom položaju.</p></div><button data-open-view="settings">Zatvori · Esc</button></header>
+    <p id="check-step">1 · Položaj i praćenje</p>
+    <div id="check-live" class="check-columns">
+      <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth"></div><p class="muted">Okvir: položaj očiju · traka: dubina</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
+      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line check-pass">✓ Položaj pogleda stiže</p><p class="check-line check-pass">✓ Praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i provjerite preciznost na označenim metama.</p><p class="muted">Kratki prekidi mogu biti treptaji. Zelene oznake još ne potvrđuju preciznost.</p></section>
+    </div>
+    <div id="check-test" class="check-stage" hidden><p style="padding:18px" class="muted">Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.</p><span class="check-target">+</span></div>
+    <div id="check-results" class="check-card" hidden style="flex:1"><h2>Rezultat ove provjere</h2><p class="check-line">Pogled je bio blizu 5 od 5 meta.</p><p>✓ Sredina: pogled uglavnom unutar kruga<br>✓ Gore lijevo: pogled uglavnom unutar kruga<br>✓ Gore desno: pogled uglavnom unutar kruga<br>✓ Dolje lijevo: pogled uglavnom unutar kruga<br>✓ Dolje desno: pogled uglavnom unutar kruga</p><p>Mete su provjerene. Još probajte izbor dugmeta.</p><p class="check-line muted">— Probni izbor nije urađen.</p><p>Ovo je kratka provjera na označenim mjestima. Pomjeranje ekrana ili promjena položaja mogu promijeniti rezultat.</p></div>
+    <p class="muted">Upravljanje računarom pogledom je pauzirano dok je ovaj ekran otvoren.</p>
+    <footer><button id="check-calibrate">Otvori Tobii kalibraciju</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
+    <small class="muted">Referenca · prikazani podaci su primjer. Nedostupni podaci nemaju zelenu oznaku. Dubina je u području koje prijavljuje uređaj, bez pretvaranja u centimetre.</small>
+  </main>
+  <script>
+    document.getElementById('check-next').addEventListener('click', event => {
+      const live = document.getElementById('check-live');
+      const test = document.getElementById('check-test');
+      const results = document.getElementById('check-results');
+      if (!live.hidden) { live.hidden = true; test.hidden = false; event.target.textContent = 'Prikaži primjer rezultata'; }
+      else if (!test.hidden) { test.hidden = true; results.hidden = false; event.target.textContent = 'Probaj izbor dugmeta'; document.getElementById('check-reset').hidden = false; }
+      else { results.hidden = true; test.hidden = false; test.querySelector('span').style.cssText += ';width:160px;height:110px;left:calc(50% - 80px);top:calc(50% - 55px);border-radius:10px'; test.querySelector('span').textContent = 'Pogledaj'; event.target.textContent = 'Prikaži primjer rezultata'; }
+    });
+    document.getElementById('check-reset').addEventListener('click', () => { document.getElementById('check-live').hidden = false; document.getElementById('check-test').hidden = true; document.getElementById('check-results').hidden = true; document.getElementById('check-next').textContent = 'Provjeri preciznost'; document.getElementById('check-reset').hidden = true; document.querySelector('#check-test span').removeAttribute('style'); document.querySelector('#check-test span').textContent = '+'; document.getElementById('check-step').textContent = '1 · Položaj i praćenje'; });
+    document.getElementById('check-calibrate').addEventListener('click', () => { document.getElementById('check-step').textContent = 'Kalibracija se otvara u Tobii aplikaciji. Nakon povratka pokrenite novu provjeru.'; });
+  </script>
   <script>
     (() => {
       'use strict';
@@ -844,6 +890,7 @@
       for (const event of ['click', 'keyup', 'select']) message.addEventListener(event, renderPredictions);
       $('learning-demo-state').addEventListener('change', renderLearning);
       document.addEventListener('keydown', event => {
+        if (!$('gaze-check-screen').hidden) { if (event.key === 'Escape') showReferenceView('settings'); return; }
         if (event.altKey || event.ctrlKey || event.metaKey || document.querySelector('dialog[open]')) return;
         if (event.key === 'Tab' && event.target === message && !$('speech-screen').hidden) { event.preventDefault(); return; }
         if (event.target.closest('input, summary')) return;
@@ -853,7 +900,7 @@
         else if (event.key.length === 1) { event.preventDefault(); append(event.key); }
       });
       document.addEventListener('pointermove', event => {
-        if (event.pointerType === 'touch' || !$('gaze-demo').checked) return;
+        if (event.pointerType === 'touch' || !$('gaze-demo').checked || !$('gaze-check-screen').hidden) return;
         const button = event.target.closest('button');
         gazeButton = button && !button.disabled ? button : null;
         gazePoint = { x: event.clientX, y: event.clientY };
@@ -878,6 +925,8 @@
       window.addEventListener('pagehide', () => { stopAlarm(); window.speechSynthesis?.cancel(); });
 
       function showReferenceView(nextView) {
+        if (nextView === 'gaze-check') $('check-reset').click();
+        $('gaze-check-screen').hidden = nextView !== 'gaze-check';
         const settingsVisible = nextView === 'settings';
         $('speech-screen').hidden = nextView !== 'speech';
         $('settings-screen').hidden = !settingsVisible;

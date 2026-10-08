@@ -32,9 +32,11 @@ from .speech.speech_service import SpeechService
 from .suggestions.service import SuggestionService
 from .tracking.gaze_provider import TobiiGazeProvider
 from .tracking.mouse_gaze_provider import MouseGazeProvider
+from .tracking.status import TrackingState, TrackingStatus
 from .tracking.tobii_calibration import launch_tobii_guest_calibration
 from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from .ui.gaze_bubble import GazeBubbleWindow
+from .ui.gaze_check_window import GazeCheckWindow
 from .ui.gaze_feedback import set_gaze_feedback
 from .ui.hotbar_controls import HotbarControls, no_focus_tool_window_flags
 from .ui.interaction_overlay import InteractionOverlayWindow
@@ -68,6 +70,8 @@ class HotbarWindow(QWidget):
         self.setFixedHeight(self.BAR_HEIGHT)
 
         self._started = False
+        self._closing = False
+        self._simulate_gaze = simulate_gaze
         self._buttons: dict[str, QToolButton] = {}
         self._appbar = WindowsAppBar()
         self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
@@ -87,6 +91,7 @@ class HotbarWindow(QWidget):
         self._keyboard_window: KeyboardWindow | None = None
         self._controller_window: ControllerWindow | None = None
         self._settings_window: SettingsWindow | None = None
+        self._gaze_check_window: GazeCheckWindow | None = None
         self._restore_button: QToolButton | None = None
         self._zoom_context: str | None = None
         self._foreground = ForegroundTracker(self, self, WindowsInputController)
@@ -120,6 +125,9 @@ class HotbarWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Hotbar close event received.")
+        self._closing = True
+        if self._gaze_check_window is not None:
+            self._gaze_check_window.close()
         if self._speech_window is not None:
             self._speech_window.close()
         if self._keyboard_window is not None:
@@ -263,6 +271,7 @@ class HotbarWindow(QWidget):
         self._gaze.eye_status_changed.connect(self._handle_eye_status_changed)
         self._gaze.status_changed.connect(self._set_status)
         self._gaze.tracking_status_changed.connect(self._tracking_status.set_tracking_status)
+        self._gaze.tracking_status_changed.connect(self._check_tracking_state)
         self._mouse.gaze_position_changed.connect(self._gaze_bubble.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_menu.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_zoom.handle_gaze)
@@ -711,6 +720,11 @@ class HotbarWindow(QWidget):
         self._set_status("Prozor za govor je otvoren.")
 
     def _open_settings(self) -> None:
+        if self._gaze_check_window is not None:
+            self._gaze_check_window.showNormal()
+            self._gaze_check_window.raise_()
+            self._gaze_check_window.activateWindow()
+            return
         logger.info("Opening fullscreen settings window.")
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()
@@ -735,6 +749,7 @@ class HotbarWindow(QWidget):
         window.speech_settings_changed.connect(self._update_speech_settings)
         window.save_retry_requested.connect(self._save_settings)
         window.calibration_requested.connect(self._launch_tobii_calibration)
+        window.gaze_check_requested.connect(self._open_gaze_check)
         window.speech_test_requested.connect(self._test_current_speech_settings)
         window.update_requested.connect(self._start_release_update)
         window.quit_requested.connect(self._quit_application)
@@ -748,6 +763,65 @@ class HotbarWindow(QWidget):
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
         self._set_status("Postavke su otvorene.")
+
+    def _open_gaze_check(self) -> None:
+        if self._gaze_check_window is not None:
+            self._gaze_check_window.showNormal()
+            self._gaze_check_window.raise_()
+            return
+        self._mouse.set_input_suspended(True)
+        self._gaze.set_check_active(True)
+        self._quick_zoom.close_zoom()
+        self._quick_menu.close_menu()
+        self._zoom_context = None
+        self._interaction_overlay.clear()
+        self._gaze_bubble.set_enabled(False)
+        if self._settings_window is not None:
+            self._settings_window.cancel_gaze_interaction()
+            self._settings_window.hide()
+        window = GazeCheckWindow(self._mouse.settings, self, simulated=self._simulate_gaze)
+        self._gaze_check_window = window
+        window.closed.connect(self._gaze_check_closed)
+        window.calibration_requested.connect(self._calibrate_from_gaze_check)
+        self._gaze.diagnostics_updated.connect(window.handle_snapshot)
+        self._gaze.eye_status_changed.connect(window.handle_eye_status)
+        window.handle_snapshot(self._gaze.check_snapshot())
+        window.show_fullscreen_on_primary()
+
+    def _gaze_check_closed(self) -> None:
+        window = self._gaze_check_window
+        if window is None:
+            return
+        self._gaze.diagnostics_updated.disconnect(window.handle_snapshot)
+        self._gaze.eye_status_changed.disconnect(window.handle_eye_status)
+        self._gaze_check_window = None
+        self._gaze.set_check_active(False)
+        window.deleteLater()
+        self._mouse.set_input_suspended(False)
+        self._gaze_bubble.set_enabled(self._mouse.settings.show_gaze_bubble and not self._closing)
+        if self._settings_window is not None and not self._closing:
+            self._settings_window.show_fullscreen_on_primary()
+
+    def _check_tracking_state(self, status: TrackingStatus) -> None:
+        if self._gaze_check_window is not None and status.state not in (
+            TrackingState.CONNECTED,
+            TrackingState.SIMULATING,
+        ):
+            self._gaze_check_window.tracking_unavailable()
+
+    def _calibrate_from_gaze_check(self) -> None:
+        # The check remains open/minimized and normal gaze input stays suspended.
+        try:
+            message = launch_tobii_guest_calibration()
+        except Exception:
+            logger.exception("Tobii calibration launch from gaze check failed.")
+            message = "Tobii kalibracija se nije mogla otvoriti. Otvorite je u Tobii aplikaciji."
+            if self._gaze_check_window is not None:
+                self._gaze_check_window.showNormal()
+        self._set_status(message)
+
+        if self._gaze_check_window is not None:
+            self._gaze_check_window.set_calibration_notice(message)
 
     def _settings_window_closed(self) -> None:
         window = self._settings_window

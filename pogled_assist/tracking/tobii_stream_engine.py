@@ -31,6 +31,8 @@ FIELD_OF_USE_INTERACTIVE = 0
 
 GazeCallback = Callable[[float, float, int], None]
 EyeStatusCallback = Callable[[bool, bool, int], None]
+EyePosition = tuple[float, float, float]
+EyePositionCallback = Callable[[EyePosition | None, EyePosition | None, int], None]
 
 _DLL_DIRECTORY_HANDLES: list[object] = []
 
@@ -111,6 +113,8 @@ class TobiiStreamEngineBackend:
     ) -> None:
         self._gaze_callback = gaze_callback
         self._eye_status_callback = eye_status_callback
+        # Optional diagnostic observer; never participates in the input gate.
+        self.eye_position_callback: EyePositionCallback | None = None
         self._lib: ctypes.CDLL | None = None
         self._dll_path = ""
         self._api = ctypes.c_void_p()
@@ -419,6 +423,12 @@ class TobiiStreamEngineBackend:
                 int(eye_position.right_validity),
                 int(eye_position.timestamp_us),
             )
+            if self.eye_position_callback is not None:
+                self.eye_position_callback(
+                    finite_eye_position(eye_position.left_xyz, eye_position.left_validity),
+                    finite_eye_position(eye_position.right_xyz, eye_position.right_validity),
+                    int(eye_position.timestamp_us),
+                )
 
         self._eye_position_receiver = EyePositionReceiver(receive_eye_position)
         status = self._lib.tobii_eye_position_normalized_subscribe(
@@ -565,6 +575,26 @@ class TobiiStreamEngineBackend:
             logger.exception("Could not get Tobii Stream Engine error message.")
 
         return f"status {status}"
+
+
+def finite_eye_position(value: object, validity: object = 1) -> EyePosition | None:
+    """Copy a finite XYZ sample, preserving out-of-box values and its units."""
+    if validity not in (1, True):
+        return None
+    if not isinstance(value, (tuple, list, ctypes.Array)):
+        return None
+    try:
+        if len(value) != 3:
+            return None
+        if any(
+            isinstance(component, bool) or not isinstance(component, (int, float))
+            for component in value
+        ):
+            return None
+        xyz = tuple(float(component) for component in value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return xyz if all(math.isfinite(component) for component in xyz) else None
 
 
 def _load_stream_engine_library() -> tuple[ctypes.CDLL, str]:

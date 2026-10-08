@@ -138,6 +138,48 @@ and eye loss discard the hold along with pending progress. Speech also blocks a
 suggestion replaced beneath gaze; that rejection must not count as leaving its
 button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
 
+### Gaze-check measurements
+
+`tracking/gaze_check.py` owns ephemeral, time-weighted eye availability and
+known-target evaluation. Collection is enabled only while the check is open and
+cleared on close. The provider publishes a coalesced diagnostic snapshot
+on the Qt thread after pending eye-loss signals. Diagnostics retain raw normalized
+gaze separately from the existing clamped control stream. Native Stream Engine
+copies normalized XYZ from its existing eye-position subscription; the x86
+bridge validates and forwards that optional message. Pro SDK origin validity
+gates its normalized track-box coordinates. Millimetre gaze origins are never
+interpreted as normalized positions. No new DLL subscription is required and the
+existing backend/eye-validity fallback order remains intact.
+
+Eye, position and gaze samples expire independently after 500 ms. Availability
+uses elapsed time, not the ratio of valid callbacks, over at most ten seconds.
+After at least three seconds, the UI calls eye availability mostly continuous
+when both eyes are valid for at least 85% of the interval with no loss longer
+than 500 ms. This presentation heuristic does not relax the input gate or prove
+gaze accuracy. Normalized box checks use the device-reported [0, 1] bounds, not a
+hard-coded centimetre conversion or invented central zone.
+
+Each fixation target has a one-second settling period and two seconds of
+measurement. At least 12 distinct fresh samples and 60% temporal coverage are
+required; gaps contribute at most 100 ms between samples. A near result requires
+90% of samples within the displayed 36 logical-pixel radius. Median error and
+90th-percentile spread are descriptive values, not clinically validated scores.
+The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
+constants with three 160 × 110 logical-pixel targets. It never emits Windows input.
+
+The optional `GazeCheckWindow` suspends `GazeMouseController` input without
+changing saved settings, continues receiving diagnostic samples, and clears all
+pending actions both on entry and exit. The hotbar owns signal disconnection,
+Settings return, shutdown and calibration handoff. A minimized calibration
+handoff retains the suspension. No diagnostic history or result is persisted.
+See the [gaze-check guide](USER_GUIDE.md#gaze-check) for the caregiver flow.
+
+The coordinate meanings follow Tobii's
+[Stream Engine API](https://developer.tobii.com/product-integration/) and
+[track-box coordinate description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
+Actual normalized-position availability and movement guidance require validation
+on the installed 4C runtime; synthetic tests cannot establish hardware accuracy.
+
 ## UI and service ownership
 
 `HotbarWindow` owns all long-lived services and top-level UI surfaces. It opens

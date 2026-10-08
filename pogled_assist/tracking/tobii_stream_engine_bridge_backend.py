@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .tobii_stream_engine import app_root
+from .tobii_stream_engine import EyePositionCallback, app_root, finite_eye_position
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ class TobiiStreamEngineBridgeBackend:
     ) -> None:
         self._gaze_callback = gaze_callback
         self._eye_status_callback = eye_status_callback
+        self.eye_position_callback: EyePositionCallback | None = None
         self._process: subprocess.Popen[str] | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -58,6 +59,7 @@ class TobiiStreamEngineBridgeBackend:
             "started": self._on_started,
             "gaze": self._on_gaze,
             "eyes": self._on_eyes,
+            "eye_position": self._on_eye_position,
             "error": self._on_error,
             "stopped": self._on_stopped,
         }
@@ -275,6 +277,19 @@ class TobiiStreamEngineBridgeBackend:
             self._eye_status_callback(False, False, 0)
             return
         self._eye_status_callback(left_open, right_open, timestamp)
+
+    def _on_eye_position(self, message: dict) -> None:
+        if self.eye_position_callback is None:
+            return
+        try:
+            timestamp = int(message.get("timestamp") or 0)
+        except (TypeError, ValueError, OverflowError):
+            return
+        self.eye_position_callback(
+            finite_eye_position(message.get("left")),
+            finite_eye_position(message.get("right")),
+            timestamp,
+        )
 
     def _on_error(self, _message: dict) -> None:
         self._connection_failed("Tobii x86 bridge reported an error.")

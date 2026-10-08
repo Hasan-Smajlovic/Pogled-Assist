@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 38 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 44 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -346,7 +346,7 @@ is the design source of truth for the visible Pogled Assist interface. The
 historical filename is retained so existing links remain stable, but the file
 also documents Settings and any other application surface changed in the
 future.
-It currently has main views for Speech, Settings, the installation summary,
+It currently has main views for Speech, Settings, Gaze check, the installation summary,
 Hotbar, standalone Keyboard, and the Controller keyboard. Gaze overlays do not
 yet have their own main views there. Add the relevant view before changing one
 of those surfaces.
@@ -377,7 +377,7 @@ and a download link. Setup, publication permissions, and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 38 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 44 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -391,6 +391,8 @@ The command renders:
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
   mouse-simulation, and unsaved-settings states
 - General, gaze, speech, and learned-word Settings surfaces, including save failure
+- Gaze check: unavailable data, live position, eye loss, fixation target, results,
+  and local dwell trial
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
@@ -399,8 +401,8 @@ The command renders:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
-Hotbar snapshots use at most 1280 logical pixels of width, and Settings snapshots
-use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
+Hotbar snapshots use at most 1280 logical pixels of width. Settings and Gaze check
+snapshots use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
 scaling. Other surfaces use the requested gallery size. In Settings, check equal
 action cells, the single-cell calibration control, the voice below keyboard
 script, and aligned decrease/value/increase columns.
@@ -408,7 +410,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 38-surface gallery.
+covered by UI interaction tests; it is not part of the 44-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -426,6 +428,10 @@ On a normal development machine, verify:
 - The hotbar spans the primary screen and does not cover maximized windows.
 - Hide and Show restore the Windows work area.
 - Settings, Speech, Keyboard, and Controller open at the expected size.
+- Gaze check opens from Settings, fits 1280 × 720 logical pixels, retains speech
+  text, blocks normal gaze input while open/minimized, and returns to Settings
+  using mouse or Escape. Check target timing, cancellation, resizing, calibration
+  handoff and taskbar return. Simulator results must be labeled as synthetic.
 - The Controller Speech tab, hidden hotbar, Quick actions, precision zoom, and
   gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
@@ -448,6 +454,13 @@ On a normal development machine, verify:
 
 On the Tobii machine, additionally verify:
 
+- In Gaze check, confirm the actual runtime supplies normalized positions before
+  accepting movement guidance. Move the attached display nearer/further and
+  sideways, verify both eye markers and depth, and confirm unavailable data has
+  no checkmark. Test five fixations and the local dwell trial, including a blink,
+  sustained one-eye loss, disconnect/reconnect and normal control after closing.
+  Record OS, tracker and installed Tobii app/driver versions; test Windows 11 with
+  the user's existing supported runtime, without switching to Core for this feature.
 - The hotbar status distinguishes connecting, unavailable device, waiting for
   fresh data, and ready tracking. Readiness requires both eyes and fresh gaze;
   it does not certify calibration accuracy.

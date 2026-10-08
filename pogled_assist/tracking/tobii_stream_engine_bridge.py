@@ -42,6 +42,7 @@ def main() -> int:
 
     _install_signal_handlers()
     backend = TobiiStreamEngineBackend(_emit_gaze, _emit_eye_status)
+    backend.eye_position_callback = _emit_eye_position
     try:
         backend.start()
         _emit("started", label=backend.label, dll_path=backend.dll_path)
@@ -71,6 +72,10 @@ def _emit_eye_status(left_open: bool, right_open: bool, timestamp: int) -> None:
         right_open=bool(right_open),
         timestamp=timestamp,
     )
+
+
+def _emit_eye_position(left: object, right: object, timestamp: int) -> None:
+    _emit("eye_position", left=left, right=right, timestamp=timestamp)
 
 
 def _emit(message_type: str, **payload: Any) -> None:

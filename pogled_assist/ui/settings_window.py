@@ -254,6 +254,7 @@ class SettingsWindow(QWidget):
     speech_settings_changed = Signal(object)
     save_retry_requested = Signal()
     calibration_requested = Signal()
+    gaze_check_requested = Signal()
     speech_test_requested = Signal()
     update_requested = Signal()
     quit_requested = Signal()
@@ -589,6 +590,9 @@ class SettingsWindow(QWidget):
             QSize(220, 58),
             "fa5s.crosshairs",
         )
+        self._gaze_check_button = self._controls.button(
+            "Provjera pogleda", self._request_gaze_check, QSize(220, 58), "fa5s.eye"
+        )
         return action_grid(
             (
                 self._move_pointer_button,
@@ -596,8 +600,13 @@ class SettingsWindow(QWidget):
                 self._interaction_overlay_button,
                 self._precision_zoom_checkbox,
                 self._calibration_button,
+                self._gaze_check_button,
             )
         )
+
+    def _request_gaze_check(self) -> None:
+        self.cancel_gaze_interaction()
+        self.gaze_check_requested.emit()
 
     def _build_speech_page(self) -> QWidget:
         page = QFrame(self)

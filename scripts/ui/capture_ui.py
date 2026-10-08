@@ -26,10 +26,12 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
+from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
@@ -256,6 +258,7 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
         try:
             session.capture_hotbar()
             session.capture_settings()
+            session.capture_gaze_check()
             session.capture_speech()
             session.capture_sidebars()
             session.capture_arabic()
@@ -338,6 +341,54 @@ class _CaptureSession:
         self.settings.set_save_error(True)
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
+
+    def capture_gaze_check(self) -> None:
+        window = GazeCheckWindow(self.gaze_settings)
+        self.widgets.append(window)
+        size = min(self.size[0], 1280), min(self.size[1], 720)
+        # Static synthetic data and frozen UI ticks keep the gallery deterministic.
+        window._timer.timeout.disconnect(window._tick)
+        self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
+        window._snapshot = CheckSnapshot(
+            True,
+            True,
+            (0.6, 0.5, 0.45),
+            (0.4, 0.5, 0.45),
+            gaze=(0.5, 0.5),
+            observed_seconds=10,
+            available_fraction=0.98,
+            longest_loss_seconds=0.15,
+        )
+        window._render_position()
+        self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
+        window._snapshot = replace(
+            window._snapshot,
+            right=False,
+            right_position=None,
+            gaze=None,
+            available_fraction=0.6,
+            longest_loss_seconds=1.1,
+        )
+        window._render_position()
+        self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
+        window._start_precision()
+        self.capture(window, "gaze-check-precision", "Gaze check: fixation target", size=size)
+        window._check = FixationCheck([], size, 36, 0)
+        window._check.results = [
+            FixationResult(name, 90, 0.9, error, spread, near)
+            for name, error, spread, near in (
+                ("Sredina", 12, 8, True),
+                ("Gore lijevo", 14, 10, True),
+                ("Gore desno", 48, 12, False),
+                ("Dolje lijevo", 18, 9, True),
+                ("Dolje desno", None, None, None),
+            )
+        ]
+        window._show_results()
+        self.capture(window, "gaze-check-results", "Gaze check: measured results", size=size)
+        window._start_trial()
+        window._target.progress = 0.6
+        self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
 
     def capture_speech(self) -> None:
         sample_phrases = [

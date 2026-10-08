@@ -123,6 +123,7 @@ class GazeMouseController(QObject):
         self._last_mouse_error_ms = 0.0
         self._interaction_source: str | None = None
         self._both_eyes_open = False
+        self._input_suspended = False
 
     def start(self) -> None:
         logger.info("Starting mouse controller.")
@@ -306,8 +307,18 @@ class GazeMouseController(QObject):
         self._set_toolbar_gaze_target(None)
         self.status_changed.emit("Upravljanje pogledom je pauzirano: oba oka moraju biti otvorena.")
 
+    def set_input_suspended(self, suspended: bool) -> None:
+        """Pause for a caregiver check without changing saved settings or eye validity."""
+        self._input_suspended = bool(suspended)
+        self.cancel_gaze_interactions_for_mouse()
+        self.cancel_zoomed_click(reset_mode=False)
+        self.cancel_quick_action_menu()
+        self._native_menu_click_pending = False
+        self._smooth_physical_point = None
+        self._last_cursor_point = None
+
     def handle_gaze(self, normalized_x: float, normalized_y: float, _timestamp: object) -> None:
-        if not self._both_eyes_open:
+        if self._input_suspended or not self._both_eyes_open:
             self._set_toolbar_gaze_target(None)
             return
 
