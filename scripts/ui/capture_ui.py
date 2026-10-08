@@ -354,7 +354,9 @@ class _CaptureSession:
         self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
         window._snapshot = CheckSnapshot(position_supported=False)
         window._render_position()
-        self.capture(window, "gaze-check-unsupported", "Gaze check: eye positions unsupported", size=size)
+        self.capture(
+            window, "gaze-check-unsupported", "Gaze check: eye positions unsupported", size=size
+        )
         window.handle_tracking_status(TrackingStatus(TrackingState.RETRYING))
         self.capture(window, "gaze-check-disconnected", "Gaze check: disconnected", size=size)
         window.handle_tracking_status(TrackingStatus(TrackingState.CONNECTED))
@@ -414,24 +416,33 @@ class _CaptureSession:
         self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
         window._target.target_index = 1
         window._target.progress_target = window._target.expected_button
-        self.capture(window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size)
+        self.capture(
+            window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size
+        )
         window._target.target_index = 2
         window._target.progress_target = window._target.expected_button
-        self.capture(window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size)
+        self.capture(
+            window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
+        )
         window._start_free()
         screen = QGuiApplication.primaryScreen().geometry()
         point = window._target.mapToGlobal(window._target.rect().center() + QPoint(16, -10))
         window._snapshot = CheckSnapshot(
-            True, True,
-            gaze=((point.x() - screen.left()) / (screen.width() - 1),
-                  (point.y() - screen.top()) / (screen.height() - 1)),
+            True,
+            True,
+            gaze=(
+                (point.x() - screen.left()) / (screen.width() - 1),
+                (point.y() - screen.top()) / (screen.height() - 1),
+            ),
             gaze_at=time.monotonic(),
         )
         window._render_free()
         self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
         window._snapshot = CheckSnapshot()
         window._render_free()
-        self.capture(window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size)
+        self.capture(
+            window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size
+        )
 
     def capture_speech(self) -> None:
         sample_phrases = [

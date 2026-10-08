@@ -163,9 +163,7 @@ def test_invalid_native_gaze_breaks_check_even_when_eyes_stay_valid(
     observer = TobiiStreamEngineBridgeBackend(gaze, eyes) if bridged else backend
     provider._attach_check_observers(observer)
     if bridged:
-        backend._gaze_callback = lambda x, y, t: observer._on_gaze(
-            {"x": x, "y": y, "timestamp": t}
-        )
+        backend._gaze_callback = lambda x, y, t: observer._on_gaze({"x": x, "y": y, "timestamp": t})
         backend._eye_status_callback = lambda left, right, t: observer._on_eyes(
             {"left_open": left, "right_open": right, "timestamp": t}
         )

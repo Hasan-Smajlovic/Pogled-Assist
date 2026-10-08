@@ -104,9 +104,7 @@ def launch_tobii_settings() -> str:
     if target is not None and _shell_execute(str(target), errors):
         logger.info("Tobii settings launch requested: %s", _short_display_path(target))
         return "Otvaranje Tobii postavki je zatraženo."
-    raise RuntimeError(
-        "Tobii postavke se nisu mogle otvoriti. Otvorite Tobii ikonu pored sata."
-    )
+    raise RuntimeError("Tobii postavke se nisu mogle otvoriti. Otvorite Tobii ikonu pored sata.")
 
 
 def _open_calibration_ui(errors: list[str]) -> str | None:

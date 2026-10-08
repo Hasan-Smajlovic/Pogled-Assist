@@ -378,11 +378,15 @@ class GazeCheckWindow(QWidget):
     def _render_position(self) -> None:
         snapshot = self._snapshot
         if self._tracking_state in (
-            TrackingState.RETRYING, TrackingState.STOPPED, TrackingState.UNAVAILABLE
+            TrackingState.RETRYING,
+            TrackingState.STOPPED,
+            TrackingState.UNAVAILABLE,
         ):
             position_notice = "Veza uređaja je prekinuta. Čekam ponovno povezivanje."
         elif snapshot.position_supported is False:
-            position_notice = "Ovaj runtime ne šalje položaje očiju. Položaj provjerite u Tobii aplikaciji."
+            position_notice = (
+                "Ovaj runtime ne šalje položaje očiju. Položaj provjerite u Tobii aplikaciji."
+            )
         elif snapshot.left_position is None and snapshot.right_position is None:
             position_notice = "Čekam svježe podatke o položaju očiju."
         else:
@@ -704,9 +708,9 @@ class GazeCheckWindow(QWidget):
         margin = TOOLBAR_EDGE_MARGIN_PX
         previous = self._selection.target
         hold_rect = self._target.button_rect(previous) if previous is not None else rect
-        hold = target is None and hold_rect.adjusted(
-            -margin, -margin, margin, margin
-        ).contains(point)
+        hold = target is None and hold_rect.adjusted(-margin, -margin, margin, margin).contains(
+            point
+        )
         result = self._selection.update(
             target,
             at * 1000,

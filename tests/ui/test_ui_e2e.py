@@ -207,10 +207,12 @@ def test_free_check_shows_nine_targets_and_only_fresh_both_eye_gaze(gaze_check, 
     for point in window._target.free_centers():
         assert not controls.adjusted(-36, -36, 36, 36).contains(point)
     window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.25, 0.75), gaze_at=now[0]))
-    expected = window._target.mapFromGlobal(QPoint(
-        round(screen.left() + 0.25 * (screen.width() - 1)),
-        round(screen.top() + 0.75 * (screen.height() - 1)),
-    ))
+    expected = window._target.mapFromGlobal(
+        QPoint(
+            round(screen.left() + 0.25 * (screen.width() - 1)),
+            round(screen.top() + 0.75 * (screen.height() - 1)),
+        )
+    )
     assert window._target.gaze_point == expected
     window.handle_eye_status(True, False)
     assert window._target.gaze_point is None
@@ -233,8 +235,10 @@ def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check
     window._start_trial()
     qtbot.wait(1)
     wrong = window._target.mapToGlobal(window._target.button_rect(0).center())
-    gaze = ((wrong.x() - screen.left()) / (screen.width() - 1),
-            (wrong.y() - screen.top()) / (screen.height() - 1))
+    gaze = (
+        (wrong.x() - screen.left()) / (screen.width() - 1),
+        (wrong.y() - screen.top()) / (screen.height() - 1),
+    )
     for sample in range(100):
         now[0] = 10 + sample * 0.02
         window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
@@ -242,8 +246,10 @@ def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check
     assert window._trial_results == []
     assert window._selection.is_blocked
     correct = window._target.mapToGlobal(window._target.center())
-    gaze = ((correct.x() - screen.left()) / (screen.width() - 1),
-            (correct.y() - screen.top()) / (screen.height() - 1))
+    gaze = (
+        (correct.x() - screen.left()) / (screen.width() - 1),
+        (correct.y() - screen.top()) / (screen.height() - 1),
+    )
     for sample in range(60):
         now[0] = 12 + sample * 0.02
         window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))

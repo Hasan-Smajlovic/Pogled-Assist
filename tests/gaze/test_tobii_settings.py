@@ -16,7 +16,9 @@ def test_settings_launch_opens_core_without_guest_or_operator_calibration(monkey
     )
     monkeypatch.setenv("TOBII_CALIBRATION_COMMAND", "operator guest command")
     launched = []
-    monkeypatch.setattr(calibration, "_shell_execute", lambda path, _: launched.append(path) or True)
+    monkeypatch.setattr(
+        calibration, "_shell_execute", lambda path, _: launched.append(path) or True
+    )
 
     def unexpected(*_args):
         raise AssertionError("Settings must not trigger Guest calibration")
@@ -29,7 +31,9 @@ def test_settings_launch_opens_core_without_guest_or_operator_calibration(monkey
 
 def test_missing_settings_reports_manual_route_without_guest_fallback(monkeypatch):
     monkeypatch.setattr(calibration.sys, "platform", "win32")
-    monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [Path("Guest calibration.lnk")])
+    monkeypatch.setattr(
+        calibration, "_start_menu_shortcuts", lambda: [Path("Guest calibration.lnk")]
+    )
     monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [])
     with pytest.raises(RuntimeError, match="ikonu pored sata"):
         calibration.launch_tobii_settings()
