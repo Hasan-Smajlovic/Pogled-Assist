@@ -228,6 +228,24 @@ def test_free_check_shows_nine_targets_and_only_fresh_both_eye_gaze(gaze_check, 
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+def test_trial_neighbors_remain_visible_beside_caregiver_controls(gaze_check, qtbot, size):
+    window, now, _screen = gaze_check
+    window.resize(*size)
+    qtbot.wait(1)
+    window._start_trial()
+    qtbot.wait(1)
+    for scenario in range(3):
+        assert window._target.target_index == scenario
+        controls = window._test_controls.geometry().adjusted(-8, -8, 8, 8)
+        for index in range(3):
+            button = window._target.button_rect(index)
+            assert window._target.rect().contains(button.adjusted(-2, -2, 2, 2))
+            assert not controls.intersects(button), (scenario, index)
+        window._finish_trial_target(True, now[0])
+
+
+@pytest.mark.e2e
 def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check, qtbot):
     from pogled_assist.tracking.gaze_check import CheckSnapshot
 

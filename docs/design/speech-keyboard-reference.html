@@ -100,7 +100,8 @@
     .check-target { position: absolute; left: calc(50% - 36px); top: calc(50% - 36px); width: 72px; height: 72px; border: 2px solid #8bd5f5; border-radius: 50%; background: #1c2029; display: grid; place-items: center; font-size: 26px; }
     .depth-labels { display:flex; justify-content:space-between; font-size:15px; color:#bac5d4; }
     .check-stage.fullscreen { position:fixed; inset:0; z-index:100; background:#111318; border:0; }
-    .check-controls { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); width:620px; padding:14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
+    .check-controls { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); width:min(620px, calc(100% - 32px)); height:140px; padding:14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
+    .check-stage.free .check-controls { top:calc(72% - 70px); bottom:auto; }
     .check-controls button { min-height:60px; min-width:220px; }
     .check-gaze { position:absolute; left:52%; top:48%; width:20px; height:20px; border:3px solid #70dfa1; border-radius:50%; }
     .check-result-columns { display:grid; grid-template-columns:1fr 1.7fr; gap:20px; }
@@ -715,20 +716,30 @@
   <script>
     const checkEl = id => document.getElementById(id);
     let checkMode = 'position';
+    let checkTrialIndex = 0;
     function checkReset() { checkMode='position'; checkEl('check-live').hidden=false; checkEl('check-test').hidden=true; checkEl('check-results').hidden=true; checkEl('check-next').textContent='Provjeri preciznost'; checkEl('check-reset').hidden=true; }
     function checkStage(mode) {
-      checkMode=mode; checkEl('check-live').hidden=true; checkEl('check-results').hidden=true; checkEl('check-test').hidden=false; checkEl('check-gaze').hidden=mode!=='free'; checkEl('check-test-next').hidden=mode==='free';
+      if (checkMode!==mode) checkTrialIndex=0;
+      checkMode=mode; checkEl('check-test').classList.toggle('free', mode==='free'); checkEl('check-live').hidden=true; checkEl('check-results').hidden=true; checkEl('check-test').hidden=false; checkEl('check-gaze').hidden=mode!=='free'; checkEl('check-test-next').hidden=mode==='free';
       const targets=checkEl('check-targets'); targets.replaceChildren();
       if (mode==='trial') {
-        for (let i=0;i<3;i++) { const b=document.createElement('span'); b.className='check-target'; b.style.cssText=`left:${64+i*148}px;top:14px;width:136px;height:64px;border-radius:10px;font-size:24px`; b.textContent=i===1?'Pogledaj':'Susjed'; targets.append(b); }
+        const [width,height,gap,left,top]=[
+          [136,64,12,64,14],
+          [96,88,10,64,window.innerHeight-270],
+          [180,72,12,Math.floor(window.innerWidth/2)-282,Math.floor(window.innerHeight/2)-36]
+        ][checkTrialIndex];
+        const expected=[1,0,2][checkTrialIndex];
+        for (let i=0;i<3;i++) { const b=document.createElement('span'); b.className='check-target'; b.style.cssText=`left:${left+i*(width+gap)}px;top:${top}px;width:${width}px;height:${height}px;border-radius:10px;font-size:24px;border-color:${i===expected?'#8bd5f5':'#58647a'}`; b.textContent=i===expected?'Pogledaj':'Susjed'; targets.append(b); }
+        checkEl('check-test-next').textContent=checkTrialIndex<2?'Sljedeća probna grupa':'Prikaži primjer rezultata';
       } else {
+        checkEl('check-test-next').textContent='Prikaži primjer rezultata';
         for (const y of (mode==='free'?[.06,.5,.94]:[.5])) for (const x of (mode==='free'?[.04,.5,.96]:[.5])) { const dot=document.createElement('span'); dot.className='check-target'; dot.style.left=`calc(${x*100}% - 36px)`; dot.style.top=`calc(${y*100}% - 36px)`; dot.textContent='+'; targets.append(dot); }
       }
       checkEl('check-test-copy').textContent=mode==='free'?'Gledajte svaku metu. Zelena tačka prikazuje pogled uživo; nema odbrojavanja ni ocjene.':mode==='trial'?'Zadržite pogled na označenom dugmetu. Susjedni izbori se bilježe.':'Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.';
     }
     checkEl('check-next').addEventListener('click',()=>checkStage(checkMode==='results'?'trial':'precision'));
     checkEl('check-free').addEventListener('click',()=>checkStage('free'));
-    checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial') checkEl('check-trial-result').textContent='Probni izbor: 3/3 · Pogrešni susjedni izbori: 1 · Prekidi praćenja: 0'; checkMode='results'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-next').textContent='Probaj izbor dugmeta'; checkEl('check-reset').hidden=false; });
+    checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') checkEl('check-trial-result').textContent='Probni izbor: 3/3 · Pogrešni susjedni izbori: 1 · Prekidi praćenja: 0'; checkMode='results'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-next').textContent='Probaj izbor dugmeta'; checkEl('check-reset').hidden=false; });
     checkEl('check-test-back').addEventListener('click',checkReset);
     checkEl('check-reset').addEventListener('click',checkReset);
     checkEl('check-calibrate').addEventListener('click',()=>{ checkReset(); checkEl('check-step').textContent='U Tobii Core odaberite korisnikov profil > Test and recalibrate. Guest prečica se ne šalje. Nakon povratka ponovite provjeru.'; });

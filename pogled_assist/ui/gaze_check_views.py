@@ -97,7 +97,7 @@ class CheckTargetView(QWidget):
         index = self.expected_button if index is None else index
         width, height, gap, left, top = (
             (136, 64, 12, 64, 14),
-            (96, 88, 10, 64, self.height() - 230),
+            (96, 88, 10, 64, self.height() - 270),
             (180, 72, 12, self.width() // 2 - 282, self.height() // 2 - 36),
         )[self.target_index]
         return QRect(left + index * (width + gap), top, width, height)
