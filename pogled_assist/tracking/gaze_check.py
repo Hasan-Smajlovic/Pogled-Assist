@@ -28,6 +28,8 @@ class CheckSnapshot:
     observed_seconds: float = 0.0
     available_fraction: float = 0.0
     longest_loss_seconds: float = 0.0
+    gaze_interruptions: int = 0
+    position_supported: bool | None = None
 
     @property
     def stable(self) -> bool | None:
@@ -52,6 +54,8 @@ class CheckTelemetry:
         self.eyes: tuple[bool, bool, float] | None = None
         self.positions: tuple[Position | None, Position | None, float] | None = None
         self.gaze: tuple[float, float, float] | None = None
+        self.gaze_interruptions = 0
+        self.position_supported: bool | None = None
         self._history: deque[tuple[float, bool]] = deque(maxlen=4096)
 
     def record_eyes(self, left: bool, right: bool, now: float) -> None:
@@ -63,11 +67,18 @@ class CheckTelemetry:
         while len(self._history) > 1 and self._history[1][0] < now - HISTORY_SECONDS:
             self._history.popleft()
         if not (left and right):
-            self.gaze = None
+            self.record_gaze_invalid()
+
+    def record_gaze_invalid(self) -> None:
+        self.gaze = None
+        # Preserve a loss even if a newer valid sample arrives before the Qt flush.
+        self.gaze_interruptions += 1
 
     def record_gaze(self, x: float, y: float, now: float) -> None:
         if math.isfinite(x) and math.isfinite(y):
             self.gaze = x, y, now
+        else:
+            self.record_gaze_invalid()
 
     def snapshot(self, now: float) -> CheckSnapshot:
         eyes_fresh = self.eyes is not None and 0 <= now - self.eyes[2] < FRESH_SECONDS
@@ -90,6 +101,8 @@ class CheckTelemetry:
             observed,
             fraction,
             longest,
+            self.gaze_interruptions,
+            self.position_supported,
         )
 
     def _availability(self, now: float) -> tuple[float, float, float]:
@@ -121,6 +134,7 @@ class FixationResult:
     median_error: float | None
     spread: float | None
     near: bool | None
+    gaze_center: tuple[float, float] | None = None
 
 
 class FixationCheck:
@@ -143,6 +157,7 @@ class FixationCheck:
         self._last_sample_at: float | None = None
         self._previous_at: float | None = None
         self._covered_seconds = 0.0
+        self._gaze_interruptions: int | None = None
 
     @property
     def finished(self) -> bool:
@@ -151,6 +166,9 @@ class FixationCheck:
     def add(self, snapshot: CheckSnapshot, now: float) -> None:
         if self.finished:
             return
+        if snapshot.gaze_interruptions != self._gaze_interruptions:
+            self.interrupt()
+            self._gaze_interruptions = snapshot.gaze_interruptions
         if (
             snapshot.gaze is None
             or snapshot.gaze_at is None
@@ -210,4 +228,5 @@ class FixationCheck:
             median(errors),
             spread[p90],
             errors[p90] <= self.radius,
+            (center[0] / max(1, width - 1), center[1] / max(1, height - 1)),
         )

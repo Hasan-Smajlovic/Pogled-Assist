@@ -64,21 +64,41 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    A dash means unavailable or stale data, never a successful check. Depth is not
    converted to centimetres. A runtime that supplies only eye validity can still
    run the target tests; use the Tobii app for its positioning display.
+   The depth bar runs from **Bliže uređaju** to **Dalje od uređaja**. Separate
+   messages distinguish waiting for fresh positions, an unsupported position
+   stream, and a disconnected device.
    Fresh eye positions can remain visible while the app waits for a valid gaze
    point. Recognizing the eyes alone does not enable gaze selection.
 2. **Provjeri preciznost** presents five automatic targets, about three seconds
-   each. Look at the small cross in each circle; no gaze click is required. Results
-   separate measured misses from insufficient data. They describe these targets
-   in this position, not the entire screen or future use. **Prekini test** cancels
+   each, at the centre and near the four screen corners, including the hotbar
+   area. Look at the small cross in each circle; no gaze click is required. The
+   gaze dot is hidden during measurement. Results show a map of targets and
+   measured gaze centres, valid-data coverage, median error and gaze spread in
+   Qt logical pixels. They separate measured misses from insufficient data and
+   describe these targets in this position. **Prekini test** cancels
    and returns to positioning; **Ponovi provjeru** clears the previous results.
    Known tracking interruptions do not count toward the required measurement
    time; a brief blink preserves the valid intervals before and after it.
-3. **Probaj izbor dugmeta** tries three local buttons using the current selection
-   pause and dwell time. No click is sent to another program. Eye loss or stale
+3. **Probaj izbor dugmeta** tries three groups of neighboring controls using the
+   current selection pause and dwell time. Look at **Pogledaj**, beside two
+   **Susjed** buttons. The groups use 136 × 64, 96 × 88 and 180 × 72 logical
+   pixels, representing hotbar, keyboard and suggestion controls in different
+   screen areas. No click is sent to another program. Eye loss, invalid or stale
    gaze resets progress, while a brief near-edge departure uses the same bounded
-   hold as the speech controls. The result counts selections, departures and
-   tracking interruptions. Its 160 × 110 logical-pixel buttons are a trial, not
-   certification that every letter or suggestion will be selected reliably.
+   hold as the speech controls. The result counts correct selections, wrong
+   neighboring selections, departures and tracking interruptions. A wrong
+   selection counts once until gaze leaves that neighbor. This is a trial;
+   individual application controls still need to be checked in actual use.
+
+**Slobodna provjera** is optional and has nine targets across the screen. Look at
+each target while a green ring shows fresh gaze from both eyes. It has no timer
+or numerical score. Missing, invalid, off-screen or stale gaze hides the ring.
+**Vrati na položaj** returns to positioning. This follows the visual feedback
+idea in Tobii Core's [Test and recalibrate](https://help.tobii.com/hc/en-us/articles/213891645-Test-and-recalibrate).
+Use the timed test separately when a measured result is needed.
+
+The assessment rules in the [architecture guide](ARCHITECTURE.md#gaze-check-measurements)
+are application heuristics, not Tobii-certified thresholds or a clinical assessment.
 
 Short eye-validity losses may be blinks; the app does not diagnose tears,
 lighting or illness. The ten-second eye-availability indicator tolerates brief
@@ -87,10 +107,21 @@ minimizing an active test, or resizing the window cancels the test. A test witho
 enough fresh samples cannot pass. The source mouse simulator is explicitly
 labeled; its results are not Tobii measurements.
 
-**Otvori Tobii kalibraciju** requests the existing Tobii calibration flow and
-minimizes the check while leaving normal gaze input paused. Return using the
-Windows taskbar or **Postavke**, then run a new check. Launching the Tobii app does
-not confirm that calibration completed. Keep the installed Tobii Core or
+**Otvori Tobii postavke** opens the installed settings application and minimizes
+the check while leaving normal gaze input paused. In Tobii Core, select the
+user's own profile, then **Test and recalibrate**, and **Recalibrate** if needed.
+The check does not send Ctrl+Shift+F10: Tobii documents that shortcut as
+[Guest calibration](https://help.tobii.com/hc/en-us/articles/209530409-Create-a-new-user-profile),
+which uses a separate temporary profile. The existing installation screen and
+hotbar calibration command retain their Guest shortcut flow.
+Check [Display setup](https://help.tobii.com/hc/en-us/articles/209529969-Display-setup)
+too: the selected Tobii display must be Windows' primary display, with its
+physical tracker alignment set correctly. The app maps gaze to that primary
+display. If settings cannot be launched, open the Tobii tray icon beside the
+clock manually. The check does not use `TOBII_CALIBRATION_COMMAND` for this
+settings-only action. Return using the Windows taskbar or **Postavke**, then run
+a new check. Launching the Tobii app does not confirm calibration completed.
+Keep the installed Tobii Core or
 Experience software; this feature does not require switching between them.
 The check does not change Tobii software, calibration, or saved settings.
 Measurements stay in memory and are discarded on close; no gaze-check recording

@@ -179,7 +179,7 @@ class TobiiGazeProvider(QObject):
         logger.info("Trying Tobii Stream Engine fallback.")
         try:
             backend = TobiiStreamEngineBackend(*self._new_stream_callbacks())
-            self._attach_position_observer(backend)
+            self._attach_check_observers(backend)
             backend.start()
         except TobiiStreamEngineError as exc:
             logger.warning("Tobii Stream Engine fallback did not start: %s", exc)
@@ -208,7 +208,7 @@ class TobiiGazeProvider(QObject):
         self.status_changed.emit("Pokušavam Tobii x86 most za 32-bitni Core Software.")
         try:
             backend = TobiiStreamEngineBridgeBackend(*self._new_stream_callbacks())
-            self._attach_position_observer(backend)
+            self._attach_check_observers(backend)
             backend.start()
         except TobiiStreamEngineBridgeError as exc:
             logger.warning("Tobii Stream Engine x86 bridge did not start: %s", exc)
@@ -264,7 +264,7 @@ class TobiiGazeProvider(QObject):
 
         return gaze, eyes
 
-    def _attach_position_observer(self, backend: object) -> None:
+    def _attach_check_observers(self, backend: object) -> None:
         generation = self._stream_generation
 
         def positions(left: object, right: object, _timestamp: int) -> None:
@@ -275,11 +275,25 @@ class TobiiGazeProvider(QObject):
                         finite_eye_position(right),
                         time.monotonic(),
                     )
+                    self._check_telemetry.position_supported = True
 
         backend.eye_position_callback = positions
 
+        def gaze_invalid(_timestamp: int) -> None:
+            with self._sample_lock:
+                if generation == self._stream_generation and self._check_active:
+                    self._check_telemetry.record_gaze_invalid()
+
+        backend.gaze_invalid_callback = gaze_invalid
+
     def check_snapshot(self) -> CheckSnapshot:
         with self._sample_lock:
+            if self._check_active and self._stream_engine is not None:
+                self._check_telemetry.position_supported = getattr(
+                    self._stream_engine, "eye_position_supported", None
+                )
+            elif self._check_active and self._backend_name == "tobii-research":
+                self._check_telemetry.position_supported = True
             return self._check_telemetry.snapshot(time.monotonic())
 
     def set_check_active(self, active: bool) -> None:
@@ -347,6 +361,7 @@ class TobiiGazeProvider(QObject):
         right_open = right is not None
         self._emit_eye_status(left_open, right_open, "tobii-research", sampled=True)
         if self._check_active:
+            self._check_telemetry.position_supported = True
             self._check_telemetry.positions = (
                 finite_eye_position(
                     gaze_data.get("left_gaze_origin_in_trackbox_coordinate_system"),
@@ -373,6 +388,8 @@ class TobiiGazeProvider(QObject):
     def _on_stream_engine_gaze(self, x: float, y: float, timestamp: int) -> None:
         if not math.isfinite(x) or not math.isfinite(y):
             self._clear_pending_gaze_sample()
+            if self._check_active:
+                self._check_telemetry.record_gaze_invalid()
             return
         if not self._stream_eye_status_known:
             self._emit_eye_status(False, False, "stream-engine")
@@ -414,7 +431,7 @@ class TobiiGazeProvider(QObject):
             # order. Apply every intervening eye loss before forwarding gaze.
             self._flush_eye_status()
             if self._check_active:
-                self.diagnostics_updated.emit(self._check_telemetry.snapshot(time.monotonic()))
+                self.diagnostics_updated.emit(self.check_snapshot())
             sample = self._pending_gaze_sample
             self._pending_gaze_sample = None
             dropped_sample_count = self._dropped_sample_count

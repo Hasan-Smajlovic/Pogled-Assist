@@ -329,6 +329,10 @@ class GazeMouseController(QObject):
 
         self.gaze_position_changed.emit(point.logical)
 
+        # A synchronous UI slot can open the caregiver check during this sample.
+        if self._input_suspended or not self._both_eyes_open:
+            return
+
         if overlay_was_open or self._overlay_open():
             return
 

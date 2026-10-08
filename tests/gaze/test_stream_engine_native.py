@@ -115,6 +115,8 @@ def test_native_start_subscribes_eyes_before_gaze_and_stop_releases_resources(na
 
 def test_native_callbacks_deliver_eye_validity_and_reject_invalid_gaze(native_backend):
     backend, library, gaze, eyes = native_backend
+    invalid = []
+    backend.gaze_invalid_callback = invalid.append
     backend.start()
     eye = engine.TobiiEyePositionNormalized()
     eye.timestamp_us = 41
@@ -137,6 +139,95 @@ def test_native_callbacks_deliver_eye_validity_and_reject_invalid_gaze(native_ba
 
     assert eyes == [(True, False, 41), (True, True, 41)]
     assert gaze == [(0.25, 0.75, 42)]
+    assert invalid == [42, 42]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("bridged", [False, True])
+def test_invalid_native_gaze_breaks_check_even_when_eyes_stay_valid(
+    native_backend, qtbot, monkeypatch, bridged
+):
+    from pogled_assist.interaction.mouse_controller import GazeSettings
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+    from pogled_assist.tracking.tobii_stream_engine_bridge_backend import (
+        TobiiStreamEngineBridgeBackend,
+    )
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    provider = TobiiGazeProvider()
+    gaze, eyes = provider._new_stream_callbacks()
+    provider.set_check_active(True)
+    backend, library, _gaze, _eyes = native_backend
+    observer = TobiiStreamEngineBridgeBackend(gaze, eyes) if bridged else backend
+    provider._attach_check_observers(observer)
+    if bridged:
+        backend._gaze_callback = lambda x, y, t: observer._on_gaze(
+            {"x": x, "y": y, "timestamp": t}
+        )
+        backend._eye_status_callback = lambda left, right, t: observer._on_eyes(
+            {"left_open": left, "right_open": right, "timestamp": t}
+        )
+        backend.eye_position_callback = lambda left, right, t: observer._on_eye_position(
+            {"left": left, "right": right, "timestamp": t}
+        )
+        backend.gaze_invalid_callback = lambda t: observer._on_gaze_invalid({"timestamp": t})
+    else:
+        backend._gaze_callback = gaze
+        backend._eye_status_callback = eyes
+    backend.start()
+    window = GazeCheckWindow(GazeSettings())
+    qtbot.addWidget(window)
+    window.show_fullscreen_on_primary()
+    qtbot.wait(1)
+    window._timer.stop()
+    provider.diagnostics_updated.connect(window.handle_snapshot)
+    provider.eye_status_changed.connect(window.handle_eye_status)
+    window._primary_button.click()
+    qtbot.wait(1)
+    start = window._check.started_at
+    _name, x, y = window._check.targets[0]
+    eye = engine.TobiiEyePositionNormalized()
+    eye.left_validity = eye.right_validity = 1
+    eye.left_xyz[:] = (0.4, 0.5, 0.6)
+    eye.right_xyz[:] = (0.6, 0.5, 0.6)
+    point = engine.TobiiGazePoint()
+    point.position_xy[:] = (x, y)
+    for sample in range(20):
+        now[0] = start + 1 + sample * 0.1
+        library.callbacks["eyes"](ctypes.pointer(eye), None)
+        point.validity = 0
+        library.callbacks["gaze"](ctypes.pointer(point), None)
+        point.validity = 1
+        library.callbacks["gaze"](ctypes.pointer(point), None)
+        provider._emit_latest_gaze_sample()
+    snapshot = provider.check_snapshot()
+    assert snapshot.left is snapshot.right is True
+    assert snapshot.left_position == pytest.approx((0.4, 0.5, 0.6))
+    now[0] = start + 3.01
+    window._tick()
+    result = window._check.results[0]
+    assert result.samples == 20
+    assert result.coverage == 0
+    assert result.near is None
+    window._start_trial()
+    screen = window.screen().geometry()
+    target = window._target.mapToGlobal(window._target.center())
+    point.position_xy[:] = (
+        (target.x() - screen.left()) / (screen.width() - 1),
+        (target.y() - screen.top()) / (screen.height() - 1),
+    )
+    for sample in range(40):
+        now[0] = start + 3.1 + sample * 0.1
+        library.callbacks["eyes"](ctypes.pointer(eye), None)
+        point.validity = 0
+        library.callbacks["gaze"](ctypes.pointer(point), None)
+        point.validity = 1
+        library.callbacks["gaze"](ctypes.pointer(point), None)
+        provider._emit_latest_gaze_sample()
+    assert window._trial_results == []
+    assert window._target.progress == 0
 
 
 def test_native_positions_are_copied_without_clamping_or_changing_eye_gate(native_backend):

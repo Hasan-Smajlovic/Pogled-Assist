@@ -166,19 +166,38 @@ hard-coded centimetre conversion or invented central zone.
 Each fixation target has a one-second settling period and two seconds of
 measurement. At least 12 distinct fresh samples and 60% temporal coverage are
 required. Consecutive valid samples contribute at most 100 ms between them;
-invalid or stale snapshots and eye-loss signals break that interval, including
-losses coalesced before the next Qt snapshot. Earlier valid intervals remain
+invalid or stale snapshots and eye-loss signals break that interval. Native
+Stream Engine also reports invalid gaze points through an optional observer and
+the x86 bridge, independently of valid eye positions. An interruption counter
+retains these losses even when a newer valid sample arrives before Qt receives
+a snapshot. Both fixation coverage and local dwell reset on a counter change.
+Earlier valid intervals remain
 counted, so a brief blink does not discard the whole target. A near result requires
 90% of samples within the displayed 36 logical-pixel radius. Median error and
 90th-percentile spread are descriptive values, not clinically validated scores.
+Five timed targets cover the centre and screen corners using a full-window
+painting surface. Results retain the normalized median gaze centre for a map,
+alongside coverage, median error and spread. The map clips off-screen centres
+only for painting; it never changes the measured error.
 The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
-constants with three 160 × 110 logical-pixel targets. It never emits Windows input.
+constants. Its three groups have 136 × 64, 96 × 88 and 180 × 72 logical-pixel
+controls, each with two neighboring controls. Wrong selections use the same
+leave-before-repeat lock and are counted separately. It never emits Windows input.
+The optional free check paints nine targets and fresh both-eye gaze without
+timing, scoring, smoothing or input. `gaze_check_views.py` owns painting and target
+geometry; `gaze_check_window.py` owns the flow and measurements.
 
 The optional `GazeCheckWindow` suspends `GazeMouseController` input without
 changing saved settings, continues receiving diagnostic samples, and clears all
-pending actions both on entry and exit. The hotbar owns signal disconnection,
+pending actions both on entry and exit. The controller checks suspension again
+after synchronous gaze-position slots return, so opening the check cannot move
+the pointer during the triggering sample. The hotbar owns signal disconnection,
 Settings return, shutdown and calibration handoff. A minimized calibration
-handoff retains the suspension. No diagnostic history or result is persisted.
+handoff retains the suspension. This check opens installed Tobii settings with
+instructions for the user's named profile, without the Guest shortcut or the
+operator-set calibration command. Existing calibration entry points retain their
+current behavior. Position capability is separate from freshness and connection
+state. No diagnostic history or result is persisted.
 See the [gaze-check guide](USER_GUIDE.md#gaze-check) for the caregiver flow.
 
 The coordinate meanings follow Tobii's

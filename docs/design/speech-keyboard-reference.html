@@ -98,6 +98,17 @@
     .check-depth::after { content: ''; position: absolute; left: 45%; top: -2px; width: 12px; height: 12px; background: #70dfa1; border-radius: 50%; }
     .check-stage { flex: 1; position: relative; border: 1px solid #394253; border-radius: 12px; }
     .check-target { position: absolute; left: calc(50% - 36px); top: calc(50% - 36px); width: 72px; height: 72px; border: 2px solid #8bd5f5; border-radius: 50%; background: #1c2029; display: grid; place-items: center; font-size: 26px; }
+    .depth-labels { display:flex; justify-content:space-between; font-size:15px; color:#bac5d4; }
+    .check-stage.fullscreen { position:fixed; inset:0; z-index:100; background:#111318; border:0; }
+    .check-controls { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); width:620px; padding:14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
+    .check-controls button { min-height:60px; min-width:220px; }
+    .check-gaze { position:absolute; left:52%; top:48%; width:20px; height:20px; border:3px solid #70dfa1; border-radius:50%; }
+    .check-result-columns { display:grid; grid-template-columns:1fr 1.7fr; gap:20px; }
+    .check-map { position:relative; height:180px; background:#111318; border:1px solid #58647a; border-radius:8px; }
+    .check-map span { position:absolute; width:20px; height:20px; border:2px solid #8bd5f5; border-radius:50%; transform:translate(-50%,-50%); }
+    .check-map i { position:absolute; width:10px; height:10px; background:#f0c84a; border-radius:50%; }
+    .check-metrics { width:100%; border-collapse:collapse; font-size:16px; }
+    .check-metrics th, .check-metrics td { padding:7px; text-align:left; border-bottom:1px solid #394253; }
     .reference-switcher {
       position: fixed;
       right: 18px;
@@ -692,26 +703,35 @@
     <header><div><h1>Provjera pogleda</h1><p class="muted">Ukućanin podešava ekran. Korisnik ostaje u udobnom položaju.</p></div><button data-open-view="settings">Zatvori · Esc</button></header>
     <p id="check-step">1 · Položaj i praćenje</p>
     <div id="check-live" class="check-columns">
-      <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth"></div><p class="muted">Okvir: položaj očiju · traka: dubina</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
+      <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth"></div><div class="depth-labels"><span>Bliže uređaju</span><span>Dalje od uređaja</span></div><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p><p class="muted">Povezan uređaj može podržavati pogled bez prikaza položaja očiju. Čekanje podataka i prekinuta veza prikazuju se zasebno.</p></section>
       <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line muted">- Čekam položaj pogleda</p><p class="check-line check-attention">! Praćenje ima prekide</p><p>Oči su prepoznate, ali nema svježeg položaja pogleda. Pogledajte prema ekranu.</p><p class="muted">Kratki prekidi mogu biti treptaji. Zelene oznake još ne potvrđuju preciznost.</p></section>
     </div>
-    <div id="check-test" class="check-stage" hidden><p style="padding:18px" class="muted">Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.</p><span class="check-target">+</span></div>
-    <div id="check-results" class="check-card" hidden style="flex:1"><h2>Rezultat ove provjere</h2><p class="check-line">Pogled je bio blizu 5 od 5 meta.</p><p>✓ Sredina: pogled uglavnom unutar kruga<br>✓ Gore lijevo: pogled uglavnom unutar kruga<br>✓ Gore desno: pogled uglavnom unutar kruga<br>✓ Dolje lijevo: pogled uglavnom unutar kruga<br>✓ Dolje desno: pogled uglavnom unutar kruga</p><p>Mete su provjerene. Još probajte izbor dugmeta.</p><p class="check-line muted">— Probni izbor nije urađen.</p><p>Ovo je kratka provjera na označenim mjestima. Pomjeranje ekrana ili promjena položaja mogu promijeniti rezultat.</p></div>
+    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-copy">Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.</p><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini test · Esc zatvara</button></div></div>
+    <div id="check-results" class="check-card" hidden style="flex:1"><h2>Rezultat ove provjere</h2><p>Pogled je bio blizu 3 od 5 meta.</p><div class="check-result-columns"><div><div class="check-map"><span style="left:50%;top:50%"></span><span style="left:4%;top:6%"></span><span style="left:96%;top:6%"></span><span style="left:4%;top:94%"></span><span style="left:96%;top:94%"></span><i style="left:92%;top:12%"></i></div><p class="muted">Krug: meta · tačka: sredina pogleda<br>Linija pokazuje smjer odstupanja.</p></div><table class="check-metrics"><tr><th>Meta</th><th>Podaci</th><th>Odstupanje</th><th>Rasipanje</th></tr><tr><td>✓ Sredina</td><td>90%</td><td>12 px</td><td>8 px</td></tr><tr><td>✓ Gore lijevo</td><td>90%</td><td>14 px</td><td>10 px</td></tr><tr><td>! Gore desno</td><td>90%</td><td>48 px</td><td>12 px</td></tr><tr><td>✓ Dolje lijevo</td><td>90%</td><td>18 px</td><td>9 px</td></tr><tr><td>- Dolje desno</td><td>20%</td><td colspan="2">Nedovoljno podataka</td></tr></table></div><p>Podesite položaj i ponovite test.</p><p id="check-trial-result" class="muted">- Probni izbor nije urađen.</p><p class="muted">Qt logički pikseli. Odstupanje je medijan udaljenosti od mete; rasipanje je 90. percentil udaljenosti od sredine pogleda. Pragovi su orijentacioni pragovi ove aplikacije.</p></div>
     <p class="muted">Upravljanje računarom pogledom je pauzirano dok je ovaj ekran otvoren.</p>
-    <footer><button id="check-calibrate">Otvori Tobii kalibraciju</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
-    <small class="muted">Referenca · svježi položaji očiju ostaju vidljivi i bez valjanog pogleda; to ne omogućava izbor. Prekidi praćenja ne ulaze u pokrivenost testa preciznosti. Dubina se ne pretvara u centimetre.</small>
+    <footer><button id="check-calibrate">Otvori Tobii postavke</button><button id="check-free">Slobodna provjera</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
+    <small class="muted">Tobii Core: odaberite korisnikov profil > Test and recalibrate. Display setup mora odgovarati primarnom ekranu i položaju uređaja. Slobodna provjera prikazuje pogled uživo, bez ocjene i odbrojavanja. Brzi test mjeri pet meta blizu rubova bez prikaza pogleda. Proba ima susjedne kontrole od 136 × 64, 96 × 88 i 180 × 72 px; bilježi i pogrešne izbore. Prekidi pogleda poništavaju zadržavanje i kada su položaji očiju valjani.</small>
   </main>
   <script>
-    document.getElementById('check-next').addEventListener('click', event => {
-      const live = document.getElementById('check-live');
-      const test = document.getElementById('check-test');
-      const results = document.getElementById('check-results');
-      if (!live.hidden) { live.hidden = true; test.hidden = false; event.target.textContent = 'Prikaži primjer rezultata'; }
-      else if (!test.hidden) { test.hidden = true; results.hidden = false; event.target.textContent = 'Probaj izbor dugmeta'; document.getElementById('check-reset').hidden = false; }
-      else { results.hidden = true; test.hidden = false; test.querySelector('span').style.cssText += ';width:160px;height:110px;left:calc(50% - 80px);top:calc(50% - 55px);border-radius:10px'; test.querySelector('span').textContent = 'Pogledaj'; event.target.textContent = 'Prikaži primjer rezultata'; }
-    });
-    document.getElementById('check-reset').addEventListener('click', () => { document.getElementById('check-live').hidden = false; document.getElementById('check-test').hidden = true; document.getElementById('check-results').hidden = true; document.getElementById('check-next').textContent = 'Provjeri preciznost'; document.getElementById('check-reset').hidden = true; document.querySelector('#check-test span').removeAttribute('style'); document.querySelector('#check-test span').textContent = '+'; document.getElementById('check-step').textContent = '1 · Položaj i praćenje'; });
-    document.getElementById('check-calibrate').addEventListener('click', () => { document.getElementById('check-step').textContent = 'Kalibracija se otvara u Tobii aplikaciji. Nakon povratka pokrenite novu provjeru.'; });
+    const checkEl = id => document.getElementById(id);
+    let checkMode = 'position';
+    function checkReset() { checkMode='position'; checkEl('check-live').hidden=false; checkEl('check-test').hidden=true; checkEl('check-results').hidden=true; checkEl('check-next').textContent='Provjeri preciznost'; checkEl('check-reset').hidden=true; }
+    function checkStage(mode) {
+      checkMode=mode; checkEl('check-live').hidden=true; checkEl('check-results').hidden=true; checkEl('check-test').hidden=false; checkEl('check-gaze').hidden=mode!=='free'; checkEl('check-test-next').hidden=mode==='free';
+      const targets=checkEl('check-targets'); targets.replaceChildren();
+      if (mode==='trial') {
+        for (let i=0;i<3;i++) { const b=document.createElement('span'); b.className='check-target'; b.style.cssText=`left:${64+i*148}px;top:14px;width:136px;height:64px;border-radius:10px;font-size:24px`; b.textContent=i===1?'Pogledaj':'Susjed'; targets.append(b); }
+      } else {
+        for (const y of (mode==='free'?[.06,.5,.94]:[.5])) for (const x of (mode==='free'?[.04,.5,.96]:[.5])) { const dot=document.createElement('span'); dot.className='check-target'; dot.style.left=`calc(${x*100}% - 36px)`; dot.style.top=`calc(${y*100}% - 36px)`; dot.textContent='+'; targets.append(dot); }
+      }
+      checkEl('check-test-copy').textContent=mode==='free'?'Gledajte svaku metu. Zelena tačka prikazuje pogled uživo; nema odbrojavanja ni ocjene.':mode==='trial'?'Zadržite pogled na označenom dugmetu. Susjedni izbori se bilježe.':'Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti.';
+    }
+    checkEl('check-next').addEventListener('click',()=>checkStage(checkMode==='results'?'trial':'precision'));
+    checkEl('check-free').addEventListener('click',()=>checkStage('free'));
+    checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial') checkEl('check-trial-result').textContent='Probni izbor: 3/3 · Pogrešni susjedni izbori: 1 · Prekidi praćenja: 0'; checkMode='results'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-next').textContent='Probaj izbor dugmeta'; checkEl('check-reset').hidden=false; });
+    checkEl('check-test-back').addEventListener('click',checkReset);
+    checkEl('check-reset').addEventListener('click',checkReset);
+    checkEl('check-calibrate').addEventListener('click',()=>{ checkReset(); checkEl('check-step').textContent='U Tobii Core odaberite korisnikov profil > Test and recalibrate. Guest prečica se ne šalje. Nakon povratka ponovite provjeru.'; });
   </script>
   <script>
     (() => {

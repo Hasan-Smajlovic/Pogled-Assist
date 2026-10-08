@@ -43,9 +43,15 @@ def main() -> int:
     _install_signal_handlers()
     backend = TobiiStreamEngineBackend(_emit_gaze, _emit_eye_status)
     backend.eye_position_callback = _emit_eye_position
+    backend.gaze_invalid_callback = _emit_gaze_invalid
     try:
         backend.start()
-        _emit("started", label=backend.label, dll_path=backend.dll_path)
+        _emit(
+            "started",
+            label=backend.label,
+            dll_path=backend.dll_path,
+            eye_position_supported=backend.eye_position_supported,
+        )
         while _running:
             time.sleep(0.25)
     except KeyboardInterrupt:
@@ -76,6 +82,10 @@ def _emit_eye_status(left_open: bool, right_open: bool, timestamp: int) -> None:
 
 def _emit_eye_position(left: object, right: object, timestamp: int) -> None:
     _emit("eye_position", left=left, right=right, timestamp=timestamp)
+
+
+def _emit_gaze_invalid(timestamp: int) -> None:
+    _emit("gaze_invalid", timestamp=timestamp)
 
 
 def _emit(message_type: str, **payload: Any) -> None:

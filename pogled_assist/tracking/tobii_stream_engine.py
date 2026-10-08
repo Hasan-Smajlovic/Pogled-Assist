@@ -33,6 +33,7 @@ GazeCallback = Callable[[float, float, int], None]
 EyeStatusCallback = Callable[[bool, bool, int], None]
 EyePosition = tuple[float, float, float]
 EyePositionCallback = Callable[[EyePosition | None, EyePosition | None, int], None]
+GazeInvalidCallback = Callable[[int], None]
 
 _DLL_DIRECTORY_HANDLES: list[object] = []
 
@@ -115,6 +116,7 @@ class TobiiStreamEngineBackend:
         self._eye_status_callback = eye_status_callback
         # Optional diagnostic observer; never participates in the input gate.
         self.eye_position_callback: EyePositionCallback | None = None
+        self.gaze_invalid_callback: GazeInvalidCallback | None = None
         self._lib: ctypes.CDLL | None = None
         self._dll_path = ""
         self._api = ctypes.c_void_p()
@@ -131,6 +133,10 @@ class TobiiStreamEngineBackend:
         self._eye_sample_count = 0
         self._eye_position_api_available = False
         self._gaze_origin_api_available = False
+
+    @property
+    def eye_position_supported(self) -> bool:
+        return bool(self._device) and self._eye_position_receiver is not None
 
     @property
     def label(self) -> str:
@@ -511,12 +517,15 @@ class TobiiStreamEngineBackend:
                 return
 
             gaze_point = gaze_point_ptr.contents
-            if gaze_point.validity != TOBII_VALIDITY_VALID:
-                return
-
             x = float(gaze_point.position_xy[0])
             y = float(gaze_point.position_xy[1])
-            if not math.isfinite(x) or not math.isfinite(y):
+            if (
+                gaze_point.validity != TOBII_VALIDITY_VALID
+                or not math.isfinite(x)
+                or not math.isfinite(y)
+            ):
+                if self.gaze_invalid_callback is not None:
+                    self.gaze_invalid_callback(int(gaze_point.timestamp_us))
                 return
 
             self._sample_count += 1

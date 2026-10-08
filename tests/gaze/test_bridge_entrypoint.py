@@ -10,6 +10,7 @@ def test_bridge_emit_helpers_write_json(capsys):
     tobii_stream_engine_bridge._emit_gaze(0.25, 0.75, 10)
     tobii_stream_engine_bridge._emit_eye_status(True, False, 11)
     tobii_stream_engine_bridge._emit_eye_position((0.3, 0.4, 0.5), None, 12)
+    tobii_stream_engine_bridge._emit_gaze_invalid(13)
 
     lines = capsys.readouterr().out.splitlines()
     assert json.loads(lines[0]) == {"type": "gaze", "x": 0.25, "y": 0.75, "timestamp": 10}
@@ -25,6 +26,7 @@ def test_bridge_emit_helpers_write_json(capsys):
         "right": None,
         "timestamp": 12,
     }
+    assert json.loads(lines[3]) == {"type": "gaze_invalid", "timestamp": 13}
 
 
 def test_bridge_serializes_concurrent_messages_through_flush(monkeypatch):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from contextlib import ExitStack
 from dataclasses import replace
 from html import escape
@@ -15,7 +16,8 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
@@ -31,6 +33,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_check_views import TARGETS
 from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsWindow
@@ -349,6 +352,12 @@ class _CaptureSession:
         # Static synthetic data and frozen UI ticks keep the gallery deterministic.
         window._timer.timeout.disconnect(window._tick)
         self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
+        window._snapshot = CheckSnapshot(position_supported=False)
+        window._render_position()
+        self.capture(window, "gaze-check-unsupported", "Gaze check: eye positions unsupported", size=size)
+        window.handle_tracking_status(TrackingStatus(TrackingState.RETRYING))
+        self.capture(window, "gaze-check-disconnected", "Gaze check: disconnected", size=size)
+        window.handle_tracking_status(TrackingStatus(TrackingState.CONNECTED))
         window._snapshot = CheckSnapshot(
             True,
             True,
@@ -385,22 +394,44 @@ class _CaptureSession:
         self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
         window._start_precision()
         self.capture(window, "gaze-check-precision", "Gaze check: fixation target", size=size)
-        window._check = FixationCheck([], size, 36, 0)
+        targets = list(TARGETS)
+        window._check = FixationCheck(targets, size, 36, 0)
         window._check.results = [
-            FixationResult(name, 90, 0.9, error, spread, near)
-            for name, error, spread, near in (
-                ("Sredina", 12, 8, True),
-                ("Gore lijevo", 14, 10, True),
-                ("Gore desno", 48, 12, False),
-                ("Dolje lijevo", 18, 9, True),
-                ("Dolje desno", None, None, None),
+            FixationResult(name, 90, 0.9 if near is not None else 0.2, error, spread, near, center)
+            for name, error, spread, near, center in (
+                ("Sredina", 12, 8, True, (0.51, 0.5)),
+                ("Gore lijevo", 14, 10, True, (0.05, 0.07)),
+                ("Gore desno", 48, 12, False, (0.92, 0.09)),
+                ("Dolje lijevo", 18, 9, True, (0.05, 0.93)),
+                ("Dolje desno", None, None, None, None),
             )
         ]
         window._show_results()
         self.capture(window, "gaze-check-results", "Gaze check: measured results", size=size)
         window._start_trial()
         window._target.progress = 0.6
+        window._target.progress_target = window._target.expected_button
         self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
+        window._target.target_index = 1
+        window._target.progress_target = window._target.expected_button
+        self.capture(window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size)
+        window._target.target_index = 2
+        window._target.progress_target = window._target.expected_button
+        self.capture(window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size)
+        window._start_free()
+        screen = QGuiApplication.primaryScreen().geometry()
+        point = window._target.mapToGlobal(window._target.rect().center() + QPoint(16, -10))
+        window._snapshot = CheckSnapshot(
+            True, True,
+            gaze=((point.x() - screen.left()) / (screen.width() - 1),
+                  (point.y() - screen.top()) / (screen.height() - 1)),
+            gaze_at=time.monotonic(),
+        )
+        window._render_free()
+        self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
+        window._snapshot = CheckSnapshot()
+        window._render_free()
+        self.capture(window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size)
 
     def capture_speech(self) -> None:
         sample_phrases = [

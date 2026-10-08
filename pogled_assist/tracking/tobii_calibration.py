@@ -95,6 +95,20 @@ def launch_tobii_guest_calibration() -> str:
     )
 
 
+def launch_tobii_settings() -> str:
+    """Open the installed settings UI without sending the Guest shortcut."""
+    if sys.platform != "win32":
+        raise RuntimeError("Tobii postavke se mogu otvoriti samo na Windowsu.")
+    errors: list[str] = []
+    target = _best_tobii_launch_target(settings_only=True)
+    if target is not None and _shell_execute(str(target), errors):
+        logger.info("Tobii settings launch requested: %s", _short_display_path(target))
+        return "Otvaranje Tobii postavki je zatraženo."
+    raise RuntimeError(
+        "Tobii postavke se nisu mogle otvoriti. Otvorite Tobii ikonu pored sata."
+    )
+
+
 def _open_calibration_ui(errors: list[str]) -> str | None:
     configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
     if configured and _launch_configured_command(configured, errors):
@@ -125,8 +139,14 @@ def _launch_configured_command(command: str, errors: list[str]) -> bool:
     return True
 
 
-def _best_tobii_launch_target() -> Path | None:
+def _best_tobii_launch_target(*, settings_only: bool = False) -> Path | None:
     candidates = _start_menu_shortcuts() + _installed_tobii_executables()
+    if settings_only:
+        candidates = [
+            candidate
+            for candidate in candidates
+            if not any(word in candidate.stem.lower() for word in ("calibr", "guest", "test"))
+        ]
     ranked = sorted(
         ((candidate, _target_score(candidate)) for candidate in candidates),
         key=lambda item: item[1],

@@ -33,7 +33,7 @@ from .suggestions.service import SuggestionService
 from .tracking.gaze_provider import TobiiGazeProvider
 from .tracking.mouse_gaze_provider import MouseGazeProvider
 from .tracking.status import TrackingState, TrackingStatus
-from .tracking.tobii_calibration import launch_tobii_guest_calibration
+from .tracking.tobii_calibration import launch_tobii_guest_calibration, launch_tobii_settings
 from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from .ui.gaze_bubble import GazeBubbleWindow
 from .ui.gaze_check_window import GazeCheckWindow
@@ -92,6 +92,7 @@ class HotbarWindow(QWidget):
         self._controller_window: ControllerWindow | None = None
         self._settings_window: SettingsWindow | None = None
         self._gaze_check_window: GazeCheckWindow | None = None
+        self._check_status = TrackingStatus(TrackingState.STOPPED)
         self._restore_button: QToolButton | None = None
         self._zoom_context: str | None = None
         self._foreground = ForegroundTracker(self, self, WindowsInputController)
@@ -785,6 +786,7 @@ class HotbarWindow(QWidget):
         window.calibration_requested.connect(self._calibrate_from_gaze_check)
         self._gaze.diagnostics_updated.connect(window.handle_snapshot)
         self._gaze.eye_status_changed.connect(window.handle_eye_status)
+        window.handle_tracking_status(self._check_status)
         window.handle_snapshot(self._gaze.check_snapshot())
         window.show_fullscreen_on_primary()
 
@@ -803,19 +805,17 @@ class HotbarWindow(QWidget):
             self._settings_window.show_fullscreen_on_primary()
 
     def _check_tracking_state(self, status: TrackingStatus) -> None:
-        if self._gaze_check_window is not None and status.state not in (
-            TrackingState.CONNECTED,
-            TrackingState.SIMULATING,
-        ):
-            self._gaze_check_window.tracking_unavailable()
+        self._check_status = status
+        if self._gaze_check_window is not None:
+            self._gaze_check_window.handle_tracking_status(status)
 
     def _calibrate_from_gaze_check(self) -> None:
         # The check remains open/minimized and normal gaze input stays suspended.
         try:
-            message = launch_tobii_guest_calibration()
+            message = launch_tobii_settings()
         except Exception:
-            logger.exception("Tobii calibration launch from gaze check failed.")
-            message = "Tobii kalibracija se nije mogla otvoriti. Otvorite je u Tobii aplikaciji."
+            logger.exception("Tobii settings launch from gaze check failed.")
+            message = "Otvorite Tobii ikonu pored sata, pa korisnikov profil > Test and recalibrate."
             if self._gaze_check_window is not None:
                 self._gaze_check_window.showNormal()
         self._set_status(message)

@@ -182,6 +182,29 @@ def hotbar_gaze(qtbot, monkeypatch, request):
 
 
 @pytest.mark.e2e
+def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar, controller, feed, _actions, _progress = hotbar_gaze
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._select_tab(1)
+    qtbot.wait(1)
+    point = settings._gaze_check_button.mapToGlobal(settings._gaze_check_button.rect().center())
+    moves = []
+    monkeypatch.setattr(controller._input, "move_to", lambda *args: moves.append(args))
+    feed(point, 0)
+    feed(point, 500)
+    assert hotbar._gaze_check_window is None
+    moves.clear()
+    feed(point, 1100)
+    assert hotbar._gaze_check_window is not None
+    assert controller._input_suspended
+    assert moves == []
+
+
+@pytest.mark.e2e
 def test_gaze_check_suspends_all_input_and_preserves_speech_and_settings(
     hotbar_gaze, qtbot, monkeypatch
 ):
@@ -229,7 +252,7 @@ def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     requests = []
     monkeypatch.setattr(
-        toolbar, "launch_tobii_guest_calibration", lambda: requests.append(True) or "Requested"
+        toolbar, "launch_tobii_settings", lambda: requests.append(True) or "Requested"
     )
     hotbar, controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._open_settings()

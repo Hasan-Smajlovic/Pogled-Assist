@@ -186,7 +186,7 @@ def test_provider_diagnostics_keep_raw_coordinates_and_expire_positions(qapp, mo
     provider.set_check_active(True)
     backend = SimpleNamespace()
     gaze, eyes = provider._new_stream_callbacks()
-    provider._attach_position_observer(backend)
+    provider._attach_check_observers(backend)
     eyes(True, True, 1)
     backend.eye_position_callback((0.4, 0.5, 0.6), (0.6, 0.5, 0.6), 1)
     gaze(-0.2, 1.5, 1)
@@ -249,7 +249,7 @@ def test_position_expiry_is_independent_of_fresh_eye_and_gaze_stream(qapp, monke
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     backend = SimpleNamespace()
-    provider._attach_position_observer(backend)
+    provider._attach_check_observers(backend)
     backend.eye_position_callback((0.4, 0.5, 0.6), (0.6, 0.5, 0.6), 1)
     now[0] = 2
     provider._on_stream_engine_eye_status(True, True, 2)
