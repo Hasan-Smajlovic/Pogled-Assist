@@ -29,10 +29,11 @@ class EyePositionView(QWidget):
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        box = QRectF(26, 12, max(1, self.width() - 52), max(1, self.height() - 76))
+        box = QRectF(26, 24, max(1, self.width() - 52), max(1, self.height() - 88))
         painter.setPen(QPen(QColor("#58647a"), 2, Qt.DashLine))
         painter.drawRoundedRect(box, 10, 10)
         positions = (self.snapshot.left_position, self.snapshot.right_position)
+        markers = []
         for name, position in zip(("L", "D"), positions, strict=True):
             if position is None:
                 continue
@@ -40,10 +41,20 @@ class EyePositionView(QWidget):
             x = box.left() + (1 - min(1.0, max(0.0, position[0]))) * box.width()
             y = box.top() + min(1.0, max(0.0, position[1])) * box.height()
             inside = all(0 <= value <= 1 for value in position)
+            markers.append((name, x, y, inside))
+        if len(markers) == 2:
+            (_, lx, ly, left_inside), (_, rx, ry, right_inside) = markers
+            if (lx - rx) ** 2 + (ly - ry) ** 2 < 32**2:
+                # Clipping can put both eyes at the same edge. Preserve both labels.
+                markers = [("L/D", (lx + rx) / 2, (ly + ry) / 2, left_inside and right_inside)]
+        for name, x, y, inside in markers:
+            radius = 20 if name == "L/D" else 16
             painter.setPen(QPen(QColor(COLORS[inside]), 3))
             painter.setBrush(QColor("#1c2029"))
-            painter.drawEllipse(QPointF(x, y), 16, 16)
-            painter.drawText(QRectF(x - 16, y - 16, 32, 32), Qt.AlignCenter, name)
+            painter.drawEllipse(QPointF(x, y), radius, radius)
+            painter.drawText(
+                QRectF(x - radius, y - radius, radius * 2, radius * 2), Qt.AlignCenter, name
+            )
         painter.setPen(QColor("#bac5d4"))
         if all(position is None for position in positions):
             painter.drawText(box, Qt.AlignCenter, "Položaj očiju nije dostupan")

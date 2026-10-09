@@ -387,8 +387,17 @@ class _CaptureSession:
             "Gaze check: eye positions without valid gaze",
             size=size,
         )
+        waiting_snapshot = window._snapshot
+        for name, title, left, right in (
+            ("too-close", "move display away", (0.6, 0.5, -0.2), (0.4, 0.5, -0.1)),
+            ("too-far", "move display closer", (0.6, 0.5, 1.2), (0.4, 0.5, 1.1)),
+            ("outside-frame", "align display", (1.2, -0.1, 0.5), (1.1, -0.1, 0.5)),
+        ):
+            window._snapshot = replace(waiting_snapshot, left_position=left, right_position=right)
+            window._render_position()
+            self.capture(window, f"gaze-check-{name}", f"Gaze check: {title}", size=size)
         window._snapshot = replace(
-            window._snapshot,
+            waiting_snapshot,
             left=True,
             right_position=None,
         )

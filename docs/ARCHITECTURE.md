@@ -162,6 +162,9 @@ when both eyes are valid for at least 85% of the interval with no loss longer
 than 500 ms. This presentation heuristic does not relax the input gate or prove
 gaze accuracy. Normalized box checks use the device-reported [0, 1] bounds, not a
 hard-coded centimetre conversion or invented central zone.
+Fresh out-of-box eye positions take priority over the missing-gaze hint when
+choosing caregiver movement guidance. Directional guidance never uses stale or
+missing positions and does not require a valid gaze point.
 
 Each fixation target has a one-second settling period and two seconds of
 measurement. At least 12 distinct fresh samples and 60% temporal coverage are
@@ -183,8 +186,10 @@ The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
 constants. Its three groups have 136 × 64, 96 × 88 and 180 × 72 logical-pixel
 controls, each with two neighboring controls. The edge margin is bounded by a
 quarter of each control dimension, as in the normal controller. Wrong selections
-use the same leave-before-repeat lock and are counted separately. Tracking loss
-cancels pending progress but preserves that lock; it cannot count another wrong
+use the same leave-before-repeat lock and are counted separately. The departure
+count includes direct transitions to a neighboring control, even if no sample
+landed in the gap between them. Tracking loss cancels pending progress but
+preserves that lock; it cannot count another wrong
 selection until a fresh gaze sample leaves the neighbor. It never emits Windows input.
 The optional free check paints nine targets and fresh both-eye gaze without
 timing, scoring, smoothing or input. `gaze_check_views.py` owns painting and target

@@ -68,7 +68,11 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    messages distinguish waiting for fresh positions, an unsupported position
    stream, and a disconnected device.
    Fresh eye positions can remain visible while the app waits for a valid gaze
-   point. Recognizing the eyes alone does not enable gaze selection.
+   point. If those positions are outside the tracking box, the screen still gives
+   positioning or distance guidance; it does not wait for a valid gaze point.
+   Overlapping eye markers share an **L/D** label, including when both positions
+   are drawn at the same frame edge. The measured coordinates stay unchanged.
+   Recognizing the eyes alone does not enable gaze selection.
 2. **Provjeri preciznost** presents five automatic targets, about three seconds
    each, at the centre and near the four screen corners, including the hotbar
    area. Look at the small cross in each circle; no gaze click is required. The
@@ -86,8 +90,9 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    screen areas. No click is sent to another program. Eye loss, invalid or stale
    gaze resets progress, while a brief near-edge departure uses the same bounded
    hold as the speech controls. The result counts correct selections, wrong
-   neighboring selections, departures and tracking interruptions. A wrong
-   selection counts once until gaze leaves that neighbor; a blink or missing
+   neighboring selections, departures and tracking interruptions. A direct jump
+   to a neighboring button also counts as a departure and restarts its pause.
+   A wrong selection counts once until gaze leaves that neighbor; a blink or missing
    gaze does not count as leaving. This is a trial;
    individual application controls still need to be checked in actual use.
 

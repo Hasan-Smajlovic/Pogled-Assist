@@ -447,10 +447,6 @@ class GazeCheckWindow(QWidget):
             guidance = "Čekam svježe podatke. Provjerite vezu uređaja i pogledajte prema ekranu."
         elif not (left_visible and right_visible):
             guidance = "Polako podesite položaj i nagib ekrana dok uređaj ponovo vidi oba oka."
-        elif snapshot.gaze is None:
-            guidance = (
-                "Oči su prepoznate, ali nema svježeg položaja pogleda. Pogledajte prema ekranu."
-            )
         elif position is False:
             guidance = "Pomjerajte i nagnite ekran tako da su obje oznake unutar okvira."
         elif depth is False:
@@ -461,6 +457,10 @@ class GazeCheckWindow(QWidget):
                 guidance = "Polako približite ekran licu."
             else:
                 guidance = "Podesite udaljenost i nagib ekrana; pratite oznake na traci."
+        elif snapshot.gaze is None:
+            guidance = (
+                "Oči su prepoznate, ali nema svježeg položaja pogleda. Pogledajte prema ekranu."
+            )
         elif snapshot.stable is False:
             guidance = (
                 "Zadržite ekran mirno. Ako se prekidi nastave, provjerite položaj i osvjetljenje."
@@ -719,7 +719,7 @@ class GazeCheckWindow(QWidget):
             can_hold=hold,
             hold_ms=TOOLBAR_LEAVE_GRACE_MS,
         )
-        if previous is not None and self._selection.target is None:
+        if previous is not None and self._selection.target != previous:
             self._trial_departures += 1
         self._target.progress = result.progress or 0.0
         self._target.progress_target = self._selection.target

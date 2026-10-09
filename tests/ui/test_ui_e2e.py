@@ -350,6 +350,109 @@ def test_trial_edge_hold_matches_normal_control_bounds(gaze_check, scenario):
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize(
+    "left,right,labels",
+    [
+        ((1.2, 0.5, 0.5), (1.1, 0.5, 0.5), {"L/D"}),
+        ((0.51, 0.5, 0.5), (0.49, 0.5, 0.5), {"L/D"}),
+        ((0.6, 0.5, 0.5), (0.4, 0.5, 0.5), {"L", "D"}),
+        ((0.6, 0.5, 0.5), None, {"L"}),
+        ((1.2, -0.1, 0.5), (1.1, -0.1, 0.5), {"L/D"}),
+        ((-0.2, 1.1, 0.5), (-0.1, 1.1, 0.5), {"L/D"}),
+    ],
+)
+def test_position_markers_keep_both_eye_labels_visible(
+    gaze_check, monkeypatch, left, right, labels
+):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+    from pogled_assist.ui import gaze_check_views
+
+    painted_text = []
+    painted_bounds = []
+
+    class RecordingPainter(gaze_check_views.QPainter):
+        def drawText(self, *args):
+            painted_text.append(args[-1])
+            return super().drawText(*args)
+
+        def drawEllipse(self, center, rx, ry):
+            painted_bounds.append(
+                gaze_check_views.QRectF(center.x() - rx, center.y() - ry, 2 * rx, 2 * ry)
+            )
+            return super().drawEllipse(center, rx, ry)
+
+    monkeypatch.setattr(gaze_check_views, "QPainter", RecordingPainter)
+    window, _now, _screen = gaze_check
+    snapshot = CheckSnapshot(False, False, left, right)
+    window.handle_snapshot(snapshot)
+    window._tick()
+    window._eyes_view.grab()
+    assert set(painted_text) & {"L", "D", "L/D"} == labels
+    bounds = gaze_check_views.QRectF(window._eyes_view.rect())
+    assert all(bounds.contains(rect.adjusted(-2, -2, 2, 2)) for rect in painted_bounds)
+    assert window._snapshot == snapshot  # Grouping is presentation-only.
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "left,right,instruction",
+    [
+        ((0.6, 0.5, -0.2), (0.4, 0.5, -0.1), "odmaknite ekran"),
+        ((0.6, 0.5, 1.2), (0.4, 0.5, 1.1), "približite ekran"),
+        ((1.2, 0.5, 0.5), (1.1, 0.5, 0.5), "obje oznake unutar okvira"),
+    ],
+)
+def test_position_guidance_uses_eye_positions_before_valid_gaze(
+    gaze_check, left, right, instruction
+):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window.handle_snapshot(CheckSnapshot(False, False, left, right))
+    window._tick()
+    assert instruction in window._guidance.text()
+    assert window._gaze_label.text().endswith("Čekam položaj pogleda")
+    assert window._snapshot.gaze is None
+    now[0] += 0.6
+    window._tick()
+    assert instruction not in window._guidance.text()
+    assert "Čekam svježe podatke" in window._guidance.text()
+
+
+@pytest.mark.e2e
+def test_trial_counts_direct_neighbor_departure_and_restarts_progress(gaze_check):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, screen = gaze_check
+    window._start_trial()
+
+    def feed(index):
+        now[0] += 0.02
+        point = window._target.mapToGlobal(window._target.button_rect(index).center())
+        gaze = (
+            (point.x() - screen.left()) / (screen.width() - 1),
+            (point.y() - screen.top()) / (screen.height() - 1),
+        )
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
+
+    for _ in range(40):
+        feed(1)
+    assert window._target.progress > 0
+    feed(0)  # A sampled saccade can skip the gap between the two buttons.
+    assert window._target.progress == 0
+    assert window._selection.target == 0
+    assert window._trial_departures == 1
+    assert window._trial_losses == 0
+    assert window._trial_results == []
+    feed(0)
+    assert window._trial_departures == 1
+    feed(1)
+    assert window._trial_departures == 2
+    assert window._target.progress == 0
+    assert window._trial_results == []
+
+
+@pytest.mark.e2e
 def test_position_copy_distinguishes_unsupported_waiting_and_disconnected(gaze_check):
     from pogled_assist.tracking.gaze_check import CheckSnapshot
     from pogled_assist.tracking.status import TrackingState, TrackingStatus
