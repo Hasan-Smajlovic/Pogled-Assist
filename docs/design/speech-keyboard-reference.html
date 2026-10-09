@@ -753,6 +753,9 @@
     checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') checkEl('check-trial-result').textContent='Probni izbor: 3/3 · Pogrešni susjedni izbori: 1 · Prekidi praćenja: 0'; checkMode='results'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-next').textContent='Probaj izbor dugmeta'; checkEl('check-reset').hidden=false; });
     checkEl('check-test-back').addEventListener('click',checkReset);
     checkEl('check-reset').addEventListener('click',checkReset);
+    // Installed settings candidates are tried in rank order. A broken shortcut must
+    // not hide another installed Core settings UI; failure retains the manual tray route.
+    // Settings and legacy calibration both exclude maintenance tools before ranking.
     checkEl('check-calibrate').addEventListener('click',()=>{ checkReset(); checkEl('check-step').textContent='U Tobii Core odaberite korisnikov profil > Test and recalibrate. Guest prečica se ne šalje. Nakon povratka ponovite provjeru.'; });
   </script>
   <script>

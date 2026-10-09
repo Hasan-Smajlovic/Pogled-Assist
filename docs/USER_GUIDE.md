@@ -118,13 +118,17 @@ the check while leaving normal gaze input paused. In Tobii Core, select the
 user's own profile, then **Test and recalibrate**, and **Recalibrate** if needed.
 The check does not send Ctrl+Shift+F10: Tobii documents that shortcut as
 [Guest calibration](https://help.tobii.com/hc/en-us/articles/209530409-Create-a-new-user-profile),
-which uses a separate temporary profile. The existing installation screen and
-hotbar calibration command retain their Guest shortcut flow.
+which uses a separate temporary profile. The existing **Pokreni kalibraciju**
+installation action and **Pokreni Tobii kalibraciju** in Settings retain their
+Guest shortcut flow. This temporary profile does not recalibrate the user's saved
+profile; use **Otvori Tobii postavke** from Gaze check for that task.
 Check [Display setup](https://help.tobii.com/hc/en-us/articles/209529969-Display-setup)
 too: the selected Tobii display must be Windows' primary display, with its
 physical tracker alignment set correctly. The app maps gaze to that primary
-display. If settings cannot be launched, open the Tobii tray icon beside the
-clock manually. The check does not use `TOBII_CALIBRATION_COMMAND` for this
+display. The app tries discovered settings shortcuts and executables in rank
+order, continuing if Windows rejects a target. If settings cannot be launched,
+open the Tobii tray icon beside the clock manually. The check does not use
+`TOBII_CALIBRATION_COMMAND` for this
 settings-only action. Return using the Windows taskbar or **Postavke**, then run
 a new check. Launching the Tobii app does not confirm calibration completed.
 Keep the installed Tobii Core or
@@ -418,7 +422,9 @@ $env:TOBII_STREAM_ENGINE_DLL = "C:\Path\To\tobii_stream_engine.dll"
 ```
 
 If calibration needs a product-specific command, set
-`TOBII_CALIBRATION_COMMAND` before launching the app.
+`TOBII_CALIBRATION_COMMAND` before launching the app. This override belongs to
+the existing Guest calibration action, which still sends Ctrl+Shift+F10 after
+requesting the command. It is not used by **Otvori Tobii postavke**.
 
 Runtime diagnostics are written to `logs\latest.txt` when logging is enabled.
 The launcher writes `start_gaze_mouse.log` even when its window is hidden.

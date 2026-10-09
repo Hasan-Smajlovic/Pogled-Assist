@@ -203,8 +203,12 @@ the pointer during the triggering sample. The hotbar owns signal disconnection,
 Settings return, shutdown and calibration handoff. A minimized calibration
 handoff retains the suspension. This check opens installed Tobii settings with
 instructions for the user's named profile, without the Guest shortcut or the
-operator-set calibration command. Maintenance executables and shortcuts are
-excluded before settings-target ranking, regardless of their folder's score.
+operator-set calibration command. Both settings and legacy calibration exclude
+maintenance executables and shortcuts before ranking, regardless of their folder's score.
+Settings additionally exclude Guest, calibration and test targets.
+Settings candidates are attempted in rank order until Windows accepts a launch;
+a broken shortcut does not prevent trying a discovered Core settings executable.
+Exhausted candidates return the manual tray-icon route, never Guest calibration.
 Existing calibration entry points retain their
 current behavior. Position capability is separate from freshness and connection
 state. No diagnostic history or result is persisted.
