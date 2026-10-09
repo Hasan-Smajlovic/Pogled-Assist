@@ -177,9 +177,13 @@ def _status_header(
     elif run is None:
         lines.append("**Waiting for CI for the latest commit.** Existing previews may be older.")
     elif run["status"] != "completed":
-        lines.append("**New gallery is being prepared.** Existing previews are from an earlier CI run.")
+        lines.append(
+            "**New gallery is being prepared.** Existing previews are from an earlier CI run."
+        )
     elif publication == "preparing":
-        lines.append("**Waiting for gallery publication.** Existing previews have not been refreshed.")
+        lines.append(
+            "**Waiting for gallery publication.** Existing previews have not been refreshed."
+        )
     elif rendered and all(rendered[key] == run[key] for key in ("head_sha", "id", "run_attempt")):
         lines.append("**Gallery matches the latest PR commit and CI run.**")
     else:
@@ -686,7 +690,9 @@ def main() -> None:
     comment = commands.add_parser("comment", help="Update gallery comments after deployment.")
     comment.add_argument("--comments", type=Path, required=True)
     comment.add_argument("--publication-run-id", type=int)
-    status = commands.add_parser("status", help="Refresh an existing comment without publishing images.")
+    status = commands.add_parser(
+        "status", help="Refresh an existing comment without publishing images."
+    )
     status.add_argument("--publication", choices=("preparing", "failed"), required=True)
     status.add_argument("--publication-run-id", type=int, required=True)
     status.add_argument("--ci-run-id", type=int)
