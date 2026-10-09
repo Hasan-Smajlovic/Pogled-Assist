@@ -48,6 +48,10 @@ invalid-eye samples do not restart the connection. A direct native connection
 stays paused until fresh data returns. After a gap in gaze delivery, selection
 starts again from zero rather than confirming a target using time spent waiting.
 
+The blue gaze marker disappears when either eye loses validity, or after
+500 ms without a new gaze point. It returns at the next valid gaze position.
+Restored eye indicators alone do not make an old marker position visible again.
+
 ## Hotbar controls
 
 The left side of the hotbar contains:

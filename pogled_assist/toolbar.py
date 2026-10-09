@@ -904,6 +904,7 @@ class HotbarWindow(QWidget):
         if left_open and right_open:
             return
 
+        self._gaze_bubble.clear()
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()
         self._zoom_context = None

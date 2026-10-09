@@ -111,6 +111,10 @@ Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
 and leaves the pointer at its last position.
+The gaze bubble is cleared immediately on eye loss and expires after 500 ms
+without a delivered gaze point, checked by its existing refresh timer. Eye
+validity alone cannot restore it; it reappears on the next accepted gaze point.
+Changing its visibility setting cannot resurrect a stale or invalid position.
 
 The source-only mouse gaze simulator bypasses tracker discovery and feeds the
 primary-screen cursor position into the same gaze interaction path with both eyes

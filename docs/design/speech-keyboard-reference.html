@@ -33,6 +33,11 @@
     .hotbar-tracking-detail { color: #bec9d9; font-size: 13px; white-space: nowrap; }
     .hotbar-status-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
     .hotbar-status-preview select { padding: 8px; font: inherit; }
+    .gaze-marker-preview { position: relative; height: 320px; border: 1px solid var(--border); border-radius: 8px; margin-top: 20px; }
+    .gaze-marker-preview > p { margin: 20px; color: #bec9d9; }
+    .gaze-marker-dot { position: absolute; top: 170px; left: 60%; width: 46px; height: 46px; border: 5px solid #12b9ff73; border-radius: 50%; background: #12b9ff1c; pointer-events: none; }
+    .gaze-marker-dot::before { content: ''; position: absolute; inset: 5px; border: 2px solid #ebfafbbe; border-radius: 50%; background: #12b9ff48; }
+    .gaze-marker-dot::after { content: ''; position: absolute; top: 14px; left: 14px; width: 8px; height: 8px; border-radius: 50%; background: #ffffffd2; }
     #hotbar-restore { width: 86px; min-height: 76px; font-size: 13px; }
     .sidebar-reference { width: 380px; height: calc(100dvh - 110px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #171d29; }
     .sidebar-reference nav, .sidebar-reference footer { display: flex; gap: 8px; }
@@ -360,6 +365,7 @@
 <body>
   <nav class="reference-switcher" aria-label="Referentni prikaz">
     <button type="button" data-reference-view="hotbar" aria-pressed="false">Početni meni</button>
+    <button type="button" data-reference-view="marker" aria-pressed="false">Oznaka pogleda</button>
     <button type="button" data-reference-view="sidebar" aria-pressed="false">Tastatura</button>
     <button type="button" data-reference-view="controller" aria-pressed="false">Upravljač: tastatura</button>
     <button type="button" data-reference-view="speech" aria-pressed="true">Govor</button>
@@ -404,6 +410,24 @@
     <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
     <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
     <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
+  </main>
+  <main id="marker-screen" hidden>
+    <h1>Oznaka pogleda</h1>
+    <p>Plavi krug prikazuje posljednji svježi, prihvaćeni pogled. Pri gubitku validnosti bilo kojeg oka odmah nestaje. Ako novi pogled ne stigne 500 ms, nestaje pri sljedećem osvježavanju prikaza.</p>
+    <p>Povratak validnosti očiju sam po sebi ne vraća krug. Ponovo se pojavljuje tek na svježoj poziciji pogleda. Isključivanje i ponovno uključivanje oznake ne vraća nevalidnu ili zastarjelu poziciju.</p>
+    <label class="hotbar-status-preview">Primjer stanja
+      <select id="marker-state-preview">
+        <option value="fresh">Svježi pogled</option>
+        <option value="eye-loss">Jedno oko nije prepoznato</option>
+        <option value="stale">Nema novog pogleda 500 ms</option>
+        <option value="eyes-only">Oči su validne, novi pogled još nije stigao</option>
+        <option value="resumed">Stigao je novi pogled</option>
+      </select>
+    </label>
+    <section class="gaze-marker-preview" aria-label="Primjer oznake pogleda">
+      <p id="marker-preview-status" role="status">Svježa pozicija pogleda</p>
+      <span id="marker-preview-dot" class="gaze-marker-dot" aria-hidden="true"></span>
+    </section>
   </main>
   <main id="sidebar-screen" hidden>
     <label>Pregled broja slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label>
@@ -785,6 +809,14 @@
         resetGaze();
       });
 
+      $('marker-state-preview').addEventListener('change', event => {
+        const state = event.target.value;
+        const visible = state === 'fresh' || state === 'resumed';
+        $('marker-preview-dot').hidden = !visible;
+        $('marker-preview-dot').style.left = state === 'resumed' ? '40%' : '60%';
+        $('marker-preview-status').textContent = visible ? 'Svježa pozicija pogleda' : 'Oznaka je skrivena do novog validnog pogleda';
+      });
+
       for (const button of document.querySelectorAll('[data-reference-view]')) {
         button.addEventListener('click', () => {
           if (button.dataset.referenceView === 'speech') {
@@ -883,6 +915,7 @@
         $('settings-screen').hidden = !settingsVisible;
         $('installation-screen').hidden = nextView !== 'installation';
         $('hotbar-screen').hidden = nextView !== 'hotbar';
+        $('marker-screen').hidden = nextView !== 'marker';
         $('sidebar-screen').hidden = nextView !== 'sidebar';
         $('controller-screen').hidden = nextView !== 'controller';
         for (const button of document.querySelectorAll('[data-reference-view]')) {

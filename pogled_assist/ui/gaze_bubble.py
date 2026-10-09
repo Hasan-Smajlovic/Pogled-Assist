@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from ..tracking.gaze_provider import GAZE_DELIVERY_GAP_SECONDS
 from ..windows.windows_z_order import force_window_topmost
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class GazeBubbleWindow(QWidget):
         self._last_point: QPoint | None = None
         self._last_moved_point: QPoint | None = None
         self._last_move_ms = 0.0
+        self._last_gaze_ms = 0.0
         self._last_raise_ms = 0.0
         self._windows_click_through_applied = False
         self._topmost_timer = QTimer(self)
@@ -58,18 +60,26 @@ class GazeBubbleWindow(QWidget):
         self._enabled = enabled
         logger.info("Gaze bubble %s.", "enabled" if enabled else "disabled")
         if not enabled:
-            self._topmost_timer.stop()
-            self.hide()
+            self.clear()
             return
 
-        if self._last_point is not None:
+        if self._last_point is not None and self._gaze_is_fresh():
             self._move_center_to(self._last_point)
             self._last_moved_point = QPoint(self._last_point)
             self._last_move_ms = time.monotonic() * 1000
             self._show_without_focus()
+        else:
+            self.clear()
+
+    def clear(self) -> None:
+        self._topmost_timer.stop()
+        self._last_point = None
+        self._last_moved_point = None
+        self.hide()
 
     def handle_gaze(self, point: QPoint) -> None:
         self._last_point = QPoint(point)
+        self._last_gaze_ms = time.monotonic() * 1000
         if not self._enabled:
             return
 
@@ -135,7 +145,14 @@ class GazeBubbleWindow(QWidget):
             self._topmost_timer.stop()
             return
 
+        if not self._gaze_is_fresh():
+            self.clear()
+            return
+
         force_window_topmost(self, show=True, aggressive=True)
+
+    def _gaze_is_fresh(self) -> bool:
+        return time.monotonic() * 1000 - self._last_gaze_ms < GAZE_DELIVERY_GAP_SECONDS * 1000
 
     def _apply_windows_click_through(self) -> None:
         if self._windows_click_through_applied or sys.platform != "win32":
