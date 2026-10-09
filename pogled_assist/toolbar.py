@@ -815,9 +815,7 @@ class HotbarWindow(QWidget):
             message = launch_tobii_settings()
         except Exception:
             logger.exception("Tobii settings launch from gaze check failed.")
-            message = (
-                "Otvorite Tobii ikonu pored sata, pa korisnikov profil > Test and recalibrate."
-            )
+            message = "Tobii postavke se nisu otvorile. Otvorite Tobii ikonu pored sata."
             if self._gaze_check_window is not None:
                 self._gaze_check_window.showNormal()
         self._set_status(message)

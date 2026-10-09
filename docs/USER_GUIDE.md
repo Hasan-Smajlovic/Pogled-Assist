@@ -76,11 +76,16 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
 2. **Provjeri preciznost** presents five automatic targets, about three seconds
    each, at the centre and near the four screen corners, including the hotbar
    area. Look at the small cross in each circle; no gaze click is required. The
-   gaze dot is hidden during measurement. Results show a map of targets and
-   measured gaze centres, valid-data coverage, median error and gaze spread in
-   Qt logical pixels. They separate measured misses from insufficient data and
-   describe these targets in this position. **Prekini test** cancels
-   and returns to positioning; **Ponovi provjeru** clears the previous results.
+   gaze dot is hidden during measurement. A small progress bar shows test progress,
+   and a message identifies missing gaze or one-eye loss. Results show a map and
+   a short outcome for each target: **Pogled blizu mete**, **Pogled izvan mete**,
+   or **Premalo podataka**. Missing data does not mean a measured miss.
+   The next-step message directs the helper to positioning, profile calibration,
+   or the button trial. **Prikaži mjerenja** reveals valid-data coverage, median
+   error and gaze spread in Qt logical pixels, with plain-language explanations.
+   Exact definitions and thresholds are available in a tooltip and the architecture guide.
+   **Prekini test** cancels and returns to positioning; **Podesi položaj** or
+   **Ponovi provjeru** clears the previous results.
    Known tracking interruptions do not count toward the required measurement
    time; a brief blink preserves the valid intervals before and after it.
 3. **Probaj izbor dugmeta** tries three groups of neighboring controls using the
@@ -89,8 +94,16 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    pixels, representing hotbar, keyboard and suggestion controls in different
    screen areas. No click is sent to another program. Eye loss, invalid or stale
    gaze resets progress, while a brief near-edge departure uses the same bounded
-   hold as the speech controls. The result counts correct selections, wrong
-   neighboring selections, departures and tracking interruptions. A direct jump
+   hold as the speech controls. Live messages explain when gaze leaves the target,
+   selects a neighbor or loses tracking. Progress is green on **Pogledaj** and
+   amber on a neighbor, alongside the text instruction. A cancellation explanation remains until
+   fresh gaze returns. The result counts correct selections, wrong neighboring
+   selections and tracking interruptions; **Prikaži mjerenja** also shows departures.
+   Advice changes after the trial: restore tracking, check position/calibration,
+   retry a timed-out selection, or try the speech keyboard when both checks passed.
+   A brief tracking gap does not fail three successful intended selections; the
+   message suggests adjusting position if cancellations become frequent.
+   **Ponovi probu dugmadi** repeats the trial while retaining precision results. A direct jump
    to a neighboring button also counts as a departure and restarts its pause.
    A wrong selection counts once until gaze leaves that neighbor; a blink or missing
    gaze does not count as leaving. This is a trial;

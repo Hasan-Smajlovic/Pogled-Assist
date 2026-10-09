@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import replace
+from html import escape
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -45,6 +47,8 @@ QPushButton { background: #1c2029; color: #eef2f8; border: 1px solid #58647a;
 QPushButton:hover { background: #262c38; border-color: #8bd5f5; }
 QPushButton:focus { border: 2px solid #8bd5f5; }
 QPushButton#checkPrimary { background: #245f9f; border-color: #8bd5f5; }
+QProgressBar { background: #394253; border: none; border-radius: 3px; }
+QProgressBar::chunk { background: #8bd5f5; border-radius: 3px; }
 """
 
 
@@ -86,6 +90,7 @@ class GazeCheckWindow(QWidget):
         self._trial_departures = 0
         self._trial_wrong_selections = 0
         self._trial_interruptions = 0
+        self._trial_feedback_loss = False
         self._tracking_state: TrackingState | None = None
         self._build_ui()
         self._escape = QShortcut(QKeySequence("Esc"), self)
@@ -101,14 +106,8 @@ class GazeCheckWindow(QWidget):
         header = QHBoxLayout()
         copy = QVBoxLayout()
         copy.addWidget(_label("Provjera pogleda", self, "checkTitle"))
-        copy.addWidget(
-            _label(
-                ("SIMULACIJA MIŠEM · Bez Tobii mjerenja. " if self._simulated else "")
-                + "Ukućanin podešava ekran. Korisnik ostaje u udobnom položaju.",
-                self,
-                "checkHint",
-            )
-        )
+        if self._simulated:
+            copy.addWidget(_label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint"))
         header.addLayout(copy, 1)
         self._close_button = self._button("Zatvori · Esc", self.close)
         header.addWidget(self._close_button)
@@ -121,7 +120,7 @@ class GazeCheckWindow(QWidget):
         self._build_test_page()
         self._build_result_page()
         self._notice = _label(
-            "Upravljanje računarom pogledom je pauzirano dok je ovaj ekran otvoren.",
+            "Upravljanje pogledom je pauzirano tokom provjere.",
             self,
             "checkHint",
         )
@@ -166,6 +165,9 @@ class GazeCheckWindow(QWidget):
         card, layout = self._card(page, "Položaj očiju uživo")
         layout.addWidget(_label("Polako pomjerajte ekran s pričvršćenim Tobijem.", card))
         self._eyes_view = EyePositionView(card)
+        self._eyes_view.setToolTip(
+            "Udaljenost unutar područja koje uređaj može pratiti; nije mjerenje u centimetrima."
+        )
         layout.addWidget(self._eyes_view, 1)
         self._position_notice = _label("Čekam podatke o položaju očiju.", card, "checkHint")
         layout.addWidget(self._position_notice)
@@ -178,7 +180,7 @@ class GazeCheckWindow(QWidget):
         self._left_label = _label("— Lijevo oko · čekam podatke", card)
         self._right_label = _label("— Desno oko · čekam podatke", card)
         self._stability_label = _label("— Prikupljam podatke o praćenju", card)
-        self._gaze_label = _label("— Čekam položaj pogleda", card)
+        self._gaze_label = _label("— Čekam pogled na ekranu", card)
         self._guidance = _label("Pogledajte prema ekranu.", card)
         for label in (
             self._left_label,
@@ -191,15 +193,7 @@ class GazeCheckWindow(QWidget):
         layout.addStretch(1)
         layout.addWidget(
             _label(
-                "Kratki prekidi mogu biti treptaji. Zelene oznake još ne potvrđuju preciznost.",
-                card,
-                "checkHint",
-            )
-        )
-        layout.addWidget(
-            _label(
-                "Tobii Core: korisnikov profil > Test and recalibrate. Display setup mora "
-                "odgovarati primarnom ekranu i položaju uređaja.",
+                "Kratak prekid može biti treptaj. Preciznost provjerite na metama.",
                 card,
                 "checkHint",
             )
@@ -214,10 +208,17 @@ class GazeCheckWindow(QWidget):
         self._test_controls = QFrame(self._target)
         self._test_controls.setObjectName("checkCard")
         layout = QVBoxLayout(self._test_controls)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(6)
         self._test_hint = _label("", self._test_controls)
+        self._test_hint.setTextFormat(Qt.RichText)
         layout.addWidget(self._test_hint, 1)
+        self._test_progress = QProgressBar(self._test_controls)
+        self._test_progress.setRange(0, 1000)
+        self._test_progress.setTextVisible(False)
+        self._test_progress.setFixedHeight(6)
+        self._test_progress.setAccessibleName("Napredak provjere preciznosti")
+        layout.addWidget(self._test_progress)
         buttons = QHBoxLayout()
         self._test_back_button = self._button("Vrati na položaj", self.reset_check)
         self._test_close_button = self._button("Zatvori · Esc", self.close)
@@ -239,26 +240,36 @@ class GazeCheckWindow(QWidget):
         map_column.addWidget(self._result_map, 1)
         map_column.addWidget(
             _label(
-                "Krug: meta · tačka: sredina pogleda\nLinija: smjer odstupanja", card, "checkHint"
+                "Krug = meta · tačka = pogled\nLinija pokazuje koliko je pogled promašio.",
+                card,
+                "checkHint",
             )
         )
         columns.addLayout(map_column, 1)
         columns.addWidget(self._result_detail, 3)
         self._result_advice = _label("", card)
-        self._trial_summary = _label("— Probni izbor nije urađen.", card)
+        self._trial_summary = _label("", card)
+        self._trial_summary.hide()
         layout.addWidget(self._result_summary)
         layout.addLayout(columns, 1)
         layout.addWidget(self._result_advice)
         layout.addWidget(self._trial_summary)
-        layout.addWidget(
-            _label(
-                "Qt logički pikseli. Odstupanje: medijan od mete. Rasipanje: 90. percentil "
-                "od sredine pogleda. Pragovi aplikacije: 90% uzoraka u krugu od 36 px, "
-                "najmanje 60% podataka. Promjena položaja može promijeniti rezultat.",
-                card,
-                "checkHint",
-            )
+        self._details_button = self._button("Prikaži mjerenja", self._render_result_details)
+        self._details_button.setCheckable(True)
+        layout.addWidget(self._details_button, 0, Qt.AlignLeft)
+        self._metrics_hint = _label(
+            "Podaci: dio vremena s važećim pogledom. Odstupanje: udaljenost od mete. "
+            "Rasipanje: koliko se pogled pomjerao. Vrijednosti su u pikselima prikaza (px).",
+            card,
+            "checkHint",
         )
+        self._metrics_hint.setToolTip(
+            "Qt logički pikseli. Odstupanje: medijan od mete. Rasipanje: 90. percentil "
+            "od sredine pogleda. Pragovi aplikacije: 90% uzoraka u krugu od 36 px, "
+            "najmanje 60% podataka. Promjena položaja može promijeniti rezultat."
+        )
+        self._metrics_hint.hide()
+        layout.addWidget(self._metrics_hint)
         self._pages.addWidget(card)
 
     def show_fullscreen_on_primary(self) -> None:
@@ -359,11 +370,23 @@ class GazeCheckWindow(QWidget):
                 self._target.target_index = self._check.index
                 self._target.update()
             remaining = max(1, round(TARGET_SECONDS - (now - self._check.started_at)))
-            self._test_hint.setText(
-                ("SIMULACIJA MIŠEM · " if self._simulated else "")
-                + f"Gledajte sredinu mete {self._check.index + 1}/5 · još {remaining} s. "
-                "Prelazi sama; ne trebate kliknuti."
+            feedback = f"Zadržite pogled · još {remaining} s."
+            state = None
+            if self._snapshot.left is False and self._snapshot.right is True:
+                feedback, state = "Uređaj ne vidi lijevo oko. Pogledajte prema ekranu.", False
+            elif self._snapshot.right is False and self._snapshot.left is True:
+                feedback, state = "Uređaj ne vidi desno oko. Pogledajte prema ekranu.", False
+            elif (
+                self._snapshot.gaze is None
+                or self._snapshot.gaze_at is None
+                or not 0 <= now - self._snapshot.gaze_at < FRESH_SECONDS
+            ):
+                feedback = "Čekam pogled s oba oka. Ako se ne vrati, odaberite „Prekini test“."
+            self._set_test_hint(
+                f"Meta {self._check.index + 1} od 5 · Gledajte križić u krugu.", feedback, state
             )
+            elapsed = self._check.index * TARGET_SECONDS + now - self._check.started_at
+            self._test_progress.setValue(round(1000 * elapsed / (5 * TARGET_SECONDS)))
         elif self._phase == "trial" and now >= self._trial_deadline:
             self._finish_trial_target(False, now)
         elif self._phase == "free":
@@ -385,12 +408,12 @@ class GazeCheckWindow(QWidget):
             position_notice = "Veza uređaja je prekinuta. Čekam ponovno povezivanje."
         elif snapshot.position_supported is False:
             position_notice = (
-                "Ovaj runtime ne šalje položaje očiju. Položaj provjerite u Tobii aplikaciji."
+                "Uređaj ne šalje položaje očiju za ovaj prikaz. Koristite Tobii prikaz položaja."
             )
         elif snapshot.left_position is None and snapshot.right_position is None:
             position_notice = "Čekam svježe podatke o položaju očiju."
         else:
-            position_notice = "Okvir: položaj očiju · traka: dubina, bez pretvaranja u centimetre."
+            position_notice = "Okvir pokazuje položaj očiju, traka ispod udaljenost."
         self._position_notice.setText(position_notice)
         left_visible = snapshot.left_position is not None or snapshot.left
         right_visible = snapshot.right_position is not None or snapshot.right
@@ -433,7 +456,7 @@ class GazeCheckWindow(QWidget):
         self._state(
             self._gaze_label,
             True if snapshot.gaze is not None else None,
-            "Položaj pogleda stiže" if snapshot.gaze is not None else "Čekam položaj pogleda",
+            "Pogled se prati" if snapshot.gaze is not None else "Čekam pogled na ekranu",
         )
         self._stability_label.setToolTip(
             f"Oba oka: {snapshot.available_fraction:.0%} vremena "
@@ -442,7 +465,7 @@ class GazeCheckWindow(QWidget):
         )
         self._eyes_view.snapshot = snapshot
         self._eyes_view.update()
-        guidance = "Zadržite položaj i provjerite preciznost na označenim metama."
+        guidance = "Zadržite položaj i odaberite „Provjeri preciznost“."
         if left_visible is None or right_visible is None:
             guidance = "Čekam svježe podatke. Provjerite vezu uređaja i pogledajte prema ekranu."
         elif not (left_visible and right_visible):
@@ -458,9 +481,7 @@ class GazeCheckWindow(QWidget):
             else:
                 guidance = "Podesite udaljenost i nagib ekrana; pratite oznake na traci."
         elif snapshot.gaze is None:
-            guidance = (
-                "Oči su prepoznate, ali nema svježeg položaja pogleda. Pogledajte prema ekranu."
-            )
+            guidance = "Oči su prepoznate, ali pogled se još ne prati. Pogledajte prema ekranu."
         elif snapshot.stable is False:
             guidance = (
                 "Zadržite ekran mirno. Ako se prekidi nastave, provjerite položaj i osvjetljenje."
@@ -484,7 +505,8 @@ class GazeCheckWindow(QWidget):
         self._trial_results.clear()
         self._target.hide()
         self._target.gaze_point = None
-        self._trial_summary.setText("— Probni izbor nije urađen.")
+        self._trial_summary.hide()
+        self._details_button.setChecked(False)
         self._pages.setCurrentIndex(0)
         self._step.setText("1 · Položaj i praćenje")
         self._primary_button.setText("Provjeri preciznost")
@@ -492,9 +514,7 @@ class GazeCheckWindow(QWidget):
         self._repeat_button.hide()
         self._calibration_button.show()
         self._free_button.show()
-        self._notice.setText(
-            "Upravljanje računarom pogledom je pauzirano dok je ovaj ekran otvoren."
-        )
+        self._notice.setText("Upravljanje pogledom je pauzirano tokom provjere.")
         self._render_position()
 
     def _start_precision(self) -> None:
@@ -504,10 +524,13 @@ class GazeCheckWindow(QWidget):
         self._target.trial = False
         self._target.free = False
         self._target.target_index = 0
-        self._test_hint.setText(
-            ("SIMULACIJA MIŠEM · " if self._simulated else "")
-            + "Gledajte sredinu mete. Prelazi sama; ne trebate kliknuti."
+        self._test_hint.setToolTip("")
+        self._set_test_hint(
+            "Meta 1 od 5 · Gledajte križić u krugu.",
+            "Meta se mijenja sama; ne trebate kliknuti.",
         )
+        self._test_progress.setValue(0)
+        self._test_progress.show()
         self._check = None
         self._primary_button.hide()
         self._calibration_button.hide()
@@ -543,9 +566,9 @@ class GazeCheckWindow(QWidget):
         self._target.setGeometry(self.rect())
         self._target.show()
         self._target.raise_()
-        width = min(620, self.width() - 32)
+        width = min(760, self.width() - 32)
         top = round(self.height() * 0.72) - 70 if self._phase == "free" else self.height() - 158
-        self._test_controls.setGeometry((self.width() - width) // 2, top, width, 140)
+        self._test_controls.setGeometry((self.width() - width) // 2, top, width, 148)
         self._test_controls.show()
         self._test_controls.raise_()
         self._test_back_button.setText(
@@ -559,6 +582,8 @@ class GazeCheckWindow(QWidget):
         self._target.trial = False
         self._target.free = True
         self._target.gaze_point = None
+        self._test_hint.setToolTip("")
+        self._test_progress.hide()
         self._show_test_stage()
         self._render_free()
 
@@ -583,61 +608,134 @@ class GazeCheckWindow(QWidget):
                 )
             )
         self._target.gaze_point = point
-        prefix = "SIMULACIJA MIŠEM · " if self._simulated else ""
-        self._test_hint.setText(
-            prefix
-            + (
-                "Gledajte svaku metu. Zelena tačka pokazuje pogled uživo; nema odbrojavanja ni ocjene."
-                if point is not None
-                else "Čekam svjež pogled s oba oka na ekranu. Nema odbrojavanja ni ocjene."
-            )
+        self._set_test_hint(
+            "Gledajte križiće redom. Zelena oznaka pokazuje vaš pogled.",
+            "Bez odbrojavanja; sami pogledajte je li oznaka blizu križića."
+            if point is not None
+            else "Čekam pogled s oba oka. Ako oznake nema, vratite se na položaj.",
         )
         self._target.update()
+
+    def _set_test_hint(self, instruction: str, feedback: str, state: bool | None = None) -> None:
+        prefix = "SIMULACIJA MIŠEM · " if self._simulated else ""
+        text = (
+            f"{escape(prefix + instruction)}<br>"
+            f'<span style="color: {COLORS[state]}">{escape(feedback)}</span>'
+        )
+        if self._test_hint.text() != text:
+            self._test_hint.setText(text)
 
     def _show_results(self) -> None:
         self._target.hide()
         self._phase = "results"
         self._pages.setCurrentIndex(2)
-        self._step.setText("Rezultat · položaj se može ponovo podesiti")
+        self._step.setText("Rezultat provjere")
         results = self._check.results if self._check is not None else []
         near = sum(result.near is True for result in results)
         missing = sum(result.near is None for result in results)
-        self._result_summary.setText(
-            f"Pogled je bio blizu {near} od {len(results)} meta."
-            if not missing
-            else f"Za {missing} od {len(results)} meta nema dovoljno podataka."
+        trial_finished = len(self._trial_results) == 3
+        state = None if missing or not results else near == len(results)
+        summary = (
+            f"Za {missing} od {len(results)} meta nema dovoljno podataka."
+            if missing
+            else f"Pogled je bio blizu {near} od {len(results)} meta."
         )
-        rows = []
-        for result in results:
-            mark = {True: "✓", False: "!", None: "-"}[result.near]
-            error = f"{result.median_error:.0f} px" if result.median_error is not None else "-"
-            spread = f"{result.spread:.0f} px" if result.spread is not None else "-"
-            rows.append(
-                f"<tr><td>{mark} {result.name}</td><td>{result.coverage:.0%}</td>"
-                f"<td>{error}</td><td>{spread}</td></tr>"
-            )
-        self._result_detail.setText(
-            '<table width="100%" cellspacing="8"><tr><th align="left">Meta</th>'
-            '<th align="left">Podaci</th><th align="left">Odstupanje</th>'
-            '<th align="left">Rasipanje</th></tr>' + "".join(rows) + "</table>"
-            "<p>✓ Blizu · ! Izvan kruga · - nedovoljno podataka</p>"
-        )
+        if not results:
+            summary = "Preciznost još nije provjerena."
+        mark = {True: "✓", False: "!", None: "—"}[state]
+        self._result_summary.setText(f"{mark} {summary}")
+        self._result_summary.setStyleSheet(f"color: {COLORS[state]}; font-size: 23px;")
+        self._render_result_details()
         self._result_map.results = results
         self._result_map.targets = self._check.targets if self._check is not None else []
         self._result_map.update()
-        if missing:
-            advice = "Prvo provjerite prate li se oba oka i stiže li pogled, pa ponovite test."
+        if missing or not results:
+            advice = "Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru."
         elif near == len(results) and results:
-            advice = "Mete su provjerene. Još probajte izbor dugmeta."
+            advice = "Još provjerite izbor dugmeta pogledom."
+            if trial_finished:
+                if self._trial_losses and not all(self._trial_results):
+                    advice = (
+                        "Prekidi praćenja poništavali su izbor. Podesite ekran dok uređaj "
+                        "ne vidi oba oka, pa ponovite probu."
+                    )
+                elif self._trial_wrong_selections:
+                    advice = (
+                        "Izbor je zahvatio i susjedna dugmad. Provjerite položaj i kalibraciju, "
+                        "pa ponovite probu."
+                    )
+                elif not all(self._trial_results):
+                    advice = (
+                        "Neka dugmad nisu odabrana na vrijeme. Ponovite probu; zadržite "
+                        "pogled na „Pogledaj“ dok se traka ne popuni."
+                    )
+                else:
+                    advice = "Zatvorite provjeru i probajte govornu tastaturu."
+                    if self._trial_losses:
+                        advice += " Ako se izbor često poništava, ponovo podesite položaj."
         else:
-            advice = "Podesite položaj i ponovite test. Ako pogled i dalje promašuje, provjerite Tobii kalibraciju."
+            advice = (
+                "Odaberite „Podesi položaj“. Ako pogled i dalje promašuje, "
+                "otvorite Tobii postavke i ponovite kalibraciju korisnikovog profila."
+            )
         self._result_advice.setText(advice)
-        self._primary_button.setText("Probaj izbor dugmeta")
+        self._trial_summary.setVisible(trial_finished)
+        if trial_finished:
+            trial_ok = all(self._trial_results) and not self._trial_wrong_selections
+            self._state(
+                self._trial_summary,
+                trial_ok,
+                f"Probni izbor: {sum(self._trial_results)}/3 · "
+                f"susjedni izbori: {self._trial_wrong_selections} · "
+                f"prekidi praćenja: {self._trial_losses}",
+            )
+        self._primary_button.setText(
+            "Ponovi probu dugmadi" if trial_finished else "Probaj izbor dugmeta"
+        )
         self._primary_button.show()
         self._calibration_button.show()
         self._free_button.show()
-        self._repeat_button.setText("Ponovi provjeru")
+        self._repeat_button.setText("Podesi položaj" if state is not True else "Ponovi provjeru")
         self._repeat_button.show()
+
+    def _render_result_details(self) -> None:
+        detailed = self._details_button.isChecked()
+        self._details_button.setText("Sakrij mjerenja" if detailed else "Prikaži mjerenja")
+        self._metrics_hint.setVisible(detailed)
+        results = self._check.results if self._check is not None else []
+        rows = []
+        for result in results:
+            mark = {True: "✓", False: "!", None: "—"}[result.near]
+            status = {
+                True: "Pogled blizu mete",
+                False: "Pogled izvan mete",
+                None: "Premalo podataka",
+            }[result.near]
+            color = COLORS[result.near]
+            if detailed:
+                error = f"{result.median_error:.0f} px" if result.median_error is not None else "—"
+                spread = f"{result.spread:.0f} px" if result.spread is not None else "—"
+                row = (
+                    f'<td style="color: {color}">{mark} {escape(result.name)}</td>'
+                    f"<td>{result.coverage:.0%}</td><td>{error}</td><td>{spread}</td>"
+                )
+            else:
+                row = (
+                    f'<td>{escape(result.name)}</td><td style="color: {color}">{mark} {status}</td>'
+                )
+            rows.append(f"<tr>{row}</tr>")
+        headings = (
+            ("Meta", "Podaci", "Odstupanje", "Rasipanje") if detailed else ("Meta", "Rezultat")
+        )
+        table = '<table width="100%" cellspacing="8"><tr>'
+        table += "".join(f'<th align="left">{heading}</th>' for heading in headings)
+        table += "</tr>" + "".join(rows) + "</table>"
+        if detailed and self._trial_results:
+            table += (
+                f"<p>Izlasci iz dugmeta: {self._trial_departures}. "
+                f"Prekidi tokom izbora: {self._trial_losses}.</p>"
+            )
+        self._result_detail.setText(table)
 
     def _start_trial(self) -> None:
         self._phase = "trial"
@@ -647,11 +745,13 @@ class GazeCheckWindow(QWidget):
         self._target.free = False
         self._target.target_index = 0
         self._target.progress = 0.0
+        self._test_progress.hide()
         self._trial_results.clear()
         self._trial_losses = self._trial_departures = 0
         self._trial_wrong_selections = 0
         self._trial_interruptions = self._snapshot.gaze_interruptions
         self._trial_sample_at = None
+        self._trial_feedback_loss = False
         self._selection.cancel()
         self._trial_ready_at = time.monotonic()
         self._set_trial_deadline(self._trial_ready_at)
@@ -662,12 +762,18 @@ class GazeCheckWindow(QWidget):
         self._show_test_stage()
 
     def _set_trial_deadline(self, now: float) -> None:
+        self._trial_feedback_loss = False
         duration = (self._settings.selection_pause_ms + self._settings.dwell_ms) / 1000
         self._trial_deadline = now + max(10.0, duration + 6.0)
-        self._test_hint.setText(
-            ("SIMULACIJA MIŠEM · " if self._simulated else "")
-            + f"Zadržite pogled na označenom dugmetu {len(self._trial_results) + 1}/3. "
-            f"Pauza {self._settings.selection_pause_ms} ms + zadržavanje {self._settings.dwell_ms} ms."
+        self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
+        self._test_hint.setToolTip(
+            f"Pauza {self._settings.selection_pause_ms} ms + "
+            f"zadržavanje {self._settings.dwell_ms} ms, kao u aplikaciji."
+        )
+
+    def _set_trial_hint(self, feedback: str, state: bool | None = None) -> None:
+        self._set_test_hint(
+            f"Dugme {len(self._trial_results) + 1} od 3 · Gledajte „Pogledaj“.", feedback, state
         )
 
     def _trial_sample(self, snapshot: CheckSnapshot, now: float) -> None:
@@ -689,6 +795,7 @@ class GazeCheckWindow(QWidget):
         if self._trial_sample_at is not None and at - self._trial_sample_at >= FRESH_SECONDS:
             self._cancel_trial_progress(loss=True)
         self._trial_sample_at = at
+        self._trial_feedback_loss = False
         screen = QGuiApplication.primaryScreen().geometry()
         x, y = snapshot.gaze
         if not (0 <= x <= 1 and 0 <= y <= 1):
@@ -730,6 +837,15 @@ class GazeCheckWindow(QWidget):
                 self._finish_trial_target(True, now)
             else:
                 self._trial_wrong_selections += 1
+                self._set_trial_hint("Odabrano je susjedno dugme. Pogledajte „Pogledaj“.", False)
+        elif target == self._target.expected_button:
+            self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
+        elif target is None:
+            self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)
+        elif self._selection.is_blocked:
+            self._set_trial_hint("Odabrano je susjedno dugme. Pogledajte „Pogledaj“.", False)
+        else:
+            self._set_trial_hint("Pogled je na susjednom dugmetu. Pogledajte „Pogledaj“.", False)
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
         if loss:
@@ -739,9 +855,21 @@ class GazeCheckWindow(QWidget):
                 and not self._selection.is_blocked
             ):
                 self._trial_losses += 1
+                self._trial_feedback_loss = True
+                self._set_trial_hint(
+                    "Praćenje je prekinuto. Pogledajte „Pogledaj“ za novi izbor.", False
+                )
+            elif (
+                self._phase == "trial"
+                and not self._selection.is_blocked
+                and not self._trial_feedback_loss
+            ):
+                self._set_trial_hint("Čekam pogled s oba oka. Pogledajte prema ekranu.")
             self._selection.pause()
         else:
             self._selection.cancel()
+            if self._phase == "trial":
+                self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)
         self._target.progress = 0.0
         self._target.progress_target = None
         self._target.update()
@@ -752,12 +880,6 @@ class GazeCheckWindow(QWidget):
         self._target.progress = 0.0
         self._target.progress_target = None
         if len(self._trial_results) == 3:
-            self._trial_summary.setText(
-                f"Probni izbor: {sum(self._trial_results)}/3 dugmeta. "
-                f"Pogrešni susjedni izbori: {self._trial_wrong_selections}; "
-                f"Izlasci iz dugmeta: {self._trial_departures}; "
-                f"prekidi praćenja tokom izbora: {self._trial_losses}."
-            )
             self._show_results()
         else:
             self._target.target_index = len(self._trial_results)
@@ -768,14 +890,14 @@ class GazeCheckWindow(QWidget):
     def _calibrate(self) -> None:
         self.reset_check()
         self._notice.setText(
-            "U Tobii Core odaberite korisnikov profil > Test and recalibrate. Provjerite "
-            "Display setup za primarni ekran. Nakon toga vratite ovaj prozor i ponovite provjeru."
+            "U Tobii Core odaberite profil korisnika > Test and recalibrate > Recalibrate. "
+            "Vratite se ovdje i ponovite provjeru."
         )
         self.showMinimized()
         self.calibration_requested.emit()
 
     def set_calibration_notice(self, message: str) -> None:
         self._notice.setText(
-            f"{message} Korisnikov profil > Test and recalibrate. "
-            "Provjerite Display setup za primarni ekran. Nakon povratka ponovite provjeru."
+            f"{message}\nOdaberite profil korisnika > Test and recalibrate > Recalibrate, "
+            "zatim se vratite ovdje i ponovite provjeru."
         )

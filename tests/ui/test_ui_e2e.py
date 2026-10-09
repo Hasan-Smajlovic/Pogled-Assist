@@ -128,7 +128,7 @@ def test_precision_does_not_bridge_coalesced_eye_losses(gaze_check, qtbot):
     assert result.coverage == 0
     assert result.near is None
     window._show_results()
-    assert "nedovoljno podataka" in window._result_detail.text()
+    assert "Premalo podataka" in window._result_detail.text()
 
 
 @pytest.mark.e2e
@@ -159,7 +159,7 @@ def test_research_eye_positions_remain_visible_without_enabling_gaze(gaze_check)
     assert window._right_label.text().startswith("✓")
     assert window._distance_label.text().startswith("✓")
     assert window._eyes_view.snapshot.left_position == (0.4, 0.5, 0.6)
-    assert window._gaze_label.text().endswith("Čekam položaj pogleda")
+    assert window._gaze_label.text().endswith("Čekam pogled na ekranu")
     assert "Oči su prepoznate" in window._guidance.text()
     assert window._snapshot.left is window._snapshot.right is False
     assert window._snapshot.gaze is None
@@ -411,7 +411,7 @@ def test_position_guidance_uses_eye_positions_before_valid_gaze(
     window.handle_snapshot(CheckSnapshot(False, False, left, right))
     window._tick()
     assert instruction in window._guidance.text()
-    assert window._gaze_label.text().endswith("Čekam položaj pogleda")
+    assert window._gaze_label.text().endswith("Čekam pogled na ekranu")
     assert window._snapshot.gaze is None
     now[0] += 0.6
     window._tick()
@@ -535,13 +535,15 @@ def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
 
 
 @pytest.mark.e2e
-def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot):
+@pytest.mark.parametrize("simulated", [False, True])
+def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulated):
     from PySide6.QtWidgets import QLabel, QPushButton
 
     from pogled_assist.tracking.gaze_check import FixationResult
 
     window, _now, _screen = gaze_check
-    for phase in ("position", "precision", "results", "trial", "free"):
+    window._simulated = simulated
+    for phase in ("position", "precision", "results", "details", "trial", "free"):
         if phase == "precision":
             window._start_precision()
         elif phase == "results":
@@ -550,6 +552,8 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot):
                 for name, x, y in window._check.targets
             ]
             window._show_results()
+        elif phase == "details":
+            window._details_button.click()
         elif phase == "trial":
             window._start_trial()
         elif phase == "free":
@@ -563,6 +567,212 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot):
             assert window.rect().contains(bounds), (phase, child.text(), bounds)
             if isinstance(child, QPushButton):
                 assert child.height() >= 60
+                assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
+            elif child.hasHeightForWidth():
+                assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "states,advice",
+    [
+        ([True] * 5, "izbor dugmeta"),
+        ([True, False, True, False, True], "Tobii postavke"),
+        ([True, False, True, None, True], "Podesi položaj"),
+        ([None] * 5, "Podesi položaj"),
+    ],
+)
+def test_gaze_check_feedback_results_explain_next_action_without_metrics(
+    gaze_check, qtbot, states, advice
+):
+    from pogled_assist.tracking.gaze_check import FixationResult
+
+    window, _now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, state, (x, y))
+        for (name, x, y), state in zip(window._check.targets, states, strict=True)
+    ]
+    window._show_results()
+    assert advice in window._result_advice.text()
+    assert "px" not in window._result_detail.text()
+    assert "Rasipanje" not in window._result_detail.text()
+    assert not window._trial_summary.isVisible()
+    if None in states:
+        assert "Premalo podataka" in window._result_detail.text()
+        assert window._result_summary.text().startswith("—")
+    elif False in states:
+        assert "Pogled izvan mete" in window._result_detail.text()
+        assert window._result_summary.text().startswith("!")
+    else:
+        assert window._result_summary.text().startswith("✓")
+    results = list(window._check.results)
+    window._details_button.click()
+    assert "Rasipanje" in window._result_detail.text()
+    assert "12 px" in window._result_detail.text()
+    assert window._metrics_hint.isVisible()
+    window._details_button.click()
+    assert "px" not in window._result_detail.text()
+    assert not window._metrics_hint.isVisible()
+    assert window._check.results == results
+    window.reset_check()
+    assert not window._details_button.isChecked()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "selected,wrong,loss,advice",
+    [
+        ([True, True, True], 0, 0, "govornu tastaturu"),
+        ([True, True, True], 0, 1, "govornu tastaturu"),
+        ([True, True, True], 1, 0, "susjedna dugmad"),
+        ([True, True, False], 0, 2, "Prekidi praćenja"),
+        ([False, False, False], 0, 0, "nisu odabrana na vrijeme"),
+    ],
+)
+def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
+    gaze_check, qtbot, selected, wrong, loss, advice
+):
+    from pogled_assist.tracking.gaze_check import FixationResult
+
+    window, _now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._show_results()
+    window._start_trial()
+    window._trial_results = selected
+    window._trial_wrong_selections = wrong
+    window._trial_losses = loss
+    window._show_results()
+    assert advice in window._result_advice.text()
+    assert window._trial_summary.isVisible()
+    assert window._primary_button.text() == "Ponovi probu dugmadi"
+    assert "Izlasci iz dugmeta" not in window._trial_summary.text()
+    if all(selected) and not wrong:
+        assert window._trial_summary.text().startswith("✓")
+        assert "Podesite ekran" not in window._result_advice.text()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("state", [False, None])
+def test_gaze_check_feedback_successful_trial_never_overrides_precision_problem(
+    gaze_check, qtbot, state
+):
+    from pogled_assist.tracking.gaze_check import FixationResult
+
+    window, _now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, state, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._trial_results = [True] * 3
+    window._show_results()
+    assert "govornu tastaturu" not in window._result_advice.text()
+    assert "Podesi položaj" in window._result_advice.text()
+
+
+@pytest.mark.e2e
+def test_gaze_check_feedback_precision_progress_and_loss_do_not_move_target(gaze_check, qtbot):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    center = window._target.center()
+    now[0] = window._check.started_at + 1.5
+    window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=now[0]))
+    window._tick()
+    assert window._test_progress.isVisible()
+    assert 0 < window._test_progress.value() < window._test_progress.maximum()
+    assert "Meta 1 od 5" in window._test_hint.text()
+    window.handle_eye_status(True, False)
+    window._tick()
+    assert "desno oko" in window._test_hint.text()
+    assert window._target.center() == center
+    assert window._phase == "precision"
+    window._start_free()
+    assert not window._test_progress.isVisible()
+
+
+@pytest.mark.e2e
+def test_gaze_check_feedback_precision_does_not_claim_stale_gaze_is_ready(gaze_check, qtbot):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=now[0] - 0.6))
+    window._tick()
+    assert "Čekam pogled" in window._test_hint.text()
+    assert "Zadržite pogled" not in window._test_hint.text()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("button,color", [(0, "#f0c84a"), (1, "#70dfa1")])
+def test_gaze_check_feedback_trial_progress_distinguishes_neighbor(
+    gaze_check, monkeypatch, button, color
+):
+    from pogled_assist.ui import gaze_check_views
+
+    colors = []
+
+    class RecordingPainter(gaze_check_views.QPainter):
+        def fillRect(self, rect, brush):
+            colors.append(brush.name())
+            return super().fillRect(rect, brush)
+
+    monkeypatch.setattr(gaze_check_views, "QPainter", RecordingPainter)
+    window, _now, _screen = gaze_check
+    window._start_trial()
+    window._target.progress_target = button
+    window._target.progress = 0.6
+    window._target.grab()
+    assert color in colors
+
+
+@pytest.mark.e2e
+def test_gaze_check_feedback_trial_explains_neighbor_and_lost_progress(gaze_check):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+
+    window, now, screen = gaze_check
+    window._start_trial()
+
+    def feed(index):
+        now[0] += 0.02
+        point = window._target.mapToGlobal(window._target.button_rect(index).center())
+        window.handle_snapshot(
+            CheckSnapshot(
+                True,
+                True,
+                gaze=(
+                    (point.x() - screen.left()) / (screen.width() - 1),
+                    (point.y() - screen.top()) / (screen.height() - 1),
+                ),
+                gaze_at=now[0],
+            )
+        )
+
+    for _ in range(60):
+        feed(0)
+    assert "susjedno dugme" in window._test_hint.text()
+    assert window._trial_wrong_selections == 1
+    for _ in range(40):
+        feed(1)
+    assert window._target.progress > 0
+    window.handle_eye_status(False, True)
+    assert window._target.progress == 0
+    assert "prekinuto" in window._test_hint.text()
+    now[0] += 0.1
+    window._tick()
+    assert "prekinuto" in window._test_hint.text()
+    feed(1)
+    assert "Zadržite pogled" in window._test_hint.text()
+    assert window._trial_results == []
 
 
 @pytest.mark.e2e

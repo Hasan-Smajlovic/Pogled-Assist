@@ -144,7 +144,7 @@ class CheckTargetView(QWidget):
                             round((rect.width() - 8) * self.progress),
                             8,
                         ),
-                        QColor("#70dfa1"),
+                        QColor(COLORS[index == self.expected_button]),
                     )
                 painter.setPen(QColor("#eef2f8"))
                 label = "Pogledaj" if index == self.expected_button else "Susjed"

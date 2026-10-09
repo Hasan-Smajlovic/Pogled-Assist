@@ -274,6 +274,38 @@ def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize("launch_fails", [False, True])
+def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
+    hotbar_gaze, qtbot, monkeypatch, launch_fails
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import settings_window
+
+    def launch():
+        if launch_fails:
+            raise RuntimeError("Synthetic launch failure")
+        return "Otvaranje Tobii postavki je zatraženo."
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(toolbar, "launch_tobii_settings", launch)
+    hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._open_settings()
+    hotbar._settings_window._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    check._calibration_button.click()
+    qtbot.wait(1)
+    assert controller._input_suspended
+    assert check._notice.text().count("Test and recalibrate") == 1
+    assert "> Recalibrate" in check._notice.text()
+    assert "profil korisnika" in check._notice.text()
+    if launch_fails:
+        assert not check.isMinimized()
+        assert "pored sata" in check._notice.text()
+    else:
+        assert check.isMinimized()
+
+
+@pytest.mark.e2e
 def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hotbar_gaze):
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._gaze.start()

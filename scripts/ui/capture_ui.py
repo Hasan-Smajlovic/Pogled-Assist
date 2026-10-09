@@ -405,6 +405,13 @@ class _CaptureSession:
         self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
         window._start_precision()
         self.capture(window, "gaze-check-precision", "Gaze check: fixation target", size=size)
+        window._snapshot = CheckSnapshot(True, False)
+        window._snapshot_at = time.monotonic()
+        window._check.started_at = time.monotonic() - 1.2
+        window._tick()
+        self.capture(
+            window, "gaze-check-precision-waiting", "Gaze check: fixation eye loss", size=size
+        )
         targets = list(TARGETS)
         window._check = FixationCheck(targets, size, 36, 0)
         window._check.results = [
@@ -419,10 +426,47 @@ class _CaptureSession:
         ]
         window._show_results()
         self.capture(window, "gaze-check-results", "Gaze check: measured results", size=size)
+        window._details_button.click()
+        self.capture(
+            window, "gaze-check-results-details", "Gaze check: optional measurements", size=size
+        )
+        window._details_button.click()
+        window._check.results[-1] = FixationResult(
+            "Dolje desno", 90, 0.9, 48, 12, False, (0.92, 0.9)
+        )
+        window._show_results()
+        self.capture(window, "gaze-check-results-misses", "Gaze check: measured misses", size=size)
+        window._check.results = [
+            FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in targets
+        ]
+        window._show_results()
+        self.capture(window, "gaze-check-results-ready", "Gaze check: targets passed", size=size)
         window._start_trial()
         window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
         self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
+        window._selection.update(
+            window._target.expected_button,
+            time.monotonic() * 1000,
+            pause_ms=500,
+            dwell_ms=500,
+        )
+        window.handle_eye_status(True, False)
+        self.capture(
+            window, "gaze-check-trial-interrupted", "Gaze check: cancelled selection", size=size
+        )
+        wrong = window._target.mapToGlobal(window._target.button_rect(0).center())
+        screen = QGuiApplication.primaryScreen().geometry()
+        gaze = (
+            (wrong.x() - screen.left()) / (screen.width() - 1),
+            (wrong.y() - screen.top()) / (screen.height() - 1),
+        )
+        start = time.monotonic()
+        duration = (self.gaze_settings.selection_pause_ms + self.gaze_settings.dwell_ms) / 1000
+        for sample in range(round(duration / 0.02) + 3):
+            at = start + sample * 0.02
+            window._trial_sample(CheckSnapshot(True, True, gaze=gaze, gaze_at=at), at)
+        self.capture(window, "gaze-check-trial-wrong", "Gaze check: neighbor selected", size=size)
         window._finish_trial_target(True, time.monotonic())
         window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
@@ -434,6 +478,16 @@ class _CaptureSession:
         window._target.progress_target = window._target.expected_button
         self.capture(
             window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
+        )
+        window._finish_trial_target(False, time.monotonic())
+        self.capture(
+            window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
+        )
+        window._trial_results = [True] * 3
+        window._trial_losses = window._trial_wrong_selections = 0
+        window._show_results()
+        self.capture(
+            window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
         )
         window._start_free()
         screen = QGuiApplication.primaryScreen().geometry()
