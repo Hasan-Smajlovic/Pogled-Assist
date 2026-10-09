@@ -147,7 +147,7 @@ class CheckTargetView(QWidget):
                         QColor(COLORS[index == self.expected_button]),
                     )
                 painter.setPen(QColor("#eef2f8"))
-                label = "Pogledaj" if index == self.expected_button else "Susjed"
+                label = "Pogledaj" if index == self.expected_button else "Drugo"
                 painter.drawText(rect, Qt.AlignCenter, label)
         else:
             for point in self.free_centers() if self.free else [center]:

@@ -90,15 +90,17 @@ Escape returns to Settings with fresh dwell state. The speech message is retaine
    time; a brief blink preserves the valid intervals before and after it.
 3. **Probaj izbor dugmeta** tries three groups of neighboring controls using the
    current selection pause and dwell time. Look at **Pogledaj**, beside two
-   **Susjed** buttons. The groups use 136 × 64, 96 × 88 and 180 × 72 logical
+   **Drugo** buttons. The groups use 136 × 64, 96 × 88 and 180 × 72 logical
    pixels, representing hotbar, keyboard and suggestion controls in different
    screen areas. No click is sent to another program. Eye loss, invalid or stale
    gaze resets progress, while a brief near-edge departure uses the same bounded
    hold as the speech controls. Live messages explain when gaze leaves the target,
-   selects a neighbor or loses tracking. Progress is green on **Pogledaj** and
+   rests on another button, confirms a wrong choice, or loses tracking.
+   **Pogled je na drugom dugmetu** does not mean it was selected;
+   **Odabrano je pogrešno dugme** confirms a wrong selection. Progress is green on **Pogledaj** and
    amber on a neighbor, alongside the text instruction. A cancellation explanation remains until
    fresh gaze returns. The result counts correct selections, wrong neighboring
-   selections and tracking interruptions; **Prikaži mjerenja** also shows departures.
+   selections (**pogrešni izbori**) and tracking interruptions; **Prikaži mjerenja** also shows departures.
    Advice changes after the trial: restore tracking, check position/calibration,
    retry a timed-out selection, or try the speech keyboard when both checks passed.
    A brief tracking gap does not fail three successful intended selections; the
@@ -219,7 +221,7 @@ Speech opens a full-screen Bosnian keyboard. Select a letter group, then a lette
 The message field is ready for typing when Speech opens, after its controls or
 dialogs are used, and when returning to Speech with Alt+Tab. Returning focus
 preserves the caret and any selected text. While adding a category, answer, or
-phrase, typing belongs to that new entry. Modal dialogs and Sleep block typing
+phrase, typing belongs to that new entry. Modal dialogs and **Odmor** block typing
 into the message until closed; Settings and other Windows applications keep
 their focus until you return to Speech. Launch still opens the hotbar.
 Space and Backspace stay on the bottom row. `Izgovori` sends the current text to
@@ -272,7 +274,7 @@ The controls on the right remain available while browsing or adding entries:
 
 - `Alarm` stops speech, repeats a distinct local emergency sound, and opens a dialog. Select
   `Zaustavi alarm` to silence it and return to the same Speech state.
-- `Sleep` stops speech and blacks out the display. Select `Nastavi` by gaze or
+- `Odmor` stops speech and blacks out the display. Select `Nastavi` by gaze or
   mouse to restore the message, current list and page, and any unfinished entry.
 - `Izlaz` offers three choices. `Odustani` returns to the same state, `Izađi`
   closes only Speech mode while preserving the conversation message, and

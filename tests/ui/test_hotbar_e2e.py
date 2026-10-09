@@ -314,7 +314,7 @@ def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hot
     assert status._detail.text() == "Upravljanje mišem"
     hotbar._gaze.status_changed.emit("Praćenje simulacijom miša je aktivno.")
     hotbar._gaze.tracker_changed.emit("retrying")
-    hotbar._set_status("Otvoren je izbornik brzih radnji.")
+    hotbar._set_status("Otvoren je meni brzih radnji.")
     assert status._title.text() == "Simulacija mišem"
     hotbar._gaze.stop()
     assert status._title.text() == "Praćenje zaustavljeno"

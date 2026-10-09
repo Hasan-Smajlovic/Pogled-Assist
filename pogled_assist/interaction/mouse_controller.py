@@ -612,7 +612,7 @@ class GazeMouseController(QObject):
             status = (
                 "Otvoreno je precizno uvećanje za brzu radnju."
                 if self.settings.use_precision_zoom
-                else "Otvoren je izbornik brzih radnji."
+                else "Otvoren je meni brzih radnji."
             )
             self.status_changed.emit(status)
 
@@ -659,7 +659,7 @@ class GazeMouseController(QObject):
             self._native_menu_click_pending = True
             self.set_mode(LEFT_CLICK)
             self.status_changed.emit(
-                "Desni klik je otvorio izbornik. Lijevi klik je spreman za odabir."
+                "Desni klik je otvorio meni. Lijevi klik je spreman za odabir."
             )
             return
 

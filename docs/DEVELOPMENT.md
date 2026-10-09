@@ -363,6 +363,11 @@ Review the HTML reference at the target display size before generating the Qt
 gallery. The reference documents the intended result; the gallery and real
 application checks confirm that the implementation matches it.
 
+Application-owned labels and feedback use standard Bosnian. The reference's
+**O ovoj referenci** section owns the UI terminology and language conventions;
+check these when adding or reviewing copy. Product names, exact controls in
+external programs, and text entered by the user retain their original wording.
+
 Generate the gallery:
 
 ```powershell

@@ -527,7 +527,7 @@
       <aside class="system-actions" aria-label="Kontrole aplikacije">
         <h2 class="section-label">Kontrole</h2>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
-        <button class="sleep" type="button" data-action="sleep">Sleep<small>Odmori oči</small></button>
+        <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
         <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
       </aside>
     </div>
@@ -627,14 +627,15 @@
       <h2>Referenca interfejsa Pogled Assist</h2>
       <p>Interaktivna HTML referenca za buduće izmjene Python aplikacije. Tekst i raspored su na bosanskom jeziku. Prebacivač prikazuje govor i opće postavke.</p>
       <ul>
+        <li>Komande i poruke koriste standardni bosanski jezik, ijekavicu, latinicu i dijakritiku. U interfejsu koristimo dugme, tastatura, tačka, meni i Sačuvaj. Probna dugmad nose oznake Pogledaj i Drugo; povratne poruke razlikuju pogled na drugom dugmetu od potvrđenog pogrešnog izbora. Zajedničke riječi koje pripadaju bosanskom jeziku ostaju prihvatljive. Nazivi proizvoda i izvorne komande vanjskih programa ostaju prepoznatljivi, a korisnikovi tekstovi se ne prevode.</li>
         <li>Arapski mijenja samo tastature i smjer unosa. Poruka je vizuelno poravnata uz desni rub polja, uključujući miješani arapski i latinični tekst. Komande ostaju na bosanskom i na istim mjestima. Latinica vraća postojeću tastaturu bez promjene poruke, editorâ ili biblioteke. Arapski režim nema prijedloga riječi. Brojevi i znakovi otvaraju grupe zapadnih i arapskih brojeva, interpunkcije i harekata; oznaka ◌ služi samo za vidljivost harekata i ne unosi se. Prirodni muški arapski glas Hamed zahtijeva internet; nedostupan glas ostavlja poruku sačuvanu i prikazuje grešku. Referentna provjera: 1920 × 1080 fizičkih piksela pri 150%, odnosno 1280 × 720 logičkih piksela.</li>
         <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
         <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
         <li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Svi redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px.</li>
         <li>Kategorije su lijevo od poruke, fraze desno. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista.</li>
         <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
-        <li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Sleep blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
-        <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Sleep i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
+        <li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Odmor blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
+        <li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Odmor i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
         <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
         <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
         <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
@@ -644,20 +645,21 @@
         <li>Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta.</li>
         <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
         <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
-        <li>Sleep zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
+        <li>Odmor zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
         <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
         <li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li>
-        <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno spremanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li>
+        <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno čuvanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li>
       </ul>
       <label><input id="gaze-demo" type="checkbox" checked> Pokazivač miša simulira pogled</label>
       <p class="muted">Za pregled klikom isključite simulaciju. Klik i fizička tastatura rade i bez čekanja.</p>
-      <label>Primjer stanja učenja <select id="learning-demo-state"><option value="saved">Sačuvano</option><option value="write">Spremanje nije uspjelo</option><option value="read">Učitavanje nije uspjelo</option><option value="empty">Nema naučenih riječi</option></select></label>
+      <label>Primjer stanja učenja <select id="learning-demo-state"><option value="saved">Sačuvano</option><option value="write">Čuvanje nije uspjelo</option><option value="read">Učitavanje nije uspjelo</option><option value="empty">Nema naučenih riječi</option></select></label>
       <label><input id="settings-save-error" type="checkbox"> Postavke nisu sačuvane</label>
       <p>Traka označava Postavke * dok čuvanje ne uspije. Otvorite Postavke za ponovni pokušaj.</p>
       <label><input id="library-read-error" type="checkbox"> Biblioteka nije učitana</label>
       <p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p>
-      <p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje Dodaj i Obriši. Uspješan pokušaj vraća spremljene stavke bez promjene poruke.</p>
+      <p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje Dodaj i Obriši. Uspješan pokušaj vraća sačuvane stavke bez promjene poruke.</p>
       <p>Izgovori prikazuje Pokrećem govor., zatim Poruka se izgovara., Čitanje je završeno. ili Govor nije uspio. Pokušajte ponovo. Poruka ostaje sačuvana. Završetak procesa nije potvrda da se zvuk čuo. Novo pokretanje aplikacije zadržava samo postojeću instancu bez promjene fokusa.</p>
+      <p>Poruke o čuvanju koriste Čuvam promjenu… i Čuvanje nije uspjelo. Novi unos nije sačuvan. Status brzih radnji glasi Otvoren je meni brzih radnji. Nakon desnog klika: Desni klik je otvorio meni. Lijevi klik je spreman za odabir.</p>
     </div>
   </details>
   <dialog id="letters-dialog" aria-labelledby="letters-title">
@@ -730,7 +732,7 @@
       trial suggests actual use only when all precision targets also have enough data.
       Keep the target still; animate only the small progress bar below the instruction.
       Dwell progress on the intended button is green; progress on a neighbor is amber,
-      accompanied by the text "Pogled je na susjednom dugmetu. Pogledajte „Pogledaj“."
+      accompanied by the text "Pogled je na drugom dugmetu. Pogledajte „Pogledaj“."
       A brief tracking gap does not invalidate three successful intended selections.
       If all targets and buttons pass, suggest actual use. With gaps, add the conditional
       "Ako se izbor često poništava, ponovo podesite položaj."
@@ -780,7 +782,7 @@
           [180,72,12,Math.floor(window.innerWidth/2)-282,Math.floor(window.innerHeight/2)-36]
         ][checkTrialIndex];
         const expected=[1,0,2][checkTrialIndex];
-        for (let i=0;i<3;i++) { const b=document.createElement('span'); b.className='check-target'; b.style.cssText=`left:${left+i*(width+gap)}px;top:${top}px;width:${width}px;height:${height}px;border-radius:10px;font-size:24px;border-color:${i===expected?'#8bd5f5':'#58647a'}`; b.textContent=i===expected?'Pogledaj':'Susjed'; if(i===expected) {const progress=document.createElement('i');progress.className='check-trial-progress';b.append(progress);} targets.append(b); }
+        for (let i=0;i<3;i++) { const b=document.createElement('span'); b.className='check-target'; b.style.cssText=`left:${left+i*(width+gap)}px;top:${top}px;width:${width}px;height:${height}px;border-radius:10px;font-size:24px;border-color:${i===expected?'#8bd5f5':'#58647a'}`; b.textContent=i===expected?'Pogledaj':'Drugo'; if(i===expected) {const progress=document.createElement('i');progress.className='check-trial-progress';b.append(progress);} targets.append(b); }
         checkEl('check-test-next').textContent=checkTrialIndex<2?'Sljedeća probna grupa':'Prikaži primjer rezultata';
       } else {
         checkEl('check-test-next').textContent='Prikaži primjer rezultata';
@@ -791,7 +793,7 @@
     }
     checkEl('check-next').addEventListener('click',()=>checkStage(checkMode==='results'?'trial':'precision'));
     checkEl('check-free').addEventListener('click',()=>checkStage('free'));
-    checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') { checkEl('check-trial-result').hidden=false; checkEl('check-trial-result').textContent='! Probni izbor: 3/3 · susjedni izbori: 1'; checkEl('check-next').textContent='Ponovi probu dugmadi'; } else checkEl('check-next').textContent='Probaj izbor dugmeta'; checkMode='results'; checkEl('check-step').textContent='Rezultat provjere'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-reset').textContent='Podesi položaj'; checkEl('check-reset').hidden=false; checkResultTable(); });
+    checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') { checkEl('check-trial-result').hidden=false; checkEl('check-trial-result').textContent='! Probni izbor: 3/3 · pogrešni izbori: 1'; checkEl('check-next').textContent='Ponovi probu dugmadi'; } else checkEl('check-next').textContent='Probaj izbor dugmeta'; checkMode='results'; checkEl('check-step').textContent='Rezultat provjere'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-reset').textContent='Podesi položaj'; checkEl('check-reset').hidden=false; checkResultTable(); });
     checkEl('check-details').addEventListener('click',()=>{checkDetails=!checkDetails;checkResultTable();});
     checkEl('check-test-back').addEventListener('click',checkReset);
     checkEl('check-reset').addEventListener('click',checkReset);
@@ -1307,7 +1309,7 @@
             items.splice(items.findIndex(entry => entry.id === id), 1);
             const stored = saveLibrary();
             render();
-            say(stored ? 'Stavka je obrisana.' : 'Obrisano za ovaj pregled. Lokalno spremanje nije dostupno.');
+            say(stored ? 'Stavka je obrisana.' : 'Obrisano za ovaj pregled. Lokalno čuvanje nije dostupno.');
           });
         } else if (item.items) {
           category = id;
@@ -1359,7 +1361,7 @@
         savedMessage = '';
         editor = null;
         render();
-        say(save ? stored ? 'Sačuvano. Vaša poruka je vraćena.' : 'Dodano za ovaj pregled. Lokalno spremanje nije dostupno.' : 'Dodavanje je otkazano. Vaša poruka je vraćena.');
+        say(save ? stored ? 'Sačuvano. Vaša poruka je vraćena.' : 'Dodano za ovaj pregled. Lokalno čuvanje nije dostupno.' : 'Dodavanje je otkazano. Vaša poruka je vraćena.');
       }
 
       function append(value) {

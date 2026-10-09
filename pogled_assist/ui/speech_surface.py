@@ -278,7 +278,7 @@ class SpeechSurface(QWidget):
         system_layout.addWidget(controls_label)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
-            ("Sleep", "Odmori oči", "sleep:start", "systemSleep"),
+            ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
             ("Izlaz", "Izađi ili ugasi aplikaciju", "exit", "systemExit"),
         ):
             button = self._make_button(

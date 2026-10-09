@@ -513,7 +513,7 @@ class HotbarWindow(QWidget):
         self._quick_zoom.close_zoom()
         self._configure_selection_overlay(self._quick_menu)
         self._quick_menu.show_at(center)
-        self._set_status("Otvoren je izbornik brzih radnji.")
+        self._set_status("Otvoren je meni brzih radnji.")
 
     def _quick_action_selected(self, action: str) -> None:
         self._quick_menu.close_menu()

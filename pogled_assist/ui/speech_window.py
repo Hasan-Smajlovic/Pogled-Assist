@@ -722,7 +722,7 @@ class SpeechWindow(SpeechSurface):
             return
 
         if not self._library_store.save(candidate):
-            self._set_status("Spremanje nije uspjelo. Novi unos nije sačuvan.")
+            self._set_status("Čuvanje nije uspjelo. Novi unos nije sačuvan.")
             return
 
         self._library = candidate

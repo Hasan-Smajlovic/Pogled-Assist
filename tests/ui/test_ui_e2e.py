@@ -626,7 +626,7 @@ def test_gaze_check_feedback_results_explain_next_action_without_metrics(
     [
         ([True, True, True], 0, 0, "govornu tastaturu"),
         ([True, True, True], 0, 1, "govornu tastaturu"),
-        ([True, True, True], 1, 0, "susjedna dugmad"),
+        ([True, True, True], 1, 0, "pogrešna dugmad"),
         ([True, True, False], 0, 2, "Prekidi praćenja"),
         ([False, False, False], 0, 0, "nisu odabrana na vrijeme"),
     ],
@@ -650,6 +650,7 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     window._show_results()
     assert advice in window._result_advice.text()
     assert window._trial_summary.isVisible()
+    assert f"pogrešni izbori: {wrong}" in window._trial_summary.text()
     assert window._primary_button.text() == "Ponovi probu dugmadi"
     assert "Izlasci iz dugmeta" not in window._trial_summary.text()
     if all(selected) and not wrong:
@@ -759,7 +760,7 @@ def test_gaze_check_feedback_trial_explains_neighbor_and_lost_progress(gaze_chec
 
     for _ in range(60):
         feed(0)
-    assert "susjedno dugme" in window._test_hint.text()
+    assert "Odabrano je pogrešno dugme" in window._test_hint.text()
     assert window._trial_wrong_selections == 1
     for _ in range(40):
         feed(1)
@@ -773,6 +774,62 @@ def test_gaze_check_feedback_trial_explains_neighbor_and_lost_progress(gaze_chec
     feed(1)
     assert "Zadržite pogled" in window._test_hint.text()
     assert window._trial_results == []
+
+
+@pytest.mark.e2e
+def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, monkeypatch):
+    from pogled_assist.tracking.gaze_check import CheckSnapshot
+    from pogled_assist.ui import gaze_check_views
+
+    labels = []
+
+    class RecordingPainter(gaze_check_views.QPainter):
+        def drawText(self, *args):
+            if isinstance(args[-1], str):
+                labels.append(args[-1])
+            return super().drawText(*args)
+
+    monkeypatch.setattr(gaze_check_views, "QPainter", RecordingPainter)
+    window, now, screen = gaze_check
+    window._start_trial()
+    window._target.grab()
+    assert labels.count("Drugo") == 2
+    assert labels.count("Pogledaj") == 1
+    point = window._target.mapToGlobal(window._target.button_rect(0).center())
+    window.handle_snapshot(
+        CheckSnapshot(
+            True,
+            True,
+            gaze=(
+                (point.x() - screen.left()) / (screen.width() - 1),
+                (point.y() - screen.top()) / (screen.height() - 1),
+            ),
+            gaze_at=now[0],
+        )
+    )
+    assert "Pogled je na drugom dugmetu" in window._test_hint.text()
+    assert "Odabrano" not in window._test_hint.text()
+    assert window._trial_wrong_selections == 0
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
+    qtbot, make_speech_window, script
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("TREBAM ODMOR")
+    rest = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:start"]
+    assert rest.text() == "Odmor\nOdmori oči"
+    rest.click()
+    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.sleep)
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake")
+    assert window._dialogs.active is None
+    assert window._input.text() == "TREBAM ODMOR"
 
 
 @pytest.mark.e2e

@@ -661,7 +661,7 @@ class GazeCheckWindow(QWidget):
                     )
                 elif self._trial_wrong_selections:
                     advice = (
-                        "Izbor je zahvatio i susjedna dugmad. Provjerite položaj i kalibraciju, "
+                        "Odabrana su i pogrešna dugmad. Provjerite položaj i kalibraciju, "
                         "pa ponovite probu."
                     )
                 elif not all(self._trial_results):
@@ -686,7 +686,7 @@ class GazeCheckWindow(QWidget):
                 self._trial_summary,
                 trial_ok,
                 f"Probni izbor: {sum(self._trial_results)}/3 · "
-                f"susjedni izbori: {self._trial_wrong_selections} · "
+                f"pogrešni izbori: {self._trial_wrong_selections} · "
                 f"prekidi praćenja: {self._trial_losses}",
             )
         self._primary_button.setText(
@@ -837,15 +837,15 @@ class GazeCheckWindow(QWidget):
                 self._finish_trial_target(True, now)
             else:
                 self._trial_wrong_selections += 1
-                self._set_trial_hint("Odabrano je susjedno dugme. Pogledajte „Pogledaj“.", False)
+                self._set_trial_hint("Odabrano je pogrešno dugme. Pogledajte „Pogledaj“.", False)
         elif target == self._target.expected_button:
             self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
         elif target is None:
             self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)
         elif self._selection.is_blocked:
-            self._set_trial_hint("Odabrano je susjedno dugme. Pogledajte „Pogledaj“.", False)
+            self._set_trial_hint("Odabrano je pogrešno dugme. Pogledajte „Pogledaj“.", False)
         else:
-            self._set_trial_hint("Pogled je na susjednom dugmetu. Pogledajte „Pogledaj“.", False)
+            self._set_trial_hint("Pogled je na drugom dugmetu. Pogledajte „Pogledaj“.", False)
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
         if loss:
