@@ -288,6 +288,8 @@ Use these existing fakes and regression tests when changing a runtime boundary:
 | --- | --- |
 | Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
+| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
+| Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_e2e.py` |
 | Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
 | AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
@@ -352,7 +354,7 @@ they use local styles and classic scripts, without a server or build step.
 | Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
 | Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
-| Tracking notification draft | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
+| Tracking notifications | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
 | Hotbar | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
 | Standalone keyboard | [keyboard.html](design/keyboard.html) | `docs/design/assets/keyboard.css`, `docs/design/assets/keyboard.js` |
 | Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
@@ -360,7 +362,7 @@ they use local styles and classic scripts, without a server or build step.
 
 Shared navigation and preview session state live in
 `docs/design/assets/reference.js`; shared tokens and controls are in
-`docs/design/assets/reference.css`. The tracking draft also reuses Speech's
+`docs/design/assets/reference.css`. The tracking page also reuses Speech's
 layout styles. Keyboard data and the mouse gaze simulation have separate shared
 scripts, `docs/design/assets/keyboard-data.js` and
 `docs/design/assets/gaze-demo.js`. Preview state is separate from application
@@ -373,9 +375,9 @@ Every change to visible layout, copy, control sizes, states, or interaction flow
 must update the matching page and its assets in the same pull request. When
 instructions name `docs/design/speech-keyboard-reference.html`, they refer to
 this collection through its entry point; edit the index only when navigation
-changes. Update and review the reference first, then implement the matching PySide6 change so the
-reference never describes an older UI. This rule applies to every window,
-sidebar, overlay, dialog, and system control in the application, not only the
+changes. Update and review the reference first, then implement the matching
+PySide6 change so the reference never describes an older UI. This rule applies
+to every window, sidebar, overlay, dialog, and system control, not only the
 Speech window. If a code change has no visible or interaction impact, state that
 explicitly in the pull request instead of editing the reference unnecessarily.
 
@@ -385,8 +387,7 @@ application checks confirm that the implementation matches it.
 
 Application-owned labels and feedback use standard Bosnian. The
 [**O ovoj referenci** page](design/reference-notes.html) owns the UI terminology
-and language conventions; check these when adding or reviewing copy. Product names, exact controls in
-external programs, and text entered by the user retain their original wording.
+and language conventions; check these when adding or reviewing copy.
 
 Generate the gallery:
 
@@ -398,9 +399,7 @@ The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
 already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
 the separate **UI gallery** workflow publishes a browser gallery and updates
 one PR bot comment with main screenshots, resolution links, the rendered commit,
-and a download link. Its status header distinguishes preparing, current, older
-or unavailable previews and a failed publication, with an update time and CI link.
-Setup, publication permissions, and cleanup are defined in
+and a download link. Status reporting, setup, permissions and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.

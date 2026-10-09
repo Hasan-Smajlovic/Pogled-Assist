@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 
-from .gaze_provider import GAZE_DELIVERY_GAP_SECONDS
-from .status import TrackingState, TrackingStatus
+from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 
 NOTICE_DELAY_SECONDS = 0.8
 RECOVERY_SECONDS = 0.5

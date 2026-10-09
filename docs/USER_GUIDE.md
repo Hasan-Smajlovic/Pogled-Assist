@@ -78,107 +78,69 @@ independent of this option.
 
 ## Gaze check
 
-Open **Postavke > Postavke pogleda > Provjera pogleda** when a household member
-needs to set up the display. This optional screen is operated by mouse or
-keyboard; the gaze user only needs to look at the targets. Normal gaze input is
-paused while the check is open, including while it is minimized. **Zatvori** or
-Escape returns to Settings with fresh dwell state. The speech message is retained.
+Open **Postavke > Postavke pogleda > Provjera pogleda** to adjust the display
+and check gaze. A helper operates this optional screen by mouse or keyboard;
+the gaze user looks at the targets. Normal gaze input stays paused while the
+check is open, including while minimized. **Zatvori** or Escape returns to
+Settings; the speech message is retained.
 
-1. **Položaj i praćenje** shows each eye, fresh gaze delivery, and recent eye
-   availability. Keep the user comfortable and adjust the screen with its attached
-   tracker. If supplied by the installed runtime, the frame shows eye positions
-   and the bar shows depth within the tracker's reported tracking box. A checkmark
-   means inside that reported area; it is not a guarantee of gaze accuracy.
-   A dash means unavailable or stale data, never a successful check. Depth is not
-   converted to centimetres. A runtime that supplies only eye validity can still
-   run the target tests; use the Tobii app for its positioning display.
-   The depth bar runs from **Bliže uređaju** to **Dalje od uređaja**. Separate
-   messages distinguish waiting for fresh positions, an unsupported position
-   stream, and a disconnected device.
-   Fresh eye positions can remain visible while the app waits for a valid gaze
-   point. If those positions are outside the tracking box, the screen still gives
-   positioning or distance guidance; it does not wait for a valid gaze point.
-   Overlapping eye markers share an **L/D** label, including when both positions
-   are drawn at the same frame edge. The measured coordinates stay unchanged.
-   Recognizing the eyes alone does not enable gaze selection.
+1. **Položaj i praćenje** shows each eye, gaze delivery and recent tracking
+   continuity. Adjust the screen with its attached tracker. When the runtime
+   supplies positions, the frame shows the eyes and the bar shows depth from
+   **Bliže uređaju** to **Dalje od uređaja**. A checkmark means inside the
+   reported tracking area, not verified accuracy; a dash means unavailable or
+   stale data. Depth is not measured in centimetres. Position guidance can work
+   before valid gaze returns. If positions are unsupported, use the Tobii app's
+   positioning display; the target tests remain available.
 2. **Provjeri preciznost** presents five automatic targets, about three seconds
-   each, at the centre and near the four screen corners, including the hotbar
-   area. Look at the small cross in each circle; no gaze click is required. The
-   gaze dot is hidden during measurement. A small progress bar shows test progress,
-   and a message identifies missing gaze or one-eye loss. Results show a map and
-   a short outcome for each target: **Pogled blizu mete**, **Pogled izvan mete**,
-   or **Premalo podataka**. Missing data does not mean a measured miss.
-   The next-step message directs the helper to positioning, profile calibration,
-   or the button trial. **Prikaži mjerenja** reveals valid-data coverage, median
-   error and gaze spread in Qt logical pixels, with plain-language explanations.
-   Exact definitions and thresholds are available in a tooltip and the architecture guide.
-   **Prekini test** cancels and returns to positioning; **Podesi položaj** or
-   **Ponovi provjeru** clears the previous results.
-   Known tracking interruptions do not count toward the required measurement
-   time; a brief blink preserves the valid intervals before and after it.
-3. **Probaj izbor dugmeta** tries three groups of neighboring controls using the
-   current selection pause and dwell time. Look at **Pogledaj**, beside two
-   **Drugo** buttons. The groups use 136 × 64, 96 × 88 and 180 × 72 logical
-   pixels, representing hotbar, keyboard and suggestion controls in different
-   screen areas. No click is sent to another program. Eye loss, invalid or stale
-   gaze resets progress, while a brief near-edge departure uses the same bounded
-   hold as the speech controls. Live messages explain when gaze leaves the target,
-   rests on another button, confirms a wrong choice, or loses tracking.
-   **Pogled je na drugom dugmetu** does not mean it was selected;
-   **Odabrano je pogrešno dugme** confirms a wrong selection. Progress is green on **Pogledaj** and
-   amber on a neighbor, alongside the text instruction. A cancellation explanation remains until
-   fresh gaze returns. The result counts correct selections, wrong neighboring
-   selections (**pogrešni izbori**) and tracking interruptions; **Prikaži mjerenja** also shows departures.
-   Advice changes after the trial: restore tracking, check position/calibration,
-   retry a timed-out selection, or try the speech keyboard when both checks passed.
-   A brief tracking gap does not fail three successful intended selections; the
-   message suggests adjusting position if cancellations become frequent.
-   **Ponovi probu dugmadi** repeats the trial while retaining precision results. A direct jump
-   to a neighboring button also counts as a departure and restarts its pause.
-   A wrong selection counts once until gaze leaves that neighbor; a blink or missing
-   gaze does not count as leaving. This is a trial;
-   individual application controls still need to be checked in actual use.
+   each, at the centre and near the screen corners. Look at each cross; no gaze
+   click is required. Results distinguish **Pogled blizu mete**, **Pogled izvan
+   mete** and **Premalo podataka**. Missing data is not a measured miss.
+   The advice directs the helper to positioning, profile calibration or the
+   button trial. **Prikaži mjerenja** reveals data coverage, error and spread,
+   with explanations. **Prekini test** returns to positioning; **Podesi položaj**
+   or **Ponovi provjeru** clears the results.
+3. **Probaj izbor dugmeta** tries three sizes of controls with the current
+   selection pause and dwell time. Look at **Pogledaj**, beside two **Drugo**
+   buttons, until the progress bar fills. No click goes to another program.
+   **Pogled je na drugom dugmetu** means gaze is there; **Odabrano je pogrešno
+   dugme** confirms a selection. Progress is green on the intended button and
+   amber on another. Eye loss or missing gaze cancels pending progress without
+   repeating an already completed selection. Results count correct selections,
+   wrong selections and tracking interruptions; **Prikaži mjerenja** also shows
+   departures. Follow the advice to restore tracking, check calibration, retry
+   or try the speech keyboard. **Ponovi probu dugmadi** retains precision
+   results. Individual application controls still need checking in actual use.
 
-**Slobodna provjera** is optional and has nine targets across the screen. Look at
-each target while a green ring shows fresh gaze from both eyes. It has no timer
-or numerical score. Missing, invalid, off-screen or stale gaze hides the ring.
+**Slobodna provjera** shows nine targets and a green ring for fresh gaze from
+both eyes, without timing or a score. Missing or off-screen gaze hides the ring.
 **Vrati na položaj** returns to positioning. This follows the visual feedback
-idea in Tobii Core's [Test and recalibrate](https://help.tobii.com/hc/en-us/articles/213891645-Test-and-recalibrate).
-Use the timed test separately when a measured result is needed.
+idea in Tobii Core's [Test and recalibrate](https://help.tobii.com/hc/en-us/articles/213891645-Test-and-recalibrate);
+use the timed test when a measured result is needed.
 
-The assessment rules in the [architecture guide](ARCHITECTURE.md#gaze-check-measurements)
-are application heuristics, not Tobii-certified thresholds or a clinical assessment.
+The [architecture guide](ARCHITECTURE.md#gaze-check-measurements) defines the
+measurement rules and thresholds. They are application heuristics, not
+Tobii-certified or clinical assessments. A short loss may be a blink; the app
+does not diagnose tears, lighting or illness. Neither recognizing the eyes nor
+the continuity indicator relaxes the both-eye input rule. Connection loss,
+minimizing an active test or resizing cancels it. Simulator results are labeled
+and are not Tobii measurements. Results stay in memory and are discarded on close.
 
-Short eye-validity losses may be blinks; the app does not diagnose tears,
-lighting or illness. The ten-second eye-availability indicator tolerates brief
-gaps, but the actual input gate still cancels on either-eye loss. Tracking loss,
-minimizing an active test, or resizing the window cancels the test. A test without
-enough fresh samples cannot pass. The source mouse simulator is explicitly
-labeled; its results are not Tobii measurements.
-
-**Otvori Tobii postavke** opens the installed settings application and minimizes
-the check while leaving normal gaze input paused. In Tobii Core, select the
-user's own profile, then **Test and recalibrate**, and **Recalibrate** if needed.
-The check does not send Ctrl+Shift+F10: Tobii documents that shortcut as
+**Otvori Tobii postavke** opens the installed Tobii settings and minimizes the
+check. In Tobii Core, select the user's profile, then **Test and recalibrate >
+Recalibrate** if needed. This action does not use `TOBII_CALIBRATION_COMMAND`
+or Ctrl+Shift+F10. Tobii documents that shortcut as
 [Guest calibration](https://help.tobii.com/hc/en-us/articles/209530409-Create-a-new-user-profile),
-which uses a separate temporary profile. The existing **Pokreni kalibraciju**
-installation action and **Pokreni Tobii kalibraciju** in Settings retain their
-Guest shortcut flow. This temporary profile does not recalibrate the user's saved
-profile; use **Otvori Tobii postavke** from Gaze check for that task.
+which uses a temporary profile and does not recalibrate the saved one.
+The existing installation **Pokreni kalibraciju** and Settings
+**Pokreni Tobii kalibraciju** actions retain that Guest flow.
+
 Check [Display setup](https://help.tobii.com/hc/en-us/articles/209529969-Display-setup)
-too: the selected Tobii display must be Windows' primary display, with its
-physical tracker alignment set correctly. The app maps gaze to that primary
-display. The app tries discovered settings shortcuts and executables in rank
-order, continuing if Windows rejects a target. If settings cannot be launched,
-open the Tobii tray icon beside the clock manually. The check does not use
-`TOBII_CALIBRATION_COMMAND` for this
-settings-only action. Return using the Windows taskbar or **Postavke**, then run
-a new check. Launching the Tobii app does not confirm calibration completed.
-Keep the installed Tobii Core or
-Experience software; this feature does not require switching between them.
-The check does not change Tobii software, calibration, or saved settings.
-Measurements stay in memory and are discarded on close; no gaze-check recording
-is saved.
+too: Tobii must use Windows' primary display with correct tracker alignment.
+If settings cannot open, use the Tobii tray icon beside the clock. Return via
+the Windows taskbar or **Postavke**, then run a new check. Opening Tobii settings
+does not confirm calibration completed or change saved app settings. Keep the
+installed Core or Experience software; this feature requires no switch.
 
 ## Hotbar controls
 

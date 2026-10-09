@@ -153,7 +153,7 @@ class FixationCheck:
         self.index = 0
         self.started_at = now
         self.results: list[FixationResult] = []
-        self._samples: list[tuple[float, float, float]] = []
+        self._samples: list[tuple[float, float]] = []
         self._last_sample_at: float | None = None
         self._previous_at: float | None = None
         self._covered_seconds = 0.0
@@ -190,8 +190,7 @@ class FixationCheck:
         if self._previous_at is not None:
             self._covered_seconds += min(0.1, at - self._previous_at)
         self._previous_at = at
-        x, y = snapshot.gaze
-        self._samples.append((at, x, y))
+        self._samples.append(snapshot.gaze)
 
     def interrupt(self) -> None:
         """Do not bridge a known tracking loss, including coalesced eye events."""
@@ -215,7 +214,7 @@ class FixationCheck:
         if len(self._samples) < 12 or coverage < 0.6:
             return FixationResult(name, len(self._samples), coverage, None, None, None)
         width, height = self.screen_size
-        points = [(x * (width - 1), y * (height - 1)) for _, x, y in self._samples]
+        points = [(x * (width - 1), y * (height - 1)) for x, y in self._samples]
         target = target_x * (width - 1), target_y * (height - 1)
         center = median(x for x, _ in points), median(y for _, y in points)
         errors = sorted(math.dist(point, target) for point in points)

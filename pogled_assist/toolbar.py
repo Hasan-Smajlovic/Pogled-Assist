@@ -741,7 +741,7 @@ class HotbarWindow(QWidget):
             and window is not None
             and window.isVisible()
             and not window.isMinimized()
-            and window._dialogs.active in (None, window._dialogs.letter, window._dialogs.confirm)
+            and window.accepts_tracking_notice()
             and self._gaze_check_window is None
             and not _is_visible(self._settings_window)
         )

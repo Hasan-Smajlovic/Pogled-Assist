@@ -401,13 +401,15 @@ class SpeechSurface(QWidget):
         self._tracking_notice = notice
         self._render_tracking_notice(immediate=immediate)
 
+    def accepts_tracking_notice(self) -> bool:
+        return (
+            self._dialogs.active is None or self._dialogs.active in self._dialogs.tracking_notices
+        )
+
     def _render_tracking_notice(self, *, immediate: bool = False) -> None:
         active = self._dialogs.active
-        self._message_header.notice.set_notice(
-            self._tracking_notice if active is None else None,
-            immediate=immediate or active is not None,
-        )
-        for dialog, widget in self._dialogs.tracking_notices.items():
+        hosts = ((None, self._message_header.notice), *self._dialogs.tracking_notices.items())
+        for dialog, widget in hosts:
             widget.set_notice(
                 self._tracking_notice if active is dialog else None,
                 immediate=immediate or active is not dialog,

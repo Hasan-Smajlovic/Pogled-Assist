@@ -148,84 +148,61 @@ button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
 
 ### Gaze-check measurements
 
-`tracking/gaze_check.py` owns ephemeral, time-weighted eye availability and
-known-target evaluation. Collection is enabled only while the check is open and
-cleared on close. The provider publishes a coalesced diagnostic snapshot
-on the Qt thread after pending eye-loss signals. Diagnostics retain raw normalized
-gaze separately from the existing clamped control stream. Native Stream Engine
-copies normalized XYZ from its existing eye-position subscription; the x86
-bridge validates and forwards that optional message. Pro SDK origin validity
-gates its normalized track-box coordinates independently of gaze-point validity.
-Fresh positions remain visible even when gaze points are invalid. Eye-recognition
-indicators accept either a valid position or the existing per-eye input validity;
-fixation, dwell and normal input still require both eyes to pass the input gate.
-Millimetre gaze origins are never interpreted as normalized positions. No new DLL
-subscription is required and the existing backend/eye-validity fallback order
-remains intact.
+The provider collects ephemeral `CheckTelemetry` only while `GazeCheckWindow`
+is open and clears it on close or stream invalidation. Coalesced snapshots reach
+the Qt thread after pending eye-loss signals. Raw normalized diagnostic gaze is
+kept separate from the clamped control stream. Native Stream Engine reuses its
+eye-position subscription; the x86 bridge validates the optional position and
+invalid-gaze messages. Pro SDK uses valid normalized track-box origins, never
+millimetre coordinates. Position capability, freshness and connection state are
+separate; fresh positions can remain visible without valid gaze.
 
-Eye, position and gaze samples expire independently after 500 ms. Availability
-uses elapsed time, not the ratio of valid callbacks, over at most ten seconds.
-After at least three seconds, the UI calls eye availability mostly continuous
-when both eyes are valid for at least 85% of the interval with no loss longer
-than 500 ms. This presentation heuristic does not relax the input gate or prove
-gaze accuracy. Normalized box checks use the device-reported [0, 1] bounds, not a
-hard-coded centimetre conversion or invented central zone.
-Fresh out-of-box eye positions take priority over the missing-gaze hint when
-choosing caregiver movement guidance. Directional guidance never uses stale or
-missing positions and does not require a valid gaze point.
+`tracking/gaze_check.py` owns the measurement rules:
 
-Each fixation target has a one-second settling period and two seconds of
-measurement. At least 12 distinct fresh samples and 60% temporal coverage are
-required. Consecutive valid samples contribute at most 100 ms between them;
-invalid or stale snapshots and eye-loss signals break that interval. Native
-Stream Engine also reports invalid gaze points through an optional observer and
-the x86 bridge, independently of valid eye positions. An interruption counter
-retains these losses even when a newer valid sample arrives before Qt receives
-a snapshot. Both fixation coverage and local dwell reset on a counter change.
-Earlier valid intervals remain
-counted, so a brief blink does not discard the whole target. A near result requires
-90% of samples within the displayed 36 logical-pixel radius. Median error and
-90th-percentile spread are descriptive values, not clinically validated scores.
-Five timed targets cover the centre and screen corners using a full-window
-painting surface. Results retain the normalized median gaze centre for a map,
-alongside coverage, median error and spread. The map clips off-screen centres
-only for painting; it never changes the measured error.
-The local dwell trial reuses `GazeSelectionTimer` and the speech edge-hold
-constants. Its three groups have 136 × 64, 96 × 88 and 180 × 72 logical-pixel
-controls, each with two neighboring controls. The edge margin is bounded by a
-quarter of each control dimension, as in the normal controller. Wrong selections
-use the same leave-before-repeat lock and are counted separately. The departure
-count includes direct transitions to a neighboring control, even if no sample
-landed in the gap between them. Tracking loss cancels pending progress but
-preserves that lock; it cannot count another wrong
-selection until a fresh gaze sample leaves the neighbor. It never emits Windows input.
-The optional free check paints nine targets and fresh both-eye gaze without
-timing, scoring, smoothing or input. `gaze_check_views.py` owns painting and target
-geometry; `gaze_check_window.py` owns the flow and measurements.
+- Eye, position and gaze samples expire independently after 500 ms.
+- Eye availability is time-weighted over at most ten seconds. After three
+  seconds, at least 85% availability with no loss longer than 500 ms is shown as
+  mostly continuous tracking.
+- Position and depth checks use the reported [0, 1] bounds, without a centimetre
+  conversion or invented central zone. Movement guidance uses only fresh
+  positions and takes priority over missing-gaze guidance when outside the box.
+  Recognizing an eye from its position never enables input.
+- Each fixation target has one second to settle and two seconds to measure.
+  A result requires 12 distinct fresh samples and 60% temporal coverage.
+  Consecutive samples contribute at most 100 ms; an invalid or stale snapshot
+  breaks the interval. An interruption counter preserves losses coalesced
+  before Qt delivery. Earlier valid intervals remain counted across a blink.
+- A near result requires 90% of samples inside the displayed 36 logical-pixel
+  radius. Median error and 90th-percentile spread are descriptive heuristics,
+  not Tobii-certified or clinical scores. The result map retains the normalized
+  median centre; clipping off-screen centres affects painting only.
 
-The optional `GazeCheckWindow` suspends `GazeMouseController` input without
-changing saved settings, continues receiving diagnostic samples, and clears all
-pending actions both on entry and exit. The controller checks suspension again
-after synchronous gaze-position slots return, so opening the check cannot move
-the pointer during the triggering sample. The hotbar owns signal disconnection,
-Settings return, shutdown and calibration handoff. A minimized calibration
-handoff retains the suspension. This check opens installed Tobii settings with
-instructions for the user's named profile, without the Guest shortcut or the
-operator-set calibration command. Both settings and legacy calibration exclude
-maintenance executables and shortcuts before ranking, regardless of their folder's score.
-Settings additionally exclude Guest, calibration and test targets.
-Settings candidates are attempted in rank order until Windows accepts a launch;
-a broken shortcut does not prevent trying a discovered Core settings executable.
-Exhausted candidates return the manual tray-icon route, never Guest calibration.
-Existing calibration entry points retain their
-current behavior. Position capability is separate from freshness and connection
-state. No diagnostic history or result is persisted.
-See the [gaze-check guide](USER_GUIDE.md#gaze-check) for the caregiver flow.
+`gaze_check_window.py` owns the flow; `gaze_check_views.py` owns painting and
+geometry. Five timed targets cover the centre and corners. The local trial
+reuses `GazeSelectionTimer`, the speech edge-hold constants and the current pause
+and dwell settings, without Windows input. Its three groups have 136 × 64,
+96 × 88 and 180 × 72 logical-pixel controls, each with two neighbors. The edge
+margin is bounded by a quarter of each dimension. Wrong selections retain the
+leave-before-repeat lock across tracking loss. Departures include direct jumps
+to a neighbor. The free check paints nine targets and fresh both-eye gaze,
+without timing, scoring, smoothing or input.
 
-The coordinate meanings follow Tobii's
-[Stream Engine API](https://developer.tobii.com/product-integration/) and
-[track-box coordinate description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
-Actual normalized-position availability and movement guidance require validation
+The hotbar owns diagnostic signal connections, Settings return, shutdown and
+Tobii settings handoff. Entry and exit clear pending actions; normal controller
+input is suspended while the check is open without changing saved settings.
+Suspension also applies while minimized and is checked again after synchronous
+gaze slots, so the triggering sample cannot move the pointer.
+
+`launch_tobii_settings` tries discovered UI candidates in rank order, excluding
+maintenance, Guest, calibration and test targets. A rejected candidate does not
+block later candidates; exhaustion returns the manual tray-icon route. Existing
+Guest calibration entry points retain their behavior and also exclude
+maintenance targets. The [user guide](USER_GUIDE.md#gaze-check) owns calibration
+instructions and the caregiver flow. No diagnostic history or result is saved.
+
+Coordinates follow Tobii's [Stream Engine API](https://developer.tobii.com/product-integration/)
+and [track-box description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
+Normalized-position availability and movement guidance still require validation
 on the installed 4C runtime; synthetic tests cannot establish hardware accuracy.
 
 ## UI and service ownership
@@ -335,11 +312,9 @@ next installer restore or finish an update interrupted during the directory swap
 
 ## Design reference
 
-[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is the self-contained visual and interaction reference used while developing
-the visible PySide6 interface. Its historical filename is retained for stable
-links. It is not loaded by the application, included by the PyInstaller build,
-or required to install or run Pogled Assist.
+The [HTML design reference](design/speech-keyboard-reference.html) is separate
+from the runtime and package. The [development guide](DEVELOPMENT.md#application-design-reference-workflow)
+owns its page map and review workflow.
 
 ## Compatibility contract
 

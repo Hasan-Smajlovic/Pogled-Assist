@@ -517,20 +517,26 @@ class GazeCheckWindow(QWidget):
         self._notice.setText("Upravljanje pogledom je pauzirano tokom provjere.")
         self._render_position()
 
-    def _start_precision(self) -> None:
+    def _set_test_mode(self, phase: str) -> None:
         self._pages.setCurrentIndex(1)
-        self._phase = "precision"
-        self._step.setText("2 · Preciznost · pet kratkih meta")
-        self._target.trial = False
-        self._target.free = False
+        self._phase = phase
+        self._target.trial = phase == "trial"
+        self._target.free = phase == "free"
         self._target.target_index = 0
+        self._target.gaze_point = None
+        self._target.progress = 0.0
+        self._target.progress_target = None
         self._test_hint.setToolTip("")
+        self._test_progress.setVisible(phase == "precision")
+
+    def _start_precision(self) -> None:
+        self._set_test_mode("precision")
+        self._step.setText("2 · Preciznost · pet kratkih meta")
         self._set_test_hint(
             "Meta 1 od 5 · Gledajte križić u krugu.",
             "Meta se mijenja sama; ne trebate kliknuti.",
         )
         self._test_progress.setValue(0)
-        self._test_progress.show()
         self._check = None
         self._primary_button.hide()
         self._calibration_button.hide()
@@ -576,14 +582,9 @@ class GazeCheckWindow(QWidget):
         )
 
     def _start_free(self) -> None:
-        self._phase = "free"
+        self._set_test_mode("free")
         self._check = None
         self._selection.cancel()
-        self._target.trial = False
-        self._target.free = True
-        self._target.gaze_point = None
-        self._test_hint.setToolTip("")
-        self._test_progress.hide()
         self._show_test_stage()
         self._render_free()
 
@@ -651,7 +652,7 @@ class GazeCheckWindow(QWidget):
         self._result_map.update()
         if missing or not results:
             advice = "Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru."
-        elif near == len(results) and results:
+        elif state is True:
             advice = "Još provjerite izbor dugmeta pogledom."
             if trial_finished:
                 if self._trial_losses and not all(self._trial_results):
@@ -738,14 +739,8 @@ class GazeCheckWindow(QWidget):
         self._result_detail.setText(table)
 
     def _start_trial(self) -> None:
-        self._phase = "trial"
-        self._pages.setCurrentIndex(1)
+        self._set_test_mode("trial")
         self._step.setText("3 · Probni izbor · bez klika drugim programima")
-        self._target.trial = True
-        self._target.free = False
-        self._target.target_index = 0
-        self._target.progress = 0.0
-        self._test_progress.hide()
         self._trial_results.clear()
         self._trial_losses = self._trial_departures = 0
         self._trial_wrong_selections = 0
@@ -835,10 +830,9 @@ class GazeCheckWindow(QWidget):
             self._selection.complete()
             if target == self._target.expected_button:
                 self._finish_trial_target(True, now)
-            else:
-                self._trial_wrong_selections += 1
-                self._set_trial_hint("Odabrano je pogrešno dugme. Pogledajte „Pogledaj“.", False)
-        elif target == self._target.expected_button:
+                return
+            self._trial_wrong_selections += 1
+        if target == self._target.expected_button:
             self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
         elif target is None:
             self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)

@@ -12,7 +12,7 @@ from typing import Any
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 
 from .gaze_check import CheckSnapshot, CheckTelemetry
-from .status import TrackingState, TrackingStatus
+from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 from .tobii_stream_engine import (
     EyeStatusCallback,
     GazeCallback,
@@ -32,7 +32,6 @@ GAZE_EMIT_INTERVAL_MS = 20
 COALESCED_SAMPLE_LOG_INTERVAL = 3000
 STREAM_EYE_STALE_SECONDS = 0.5
 STREAM_RESTART_SECONDS = 3.0
-GAZE_DELIVERY_GAP_SECONDS = 0.5
 
 
 class TobiiGazeProvider(QObject):
