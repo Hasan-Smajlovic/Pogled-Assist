@@ -107,6 +107,14 @@ readiness after 500 ms without gaze; it does not change the input gate, dwell,
 backend subscriptions, or reconnect policy. See the
 [status guide](USER_GUIDE.md#before-starting) for the visible states.
 
+`TrackingFeedback` observes the same delivered lifecycle, eye and gaze signals
+for passive Speech notifications. `TrackingFeedbackState` owns presentation
+timing separately from input safety. Only the message header and active letter
+or confirmation header display a notice; no gaze target or modal action is added.
+The [notification guide](USER_GUIDE.md#tracking-notifications-in-speech) owns
+the setting, timing and suppressed contexts. Neither notification timing nor
+turning the setting off changes pointer movement, dwell cancellation or retries.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,

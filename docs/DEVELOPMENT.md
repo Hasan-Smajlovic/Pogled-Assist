@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 62 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 69 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -404,7 +404,7 @@ Setup, publication permissions, and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 62 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 69 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -425,6 +425,8 @@ The command renders:
   three local dwell trial sizes, cancelled selection and wrong-neighbor feedback,
   trial results needing adjustment, completed check, and free check with and without live gaze
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
+- Speech tracking notifications: eye loss, missing gaze, disconnected device,
+  repeated interruptions, recovery, letter selection and deletion confirmation
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
@@ -441,7 +443,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 62-surface gallery.
+covered by UI interaction tests; it is not part of the 69-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -469,6 +471,10 @@ On a normal development machine, verify:
   gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
 - Settings survive an application restart.
+- Tracking notifications are initially enabled, can be disabled in Gaze Settings,
+  leave targets fixed in Speech and its letter/deletion dialogs, and restore the
+  message field after recovery. Check that Rest, Settings and Gaze check suppress
+  them, without suppressing the independent both-eye safety gate.
 - Logs appear under `logs` only when logging is enabled.
 - Closing the app removes AppBar reservations and child windows.
 - Bosnian suggestions complete a partial word and offer a next word offline.
@@ -505,6 +511,10 @@ On the Tobii machine, additionally verify:
 - Both labeled eye indicators reflect real validity. Hide removes the whole
   status with the hotbar; Show restores its current state.
 - Losing one eye cancels dwell progress and stops pointer movement.
+- In Speech and its letter/deletion dialogs, check short blinks, sustained one-eye
+  loss, repeated losses, missing gaze and disconnect/reconnect. A sustained issue
+  shows the correct notice; fresh tracking turns it green briefly and then hides
+  it. Turning notifications off must never allow selection with one invalid eye.
 - At 150% scaling, select Speech, Keyboard, and Settings from the top screen edge
   without a mouse. Gaps between buttons must not select either neighbor.
 - In Speech, the hotbar, and standalone Keyboard, a brief movement just beyond a button edge freezes progress without

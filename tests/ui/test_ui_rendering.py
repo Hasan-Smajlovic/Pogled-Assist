@@ -46,7 +46,7 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch, size):
     output_dir = Path(gallery_root) / f"{size[0]}x{size[1]}" if gallery_root else tmp_path
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 62
+    assert len(snapshots) == 69
     assert (output_dir / "index.html").is_file()
     for snapshot in snapshots:
         image = QImage(str(snapshot))

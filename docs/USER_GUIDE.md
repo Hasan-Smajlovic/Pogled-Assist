@@ -48,6 +48,34 @@ invalid-eye samples do not restart the connection. A direct native connection
 stays paused until fresh data returns. After a gap in gaze delivery, selection
 starts again from zero rather than confirming a target using time spent waiting.
 
+## Tracking notifications in Speech
+
+**Postavke > Postavke pogleda > Obavijesti o praćenju pogleda** is on by
+default, including when loading settings from an older release. Turn it off to
+hide Speech notifications; the both-eye safety rule still applies immediately.
+
+Speech normally has no notification or reserved empty row. A tracking problem
+lasting about 0.8 seconds shows a notice in the message header, letter dialog,
+or deletion confirmation. It distinguishes missing eye data, missing fresh gaze
+and a disconnected device. Three eye-tracking interruptions of at least 0.35 seconds within
+10 seconds can also show **Praćenje često prekida · provjerite položaj uređaja**.
+These presentation thresholds filter short interruptions; they do not delay
+cancellation of gaze selection or identify a medical cause.
+
+After both eyes and fresh gaze return, **Praćenje se vraća** appears while
+stability is checked. About half a second of continuous valid tracking changes
+it to green **Možete nastaviti** for two seconds, then it slides away. Another
+interruption updates the same notice. Green confirms that tracking data has
+returned, not calibration accuracy. It adds no waiting time to normal selection.
+During repeated interruptions, a warning can coexist with usable tracking;
+**odabir je zaustavljen** appears only while selection lacks valid data.
+
+The notice takes no focus and requires no acknowledgement. Buttons stay in
+place and the message field retains its full width; its original height returns
+when the notice disappears. Rest, Gaze check, Settings and hidden or minimized
+Speech do not produce these notifications. The existing hotbar status remains
+independent of this option.
+
 ## Gaze check
 
 Open **Postavke > Postavke pogleda > Provjera pogleda** when a household member

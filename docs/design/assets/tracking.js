@@ -5,12 +5,12 @@
   const trackingStates = {
     ready: { title: '', detail: '', tone: 'ready', eyes: [true, true], gaze: true },
     brief: { title: 'Praćenje je prekinuto', detail: '', tone: 'quiet', eyes: [false, true], gaze: false },
-    right: { title: 'Desno oko se trenutno ne prati', detail: 'Odabir je zaustavljen.', tone: 'warning', eyes: [true, false], gaze: false, help: true },
-    left: { title: 'Lijevo oko se trenutno ne prati', detail: 'Odabir je zaustavljen.', tone: 'warning', eyes: [false, true], gaze: false, help: true },
-    both: { title: 'Praćenje oba oka je prekinuto', detail: 'Pogledajte prema ekranu.', tone: 'warning', eyes: [false, false], gaze: false, help: true },
-    waiting: { title: 'Čekam podatke o pogledu', detail: 'Odabir je zaustavljen.', tone: 'quiet', eyes: [true, true], gaze: false },
-    frequent: { title: 'Praćenje često prekida', detail: 'Provjerite položaj uređaja.', tone: 'warning', eyes: [true, true], gaze: true, help: true },
-    disconnected: { title: 'Uređaj nije povezan', detail: 'Pokušavam ponovo.', tone: 'error', eyes: [null, null], gaze: false },
+    right: { title: 'Desno oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [true, false], gaze: false },
+    left: { title: 'Lijevo oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [false, true], gaze: false },
+    both: { title: 'Praćenje oba oka je prekinuto', detail: 'pogledajte prema ekranu', tone: 'warning', eyes: [false, false], gaze: false },
+    waiting: { title: 'Čekam podatke o pogledu', detail: 'odabir je zaustavljen', tone: 'quiet', eyes: [true, true], gaze: false },
+    frequent: { title: 'Praćenje često prekida', detail: 'provjerite položaj uređaja', tone: 'warning', eyes: [true, true], gaze: true },
+    disconnected: { title: 'Uređaj nije povezan', detail: 'pokušavam ponovo', tone: 'error', eyes: [null, null], gaze: false },
     stabilizing: { title: 'Praćenje se vraća', detail: '', tone: 'quiet', eyes: [true, true], gaze: true },
     recovered: { title: 'Možete nastaviti', detail: '', tone: 'ready', eyes: [true, true], gaze: true },
   };
@@ -71,11 +71,11 @@
     const host = context === 'message' ? background : foreground;
     (context === 'message' ? foreground : background).replaceChildren();
     if (!host.firstElementChild) {
-      host.innerHTML = '<div class="tracking-feedback" aria-hidden="true" inert><div class="tracking-eyes"></div><div class="tracking-feedback-copy" role="status" aria-live="polite" aria-atomic="true"><p class="tracking-feedback-title"></p><p class="tracking-feedback-detail" hidden></p></div><button type="button" class="tracking-help" data-tracking-help>Provjera pogleda</button></div>';
+      host.innerHTML = '<div class="tracking-feedback" aria-hidden="true" inert><div class="tracking-eyes"></div><p class="tracking-feedback-copy" role="status" aria-live="polite" aria-atomic="true"><span class="tracking-feedback-title"></span><span class="tracking-feedback-detail" hidden></span></p></div>';
     }
     const feedback = host.firstElementChild;
     const noticeVisible = showFeedback && trackingNoticeOpen;
-    document.querySelector('.tracking-message-heading').dataset.notice = String(noticeVisible && context === 'message');
+    document.querySelector('.tracking-app .message-box').dataset.notice = String(noticeVisible && context === 'message');
     feedback.dataset.visible = String(noticeVisible);
     feedback.inert = !noticeVisible;
     feedback.setAttribute('aria-hidden', String(!noticeVisible));
@@ -91,12 +91,9 @@
       const title = feedback.querySelector('.tracking-feedback-title');
       if (title.textContent !== state.title) title.textContent = state.title;
       const detail = feedback.querySelector('.tracking-feedback-detail');
-      if (detail.textContent !== state.detail) detail.textContent = state.detail;
+      const detailText = state.detail ? ' · ' + state.detail : '';
+      if (detail.textContent !== detailText) detail.textContent = detailText;
       detail.hidden = !state.detail;
-      const help = feedback.querySelector('.tracking-help');
-      help.classList.toggle('tracking-help-slot', !state.help);
-      help.tabIndex = state.help ? 0 : -1;
-      help.setAttribute('aria-hidden', String(!state.help));
     }
     document.querySelectorAll('.tracking-demo-target').forEach(button => {
       button.classList.remove('tracking-demo-target');
@@ -149,9 +146,6 @@
     } else if (button.id === 'tracking-confirm') {
       $('tracking-message').value = '';
       setTrackingContext('message');
-    } else if (button.hasAttribute('data-tracking-help')) {
-      stopTrackingDemo();
-      ReferenceDesign.open('gaze-check', { return: 'tracking' });
     }
   });
   $('tracking-demo').addEventListener('click', () => {

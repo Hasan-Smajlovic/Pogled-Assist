@@ -28,6 +28,7 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
+from pogled_assist.tracking.feedback import TrackingNotice
 from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
@@ -525,6 +526,7 @@ class _CaptureSession:
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.capture_tracking_feedback()
         self.speech._view_mode = "categories"
         self.speech._show_list_level()
         self.capture(self.speech, "speech-categories", "Speech categories")
@@ -549,6 +551,61 @@ class _CaptureSession:
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
         self.capture(dialog, name, title, size=(dialog.width(), dialog.height()))
+
+    def capture_tracking_feedback(self) -> None:
+        self.speech._input.setText("TREBAM VODE")
+        for name, notice in (
+            (
+                "warning",
+                TrackingNotice(
+                    "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
+                ),
+            ),
+            (
+                "waiting",
+                TrackingNotice(
+                    "Čekam podatke o pogledu", "odabir je zaustavljen", "quiet", (True, True)
+                ),
+            ),
+            ("disconnected", TrackingNotice("Uređaj nije povezan", "pokušavam ponovo", "error")),
+            (
+                "frequent",
+                TrackingNotice(
+                    "Praćenje često prekida", "provjerite položaj uređaja", eyes=(True, True)
+                ),
+            ),
+            ("recovered", TrackingNotice("Možete nastaviti", tone="ready", eyes=(True, True))),
+        ):
+            self.speech.set_tracking_notice(notice, immediate=True)
+            self.capture(self.speech, f"speech-tracking-{name}", f"Speech tracking: {name}")
+        self.speech._open_letter_dialog(0)
+        self.speech.set_tracking_notice(
+            TrackingNotice(
+                "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
+            ),
+            immediate=True,
+        )
+        self.capture_dialog(
+            self.speech._dialogs.letter,
+            "speech-tracking-letters",
+            "Speech letters: tracking interrupted",
+        )
+        self.speech._close_dialog()
+        self.speech._open_clear_dialog()
+        self.speech.set_tracking_notice(
+            TrackingNotice(
+                "Lijevo oko se trenutno ne prati", "odabir je zaustavljen", eyes=(False, True)
+            ),
+            immediate=True,
+        )
+        self.capture_dialog(
+            self.speech._dialogs.confirm,
+            "speech-tracking-confirm",
+            "Clear message: tracking interrupted",
+        )
+        self.speech._close_dialog()
+        self.speech.set_tracking_notice(None, immediate=True)
+        self.speech._input.clear()
 
     def capture_speech_dialogs(self) -> None:
         self.speech._start_alarm()

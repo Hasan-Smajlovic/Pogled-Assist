@@ -52,6 +52,7 @@ class GazeSettings:
     move_mouse: bool = True
     show_gaze_bubble: bool = True
     show_interaction_overlay: bool = True
+    show_tracking_notifications: bool = True
     use_precision_zoom: bool = True
     start_with_windows: bool = False
     logging_enabled: bool = True

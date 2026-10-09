@@ -24,12 +24,12 @@
   width: 100%;
   flex: 1;
   min-height: 60px;
-  padding: 10px 16px;
+  padding: 6px 12px;
   border: 2px solid #465268;
   border-radius: 8px;
   background: #0b0d11;
   color: #fff;
-  font-size: clamp(23px, 2.2vw, 34px);
+  font-size: 28px;
   text-align: center;
 }
 #message::placeholder { color: #a0adbf; font-size: .8em; }
@@ -73,6 +73,10 @@ dialog {
 }
 dialog::backdrop { background: #000c; }
 dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
+#letters-dialog, #confirm-dialog { width: min(1000px, calc(100vw - 64px)); }
+#letters-dialog { padding: 24px 28px; }
+#letters-dialog h2, #confirm-dialog h2 { min-height: 60px; display: flex; align-items: center; }
+#letters-dialog h2 { margin-bottom: 18px; }
 .letter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .letter-grid.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .letter-grid button { min-height: 120px; font-size: 38px; }
@@ -92,7 +96,7 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
 #speech-closed-screen .closed-content, #closed-screen .closed-content { text-align: center; padding: 24px; }
 #speech-closed-screen button, #closed-screen button { width: min(420px, 80vw); }
 @media (max-height: 760px) and (min-width: 901px) {
-  .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 80px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
+  .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 96px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
   .word { min-height: 68px; }
   .key-grid, .item-grid { grid-template-rows: repeat(3, minmax(64px, 1fr)); }
 }

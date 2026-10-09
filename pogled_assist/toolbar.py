@@ -30,6 +30,7 @@ from .settings_store import load_app_settings, save_app_settings
 from .speech.speech_library import speech_library_store
 from .speech.speech_service import SpeechService
 from .suggestions.service import SuggestionService
+from .tracking.feedback import TrackingNotice
 from .tracking.gaze_provider import TobiiGazeProvider
 from .tracking.mouse_gaze_provider import MouseGazeProvider
 from .tracking.status import TrackingState, TrackingStatus
@@ -45,6 +46,7 @@ from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
 from .ui.settings_window import SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
+from .ui.tracking_feedback import TrackingFeedback
 from .windows.appbar import WindowsAppBar
 from .windows.foreground_tracker import ForegroundTracker
 from .windows.windows_input import WindowsInputController
@@ -108,6 +110,11 @@ class HotbarWindow(QWidget):
         self._gaze_bubble.set_enabled(self._mouse.settings.show_gaze_bubble)
         self._interaction_overlay = InteractionOverlayWindow()
         self._interaction_overlay.set_enabled(self._mouse.settings.show_interaction_overlay)
+        self._tracking_feedback = TrackingFeedback(
+            self,
+            self._tracking_feedback_active,
+            enabled=self._mouse.settings.show_tracking_notifications,
+        )
 
         self._build_ui()
         self._build_restore_button()
@@ -127,6 +134,7 @@ class HotbarWindow(QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Hotbar close event received.")
         self._closing = True
+        self._tracking_feedback.stop()
         if self._gaze_check_window is not None:
             self._gaze_check_window.close()
         if self._speech_window is not None:
@@ -268,11 +276,15 @@ class HotbarWindow(QWidget):
         self._foreground.status_changed.connect(self._set_status)
         self._gaze.gaze_updated.connect(self._mouse.handle_gaze)
         self._gaze.gaze_updated.connect(self._tracking_status.handle_gaze)
+        self._gaze.gaze_updated.connect(self._tracking_feedback.handle_gaze)
         self._gaze.eye_status_changed.connect(self._mouse.handle_eye_status)
         self._gaze.eye_status_changed.connect(self._handle_eye_status_changed)
+        self._gaze.eye_status_changed.connect(self._tracking_feedback.handle_eyes)
         self._gaze.status_changed.connect(self._set_status)
         self._gaze.tracking_status_changed.connect(self._tracking_status.set_tracking_status)
         self._gaze.tracking_status_changed.connect(self._check_tracking_state)
+        self._gaze.tracking_status_changed.connect(self._tracking_feedback.handle_status)
+        self._tracking_feedback.changed.connect(self._show_tracking_notice)
         self._mouse.gaze_position_changed.connect(self._gaze_bubble.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_menu.handle_gaze)
         self._mouse.gaze_position_changed.connect(self._quick_zoom.handle_gaze)
@@ -718,7 +730,27 @@ class HotbarWindow(QWidget):
         self._speech_window.update_settings(self._speech.settings)
 
         self._speech_window.show_full_screen()
+        self._tracking_feedback.refresh()
+        self._show_tracking_notice(self._tracking_feedback.notice)
         self._set_status("Prozor za govor je otvoren.")
+
+    def _tracking_feedback_active(self) -> bool:
+        window = self._speech_window
+        return (
+            not self._closing
+            and window is not None
+            and window.isVisible()
+            and not window.isMinimized()
+            and window._dialogs.active in (None, window._dialogs.letter, window._dialogs.confirm)
+            and self._gaze_check_window is None
+            and not _is_visible(self._settings_window)
+        )
+
+    def _show_tracking_notice(self, notice: TrackingNotice | None) -> None:
+        if self._speech_window is not None:
+            self._speech_window.set_tracking_notice(
+                notice, immediate=not self._mouse.settings.show_tracking_notifications
+            )
 
     def _open_settings(self) -> None:
         if self._gaze_check_window is not None:
@@ -875,6 +907,9 @@ class HotbarWindow(QWidget):
 
     def _update_gaze_settings(self, settings: object) -> None:
         self._mouse.update_settings(settings)
+        self._tracking_feedback.set_enabled(self._mouse.settings.show_tracking_notifications)
+        if not self._mouse.settings.show_tracking_notifications:
+            self._show_tracking_notice(None)
         self._gaze_bubble.set_enabled(bool(getattr(settings, "show_gaze_bubble", True)))
         self._interaction_overlay.set_enabled(
             bool(getattr(settings, "show_interaction_overlay", True))

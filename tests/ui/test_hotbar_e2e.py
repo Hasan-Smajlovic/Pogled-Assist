@@ -27,6 +27,114 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
+def test_tracking_notice_uses_provider_signals_without_changing_eye_safety(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import tracking_feedback
+
+    hotbar, controller, feed, _actions, _progress = hotbar_gaze
+    clock = [20.0]
+    monkeypatch.setattr(tracking_feedback, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    feedback = hotbar._tracking_feedback
+    feedback._timer.stop()
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(*controller._logical_screen_rect)
+    qtbot.wait(1)
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice is None
+    window._input.setText("Synthetic test message")
+    original_message = window._input.text()
+    window._open_clear_dialog()
+    qtbot.wait(1)
+    target = window._dialogs.confirm_button
+    point = target.mapToGlobal(target.rect().center())
+    feed(point, 0)
+    feed(point, 700)
+    assert target.property("gazeTarget")
+    hotbar._gaze.eye_status_changed.emit(True, False)
+    assert not controller._both_eyes_open
+    assert not target.property("gazeTarget")
+    assert feedback.notice is None
+    clock[0] += 0.81
+    feedback.refresh()
+    qtbot.waitUntil(lambda: window._dialogs.confirm_notice.progress == 1)
+    assert feedback.notice.title.startswith("Desno oko")
+    assert window._dialogs.confirm_notice.isVisible()
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert feedback.notice.title == "Čekam podatke o pogledu"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice.title == "Praćenje se vraća"
+    clock[0] += 0.51
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice.title == "Možete nastaviti"
+    clock[0] += 2.01
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice is None
+    hotbar._gaze.eye_status_changed.emit(False, True)
+    clock[0] += 0.81
+    feedback.refresh()
+    assert feedback.notice.title.startswith("Lijevo oko")
+    hotbar._update_gaze_settings(replace(controller.settings, show_tracking_notifications=False))
+    assert feedback.notice is None
+    assert window._dialogs.confirm_notice.isHidden()
+    feed(point, 2500)
+    feed(point, 5000)
+    assert window._input.text() == original_message
+    assert not controller._both_eyes_open
+
+    hotbar._update_gaze_settings(replace(controller.settings, show_tracking_notifications=True))
+    assert feedback.notice is None
+    clock[0] += 0.81
+    feedback.refresh()
+    assert feedback.notice.title.startswith("Lijevo oko")
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("context", ["sleep", "hidden", "minimized", "settings", "check"])
+def test_intentional_contexts_suppress_tracking_notices(hotbar_gaze, qtbot, monkeypatch, context):
+    from types import SimpleNamespace
+
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import settings_window, tracking_feedback
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    clock = [20.0]
+    monkeypatch.setattr(tracking_feedback, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    hotbar = hotbar_gaze[0]
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    feedback = hotbar._tracking_feedback
+    feedback._timer.stop()
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    hotbar._gaze.eye_status_changed.emit(False, True)
+    clock[0] += 1
+    feedback.refresh()
+    assert feedback.notice is not None
+    if context == "sleep":
+        window._start_sleep()
+    elif context == "hidden":
+        window.hide()
+    elif context == "minimized":
+        window.showMinimized()
+    else:
+        hotbar._open_settings()
+        if context == "check":
+            hotbar._open_gaze_check()
+    feedback.refresh()
+    assert feedback.notice is None
+    clock[0] += 10
+    feedback.refresh()
+    assert feedback.notice is None
+
+
+@pytest.mark.e2e
 def test_keyboard_script_is_global_and_persisted(hotbar_gaze, qtbot, monkeypatch):
     from pogled_assist import toolbar
     from pogled_assist.ui import settings_window

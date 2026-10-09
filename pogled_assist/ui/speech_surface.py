@@ -21,9 +21,11 @@ from PySide6.QtWidgets import (
 )
 
 from ..keyboard_layouts import switch_label
+from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
+from .tracking_feedback import MessageTrackingHeader
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
 KEY_GRID_MAX_COLUMNS = 8
@@ -49,11 +51,13 @@ class SpeechSurface(QWidget):
         self._action_buttons: dict[str, QPushButton] = {}
         self._main_dynamic_actions: set[str] = set()
         self._gaze_target_action: str | None = None
+        self._tracking_notice: TrackingNotice | None = None
         self._build_ui(keyboard_script)
         self._dialogs = SpeechDialogs(
             self, self._make_button, self._context_changed, self._restore_input_focus
         )
         self._dialogs.closed.connect(self.dialog_closed.emit)
+        self._dialogs.closed.connect(lambda _dialog: self._render_tracking_notice())
 
     def _build_ui(self, keyboard_script: str) -> None:
         self.setStyleSheet(SPEECH_STYLE)
@@ -92,6 +96,7 @@ class SpeechSurface(QWidget):
 
     def _build_message_box(self) -> QWidget:
         message_box = QWidget(self)
+        message_box.setFixedHeight(96)
         message_layout = QVBoxLayout(message_box)
         message_layout.setContentsMargins(0, 0, 0, 0)
         message_layout.setSpacing(4)
@@ -101,16 +106,16 @@ class SpeechSurface(QWidget):
         self._status_label.setObjectName("statusLabel")
         self._status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        message_header = QHBoxLayout()
-        message_header.setContentsMargins(0, 0, 0, 0)
-        message_header.addWidget(self._message_label)
-        message_header.addWidget(self._status_label, 1)
+        self._message_header = MessageTrackingHeader(
+            self._message_label, self._status_label, message_box
+        )
         self._input = QLineEdit(message_box)
         self._input.setObjectName("speechInput")
         self._input.setAlignment(Qt.AlignCenter)
-        self._input.setMinimumHeight(62)
+        self._input.setMinimumHeight(0)
+        self._input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
         self._input.setPlaceholderText("Odaberite grupu slova…")
-        message_layout.addLayout(message_header)
+        message_layout.addWidget(self._message_header)
         message_layout.addWidget(self._input, 1)
 
         return message_box
@@ -388,6 +393,25 @@ class SpeechSurface(QWidget):
 
     def _open_dialog(self, dialog: QDialog, height: int) -> None:
         self._dialogs.open(dialog, height)
+        self._render_tracking_notice()
+
+    def set_tracking_notice(
+        self, notice: TrackingNotice | None, *, immediate: bool = False
+    ) -> None:
+        self._tracking_notice = notice
+        self._render_tracking_notice(immediate=immediate)
+
+    def _render_tracking_notice(self, *, immediate: bool = False) -> None:
+        active = self._dialogs.active
+        self._message_header.notice.set_notice(
+            self._tracking_notice if active is None else None,
+            immediate=immediate or active is not None,
+        )
+        for dialog, widget in self._dialogs.tracking_notices.items():
+            widget.set_notice(
+                self._tracking_notice if active is dialog else None,
+                immediate=immediate or active is not dialog,
+            )
 
     def _close_dialog(self) -> None:
         self._dialogs.close()
@@ -534,8 +558,8 @@ SPEECH_STYLE = """
                 border: 2px solid #465268;
                 border-radius: 8px;
                 color: #ffffff;
-                font-size: 30px;
-                padding: 8px 16px;
+                font-size: 28px;
+                padding: 6px 12px;
                 placeholder-text-color: #a0adbf;
                 selection-background-color: #245f9f;
             }

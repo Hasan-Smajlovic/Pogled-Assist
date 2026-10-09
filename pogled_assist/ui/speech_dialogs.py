@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .tracking_feedback import dialog_tracking_header
+
 DIALOG_ACTION_MIN_HEIGHT = 128
 
 
@@ -41,6 +43,10 @@ class SpeechDialogs(QObject):
         self.backdrop.setObjectName("modalBackdrop")
         self.backdrop.hide()
         self._build_dialogs()
+        self.tracking_notices = {
+            self.letter: self.letter_notice,
+            self.confirm: self.confirm_notice,
+        }
 
     def open(self, dialog: QDialog, height: int) -> None:
         self._context_changed()
@@ -50,6 +56,8 @@ class SpeechDialogs(QObject):
         self.backdrop.raise_()
         available_width = max(320, self._parent.width() - 64)
         width = min(1280, max(680, round(self._parent.width() * 0.68)), available_width)
+        if dialog in (self.letter, self.confirm):
+            width = min(1000, available_width)
         dialog.resize(width, min(height, max(320, self._parent.height() - 64)))
         self._position_dialog(dialog)
         dialog.show()
@@ -95,8 +103,8 @@ class SpeechDialogs(QObject):
     def _build_letter_dialog(self) -> None:
         self.letter = self._new_dialog()
         letter_layout = QVBoxLayout(self.letter)
-        letter_layout.setContentsMargins(32, 30, 32, 32)
-        letter_layout.setSpacing(24)
+        letter_layout.setContentsMargins(28, 24, 28, 24)
+        letter_layout.setSpacing(18)
         self.letter_title = QLabel("Odaberite slovo", self.letter)
         self.letter_title.setObjectName("dialogTitle")
         self.letter_grid_host = QWidget(self.letter)
@@ -104,7 +112,8 @@ class SpeechDialogs(QObject):
         self.letter_grid.setContentsMargins(0, 0, 0, 0)
         self.letter_grid.setHorizontalSpacing(16)
         self.letter_grid.setVerticalSpacing(16)
-        letter_layout.addWidget(self.letter_title)
+        header, self.letter_notice = dialog_tracking_header(self.letter_title, self.letter)
+        letter_layout.addWidget(header)
         letter_layout.addWidget(self.letter_grid_host, 1)
         self.letter.finished.connect(
             lambda _result, dialog=self.letter: self._dialog_finished(dialog)
@@ -139,7 +148,8 @@ class SpeechDialogs(QObject):
         )
         confirm_actions.addWidget(cancel, 1)
         confirm_actions.addWidget(self.confirm_button, 1)
-        confirm_layout.addWidget(self.confirm_title)
+        header, self.confirm_notice = dialog_tracking_header(self.confirm_title, self.confirm)
+        confirm_layout.addWidget(header)
         confirm_layout.addWidget(self.confirm_copy)
         confirm_layout.addStretch(1)
         confirm_layout.addLayout(confirm_actions)
