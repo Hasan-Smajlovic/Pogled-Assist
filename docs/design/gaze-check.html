@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Provjera pogleda</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/gaze-check.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/gaze-check.js" defer></script>
+</head>
+<body data-reference-page="gaze-check">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="gaze-check-screen" class="gaze-check" aria-label="Provjera pogleda">
+    <header><div><h1>Provjera pogleda</h1></div><button data-reference-return>Zatvori · Esc</button></header>
+    <p id="check-step">1 · Položaj i praćenje</p>
+    <div id="check-live" class="check-columns">
+      <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth" title="Udaljenost unutar područja koje uređaj može pratiti; nije mjerenje u centimetrima."></div><div class="depth-labels"><span>Bliže uređaju</span><span>Dalje od uređaja</span></div><p class="muted">Okvir pokazuje položaj očiju, traka ispod udaljenost.</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
+      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line check-pass">✓ Pogled se prati</p><p class="check-line check-pass">✓ Praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i odaberite „Provjeri preciznost“.</p><p class="muted">Kratak prekid može biti treptaj. Preciznost provjerite na metama.</p></section>
+    </div>
+    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-copy">Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span></p><progress id="check-progress" value="1" max="5" aria-label="Napredak provjere"></progress><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini test · Esc zatvara</button></div></div>
+    <div id="check-results" class="check-card" hidden style="flex:1">
+      <h2 id="check-result-title">— Za 1 od 5 meta nema dovoljno podataka.</h2>
+      <div class="check-result-columns"><div><div class="check-map"><span style="left:50%;top:50%"></span><span style="left:4%;top:6%"></span><span style="left:96%;top:6%"></span><span style="left:4%;top:94%"></span><span style="left:96%;top:94%"></span><i style="left:92%;top:12%"></i></div><p class="muted">Krug = meta · tačka = pogled<br>Linija pokazuje koliko je pogled promašio.</p></div><table id="check-result-table" class="check-metrics"></table></div>
+      <p id="check-result-advice">Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru.</p>
+      <p id="check-trial-result" hidden></p>
+      <button id="check-details" style="align-self:flex-start;min-height:60px">Prikaži mjerenja</button>
+      <p id="check-metrics-help" class="muted" hidden>Podaci: dio vremena s važećim pogledom. Odstupanje: udaljenost od mete. Rasipanje: koliko se pogled pomjerao. Vrijednosti su u pikselima prikaza (px).</p>
+    </div>
+    <p id="check-notice" class="muted">Upravljanje pogledom je pauzirano tokom provjere.</p>
+    <footer><button id="check-calibrate">Otvori Tobii postavke</button><button id="check-free">Slobodna provjera</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
+    <!-- Report only measured outcomes. Missing data is never a measured miss or success.
+      Target locations/timing, eye gate, thresholds and local dwell behavior stay unchanged.
+      Keep measurement formulas in tooltips and the owning architecture guide.
+      Live test feedback: waiting for gaze / eye lost / neighbor selected / look again.
+      Failed trial advice prioritizes lost tracking, then neighbors, then timeout; a successful
+      trial suggests actual use only when all precision targets also have enough data.
+      Keep the target still; animate only the small progress bar below the instruction.
+      Dwell progress on the intended button is green; progress on a neighbor is amber,
+      accompanied by the text "Pogled je na drugom dugmetu. Pogledajte „Pogledaj“."
+      A brief tracking gap does not invalidate three successful intended selections.
+      If all targets and buttons pass, suggest actual use. With gaps, add the conditional
+      "Ako se izbor često poništava, ponovo podesite položaj."
+      Settings handoff keeps the profile instructions visible after returning. On launch
+      failure say: "Tobii postavke se nisu otvorile. Otvorite Tobii ikonu pored sata."
+      Keep a cancelled-selection explanation until fresh gaze returns; do not replace
+      it with a generic waiting message on the next 100 ms UI tick.
+      Fresh eye positions alone never imply fresh gaze in precision feedback.
+      Copy follows Tobii's separation of positioning and target validation:
+      https://help.tobii.com/hc/en-us/articles/213891645-Test-and-recalibrate
+      Concise outcomes, corrective actions, and color plus text follow WAI:
+      https://www.w3.org/WAI/tutorials/forms/notifications/ -->
+  </main>
+</body>
+</html>

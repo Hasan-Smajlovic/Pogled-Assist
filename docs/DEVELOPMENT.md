@@ -341,19 +341,39 @@ sample quality, latency, or hardware accuracy. Report those checks as not run.
 
 ### Application design reference workflow
 
-[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is the design source of truth for the visible Pogled Assist interface. The
-historical filename is retained so existing links remain stable, but the file
-also documents Settings and any other application surface changed in the
-future.
-It currently has main views for Speech, Settings, Gaze check, the installation summary,
-Hotbar, standalone Keyboard, and the Controller keyboard. Gaze overlays do not
-yet have their own main views there. Add the relevant view before changing one
-of those surfaces.
+The [application design reference](design/speech-keyboard-reference.html) is
+the design source of truth for the visible Pogled Assist interface. That
+historical filename is now the entry point; old fragments such as `#tracking`
+open the matching standalone page. Open the HTML files directly in a browser;
+they use local styles and classic scripts, without a server or build step.
+
+| Surface | HTML document | Styles and interaction |
+| --- | --- | --- |
+| Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
+| Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
+| Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
+| Tracking notification draft | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
+| Hotbar | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
+| Standalone keyboard | [keyboard.html](design/keyboard.html) | `docs/design/assets/keyboard.css`, `docs/design/assets/keyboard.js` |
+| Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
+| Installation summary | [installation.html](design/installation.html) | Shared styles; illustrative actions only |
+
+Shared navigation and preview session state live in
+`docs/design/assets/reference.js`; shared tokens and controls are in
+`docs/design/assets/reference.css`. The tracking draft also reuses Speech's
+layout styles. Keyboard data and the mouse gaze simulation have separate shared
+scripts, `docs/design/assets/keyboard-data.js` and
+`docs/design/assets/gaze-demo.js`. Preview state is separate from application
+data and settings. Each page owns its feature notes; the
+[reference notes](design/reference-notes.html) own shared language conventions.
+Gaze overlays do not yet have their own pages. Add the relevant page before
+changing one of those surfaces.
 
 Every change to visible layout, copy, control sizes, states, or interaction flow
-must update the matching HTML reference in the same pull request. Update and
-review the reference first, then implement the matching PySide6 change so the
+must update the matching page and its assets in the same pull request. When
+instructions name `docs/design/speech-keyboard-reference.html`, they refer to
+this collection through its entry point; edit the index only when navigation
+changes. Update and review the reference first, then implement the matching PySide6 change so the
 reference never describes an older UI. This rule applies to every window,
 sidebar, overlay, dialog, and system control in the application, not only the
 Speech window. If a code change has no visible or interaction impact, state that
@@ -363,9 +383,9 @@ Review the HTML reference at the target display size before generating the Qt
 gallery. The reference documents the intended result; the gallery and real
 application checks confirm that the implementation matches it.
 
-Application-owned labels and feedback use standard Bosnian. The reference's
-**O ovoj referenci** section owns the UI terminology and language conventions;
-check these when adding or reviewing copy. Product names, exact controls in
+Application-owned labels and feedback use standard Bosnian. The
+[**O ovoj referenci** page](design/reference-notes.html) owns the UI terminology
+and language conventions; check these when adding or reviewing copy. Product names, exact controls in
 external programs, and text entered by the user retain their original wording.
 
 Generate the gallery:

@@ -134,9 +134,11 @@ the [development guide](docs/DEVELOPMENT.md).
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
 
 The [application UI reference](docs/design/speech-keyboard-reference.html) is a
-development-only HTML prototype for the visible PySide6 interface. Its
-historical filename is retained for stable links. The application does not load
-or package it.
+development-only collection of HTML prototypes for the visible PySide6
+interface. Its historical filename remains the entry point, linking to a
+separate document for each screen or feature. The application does not load or
+package these files. The [development guide](docs/DEVELOPMENT.md#application-design-reference-workflow)
+maps the pages and shared assets.
 
 ## Runtime requirements
 

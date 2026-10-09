@@ -1,0 +1,88 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #eef2f8;
+  background: #111318;
+  --surface: #1c2029;
+  --border: #394253;
+  --blue: #245f9f;
+  --cyan: #8bd5f5;
+  --gap: 12px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; padding: 12px; }
+button, input { font: inherit; }
+button {
+  position: relative;
+  min-width: 0;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #f6f7fb;
+  font-size: clamp(18px, 1.7vw, 26px);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:hover { border-color: var(--cyan); background: #262c38; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 3px;
+}
+button:disabled { opacity: .4; cursor: default; }
+button[aria-pressed="true"], .primary {
+  border-color: #67b7dc;
+  background: var(--blue);
+  color: #fff;
+}
+.primary:hover { background: #2e70b3; }
+.warning { background: #43381d; border-color: #927d40; color: #fde68a; }
+.danger { background: #4b2224; border-color: #a1535b; color: #ffd6d6; }
+.danger:hover { background: #663034; }
+.muted { color: #bac5d4; }
+/* Prototype navigation stays outside application controls. */
+.reference-switcher, .reference-tools {
+  position: fixed; bottom: 10px; z-index: 90;
+  padding: 7px; border: 1px solid #465268; border-radius: 10px;
+  background: #0b0d11f5; box-shadow: 0 8px 28px #0009;
+  font-size: 14px;
+}
+.reference-switcher { right: 10px; display: flex; align-items: flex-end; gap: 8px; }
+.reference-switcher a, .reference-switcher summary, .reference-tools summary {
+  display: block; padding: 8px 12px; color: #dff4ff; cursor: pointer;
+  border-radius: 6px; text-decoration: none;
+}
+.reference-switcher a:hover, .reference-switcher summary:hover { background: #263449; }
+.reference-switcher a[aria-current] { background: #245f9f; color: #fff; }
+.reference-switcher details > div { display: grid; gap: 3px; margin-top: 5px; }
+.reference-tools { left: 10px; max-width: min(360px, calc(100vw - 20px)); }
+.reference-tools label, .reference-tools > a { display: block; margin: 12px; }
+.reference-tools button { min-height: 40px; padding: 8px; font-size: 14px; margin: 4px; }
+.reference-tools input[type="checkbox"] { width: 20px; height: 20px; vertical-align: middle; }
+.reference-tools select { padding: 6px; font: inherit; }
+.reference-tools a, .reference-index a, .design-notes a { color: #8bd5f5; }
+.reference-index { max-width: 1080px; margin: 36px auto; padding: 16px; line-height: 1.6; }
+.reference-index h1 { font-size: 32px; margin: 0 0 8px; }
+.reference-index > p { color: #bac5d4; }
+.reference-index li { margin-bottom: 12px; }
+.reference-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 28px 0; }
+.reference-cards a { display: block; padding: 20px; border: 1px solid #394253; border-radius: 12px; background: #1c2029; text-decoration: none; }
+.reference-cards a:hover { border-color: #8bd5f5; background: #242c39; }
+.reference-cards strong { display: block; color: #eef2f8; font-size: 20px; }
+.reference-cards span { display: block; margin-top: 8px; color: #bac5d4; font-size: 14px; }
+.design-notes { max-width: 1100px; margin: 20px auto 64px; line-height: 1.6; }
+.design-notes summary { cursor: pointer; color: #8bd5f5; }
+@media (max-height: 760px) and (min-width: 901px) {
+  body { padding: 8px; }
+  button { min-height: 72px; }
+}
+@media (max-width: 900px) { body { padding: 8px; } }
+@media (max-width: 560px) {
+  :root { --gap: 8px; }
+  button { font-size: 17px; min-height: 76px; padding: 8px; }
+}
