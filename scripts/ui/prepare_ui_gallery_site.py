@@ -12,6 +12,7 @@ import subprocess
 import zlib
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -19,6 +20,8 @@ from zipfile import BadZipFile, ZipFile
 
 REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
 COMMENT_MARKER = "<!-- pogled-assist-ui-gallery -->"
+STATUS_START = "<!-- pogled-assist-ui-gallery-status -->"
+STATUS_END = "<!-- /pogled-assist-ui-gallery-status -->"
 RESOLUTIONS = ("1280x720", "1440x900")
 PREVIEWS = (
     ("speech.png", "Speech"),
@@ -62,16 +65,141 @@ def prepare_site(api, output_dir: Path, base_url: str) -> list[dict]:
     return comments
 
 
-def update_comments(api, galleries: list[dict]) -> None:
-    """Update only our bot's gallery comment, while the PR head still matches."""
+def update_comments(api, galleries: list[dict], publication_run_id: int | None = None) -> None:
+    """Publish only matching PR heads, with freshly read CI status after deployment."""
+    workflow_id = api.get("actions/workflows/ci.yml")["id"]
     for gallery in galleries:
-        number = gallery["number"]
-        pull = api.get(f"pulls/{number}")
+        pull = api.get(f"pulls/{gallery['number']}")
         if pull["state"] != "open" or pull["head"]["sha"] != gallery["head_sha"]:
             continue
-        comments = api.items(f"issues/{number}/comments?per_page=100")
+        run = _latest_ci(api, pull, workflow_id)
+        header = _status_header(pull, run, "published", publication_run_id, gallery.get("run"))
+        payload = {**gallery, "body": _with_status(gallery["body"], header)}
+        _write_comment(api, pull, payload)
+
+
+def update_status(
+    api,
+    publication: str,
+    publication_run_id: int,
+    ci_run_id: int | None = None,
+    ci_attempt: int | None = None,
+) -> None:
+    """Keep existing previews while CI runs or publication fails; never claim new images exist."""
+    workflow_id = api.get("actions/workflows/ci.yml")["id"]
+    for pull in api.items("pulls?state=open&per_page=100"):
+        if pull["base"]["ref"] not in ("development", "master") or not pull["head"]["repo"]:
+            continue
+        run = _latest_ci(api, pull, workflow_id)
+        if ci_run_id is not None and (
+            run is None or run["id"] != ci_run_id or run["run_attempt"] != ci_attempt
+        ):
+            continue
+        comments = api.items(f"issues/{pull['number']}/comments?per_page=100")
         existing = next((comment for comment in comments if _is_gallery_comment(comment)), None)
-        _update_comment(api, gallery, existing)
+        if existing is None:
+            continue
+        # A delayed start event must not replace a completed publication's status.
+        if (
+            publication == "preparing"
+            and run
+            and run["status"] == "completed"
+            and any(
+                _publication_marker(run, phase) in existing["body"]
+                for phase in ("published", "failed")
+            )
+        ):
+            continue
+        header = _status_header(pull, run, publication, publication_run_id)
+        payload = {"number": pull["number"], "body": _with_status(existing["body"], header)}
+        _write_comment(api, pull, payload, existing)
+
+
+def _latest_ci(api, pull: dict, workflow_id: int) -> dict | None:
+    runs = api.items(
+        f"actions/workflows/{workflow_id}/runs?event=pull_request&head_sha={pull['head']['sha']}"
+        "&per_page=100",
+        "workflow_runs",
+    )
+    matching = [
+        run
+        for run in runs
+        if run["workflow_id"] == workflow_id
+        and run["event"] == "pull_request"
+        and _matches_head(run, pull, pull["head"]["sha"])
+        and _matches_association(run.get("pull_requests") or [], pull)
+    ]
+    return max(
+        matching,
+        key=lambda run: (run.get("run_started_at") or run.get("created_at") or "", run["id"]),
+        default=None,
+    )
+
+
+def _write_comment(api, pull: dict, payload: dict, existing: dict | None = None) -> None:
+    if existing is None:
+        comments = api.items(f"issues/{pull['number']}/comments?per_page=100")
+        existing = next((comment for comment in comments if _is_gallery_comment(comment)), None)
+    current = api.get(f"pulls/{pull['number']}")
+    if current["state"] != "open" or current["head"]["sha"] != pull["head"]["sha"]:
+        return
+    if existing:
+        previous = re.sub(r"^Last updated:.*$", "", existing["body"], flags=re.MULTILINE)
+        updated = re.sub(r"^Last updated:.*$", "", payload["body"], flags=re.MULTILINE)
+        if previous == updated:
+            return
+    _update_comment(api, payload, existing)
+
+
+def _publication_marker(run: dict | None, phase: str) -> str:
+    key = f"{run['id']}:{run['run_attempt']}:{run['head_sha']}" if run else "none"
+    return f"<!-- pogled-assist-ui-gallery-state: {phase}:{key} -->"
+
+
+def _status_header(
+    pull: dict,
+    run: dict | None,
+    publication: str,
+    publication_run_id: int | None,
+    rendered: dict | None = None,
+) -> str:
+    sha = pull["head"]["sha"]
+    updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    lines = [
+        STATUS_START,
+        _publication_marker(run, publication),
+        f"Last updated: **{updated}**",
+        f"Latest PR commit: [`{sha[:7]}`](https://github.com/{REPOSITORY}/commit/{sha})",
+        "",
+    ]
+    if publication == "failed":
+        lines.append("**Gallery publication failed.** Existing previews have not been refreshed.")
+    elif run is None:
+        lines.append("**Waiting for CI for the latest commit.** Existing previews may be older.")
+    elif run["status"] != "completed":
+        lines.append("**New gallery is being prepared.** Existing previews are from an earlier CI run.")
+    elif publication == "preparing":
+        lines.append("**Waiting for gallery publication.** Existing previews have not been refreshed.")
+    elif rendered and all(rendered[key] == run[key] for key in ("head_sha", "id", "run_attempt")):
+        lines.append("**Gallery matches the latest PR commit and CI run.**")
+    else:
+        lines.append("**No gallery for the latest CI run.** Existing previews may be older.")
+    if run:
+        state = run["conclusion"] or run["status"]
+        lines.append(
+            f"Latest CI: **{state}** · [CI run](https://github.com/{REPOSITORY}/actions/runs/{run['id']})"
+        )
+    if publication_run_id is not None:
+        lines.append(
+            f"[Gallery workflow](https://github.com/{REPOSITORY}/actions/runs/{publication_run_id})"
+        )
+    return "\n".join([*lines, STATUS_END])
+
+
+def _with_status(body: str, header: str) -> str:
+    body = re.sub(f"{STATUS_START}.*?{STATUS_END}\\n*", "", body, flags=re.DOTALL)
+    content = body.removeprefix(COMMENT_MARKER).lstrip().removeprefix("### UI previews").lstrip()
+    return f"{COMMENT_MARKER}\n### UI previews\n\n{header}\n\n{content}"
 
 
 def read_images(archive: bytes) -> dict[str, bytes]:
@@ -162,6 +290,9 @@ class GallerySource:
             self.runs[run_id] = self.api.get(f"actions/runs/{run_id}")
         run = self.runs[run_id]
         if not _matches_pull(run, pull, self.workflow_id, source["head_sha"]):
+            return None
+        # A rerun must not reuse an image uploaded before its current attempt started.
+        if artifact.get("created_at", "") < run.get("run_started_at", ""):
             return None
         return run
 
@@ -263,6 +394,11 @@ def _comment_payload(pull: dict, gallery: Gallery | None, base_url: str) -> dict
         "head_sha": pull["head"]["sha"],
         "body": body,
         "create": gallery is not None,
+        "run": (
+            {key: gallery.run[key] for key in ("head_sha", "id", "run_attempt")}
+            if gallery is not None
+            else None
+        ),
     }
 
 
@@ -549,13 +685,35 @@ def main() -> None:
     build.add_argument("--base-url", required=True)
     comment = commands.add_parser("comment", help="Update gallery comments after deployment.")
     comment.add_argument("--comments", type=Path, required=True)
+    comment.add_argument("--publication-run-id", type=int)
+    status = commands.add_parser("status", help="Refresh an existing comment without publishing images.")
+    status.add_argument("--publication", choices=("preparing", "failed"), required=True)
+    status.add_argument("--publication-run-id", type=int, required=True)
+    status.add_argument("--ci-run-id", type=int)
+    status.add_argument("--ci-attempt", type=int)
     arguments = parser.parse_args()
+    if arguments.command == "status" and (arguments.ci_run_id is None) != (
+        arguments.ci_attempt is None
+    ):
+        parser.error("--ci-run-id and --ci-attempt must be provided together")
     if arguments.command == "build":
         comments = prepare_site(GitHub(), arguments.output, arguments.base_url)
         arguments.comments.parent.mkdir(parents=True, exist_ok=True)
         arguments.comments.write_text(json.dumps(comments), encoding="utf-8")
+    elif arguments.command == "comment":
+        update_comments(
+            GitHub(),
+            json.loads(arguments.comments.read_text(encoding="utf-8")),
+            arguments.publication_run_id,
+        )
     else:
-        update_comments(GitHub(), json.loads(arguments.comments.read_text(encoding="utf-8")))
+        update_status(
+            GitHub(),
+            arguments.publication,
+            arguments.publication_run_id,
+            arguments.ci_run_id,
+            arguments.ci_attempt,
+        )
 
 
 if __name__ == "__main__":

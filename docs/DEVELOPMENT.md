@@ -373,7 +373,9 @@ The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
 already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
 the separate **UI gallery** workflow publishes a browser gallery and updates
 one PR bot comment with main screenshots, resolution links, the rendered commit,
-and a download link. Setup, publication permissions, and cleanup are defined in
+and a download link. Its status header distinguishes preparing, current, older
+or unavailable previews and a failed publication, with an update time and CI link.
+Setup, publication permissions, and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
