@@ -176,9 +176,20 @@ separate; fresh positions can remain visible without valid gaze.
   radius. Median error and 90th-percentile spread are descriptive heuristics,
   not Tobii-certified or clinical scores. The result map retains the normalized
   median centre; clipping off-screen centres affects painting only.
+- Each button trial measures coverage from its ready time until selection or
+  timeout. Only distinct fresh both-eye gaze samples count, including gaze
+  outside the buttons. Consecutive samples contribute at most 100 ms; known
+  losses and stale gaps break the interval. A timed-out target needs at least
+  60% coverage before advice can attribute failure to fixation or calibration.
+  Isolated samples never count as sustained tracking. This threshold only
+  selects advice; it does not change dwell, the eye gate or trial success.
 
 `gaze_check_window.py` owns the flow; `gaze_check_views.py` owns painting and
-geometry. Five timed targets cover the centre and corners. The local trial
+geometry. `gaze_check_feedback.py` selects result advice without Qt: missing
+precision data, measured misses, then the completed trial's insufficient gaze
+coverage, cancelled selections, wrong selections and timeout. Successful trials
+with a brief loss still suggest actual use if all precision targets passed.
+Five timed targets cover the centre and corners. The local trial
 reuses `GazeSelectionTimer`, the speech edge-hold constants and the current pause
 and dwell settings, without Windows input. Its three groups have 136 × 64,
 96 × 88 and 180 × 72 logical-pixel controls, each with two neighbors. The edge

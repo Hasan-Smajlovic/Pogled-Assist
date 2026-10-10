@@ -13,6 +13,8 @@ HISTORY_SECONDS = 10.0
 SETTLE_SECONDS = 1.0
 MEASURE_SECONDS = 2.0
 TARGET_SECONDS = SETTLE_SECONDS + MEASURE_SECONDS
+MIN_COVERAGE = 0.6
+COVERAGE_INTERVAL_SECONDS = 0.1
 
 Position = tuple[float, float, float]
 
@@ -137,6 +139,34 @@ class FixationResult:
     gaze_center: tuple[float, float] | None = None
 
 
+class TrialGazeCoverage:
+    """Coverage from validated gaze timestamps; a known loss breaks the interval."""
+
+    def __init__(self, started_at: float) -> None:
+        self.started_at = started_at
+        self._last_sample_at: float | None = None
+        self._previous_at: float | None = None
+        self._covered_seconds = 0.0
+
+    def add(self, at: float) -> None:
+        if (
+            not math.isfinite(at)
+            or at < self.started_at
+            or (self._last_sample_at is not None and at <= self._last_sample_at)
+        ):
+            return
+        if self._previous_at is not None and at - self._previous_at < FRESH_SECONDS:
+            self._covered_seconds += min(COVERAGE_INTERVAL_SECONDS, at - self._previous_at)
+        self._last_sample_at = self._previous_at = at
+
+    def interrupt(self) -> None:
+        self._previous_at = None
+
+    def sufficient(self, now: float) -> bool:
+        elapsed = now - self.started_at
+        return elapsed > 0 and self._covered_seconds / elapsed >= MIN_COVERAGE
+
+
 class FixationCheck:
     """Five timed known targets. Raw out-of-screen gaze is never clamped."""
 
@@ -188,7 +218,7 @@ class FixationCheck:
             return
         self._last_sample_at = at
         if self._previous_at is not None:
-            self._covered_seconds += min(0.1, at - self._previous_at)
+            self._covered_seconds += min(COVERAGE_INTERVAL_SECONDS, at - self._previous_at)
         self._previous_at = at
         self._samples.append(snapshot.gaze)
 
@@ -211,7 +241,7 @@ class FixationCheck:
     def _result(self) -> FixationResult:
         name, target_x, target_y = self.targets[self.index]
         coverage = self._covered_seconds / MEASURE_SECONDS
-        if len(self._samples) < 12 or coverage < 0.6:
+        if len(self._samples) < 12 or coverage < MIN_COVERAGE:
             return FixationResult(name, len(self._samples), coverage, None, None, None)
         width, height = self.screen_size
         points = [(x * (width - 1), y * (height - 1)) for x, y in self._samples]

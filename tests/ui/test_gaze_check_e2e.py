@@ -129,12 +129,44 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     assert window._trial_results == [False] * 3
     assert window._trial_losses == 0  # No pending selection ever started.
     assert "poništeni izbori: 0" in window._trial_summary.text()
-    assert "nije bilo podataka o pogledu" in window._result_advice.text()
+    assert "nije bilo dovoljno podataka o pogledu" in window._result_advice.text()
     assert "Podesite položaj" in window._result_advice.text()
     assert "nisu odabrana na vrijeme" not in window._result_advice.text()
     assert "0/3" in window._trial_summary.text()
     window._start_trial()
-    assert not window._trial_gaze_targets
+    assert not window._trial_tracked_targets
+
+
+@pytest.mark.parametrize("samples", ["single", "repeated", "sparse", "interrupted"])
+def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check, qtbot, samples):
+    window, now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._start_trial()
+    interruptions = 0
+    for _ in range(3):
+        start = window._trial_ready_at
+        count = 1 if samples == "single" else 90
+        for index in range(count):
+            now[0] = start + 0.1 + index * 0.1
+            at = start + 0.1 if samples == "repeated" else now[0]
+            if samples == "sparse" and index % 10:
+                continue
+            if samples == "interrupted":
+                interruptions += 1
+            window.handle_snapshot(
+                CheckSnapshot(
+                    True, True, gaze=(0.99, 0.5), gaze_at=at, gaze_interruptions=interruptions
+                )
+            )
+        now[0] = window._trial_deadline + 0.01
+        window._tick()
+    assert window._trial_losses == 0  # No pending dwell to cancel outside the buttons.
+    assert "Podesite položaj" in window._result_advice.text()
+    assert "nisu odabrana na vrijeme" not in window._result_advice.text()
 
 
 def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(gaze_check, qtbot):
@@ -146,22 +178,24 @@ def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(g
     ]
     window._start_trial()
     for _ in range(3):
-        now[0] = window._trial_ready_at + 0.1
-        # Fresh gaze away from the buttons is data, even without starting dwell.
-        window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.99, 0.5), gaze_at=now[0]))
+        start = window._trial_ready_at
+        # Sustained fresh gaze outside the buttons is data without pending dwell.
+        for index in range(100):
+            now[0] = start + index * 0.1
+            window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.99, 0.5), gaze_at=now[0]))
         now[0] = window._trial_deadline + 0.01
         window._tick()
-    assert window._trial_gaze_targets == {0, 1, 2}
+    assert window._trial_tracked_targets == {0, 1, 2}
     assert "nisu odabrana na vrijeme" in window._result_advice.text()
-    assert "nije bilo podataka o pogledu" not in window._result_advice.text()
+    assert "nije bilo dovoljno podataka o pogledu" not in window._result_advice.text()
     window._start_trial()
     for _ in range(3):
         now[0] = window._trial_deadline + 0.01
         window._tick()
-    assert "nije bilo podataka o pogledu" in window._result_advice.text()
-    assert not window._trial_gaze_targets
+    assert "nije bilo dovoljno podataka o pogledu" in window._result_advice.text()
+    assert not window._trial_tracked_targets
     window.reset_check()
-    assert not window._trial_gaze_targets
+    assert not window._trial_tracked_targets
 
 
 def test_precision_does_not_bridge_coalesced_eye_losses(gaze_check, qtbot):
@@ -680,7 +714,7 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     window._show_results()
     window._start_trial()
     window._trial_results = selected
-    window._trial_gaze_targets = {0, 1, 2}
+    window._trial_tracked_targets = {0, 1, 2}
     window._trial_wrong_selections = wrong
     window._trial_losses = loss
     window._show_results()

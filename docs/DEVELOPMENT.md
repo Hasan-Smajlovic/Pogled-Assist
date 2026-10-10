@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 69 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 70 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |

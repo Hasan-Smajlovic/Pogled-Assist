@@ -481,7 +481,7 @@ class _CaptureSession:
             window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
         )
         window._finish_trial_target(False, time.monotonic())
-        window._trial_gaze_targets = {0, 1, 2}
+        window._trial_tracked_targets = {0, 1, 2}
         window._show_results()
         self.capture(
             window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size

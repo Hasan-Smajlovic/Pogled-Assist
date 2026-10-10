@@ -5,8 +5,65 @@ from types import SimpleNamespace
 
 import pytest
 
-from pogled_assist.tracking.gaze_check import CheckSnapshot, CheckTelemetry, FixationCheck
+from pogled_assist.tracking.gaze_check import (
+    CheckSnapshot,
+    CheckTelemetry,
+    FixationCheck,
+    TrialGazeCoverage,
+)
 from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+
+@pytest.mark.parametrize("covered_seconds,expected", [(5.9, False), (6.1, True)])
+def test_trial_coverage_requires_sustained_data(covered_seconds, expected):
+    coverage = TrialGazeCoverage(10)
+    for index in range(round(covered_seconds * 100) + 1):
+        coverage.add(10 + index * 0.01)
+    assert coverage.sufficient(20) is expected
+
+
+@pytest.mark.parametrize("invalid", [9.0, float("nan"), float("inf"), -float("inf")])
+def test_trial_coverage_ignores_invalid_and_pre_target_samples(invalid):
+    coverage = TrialGazeCoverage(10)
+    coverage.add(invalid)
+    coverage.add(10.1)
+    assert not coverage.sufficient(10.11)
+
+
+def test_trial_coverage_does_not_count_cached_or_out_of_order_samples():
+    coverage = TrialGazeCoverage(10)
+    coverage.add(10.1)
+    for _ in range(100):
+        coverage.add(10.1)
+        coverage.add(10.05)
+    assert not coverage.sufficient(20)
+
+
+@pytest.mark.parametrize("gap", [0.2, 0.5, 1.0])
+def test_trial_coverage_caps_intervals_and_rejects_stale_gaps(gap):
+    coverage = TrialGazeCoverage(0)
+    for index in range(50):
+        coverage.add(index * gap)
+    assert not coverage.sufficient(50 * gap)
+
+
+def test_trial_coverage_does_not_bridge_known_interruptions():
+    coverage = TrialGazeCoverage(10)
+    for index in range(100):
+        coverage.interrupt()
+        coverage.add(10 + index * 0.01)
+    assert not coverage.sufficient(11)
+
+
+def test_trial_coverage_retains_valid_intervals_across_a_brief_loss():
+    coverage = TrialGazeCoverage(10)
+    for index in range(101):
+        if index == 50:
+            coverage.interrupt()
+        coverage.add(10 + index * 0.01)
+    assert coverage.sufficient(11)
+    assert not TrialGazeCoverage(12).sufficient(13)
+    assert not coverage.sufficient(10)
 
 
 def test_diagnostics_are_opt_in_and_closing_discards_measurements(qapp):

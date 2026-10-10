@@ -31,8 +31,10 @@ from ..tracking.gaze_check import (
     TARGET_SECONDS,
     CheckSnapshot,
     FixationCheck,
+    TrialGazeCoverage,
 )
 from ..tracking.status import TrackingState, TrackingStatus
+from .gaze_check_feedback import result_advice
 from .gaze_check_views import COLORS, TARGETS, CheckTargetView, EyePositionView, ResultMapView
 
 STYLESHEET = """
@@ -83,7 +85,8 @@ class GazeCheckWindow(QWidget):
         self._phase = "position"
         self._selection = GazeSelectionTimer()
         self._trial_results: list[bool] = []
-        self._trial_gaze_targets: set[int] = set()
+        self._trial_tracked_targets: set[int] = set()
+        self._trial_coverage: TrialGazeCoverage | None = None
         self._trial_deadline = 0.0
         self._trial_ready_at = 0.0
         self._trial_sample_at: float | None = None
@@ -504,7 +507,8 @@ class GazeCheckWindow(QWidget):
         self._check = None
         self._selection.cancel()
         self._trial_results.clear()
-        self._trial_gaze_targets.clear()
+        self._trial_tracked_targets.clear()
+        self._trial_coverage = None
         self._target.hide()
         self._target.gaze_point = None
         self._trial_summary.hide()
@@ -652,44 +656,15 @@ class GazeCheckWindow(QWidget):
         self._result_map.results = results
         self._result_map.targets = self._check.targets if self._check is not None else []
         self._result_map.update()
-        if missing or not results:
-            advice = "Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru."
-        elif state is True:
-            advice = "Još provjerite izbor dugmeta pogledom."
-            if trial_finished:
-                if any(
-                    not selected and index not in self._trial_gaze_targets
-                    for index, selected in enumerate(self._trial_results)
-                ):
-                    advice = (
-                        "Tokom dijela probe nije bilo podataka o pogledu. Podesite položaj "
-                        "dok se prate oba oka, pa ponovite probu."
-                    )
-                elif self._trial_losses and not all(self._trial_results):
-                    advice = (
-                        "Prekidi praćenja poništavali su izbor. Podesite ekran dok uređaj "
-                        "ne vidi oba oka, pa ponovite probu."
-                    )
-                elif self._trial_wrong_selections:
-                    advice = (
-                        "Odabrana su i pogrešna dugmad. Provjerite položaj i kalibraciju, "
-                        "pa ponovite probu."
-                    )
-                elif not all(self._trial_results):
-                    advice = (
-                        "Neka dugmad nisu odabrana na vrijeme. Ponovite probu; zadržite "
-                        "pogled na „Pogledaj“ dok se traka ne popuni."
-                    )
-                else:
-                    advice = "Zatvorite provjeru i probajte govornu tastaturu."
-                    if self._trial_losses:
-                        advice += " Ako se izbor često poništava, ponovo podesite položaj."
-        else:
-            advice = (
-                "Odaberite „Podesi položaj“. Ako pogled i dalje promašuje, "
-                "otvorite Tobii postavke i ponovite kalibraciju korisnikovog profila."
+        self._result_advice.setText(
+            result_advice(
+                results,
+                trial_results=self._trial_results,
+                tracked_targets=self._trial_tracked_targets,
+                losses=self._trial_losses,
+                wrong_selections=self._trial_wrong_selections,
             )
-        self._result_advice.setText(advice)
+        )
         self._trial_summary.setVisible(trial_finished)
         if trial_finished:
             trial_ok = all(self._trial_results) and not self._trial_wrong_selections
@@ -752,7 +727,7 @@ class GazeCheckWindow(QWidget):
         self._set_test_mode("trial")
         self._step.setText("3 · Probni izbor · bez klika drugim programima")
         self._trial_results.clear()
-        self._trial_gaze_targets.clear()
+        self._trial_tracked_targets.clear()
         self._trial_losses = self._trial_departures = 0
         self._trial_wrong_selections = 0
         self._trial_interruptions = self._snapshot.gaze_interruptions
@@ -771,6 +746,7 @@ class GazeCheckWindow(QWidget):
         self._trial_feedback_loss = False
         duration = (self._settings.selection_pause_ms + self._settings.dwell_ms) / 1000
         self._trial_deadline = now + max(10.0, duration + 6.0)
+        self._trial_coverage = TrialGazeCoverage(now)
         self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
         self._test_hint.setToolTip(
             f"Pauza {self._settings.selection_pause_ms} ms + "
@@ -801,7 +777,8 @@ class GazeCheckWindow(QWidget):
         if self._trial_sample_at is not None and at - self._trial_sample_at >= FRESH_SECONDS:
             self._cancel_trial_progress(loss=True)
         self._trial_sample_at = at
-        self._trial_gaze_targets.add(len(self._trial_results))
+        if self._trial_coverage is not None:
+            self._trial_coverage.add(at)
         self._trial_feedback_loss = False
         screen = QGuiApplication.primaryScreen().geometry()
         x, y = snapshot.gaze
@@ -855,6 +832,8 @@ class GazeCheckWindow(QWidget):
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
         if loss:
+            if self._trial_coverage is not None:
+                self._trial_coverage.interrupt()
             if (
                 self._phase == "trial"
                 and self._selection.target is not None
@@ -881,6 +860,10 @@ class GazeCheckWindow(QWidget):
         self._target.update()
 
     def _finish_trial_target(self, selected: bool, now: float) -> None:
+        if self._trial_coverage is not None and self._trial_coverage.sufficient(
+            min(now, self._trial_deadline)
+        ):
+            self._trial_tracked_targets.add(len(self._trial_results))
         self._trial_results.append(selected)
         self._selection.cancel()
         self._target.progress = 0.0
