@@ -10,6 +10,32 @@ from pogled_assist.windows.windows_startup import StartupTaskResult
 
 
 @pytest.mark.e2e
+def test_tracking_notifications_setting_is_on_by_default_and_fits_gaze_page(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window._select_tab(1)
+    window.show()
+    qtbot.wait(1)
+    checkbox = window._tracking_notifications_checkbox
+    assert checkbox.isChecked()
+    assert checkbox.height() >= 58
+    assert window.rect().contains(QRect(checkbox.mapTo(window, QPoint()), checkbox.size()))
+    assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text()) + 50
+    updates = []
+    window.gaze_settings_changed.connect(updates.append)
+    checkbox.click()
+    assert not updates[-1].show_tracking_notifications
+    assert not checkbox.isChecked()
+    checkbox.click()
+    assert updates[-1].show_tracking_notifications
+    assert checkbox.isChecked()
+
+
+@pytest.mark.e2e
 @pytest.mark.parametrize("preset", ["default", "human_like"])
 def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     qtbot, monkeypatch, preset

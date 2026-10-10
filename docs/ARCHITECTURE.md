@@ -107,6 +107,14 @@ readiness after 500 ms without gaze; it does not change the input gate, dwell,
 backend subscriptions, or reconnect policy. See the
 [status guide](USER_GUIDE.md#before-starting) for the visible states.
 
+`TrackingFeedback` observes the same delivered lifecycle, eye and gaze signals
+for passive Speech notifications. `TrackingFeedbackState` owns presentation
+timing separately from input safety. Only the message header and active letter
+or confirmation header display a notice; no gaze target or modal action is added.
+The [notification guide](USER_GUIDE.md#tracking-notifications-in-speech) owns
+the setting, timing and suppressed contexts. Neither notification timing nor
+turning the setting off changes pointer movement, dwell cancellation or retries.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
@@ -137,6 +145,76 @@ on the previous button, and a held update can never confirm it. Context changes
 and eye loss discard the hold along with pending progress. Speech also blocks a
 suggestion replaced beneath gaze; that rejection must not count as leaving its
 button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
+
+### Gaze-check measurements
+
+The provider collects ephemeral `CheckTelemetry` only while `GazeCheckWindow`
+is open and clears it on close or stream invalidation. Coalesced snapshots reach
+the Qt thread after pending eye-loss signals. Raw normalized diagnostic gaze is
+kept separate from the clamped control stream. Native Stream Engine reuses its
+eye-position subscription; the x86 bridge validates the optional position and
+invalid-gaze messages. Pro SDK uses valid normalized track-box origins, never
+millimetre coordinates. Position capability, freshness and connection state are
+separate; fresh positions can remain visible without valid gaze.
+
+`tracking/gaze_check.py` owns the measurement rules:
+
+- Eye, position and gaze samples expire independently after 500 ms.
+- Eye availability is time-weighted over at most ten seconds. After three
+  seconds, at least 85% availability with no loss longer than 500 ms is shown as
+  mostly continuous tracking.
+- Position and depth checks use the reported [0, 1] bounds, without a centimetre
+  conversion or invented central zone. Movement guidance uses only fresh
+  positions and takes priority over missing-gaze guidance when outside the box.
+  Recognizing an eye from its position never enables input.
+- Each fixation target has one second to settle and two seconds to measure.
+  A result requires 12 distinct fresh samples and 60% temporal coverage.
+  Consecutive samples contribute at most 100 ms; an invalid or stale snapshot
+  breaks the interval. An interruption counter preserves losses coalesced
+  before Qt delivery. Earlier valid intervals remain counted across a blink.
+- A near result requires 90% of samples inside the displayed 36 logical-pixel
+  radius. Median error and 90th-percentile spread are descriptive heuristics,
+  not Tobii-certified or clinical scores. The result map retains the normalized
+  median centre; clipping off-screen centres affects painting only.
+- Each button trial measures coverage from its ready time until selection or
+  timeout. Only distinct fresh both-eye gaze samples count, including gaze
+  outside the buttons. Consecutive samples contribute at most 100 ms; known
+  losses and stale gaps break the interval. A timed-out target needs at least
+  60% coverage before advice can attribute failure to fixation or calibration.
+  Isolated samples never count as sustained tracking. This threshold only
+  selects advice; it does not change dwell, the eye gate or trial success.
+
+`gaze_check_window.py` owns the flow; `gaze_check_views.py` owns painting and
+geometry. `gaze_check_feedback.py` selects result advice without Qt: missing
+precision data, measured misses, then the completed trial's insufficient gaze
+coverage, cancelled selections, wrong selections and timeout. Successful trials
+with a brief loss still suggest actual use if all precision targets passed.
+Five timed targets cover the centre and corners. The local trial
+reuses `GazeSelectionTimer`, the speech edge-hold constants and the current pause
+and dwell settings, without Windows input. Its three groups have 136 × 64,
+96 × 88 and 180 × 72 logical-pixel controls, each with two neighbors. The edge
+margin is bounded by a quarter of each dimension. Wrong selections retain the
+leave-before-repeat lock across tracking loss. Departures include direct jumps
+to a neighbor. The free check paints nine targets and fresh both-eye gaze,
+without timing, scoring, smoothing or input.
+
+The hotbar owns diagnostic signal connections, Settings return, shutdown and
+Tobii settings handoff. Entry and exit clear pending actions; normal controller
+input is suspended while the check is open without changing saved settings.
+Suspension also applies while minimized and is checked again after synchronous
+gaze slots, so the triggering sample cannot move the pointer.
+
+`launch_tobii_settings` tries discovered UI candidates in rank order, excluding
+maintenance, Guest, calibration and test targets. A rejected candidate does not
+block later candidates; exhaustion returns the manual tray-icon route. Existing
+Guest calibration entry points retain their behavior and also exclude
+maintenance targets. The [user guide](USER_GUIDE.md#gaze-check) owns calibration
+instructions and the caregiver flow. No diagnostic history or result is saved.
+
+Coordinates follow Tobii's [Stream Engine API](https://developer.tobii.com/product-integration/)
+and [track-box description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
+Normalized-position availability and movement guidance still require validation
+on the installed 4C runtime; synthetic tests cannot establish hardware accuracy.
 
 ## UI and service ownership
 
@@ -245,11 +323,9 @@ next installer restore or finish an update interrupted during the directory swap
 
 ## Design reference
 
-[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is the self-contained visual and interaction reference used while developing
-the visible PySide6 interface. Its historical filename is retained for stable
-links. It is not loaded by the application, included by the PyInstaller build,
-or required to install or run Pogled Assist.
+The [HTML design reference](design/speech-keyboard-reference.html) is separate
+from the runtime and package. The [development guide](DEVELOPMENT.md#application-design-reference-workflow)
+owns its page map and review workflow.
 
 ## Compatibility contract
 

@@ -13,6 +13,26 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
+    qtbot, make_speech_window, script
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("TREBAM ODMOR")
+    rest = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:start"]
+    assert rest.text() == "Odmor\nOdmori oči"
+    rest.click()
+    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.sleep)
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake")
+    assert window._dialogs.active is None
+    assert window._input.text() == "TREBAM ODMOR"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
 @pytest.mark.parametrize("letters_per_group", [2, 5])
 @pytest.mark.parametrize("size", [(320, 640), (380, 640), (380, 950)])
 def test_controller_keyboard_rows_fill_sidebar_width(

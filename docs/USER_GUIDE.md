@@ -48,6 +48,103 @@ invalid-eye samples do not restart the connection. A direct native connection
 stays paused until fresh data returns. After a gap in gaze delivery, selection
 starts again from zero rather than confirming a target using time spent waiting.
 
+## Tracking notifications in Speech
+
+**Postavke > Postavke pogleda > Obavijesti o praćenju pogleda** is on by
+default, including when loading settings from an older release. Turn it off to
+hide Speech notifications; the both-eye safety rule still applies immediately.
+
+Speech normally has no notification or reserved empty row. A tracking problem
+lasting about 0.8 seconds shows a notice in the message header, letter dialog,
+or deletion confirmation. It distinguishes missing eye data, missing fresh gaze
+and a disconnected device. Three eye-tracking interruptions of at least 0.35 seconds within
+10 seconds can also show **Praćenje često prekida · provjerite položaj uređaja**.
+These presentation thresholds filter short interruptions; they do not delay
+cancellation of gaze selection or identify a medical cause.
+
+After both eyes and fresh gaze return, **Praćenje se vraća** appears while
+stability is checked. About half a second of continuous valid tracking changes
+it to green **Možete nastaviti** for two seconds, then it slides away. Another
+interruption updates the same notice. Green confirms that tracking data has
+returned, not calibration accuracy. It adds no waiting time to normal selection.
+During repeated interruptions, a warning can coexist with usable tracking;
+**odabir je zaustavljen** appears only while selection lacks valid data.
+
+The notice takes no focus and requires no acknowledgement. Buttons stay in
+place and the message field retains its full width; its original height returns
+when the notice disappears. Rest, Gaze check, Settings and hidden or minimized
+Speech do not produce these notifications. The existing hotbar status remains
+independent of this option.
+
+## Gaze check
+
+Open **Postavke > Postavke pogleda > Provjera pogleda** to adjust the display
+and check gaze. A helper operates this optional screen by mouse or keyboard;
+the gaze user looks at the targets. Normal gaze input stays paused while the
+check is open, including while minimized. **Zatvori** or Escape returns to
+Settings; the speech message is retained.
+
+1. **Položaj i praćenje** shows each eye, gaze delivery and recent tracking
+   continuity. Adjust the screen with its attached tracker. When the runtime
+   supplies positions, the frame shows the eyes and the bar shows depth from
+   **Bliže uređaju** to **Dalje od uređaja**. A checkmark means inside the
+   reported tracking area, not verified accuracy; a dash means unavailable or
+   stale data. Depth is not measured in centimetres. Position guidance can work
+   before valid gaze returns. If positions are unsupported, use the Tobii app's
+   positioning display; the target tests remain available.
+2. **Provjeri preciznost** presents five automatic targets, about three seconds
+   each, at the centre and near the screen corners. Look at each cross; no gaze
+   click is required. Results distinguish **Pogled blizu mete**, **Pogled izvan
+   mete** and **Premalo podataka**. Missing data is not a measured miss.
+   The advice directs the helper to positioning, profile calibration or the
+   button trial. **Prikaži mjerenja** reveals data coverage, error and spread,
+   with explanations. **Prekini test** returns to positioning; **Podesi položaj**
+   or **Ponovi provjeru** clears the results.
+3. **Probaj izbor dugmeta** tries three sizes of controls with the current
+   selection pause and dwell time. Look at **Pogledaj**, beside two **Drugo**
+   buttons, until the progress bar fills. No click goes to another program.
+   **Pogled je na drugom dugmetu** means gaze is there; **Odabrano je pogrešno
+   dugme** confirms a selection. Progress is green on the intended button and
+   amber on another. Eye loss or missing gaze cancels pending progress without
+   repeating an already completed selection. Results count correct selections,
+   wrong selections and interrupted pending selections; **Prikaži mjerenja**
+   also shows departures. A timed-out target with insufficient gaze coverage
+   directs the helper to restore tracking. A few isolated samples do not justify
+   asking for a longer stare.
+   Follow the advice to restore tracking, check calibration, retry
+   or try the speech keyboard. **Ponovi probu dugmadi** retains precision
+   results. Individual application controls still need checking in actual use.
+
+**Slobodna provjera** shows nine targets and a green ring for fresh gaze from
+both eyes, without timing or a score. Missing or off-screen gaze hides the ring.
+**Vrati na položaj** returns to positioning. This follows the visual feedback
+idea in Tobii Core's [Test and recalibrate](https://help.tobii.com/hc/en-us/articles/213891645-Test-and-recalibrate);
+use the timed test when a measured result is needed.
+
+The [architecture guide](ARCHITECTURE.md#gaze-check-measurements) defines the
+measurement rules and thresholds. They are application heuristics, not
+Tobii-certified or clinical assessments. A short loss may be a blink; the app
+does not diagnose tears, lighting or illness. Neither recognizing the eyes nor
+the continuity indicator relaxes the both-eye input rule. Connection loss,
+minimizing an active test or resizing cancels it. Simulator results are labeled
+and are not Tobii measurements. Results stay in memory and are discarded on close.
+
+**Otvori Tobii postavke** opens the installed Tobii settings and minimizes the
+check. In Tobii Core, select the user's profile, then **Test and recalibrate >
+Recalibrate** if needed. This action does not use `TOBII_CALIBRATION_COMMAND`
+or Ctrl+Shift+F10. Tobii documents that shortcut as
+[Guest calibration](https://help.tobii.com/hc/en-us/articles/209530409-Create-a-new-user-profile),
+which uses a temporary profile and does not recalibrate the saved one.
+The existing installation **Pokreni kalibraciju** and Settings
+**Pokreni Tobii kalibraciju** actions retain that Guest flow.
+
+Check [Display setup](https://help.tobii.com/hc/en-us/articles/209529969-Display-setup)
+too: Tobii must use Windows' primary display with correct tracker alignment.
+If settings cannot open, use the Tobii tray icon beside the clock. Return via
+the Windows taskbar or **Postavke**, then run a new check. Opening Tobii settings
+does not confirm calibration completed or change saved app settings. Keep the
+installed Core or Experience software; this feature requires no switch.
+
 ## Hotbar controls
 
 The left side of the hotbar contains:
@@ -117,7 +214,7 @@ Speech opens a full-screen Bosnian keyboard. Select a letter group, then a lette
 The message field is ready for typing when Speech opens, after its controls or
 dialogs are used, and when returning to Speech with Alt+Tab. Returning focus
 preserves the caret and any selected text. While adding a category, answer, or
-phrase, typing belongs to that new entry. Modal dialogs and Sleep block typing
+phrase, typing belongs to that new entry. Modal dialogs and **Odmor** block typing
 into the message until closed; Settings and other Windows applications keep
 their focus until you return to Speech. Launch still opens the hotbar.
 Space and Backspace stay on the bottom row. `Izgovori` sends the current text to
@@ -170,7 +267,7 @@ The controls on the right remain available while browsing or adding entries:
 
 - `Alarm` stops speech, repeats a distinct local emergency sound, and opens a dialog. Select
   `Zaustavi alarm` to silence it and return to the same Speech state.
-- `Sleep` stops speech and blacks out the display. Select `Nastavi` by gaze or
+- `Odmor` stops speech and blacks out the display. Select `Nastavi` by gaze or
   mouse to restore the message, current list and page, and any unfinished entry.
 - `Izlaz` offers three choices. `Odustani` returns to the same state, `Izađi`
   closes only Speech mode while preserving the conversation message, and
@@ -333,7 +430,9 @@ $env:TOBII_STREAM_ENGINE_DLL = "C:\Path\To\tobii_stream_engine.dll"
 ```
 
 If calibration needs a product-specific command, set
-`TOBII_CALIBRATION_COMMAND` before launching the app.
+`TOBII_CALIBRATION_COMMAND` before launching the app. This override belongs to
+the existing Guest calibration action, which still sends Ctrl+Shift+F10 after
+requesting the command. It is not used by **Otvori Tobii postavke**.
 
 Runtime diagnostics are written to `logs\latest.txt` when logging is enabled.
 The launcher writes `start_gaze_mouse.log` even when its window is hidden.

@@ -34,7 +34,7 @@ components.
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 38 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 70 main UI surfaces without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -288,6 +288,8 @@ Use these existing fakes and regression tests when changing a runtime boundary:
 | --- | --- |
 | Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
+| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
+| Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_e2e.py` |
 | Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
 | AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
@@ -341,27 +343,51 @@ sample quality, latency, or hardware accuracy. Report those checks as not run.
 
 ### Application design reference workflow
 
-[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is the design source of truth for the visible Pogled Assist interface. The
-historical filename is retained so existing links remain stable, but the file
-also documents Settings and any other application surface changed in the
-future.
-It currently has main views for Speech, Settings, the installation summary,
-Hotbar, standalone Keyboard, and the Controller keyboard. Gaze overlays do not
-yet have their own main views there. Add the relevant view before changing one
-of those surfaces.
+The [application design reference](design/speech-keyboard-reference.html) is
+the design source of truth for the visible Pogled Assist interface. That
+historical filename is now the entry point; old fragments such as `#tracking`
+open the matching standalone page. Open the HTML files directly in a browser;
+they use local styles and classic scripts, without a server or build step.
+
+| Surface | HTML document | Styles and interaction |
+| --- | --- | --- |
+| Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
+| Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
+| Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
+| Tracking notifications | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
+| Hotbar | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
+| Standalone keyboard | [keyboard.html](design/keyboard.html) | `docs/design/assets/keyboard.css`, `docs/design/assets/keyboard.js` |
+| Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
+| Installation summary | [installation.html](design/installation.html) | Shared styles; illustrative actions only |
+
+Shared navigation and preview session state live in
+`docs/design/assets/reference.js`; shared tokens and controls are in
+`docs/design/assets/reference.css`. The tracking page also reuses Speech's
+layout styles. Keyboard data and the mouse gaze simulation have separate shared
+scripts, `docs/design/assets/keyboard-data.js` and
+`docs/design/assets/gaze-demo.js`. Preview state is separate from application
+data and settings. Each page owns its feature notes; the
+[reference notes](design/reference-notes.html) own shared language conventions.
+Gaze overlays do not yet have their own pages. Add the relevant page before
+changing one of those surfaces.
 
 Every change to visible layout, copy, control sizes, states, or interaction flow
-must update the matching HTML reference in the same pull request. Update and
-review the reference first, then implement the matching PySide6 change so the
-reference never describes an older UI. This rule applies to every window,
-sidebar, overlay, dialog, and system control in the application, not only the
+must update the matching page and its assets in the same pull request. When
+instructions name `docs/design/speech-keyboard-reference.html`, they refer to
+this collection through its entry point; edit the index only when navigation
+changes. Update and review the reference first, then implement the matching
+PySide6 change so the reference never describes an older UI. This rule applies
+to every window, sidebar, overlay, dialog, and system control, not only the
 Speech window. If a code change has no visible or interaction impact, state that
 explicitly in the pull request instead of editing the reference unnecessarily.
 
 Review the HTML reference at the target display size before generating the Qt
 gallery. The reference documents the intended result; the gallery and real
 application checks confirm that the implementation matches it.
+
+Application-owned labels and feedback use standard Bosnian. The
+[**O ovoj referenci** page](design/reference-notes.html) owns the UI terminology
+and language conventions; check these when adding or reviewing copy.
 
 Generate the gallery:
 
@@ -373,11 +399,11 @@ The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
 already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
 the separate **UI gallery** workflow publishes a browser gallery and updates
 one PR bot comment with main screenshots, resolution links, the rendered commit,
-and a download link. Setup, publication permissions, and cleanup are defined in
+and a download link. Status reporting, setup, permissions and cleanup are defined in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 38 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 70 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -391,7 +417,16 @@ The command renders:
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
   mouse-simulation, and unsaved-settings states
 - General, gaze, speech, and learned-word Settings surfaces, including save failure
+- Gaze check: unavailable data, unsupported positions, disconnected device,
+  live position, eye positions without valid gaze, too-close/too-far/outside-frame
+  guidance without valid gaze, eye loss, fixation target with and without gaze,
+  incomplete results, optional measurements, measured misses, passed targets,
+  three local dwell trial sizes, cancelled selection and wrong-neighbor feedback,
+  trial results needing adjustment, a trial without gaze data, completed check,
+  and free check with and without live gaze
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
+- Speech tracking notifications: eye loss, missing gaze, disconnected device,
+  repeated interruptions, recovery, letter selection and deletion confirmation
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
@@ -399,8 +434,8 @@ The command renders:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
-Hotbar snapshots use at most 1280 logical pixels of width, and Settings snapshots
-use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
+Hotbar snapshots use at most 1280 logical pixels of width. Settings and Gaze check
+snapshots use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
 scaling. Other surfaces use the requested gallery size. In Settings, check equal
 action cells, the single-cell calibration control, the voice below keyboard
 script, and aligned decrease/value/increase columns.
@@ -408,7 +443,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 38-surface gallery.
+covered by UI interaction tests; it is not part of the 70-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -426,10 +461,20 @@ On a normal development machine, verify:
 - The hotbar spans the primary screen and does not cover maximized windows.
 - Hide and Show restore the Windows work area.
 - Settings, Speech, Keyboard, and Controller open at the expected size.
+- Gaze check opens from Settings, fits 1280 × 720 logical pixels, retains speech
+  text, blocks normal gaze input while open/minimized, and returns to Settings
+  using mouse or Escape. Check target timing, cancellation, resizing, calibration
+  handoff and taskbar return. Check all nine free targets, live-gaze expiry, the
+  result map and visible metrics, and all three neighbor-control sizes. Confirm
+  the caregiver panel covers no target. Simulator results must be labeled as synthetic.
 - The Controller Speech tab, hidden hotbar, Quick actions, precision zoom, and
   gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
 - Settings survive an application restart.
+- Tracking notifications are initially enabled, can be disabled in Gaze Settings,
+  leave targets fixed in Speech and its letter/deletion dialogs, and restore the
+  message field after recovery. Check that Rest, Settings and Gaze check suppress
+  them, without suppressing the independent both-eye safety gate.
 - Logs appear under `logs` only when logging is enabled.
 - Closing the app removes AppBar reservations and child windows.
 - Bosnian suggestions complete a partial word and offer a next word offline.
@@ -448,12 +493,28 @@ On a normal development machine, verify:
 
 On the Tobii machine, additionally verify:
 
+- In Gaze check, confirm the actual runtime supplies normalized positions before
+  accepting movement guidance. Move the attached display nearer/further and
+  sideways, verify both eye markers and depth, and confirm unavailable data has
+  no checkmark. Test five fixations near the screen edges, the nine-point free
+  check and all three local dwell trials, including wrong-neighbor selection, a blink,
+  sustained one-eye loss, disconnect/reconnect and normal control after closing.
+  Record OS, tracker, installed Tobii app/driver versions and selected application
+  backend. Test the user's existing Tobii Core installation, including calibration
+  settings launch, named-profile recalibration and return. Confirm that this
+  settings action never starts Guest calibration. Verify Display setup uses the
+  primary display and tracker alignment; this feature must not require a switch
+  to Tobii Experience.
 - The hotbar status distinguishes connecting, unavailable device, waiting for
   fresh data, and ready tracking. Readiness requires both eyes and fresh gaze;
   it does not certify calibration accuracy.
 - Both labeled eye indicators reflect real validity. Hide removes the whole
   status with the hotbar; Show restores its current state.
 - Losing one eye cancels dwell progress and stops pointer movement.
+- In Speech and its letter/deletion dialogs, check short blinks, sustained one-eye
+  loss, repeated losses, missing gaze and disconnect/reconnect. A sustained issue
+  shows the correct notice; fresh tracking turns it green briefly and then hides
+  it. Turning notifications off must never allow selection with one invalid eye.
 - At 150% scaling, select Speech, Keyboard, and Settings from the top screen edge
   without a mouse. Gaps between buttons must not select either neighbor.
 - In Speech, the hotbar, and standalone Keyboard, a brief movement just beyond a button edge freezes progress without

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Govor</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/speech.css">
+  <link rel="stylesheet" href="assets/gaze-demo.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/keyboard-data.js" defer></script>
+  <script src="assets/gaze-demo.js" defer></script>
+  <script src="assets/speech.js" defer></script>
+</head>
+<body data-reference-page="speech">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="speech-screen" class="speech-screen" aria-label="Pogled Assist govorna tastatura">
+    <header class="topbar">
+      <button class="warning" type="button" data-action="clear">Obriši</button>
+      <button id="categories-toggle" type="button" data-action="categories" aria-pressed="false">Kategorije</button>
+      <div class="message-box">
+        <div class="message-header">
+          <label id="message-label" for="message">Vaša poruka</label>
+          <span id="status" role="status" aria-live="polite"></span>
+        </div>
+        <input id="message" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
+      </div>
+      <button class="primary" type="button" data-action="speak">Izgovori</button>
+      <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
+    </header>
+    <section class="predictions" aria-label="Ponuđene riječi">
+      <h2 class="section-label">Brzi izbor</h2>
+      <div class="prediction-controls">
+        <div id="predictions" class="prediction-row"></div>
+        <button id="undo-word" type="button" data-action="undo-word" disabled>Poništi riječ</button>
+      </div>
+    </section>
+    <div class="workspace">
+      <section class="main-panel" aria-labelledby="view-title">
+        <div class="view-header">
+          <h1 id="view-title">Odaberite grupu slova</h1>
+          <button id="back" type="button" data-action="back" hidden>Nazad</button>
+          <button id="add" class="primary" type="button" data-action="add" hidden>Dodaj</button>
+          <button id="manage" type="button" data-action="manage" aria-pressed="false" hidden>Obriši</button>
+          <button id="retry-library" type="button" data-action="retry-library" hidden>Učitaj ponovo</button>
+          <button id="cancel-edit" type="button" data-action="cancel-edit" hidden>Odustani</button>
+          <button id="save" class="primary" type="button" data-action="save" hidden>Sačuvaj</button>
+        </div>
+        <div id="content" class="key-grid"></div>
+        <nav id="paging" class="paging" aria-label="Stranice" hidden>
+          <button type="button" data-action="previous">Prethodna</button>
+          <span id="page-number"></span>
+          <button type="button" data-action="next">Sljedeća</button>
+        </nav>
+      </section>
+      <aside class="system-actions" aria-label="Kontrole aplikacije">
+        <h2 class="section-label">Kontrole</h2>
+        <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
+        <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
+        <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
+      </aside>
+    </div>
+    <div class="utility-row">
+      <button type="button" data-action="space">Razmak</button>
+      <button type="button" data-action="backspace">Obriši slovo</button>
+      <button id="keyboard-toggle" type="button" data-action="keyboard-toggle">Brojevi i znakovi</button>
+      <button type="button" data-script-toggle>Arapski</button>
+    </div>
+  </main>
+  <details class="reference-tools">
+    <summary>Opcije pregleda</summary>
+    <label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label>
+    <button id="single-letter-preview" type="button">1 slovo u grupi</button>
+    <button id="twelve-letters-preview" type="button">12 slova u grupi</button>
+    <label><input id="library-read-error" type="checkbox"> Biblioteka nije učitana</label>
+  </details>  <dialog id="letters-dialog" aria-labelledby="letters-title">
+    <h2 id="letters-title">Odaberite slovo</h2>
+    <div id="letters" class="letter-grid"></div>
+  </dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-copy">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-copy" class="dialog-copy"></p>
+    <div class="confirm-actions">
+      <button type="button" data-action="cancel-confirm" autofocus>Odustani</button>
+      <button id="confirm-button" class="danger" type="button" data-action="confirm">Potvrdi</button>
+    </div>
+  </dialog>
+  <dialog id="exit-dialog" aria-labelledby="exit-title" aria-describedby="exit-copy">
+    <h2 id="exit-title">Izaći iz govornog načina?</h2>
+    <p id="exit-copy" class="dialog-copy">Možete se vratiti na razgovor, izaći iz govornog načina ili ugasiti cijelu aplikaciju.</p>
+    <div class="confirm-actions exit-actions">
+      <button type="button" data-action="cancel-exit" autofocus>Odustani</button>
+      <button type="button" data-action="leave-speech">Izađi</button>
+      <button class="danger" type="button" data-action="quit-app">Ugasi aplikaciju</button>
+    </div>
+  </dialog>
+  <dialog id="alarm-dialog" aria-labelledby="alarm-title" aria-describedby="alarm-copy">
+    <h2 id="alarm-title">Alarm je uključen</h2>
+    <p id="alarm-copy" class="dialog-copy">Zvučni signal se ponavlja dok ga ne zaustavite.</p>
+    <button class="danger" type="button" data-action="stop-alarm">Zaustavi alarm</button>
+  </dialog>
+  <dialog id="sleep-screen" aria-label="Odmor očiju">
+    <button id="wake" type="button" data-action="wake">Nastavi</button>
+  </dialog>
+  <dialog id="speech-closed-screen" aria-labelledby="speech-closed-title">
+    <div class="closed-content">
+      <h2 id="speech-closed-title">Govorni način je zatvoren</h2>
+      <p class="dialog-copy">Poruka je sačuvana za sljedeće otvaranje.</p>
+      <button type="button" data-action="reopen-speech">Ponovo otvori govor</button>
+    </div>
+  </dialog>
+  <dialog id="closed-screen" aria-labelledby="closed-title">
+    <div class="closed-content">
+      <h2 id="closed-title">Aplikacija je zatvorena</h2>
+      <p class="dialog-copy">Prikaz izlaza u HTML referenci.</p>
+      <button type="button" data-action="reopen">Vrati se na pregled dizajna</button>
+    </div>
+  </dialog>
+  <div id="gaze-ring" aria-hidden="true" hidden></div>
+
+<details class="design-notes"><summary>Pravila ovog prikaza</summary>
+    <ul>
+      <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
+<li>Kategorije su lijevo od poruke, fraze desno. Polje poruke zauzima cijelu dostupnu širinu; gornji red zadržava visinu od 96 px. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista. Obavijesti o prekidima i povratku praćenja imaju <a href="tracking.html">zaseban pregled</a>; koriste postojeće zaglavlje i ne pomjeraju dugmad.</li>
+<li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
+<li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Odmor blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
+<li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Odmor i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 80 px, a modalne akcije najmanje 128 px visine.</li>
+<li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Brzi izbor u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
+<li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
+<li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
+<li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
+<li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
+<li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak za manje od 120 ms nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
+<li>Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta.</li>
+<li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
+<li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
+<li>Odmor zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
+<li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
+<li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno čuvanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li></ul>
+<p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje Dodaj i Obriši. Uspješan pokušaj vraća sačuvane stavke bez promjene poruke.</p><p>Izgovori prikazuje Pokrećem govor., zatim Poruka se izgovara., Čitanje je završeno. ili Govor nije uspio. Pokušajte ponovo. Poruka ostaje sačuvana. Završetak procesa nije potvrda da se zvuk čuo. Novo pokretanje aplikacije zadržava samo postojeću instancu bez promjene fokusa.</p>
+<p>Poruke o čuvanju koriste Čuvam promjenu… i Čuvanje nije uspjelo. Novi unos nije sačuvan. Status brzih radnji glasi Otvoren je meni brzih radnji. Nakon desnog klika: Desni klik je otvorio meni. Lijevi klik je spreman za odabir.</p>
+</details>
+</body>
+</html>

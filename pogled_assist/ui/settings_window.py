@@ -254,6 +254,7 @@ class SettingsWindow(QWidget):
     speech_settings_changed = Signal(object)
     save_retry_requested = Signal()
     calibration_requested = Signal()
+    gaze_check_requested = Signal()
     speech_test_requested = Signal()
     update_requested = Signal()
     quit_requested = Signal()
@@ -514,14 +515,25 @@ class SettingsWindow(QWidget):
     def _build_gaze_page(self) -> QWidget:
         page = QFrame(self)
         layout = content_layout(page)
-        layout.addWidget(styled_label("Postavke pogleda", "sectionTitle", page))
-        layout.addWidget(
+        header = QGridLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setVerticalSpacing(4)
+        header.setColumnStretch(0, 1)
+        header.addWidget(styled_label("Postavke pogleda", "sectionTitle", page), 0, 0)
+        header.addWidget(
             styled_label(
                 "Podesite brzinu, stabilnost i povratnu informaciju pogleda.",
                 "sectionDescription",
                 page,
-            )
+            ),
+            1,
+            0,
         )
+        self._tracking_notifications_checkbox = self._controls.checkbox(
+            "Obavijesti o praćenju pogleda", self._toggle_tracking_notifications, QSize(300, 58)
+        )
+        header.addWidget(self._tracking_notifications_checkbox, 0, 1, 2, 1)
+        layout.addLayout(header)
 
         row, self._selection_pause_value = self._controls.adjust_row(
             "Pauza prije odabira",
@@ -589,6 +601,9 @@ class SettingsWindow(QWidget):
             QSize(220, 58),
             "fa5s.crosshairs",
         )
+        self._gaze_check_button = self._controls.button(
+            "Provjera pogleda", self._request_gaze_check, QSize(220, 58), "fa5s.eye"
+        )
         return action_grid(
             (
                 self._move_pointer_button,
@@ -596,8 +611,13 @@ class SettingsWindow(QWidget):
                 self._interaction_overlay_button,
                 self._precision_zoom_checkbox,
                 self._calibration_button,
+                self._gaze_check_button,
             )
         )
+
+    def _request_gaze_check(self) -> None:
+        self.cancel_gaze_interaction()
+        self.gaze_check_requested.emit()
 
     def _build_speech_page(self) -> QWidget:
         page = QFrame(self)
@@ -720,6 +740,15 @@ class SettingsWindow(QWidget):
         checked = not self._gaze_settings.show_interaction_overlay
         self._gaze_settings = replace(self._gaze_settings, show_interaction_overlay=checked)
         self._emit_gaze_settings("Prikaz napretka radnje je ažuriran.")
+
+    def _toggle_tracking_notifications(self) -> None:
+        enabled = not self._gaze_settings.show_tracking_notifications
+        self._gaze_settings = replace(self._gaze_settings, show_tracking_notifications=enabled)
+        self._emit_gaze_settings(
+            "Obavijesti o praćenju su uključene."
+            if enabled
+            else "Obavijesti o praćenju su isključene."
+        )
 
     def _toggle_precision_zoom(self) -> None:
         checked = not self._gaze_settings.use_precision_zoom
@@ -880,6 +909,9 @@ class SettingsWindow(QWidget):
         self._move_pointer_button.setChecked(self._gaze_settings.move_mouse)
         self._gaze_bubble_button.setChecked(self._gaze_settings.show_gaze_bubble)
         self._interaction_overlay_button.setChecked(self._gaze_settings.show_interaction_overlay)
+        self._tracking_notifications_checkbox.setChecked(
+            self._gaze_settings.show_tracking_notifications
+        )
         self._precision_zoom_checkbox.setChecked(self._gaze_settings.use_precision_zoom)
         self._startup_checkbox.setChecked(self._gaze_settings.start_with_windows)
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Početni meni</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/hotbar.css">
+  <link rel="stylesheet" href="assets/gaze-demo.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/gaze-demo.js" defer></script>
+  <script src="assets/hotbar.js" defer></script>
+</head>
+<body data-reference-page="hotbar">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="hotbar-screen">
+    <nav class="hotbar-reference" aria-label="Početni meni">
+      <button id="hotbar-hide" type="button" data-edge-control>Sakrij</button>
+      <button type="button" data-edge-control data-open-view="settings">Postavke</button>
+      <button type="button" data-edge-control>Brze radnje</button>
+      <button type="button" data-edge-control>Lijevi klik</button>
+      <button type="button" data-edge-control>Desni klik</button>
+      <button type="button" data-edge-control>Dvostruki klik</button>
+      <button type="button" data-edge-control data-open-view="speech">Govor</button>
+      <button type="button" data-edge-control data-open-view="sidebar">Tastatura</button>
+      <button type="button" data-edge-control data-open-view="controller">Upravljač</button>
+      <div id="hotbar-tracking-status" class="hotbar-tracking-status" role="status" aria-live="polite">
+        <div class="hotbar-tracking-title"><span id="hotbar-tracking-icon" class="hotbar-tracking-icon" aria-hidden="true">✓</span><span id="hotbar-tracking-title">Praćenje spremno</span></div>
+        <div id="hotbar-tracking-detail" class="hotbar-tracking-detail">Lijevo ✓ &nbsp; Desno ✓</div>
+      </div>
+    </nav>
+    <button id="hotbar-restore" type="button" data-edge-control hidden>Prikaži</button>
+    <label class="hotbar-status-preview">Primjer stanja
+      <select id="hotbar-status-preview">
+        <option value="ready">Oba oka i svježi pogled</option>
+        <option value="left">Lijevo oko nije prepoznato</option>
+        <option value="right">Desno oko nije prepoznato</option>
+        <option value="eyes">Nijedno oko nije prepoznato</option>
+        <option value="waiting">Čekanje svježih podataka</option>
+        <option value="connecting">Povezivanje</option>
+        <option value="retrying">Uređaj nije povezan</option>
+        <option value="simulation">Simulacija mišem</option>
+        <option value="unavailable">Simulacija nije dostupna</option>
+        <option value="stopped">Praćenje zaustavljeno</option>
+      </select>
+    </label>
+    <p>Status je dio trake, nije dugme i nije površina odabira pogledom. Sakrij uklanja cijelu traku sa statusom. Prikaži vraća traku; dok je sakrivena, nema izdvojenog statusnog panela.</p>
+    <p>Praćenje spremno zahtijeva aktivnu vezu, validne podatke oba oka i svježi uzorak pogleda. Gubitak oka prikazuje Praćenje pauzirano i zadržava obje oznake oka: ✓ za validan podatak, — kada podatak nije validan. Čekanje podataka se razlikuje od gubitka oka i nepovezanog uređaja. Simulacija mišem ne prikazuje lažnu potvrdu Tobii očiju. Prikaz nema treperenja, animacije ni zvučnih upozorenja pri treptaju.</p>
+    <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
+    <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
+    <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
+  </main>
+  <details class="reference-tools"><summary>Opcije pregleda</summary><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
+  <div id="gaze-ring" aria-hidden="true" hidden></div>
+</body>
+</html>

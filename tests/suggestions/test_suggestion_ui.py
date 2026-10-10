@@ -360,7 +360,16 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
             "_write",
             lambda _payload: (_ for _ in ()).throw(OSError("disk full")),
         )
+        saving_messages = []
+        forget = service.forget
+
+        def observe_saving_message(word):
+            saving_messages.append(window._learning_page._status_label.text())
+            forget(word)
+
+        monkeypatch.setattr(service, "forget", observe_saving_message)
         window._learning_page._forget_button.click()
+        assert saving_messages == ["Čuvam promjenu…"]
         qtbot.waitUntil(lambda: not window._learning_page._busy)
         assert service.store.error == WRITE_ERROR
         assert window._learning_page._retry_button.isEnabled()
