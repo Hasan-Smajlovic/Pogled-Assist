@@ -4,6 +4,8 @@
   const checkEl = id => document.getElementById(id);
   let checkMode = 'position';
   let checkTrialIndex = 0;
+  const noGazeExample = new URLSearchParams(location.search).get('trial') === 'no-gaze';
+  let checkTrialFinished = false;
   // Runtime trial contract: a blink or missing gaze cancels pending progress but
   // never unlocks an already selected neighbor. Only a fresh departure does so.
   // Near-edge hold uses min(24 px, width / 4, height / 4), as in normal controls.
@@ -18,13 +20,40 @@
   let checkDetails = false;
   const checkNames = ['Sredina', 'Gore lijevo', 'Gore desno', 'Dolje lijevo', 'Dolje desno'];
   function checkResultTable() {
-  const statuses = ['✓ Pogled blizu mete', '✓ Pogled blizu mete', '! Pogled izvan mete', '✓ Pogled blizu mete', '— Premalo podataka'];
-  const values = [['90%', '12 px', '8 px'], ['90%', '14 px', '10 px'], ['90%', '48 px', '12 px'], ['90%', '18 px', '9 px'], ['20%', '—', '—']];
-  checkEl('check-result-table').innerHTML = '<tr><th>Meta</th>' + (checkDetails ? '<th>Podaci</th><th>Odstupanje</th><th>Rasipanje</th>' : '<th>Rezultat</th>') + '</tr>' + checkNames.map((name,i) => `<tr><td>${name}</td>${checkDetails ? values[i].map(v=>`<td>${v}</td>`).join('') : `<td class="${i===4?'muted':i===2?'check-attention':'check-pass'}">${statuses[i]}</td>`}</tr>`).join('');
-  checkEl('check-details').textContent = checkDetails ? 'Sakrij mjerenja' : 'Prikaži mjerenja';
-  checkEl('check-metrics-help').hidden = !checkDetails;
+    const missingTrialGaze = noGazeExample && checkTrialFinished;
+    const statuses = missingTrialGaze ? Array(5).fill('✓ Pogled blizu mete') : [
+      '✓ Pogled blizu mete', '✓ Pogled blizu mete', '! Pogled izvan mete',
+      '✓ Pogled blizu mete', '— Premalo podataka',
+    ];
+    const values = missingTrialGaze ? Array(5).fill(['90%', '12 px', '8 px']) : [
+      ['90%', '12 px', '8 px'], ['90%', '14 px', '10 px'], ['90%', '48 px', '12 px'],
+      ['90%', '18 px', '9 px'], ['20%', '—', '—'],
+    ];
+    const headings = checkDetails ? ['Meta', 'Podaci', 'Odstupanje', 'Rasipanje'] : ['Meta', 'Rezultat'];
+    const rows = checkNames.map((name, index) => {
+      let tone = 'check-pass';
+      if (!missingTrialGaze && index === 4) tone = 'muted';
+      else if (!missingTrialGaze && index === 2) tone = 'check-attention';
+      const cells = checkDetails
+        ? values[index].map(value => `<td>${value}</td>`).join('')
+        : `<td class="${tone}">${statuses[index]}</td>`;
+      return `<tr><td>${name}</td>${cells}</tr>`;
+    });
+    checkEl('check-result-table').innerHTML = '<tr>'
+      + headings.map(heading => `<th>${heading}</th>`).join('') + '</tr>' + rows.join('');
+    checkEl('check-details').textContent = checkDetails ? 'Sakrij mjerenja' : 'Prikaži mjerenja';
+    checkEl('check-metrics-help').hidden = !checkDetails;
+    checkEl('check-result-title').textContent = missingTrialGaze
+      ? '✓ Pogled je bio blizu 5 od 5 meta.' : '— Za 1 od 5 meta nema dovoljno podataka.';
+    checkEl('check-result-advice').textContent = missingTrialGaze
+      ? 'Tokom dijela probe nije bilo podataka o pogledu. Podesite položaj dok se prate oba oka, pa ponovite probu.'
+      : 'Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru.';
+    if (missingTrialGaze) {
+      checkEl('check-trial-result').textContent = '! Probni izbor: 0/3 · pogrešni izbori: 0 · poništeni izbori: 0';
+    }
+    checkEl('check-results').querySelector('.check-map i').hidden = missingTrialGaze;
   }
-  function checkReset() { checkMode='position'; checkDetails=false; checkResultTable(); checkEl('check-live').hidden=false; checkEl('check-test').hidden=true; checkEl('check-results').hidden=true; checkEl('check-trial-result').hidden=true; checkEl('check-step').textContent='1 · Položaj i praćenje'; checkEl('check-notice').textContent='Upravljanje pogledom je pauzirano tokom provjere.'; checkEl('check-next').textContent='Provjeri preciznost'; checkEl('check-reset').hidden=true; }
+  function checkReset() { checkMode='position'; checkDetails=false; checkTrialFinished=false; checkResultTable(); checkEl('check-live').hidden=false; checkEl('check-test').hidden=true; checkEl('check-results').hidden=true; checkEl('check-trial-result').hidden=true; checkEl('check-step').textContent='1 · Položaj i praćenje'; checkEl('check-notice').textContent='Upravljanje pogledom je pauzirano tokom provjere.'; checkEl('check-next').textContent='Provjeri preciznost'; checkEl('check-reset').hidden=true; }
   function checkStage(mode) {
   if (checkMode!==mode) checkTrialIndex=0;
   checkMode=mode; checkEl('check-test').classList.toggle('free', mode==='free'); checkEl('check-live').hidden=true; checkEl('check-results').hidden=true; checkEl('check-test').hidden=false; checkEl('check-gaze').hidden=mode!=='free'; checkEl('check-test-next').hidden=mode==='free';
@@ -47,7 +76,7 @@
   }
   checkEl('check-next').addEventListener('click',()=>checkStage(checkMode==='results'?'trial':'precision'));
   checkEl('check-free').addEventListener('click',()=>checkStage('free'));
-  checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') { checkEl('check-trial-result').hidden=false; checkEl('check-trial-result').textContent='! Probni izbor: 3/3 · pogrešni izbori: 1'; checkEl('check-next').textContent='Ponovi probu dugmadi'; } else checkEl('check-next').textContent='Probaj izbor dugmeta'; checkMode='results'; checkEl('check-step').textContent='Rezultat provjere'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-reset').textContent='Podesi položaj'; checkEl('check-reset').hidden=false; checkResultTable(); });
+  checkEl('check-test-next').addEventListener('click',()=>{ if(checkMode==='trial' && checkTrialIndex<2) { checkTrialIndex++; checkStage('trial'); return; } if(checkMode==='trial') { checkTrialFinished=true; checkEl('check-trial-result').hidden=false; checkEl('check-trial-result').textContent='! Probni izbor: 3/3 · pogrešni izbori: 1'; checkEl('check-next').textContent='Ponovi probu dugmadi'; } else checkEl('check-next').textContent='Probaj izbor dugmeta'; checkMode='results'; checkEl('check-step').textContent='Rezultat provjere'; checkEl('check-test').hidden=true; checkEl('check-results').hidden=false; checkEl('check-reset').textContent='Podesi položaj'; checkEl('check-reset').hidden=false; checkResultTable(); });
   checkEl('check-details').addEventListener('click',()=>{checkDetails=!checkDetails;checkResultTable();});
   checkEl('check-test-back').addEventListener('click',checkReset);
   checkEl('check-reset').addEventListener('click',checkReset);

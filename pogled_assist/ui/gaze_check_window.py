@@ -83,6 +83,7 @@ class GazeCheckWindow(QWidget):
         self._phase = "position"
         self._selection = GazeSelectionTimer()
         self._trial_results: list[bool] = []
+        self._trial_gaze_targets: set[int] = set()
         self._trial_deadline = 0.0
         self._trial_ready_at = 0.0
         self._trial_sample_at: float | None = None
@@ -503,6 +504,7 @@ class GazeCheckWindow(QWidget):
         self._check = None
         self._selection.cancel()
         self._trial_results.clear()
+        self._trial_gaze_targets.clear()
         self._target.hide()
         self._target.gaze_point = None
         self._trial_summary.hide()
@@ -655,7 +657,15 @@ class GazeCheckWindow(QWidget):
         elif state is True:
             advice = "Još provjerite izbor dugmeta pogledom."
             if trial_finished:
-                if self._trial_losses and not all(self._trial_results):
+                if any(
+                    not selected and index not in self._trial_gaze_targets
+                    for index, selected in enumerate(self._trial_results)
+                ):
+                    advice = (
+                        "Tokom dijela probe nije bilo podataka o pogledu. Podesite položaj "
+                        "dok se prate oba oka, pa ponovite probu."
+                    )
+                elif self._trial_losses and not all(self._trial_results):
                     advice = (
                         "Prekidi praćenja poništavali su izbor. Podesite ekran dok uređaj "
                         "ne vidi oba oka, pa ponovite probu."
@@ -688,7 +698,7 @@ class GazeCheckWindow(QWidget):
                 trial_ok,
                 f"Probni izbor: {sum(self._trial_results)}/3 · "
                 f"pogrešni izbori: {self._trial_wrong_selections} · "
-                f"prekidi praćenja: {self._trial_losses}",
+                f"poništeni izbori: {self._trial_losses}",
             )
         self._primary_button.setText(
             "Ponovi probu dugmadi" if trial_finished else "Probaj izbor dugmeta"
@@ -742,6 +752,7 @@ class GazeCheckWindow(QWidget):
         self._set_test_mode("trial")
         self._step.setText("3 · Probni izbor · bez klika drugim programima")
         self._trial_results.clear()
+        self._trial_gaze_targets.clear()
         self._trial_losses = self._trial_departures = 0
         self._trial_wrong_selections = 0
         self._trial_interruptions = self._snapshot.gaze_interruptions
@@ -790,6 +801,7 @@ class GazeCheckWindow(QWidget):
         if self._trial_sample_at is not None and at - self._trial_sample_at >= FRESH_SECONDS:
             self._cancel_trial_progress(loss=True)
         self._trial_sample_at = at
+        self._trial_gaze_targets.add(len(self._trial_results))
         self._trial_feedback_loss = False
         screen = QGuiApplication.primaryScreen().geometry()
         x, y = snapshot.gaze

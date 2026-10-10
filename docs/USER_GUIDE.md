@@ -107,8 +107,10 @@ Settings; the speech message is retained.
    dugme** confirms a selection. Progress is green on the intended button and
    amber on another. Eye loss or missing gaze cancels pending progress without
    repeating an already completed selection. Results count correct selections,
-   wrong selections and tracking interruptions; **Prikaži mjerenja** also shows
-   departures. Follow the advice to restore tracking, check calibration, retry
+   wrong selections and interrupted pending selections; **Prikaži mjerenja**
+   also shows departures. A timed-out target with no fresh gaze data directs
+   the helper to restore tracking, rather than asking for a longer stare.
+   Follow the advice to restore tracking, check calibration, retry
    or try the speech keyboard. **Ponovi probu dugmadi** retains precision
    results. Individual application controls still need checking in actual use.
 

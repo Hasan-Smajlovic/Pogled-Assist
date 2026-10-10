@@ -21,13 +21,16 @@ def test_tracking_notice_preserves_targets_message_and_focus(
     window = make_speech_window(FakeSpeech(), library_store=FakeLibraryStore())
     window.resize(*size)
     window.show()
+    window.activateWindow()
+    qtbot.waitUntil(lambda: qapp.focusWidget() is window._input)
     window._input.setText("TREBAM VODE")
     window._input.setSelection(0, 6)
     if context == "letters":
         window._open_letter_dialog(0)
     elif context == "confirm":
         window._open_clear_dialog()
-    qtbot.wait(1)
+    active_window = window if context == "message" else window._dialogs.active
+    qtbot.waitUntil(lambda: qapp.activeWindow() is active_window)
     widget = (
         window._message_header.notice
         if context == "message"
@@ -40,6 +43,7 @@ def test_tracking_notice_preserves_targets_message_and_focus(
     }
     original_height = window._input.height()
     original_selection = window._input.selectedText()
+    assert original_selection == "TREBAM"
     focus = qapp.focusWidget()
     notice = TrackingNotice(
         "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)

@@ -34,7 +34,11 @@
       Target locations/timing, eye gate, thresholds and local dwell behavior stay unchanged.
       Keep measurement formulas in tooltips and the owning architecture guide.
       Live test feedback: waiting for gaze / eye lost / neighbor selected / look again.
-      Failed trial advice prioritizes lost tracking, then neighbors, then timeout; a successful
+      Failed trial advice first distinguishes targets with no fresh gaze samples:
+      "Tokom dijela probe nije bilo podataka o pogledu. Podesite položaj dok se prate
+      oba oka, pa ponovite probu." Preview this result with ?trial=no-gaze.
+      "Poništeni izbori" counts interrupted pending selections, not every tracking gap.
+      Otherwise prioritize lost tracking, then neighbors, then timeout; a successful
       trial suggests actual use only when all precision targets also have enough data.
       Keep the target still; animate only the small progress bar below the instruction.
       Dwell progress on the intended button is green; progress on a neighbor is amber,

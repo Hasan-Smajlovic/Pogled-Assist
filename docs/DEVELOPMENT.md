@@ -403,7 +403,7 @@ and a download link. Status reporting, setup, permissions and cleanup are define
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
 To review the artifact offline, download and extract it from the workflow run,
 then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 69 surfaces; the artifact is kept for 14 days and
+Each folder contains the same 70 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -422,7 +422,8 @@ The command renders:
   guidance without valid gaze, eye loss, fixation target with and without gaze,
   incomplete results, optional measurements, measured misses, passed targets,
   three local dwell trial sizes, cancelled selection and wrong-neighbor feedback,
-  trial results needing adjustment, completed check, and free check with and without live gaze
+  trial results needing adjustment, a trial without gaze data, completed check,
+  and free check with and without live gaze
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
 - Speech tracking notifications: eye loss, missing gaze, disconnected device,
   repeated interruptions, recovery, letter selection and deletion confirmation
@@ -442,7 +443,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 69-surface gallery.
+covered by UI interaction tests; it is not part of the 70-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.

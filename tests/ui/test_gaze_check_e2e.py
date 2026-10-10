@@ -105,6 +105,65 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
     assert window._phase == "position"
 
 
+@pytest.mark.parametrize("missing", ["eyes", "gaze", "stale"])
+def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qtbot, missing):
+    window, now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._start_trial()
+    for _ in range(3):
+        now[0] = window._trial_ready_at + 0.1
+        if missing == "eyes":
+            snapshot = CheckSnapshot(True, False)
+        elif missing == "gaze":
+            snapshot = CheckSnapshot(True, True)
+        else:
+            snapshot = CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=now[0] - 0.6)
+        window.handle_snapshot(snapshot)
+        now[0] = window._trial_deadline + 0.01
+        window._tick()
+    assert window._phase == "results"
+    assert window._trial_results == [False] * 3
+    assert window._trial_losses == 0  # No pending selection ever started.
+    assert "poništeni izbori: 0" in window._trial_summary.text()
+    assert "nije bilo podataka o pogledu" in window._result_advice.text()
+    assert "Podesite položaj" in window._result_advice.text()
+    assert "nisu odabrana na vrijeme" not in window._result_advice.text()
+    assert "0/3" in window._trial_summary.text()
+    window._start_trial()
+    assert not window._trial_gaze_targets
+
+
+def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(gaze_check, qtbot):
+    window, now, _screen = gaze_check
+    window._start_precision()
+    qtbot.wait(1)
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._start_trial()
+    for _ in range(3):
+        now[0] = window._trial_ready_at + 0.1
+        # Fresh gaze away from the buttons is data, even without starting dwell.
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.99, 0.5), gaze_at=now[0]))
+        now[0] = window._trial_deadline + 0.01
+        window._tick()
+    assert window._trial_gaze_targets == {0, 1, 2}
+    assert "nisu odabrana na vrijeme" in window._result_advice.text()
+    assert "nije bilo podataka o pogledu" not in window._result_advice.text()
+    window._start_trial()
+    for _ in range(3):
+        now[0] = window._trial_deadline + 0.01
+        window._tick()
+    assert "nije bilo podataka o pogledu" in window._result_advice.text()
+    assert not window._trial_gaze_targets
+    window.reset_check()
+    assert not window._trial_gaze_targets
+
+
 def test_precision_does_not_bridge_coalesced_eye_losses(gaze_check, qtbot):
     import threading
 
@@ -522,7 +581,7 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulate
 
     window, _now, _screen = gaze_check
     window._simulated = simulated
-    for phase in ("position", "precision", "results", "details", "trial", "free"):
+    for phase in ("position", "precision", "results", "details", "trial", "trial-no-gaze", "free"):
         if phase == "precision":
             window._start_precision()
         elif phase == "results":
@@ -535,6 +594,9 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulate
             window._details_button.click()
         elif phase == "trial":
             window._start_trial()
+        elif phase == "trial-no-gaze":
+            window._trial_results = [False] * 3
+            window._show_results()
         elif phase == "free":
             window._start_free()
         qtbot.wait(1)
@@ -618,12 +680,14 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     window._show_results()
     window._start_trial()
     window._trial_results = selected
+    window._trial_gaze_targets = {0, 1, 2}
     window._trial_wrong_selections = wrong
     window._trial_losses = loss
     window._show_results()
     assert advice in window._result_advice.text()
     assert window._trial_summary.isVisible()
     assert f"pogrešni izbori: {wrong}" in window._trial_summary.text()
+    assert f"poništeni izbori: {loss}" in window._trial_summary.text()
     assert window._primary_button.text() == "Ponovi probu dugmadi"
     assert "Izlasci iz dugmeta" not in window._trial_summary.text()
     if all(selected) and not wrong:

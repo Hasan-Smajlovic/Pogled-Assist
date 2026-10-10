@@ -481,6 +481,8 @@ class _CaptureSession:
             window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
         )
         window._finish_trial_target(False, time.monotonic())
+        window._trial_gaze_targets = {0, 1, 2}
+        window._show_results()
         self.capture(
             window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
         )
@@ -489,6 +491,12 @@ class _CaptureSession:
         window._show_results()
         self.capture(
             window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
+        )
+        window._start_trial()
+        for _ in range(3):
+            window._finish_trial_target(False, time.monotonic())
+        self.capture(
+            window, "gaze-check-trial-no-gaze", "Gaze check: trial without gaze data", size=size
         )
         window._start_free()
         screen = QGuiApplication.primaryScreen().geometry()
