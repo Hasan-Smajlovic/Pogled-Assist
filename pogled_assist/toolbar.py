@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from dataclasses import replace
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
+from . import diagnostics
 from .interaction.mouse_controller import (
     CLICK_ACTIONS,
     CONTROLLER,
@@ -75,6 +77,7 @@ class HotbarWindow(QWidget):
         self._closing = False
         self._simulate_gaze = simulate_gaze
         self._buttons: dict[str, QToolButton] = {}
+        self._diagnostic_context = diagnostics.TargetContext("hotbar")
         self._appbar = WindowsAppBar()
         self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
@@ -258,6 +261,27 @@ class HotbarWindow(QWidget):
             return None
         return button if button.isEnabled() else None
 
+    def diagnostic_context(self, action: str | None) -> diagnostics.TargetContext:
+        if (
+            action
+            and action.startswith(SPEECH_WINDOW_ACTION_PREFIX)
+            and self._speech_window is not None
+        ):
+            return self._speech_window._diagnostic_context
+        if (
+            action
+            and action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX)
+            and self._keyboard_window is not None
+        ):
+            return self._keyboard_window.diagnostic_context(action)
+        if (
+            action
+            and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
+            and self._controller_window is not None
+        ):
+            return self._controller_window.diagnostic_context(action)
+        return self._diagnostic_context
+
     def _build_ui(self) -> None:
         self._controls = HotbarControls(
             self, self._run_toolbar_action, self._mouse.cancel_gaze_interactions_for_mouse
@@ -349,7 +373,7 @@ class HotbarWindow(QWidget):
         checked: bool | None = None,
         source: str = "unknown",
     ) -> None:
-        logger.info("Toolbar action requested by %s: %s", source, action)
+        logger.info("Toolbar action requested by %s: %s", source, diagnostics.safe_action(action))
         if source == "mouse":
             self._mouse.cancel_gaze_interactions_for_mouse()
         if self._route_window_action(action):
@@ -747,6 +771,13 @@ class HotbarWindow(QWidget):
         )
 
     def _show_tracking_notice(self, notice: TrackingNotice | None) -> None:
+        diagnostics.emit(
+            "tracking_notice_host",
+            host="speech"
+            if self._speech_window is not None and self._speech_window.isVisible()
+            else "none",
+            tone=notice.tone if notice is not None else None,
+        )
         if self._speech_window is not None:
             self._speech_window.set_tracking_notice(
                 notice, immediate=not self._mouse.settings.show_tracking_notifications
@@ -771,12 +802,19 @@ class HotbarWindow(QWidget):
             self._settings_window.activateWindow()
             return
 
+        requested_at = time.monotonic()
+        diagnostics.emit("settings_open_started", priority=True)
         window = SettingsWindow(
             self._mouse.settings,
             self._speech.settings,
             self,
             update_manager=self._release_update_manager,
             suggestions=self._suggestions,
+        )
+        diagnostics.emit(
+            "settings_constructed",
+            priority=True,
+            duration_ms=(time.monotonic() - requested_at) * 1000,
         )
         window.gaze_settings_changed.connect(self._update_gaze_settings)
         window.speech_settings_changed.connect(self._update_speech_settings)
@@ -795,6 +833,9 @@ class HotbarWindow(QWidget):
         self._settings_window = window
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
+        diagnostics.emit(
+            "settings_shown", priority=True, duration_ms=(time.monotonic() - requested_at) * 1000
+        )
         self._set_status("Postavke su otvorene.")
 
     def _open_gaze_check(self) -> None:
@@ -844,7 +885,17 @@ class HotbarWindow(QWidget):
     def _calibrate_from_gaze_check(self) -> None:
         # The check remains open/minimized and normal gaze input stays suspended.
         try:
+            diagnostics.emit(
+                "gaze_check_handoff", priority=True, action="tobii_settings", outcome="requested"
+            )
             message = launch_tobii_settings()
+            diagnostics.emit(
+                "gaze_check_handoff",
+                priority=True,
+                action="tobii_settings",
+                outcome="launcher_returned",
+                calibration_completed="unknown",
+            )
         except Exception:
             logger.exception("Tobii settings launch from gaze check failed.")
             message = "Tobii postavke se nisu otvorile. Otvorite Tobii ikonu pored sata."
@@ -1013,6 +1064,7 @@ class HotbarWindow(QWidget):
         if left_open and right_open:
             return
 
+        self._gaze_bubble.clear()
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()
         self._zoom_context = None

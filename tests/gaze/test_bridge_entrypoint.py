@@ -1,9 +1,62 @@
 from __future__ import annotations
 
+import io
 import json
 import threading
 
 from pogled_assist.tracking import tobii_stream_engine_bridge
+
+
+def test_blocked_bridge_stderr_does_not_block_stdout_input(monkeypatch):
+    entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
+    output = io.StringIO()
+    result = []
+
+    class BlockedError:
+        def write(self, text):
+            entered.set()
+            release.wait(5)
+
+        def flush(self):
+            pass
+
+    class Backend:
+        label = "fake tracker"
+        dll_path = "fake DLL"
+        eye_position_supported = False
+
+        def __init__(self, gaze, eyes):
+            self.gaze = gaze
+            self.eyes = eyes
+
+        def start(self):
+            assert entered.wait(1)
+            self.eyes(True, True, 1)
+            self.gaze(0.25, 0.75, 2)
+            delivered.set()
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "stdout", output)
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "stderr", BlockedError())
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "argv", ["bridge.py"])
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_pointer_size", lambda: 4)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_install_signal_handlers", lambda: None)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_running", False)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "TobiiStreamEngineBackend", Backend)
+    runner = threading.Thread(target=lambda: result.append(tobii_stream_engine_bridge.main()))
+    try:
+        runner.start()
+        assert delivered.wait(1), "input callbacks must finish while stderr remains blocked"
+    finally:
+        release.set()
+        runner.join(3)
+    assert not runner.is_alive()
+    assert result == [0]
+    messages = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert [item["type"] for item in messages] == ["eyes", "gaze", "started", "stopped"]
+    assert messages[1] == {"type": "gaze", "x": 0.25, "y": 0.75, "timestamp": 2}
 
 
 def test_bridge_emit_helpers_write_json(capsys):

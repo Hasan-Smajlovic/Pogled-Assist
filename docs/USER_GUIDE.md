@@ -48,6 +48,10 @@ invalid-eye samples do not restart the connection. A direct native connection
 stays paused until fresh data returns. After a gap in gaze delivery, selection
 starts again from zero rather than confirming a target using time spent waiting.
 
+The blue gaze marker disappears when either eye loses validity, or after
+500 ms without a new gaze point. It returns at the next valid gaze position.
+Restored eye indicators alone do not make an old marker position visible again.
+
 ## Tracking notifications in Speech
 
 **Postavke > Postavke pogleda > Obavijesti o praćenju pogleda** is on by
@@ -127,7 +131,8 @@ Tobii-certified or clinical assessments. A short loss may be a blink; the app
 does not diagnose tears, lighting or illness. Neither recognizing the eyes nor
 the continuity indicator relaxes the both-eye input rule. Connection loss,
 minimizing an active test or resizing cancels it. Simulator results are labeled
-and are not Tobii measurements. Results stay in memory and are discarded on close.
+and are not Tobii measurements. The screen discards results on close. An explicitly enabled diagnostic trace
+can save measurement fields; see [Diagnostic log collection](#diagnostic-log-collection).
 
 **Otvori Tobii postavke** opens the installed Tobii settings and minimizes the
 check. In Tobii Core, select the user's profile, then **Test and recalibrate >
@@ -438,6 +443,33 @@ Runtime diagnostics are written to `logs\latest.txt` when logging is enabled.
 The launcher writes `start_gaze_mouse.log` even when its window is hidden.
 Updater diagnostics are appended to `update_windows.log` in the installation
 folder.
+
+### Diagnostic log collection
+
+When reporting a tracking or selection problem, close the application after the
+reproduction and send the whole `logs` folder through your agreed support channel.
+It includes the readable log and structured sessions in `logs\diagnostics`.
+Note the approximate time, the control you tried to select, and whether someone
+used the mouse or keyboard. Keep a short video when practical. Archive filenames
+reflect rotation time, which can differ from the start of the recorded session.
+
+Normal logging collects summaries and selection interruption reasons. For a
+short, more detailed reproduction, a caregiver can launch from PowerShell with:
+
+```powershell
+$env:POGLED_ASSIST_GAZE_DIAGNOSTICS = 'trace'
+& 'C:\PogledAssist\PogledAssist.exe'
+Remove-Item Env:\POGLED_ASSIST_GAZE_DIAGNOSTICS
+```
+
+Close any already-running copy first. Trace lasts at most ten minutes or 32 MiB,
+then continues with normal logging. The existing **Uključi zapisivanje** setting
+must be enabled; disabling it also disables trace. No new control is added.
+Structured sessions have a size limit and can omit records when output is slow;
+their health records show that loss. A crash can omit the last batch or closing
+record. Detailed coordinates and button geometry may reveal activity even though
+the application does not add composed text, spoken messages, suggestion text or
+key labels to these diagnostic records. Review the folder before sharing it.
 
 ## Exit
 

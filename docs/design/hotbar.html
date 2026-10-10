@@ -51,6 +51,24 @@
     <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
     <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
   </main>
+  <section id="marker-screen">
+    <h2>Oznaka pogleda</h2>
+    <p>Plavi krug prikazuje posljednji svježi, prihvaćeni pogled. Pri gubitku validnosti bilo kojeg oka odmah nestaje. Ako novi pogled ne stigne 500 ms, nestaje pri sljedećem osvježavanju prikaza.</p>
+    <p>Povratak validnosti očiju sam po sebi ne vraća krug. Ponovo se pojavljuje tek na svježoj poziciji pogleda. Isključivanje i ponovno uključivanje oznake ne vraća nevalidnu ili zastarjelu poziciju.</p>
+    <label class="hotbar-status-preview">Primjer stanja
+      <select id="marker-state-preview">
+        <option value="fresh">Svježi pogled</option>
+        <option value="eye-loss">Jedno oko nije prepoznato</option>
+        <option value="stale">Nema novog pogleda 500 ms</option>
+        <option value="eyes-only">Oči su validne, novi pogled još nije stigao</option>
+        <option value="resumed">Stigao je novi pogled</option>
+      </select>
+    </label>
+    <section class="gaze-marker-preview" aria-label="Primjer oznake pogleda">
+      <p id="marker-preview-status" role="status">Svježa pozicija pogleda</p>
+      <span id="marker-preview-dot" class="gaze-marker-dot" aria-hidden="true"></span>
+    </section>
+  </section>
   <details class="reference-tools"><summary>Opcije pregleda</summary><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 </body>

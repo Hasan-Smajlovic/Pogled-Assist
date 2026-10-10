@@ -119,6 +119,10 @@ Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
 and leaves the pointer at its last position.
+The gaze bubble is cleared immediately on eye loss and expires after 500 ms
+without a delivered gaze point, checked by its existing refresh timer. Eye
+validity alone cannot restore it; it reappears on the next accepted gaze point.
+Changing its visibility setting cannot resurrect a stale or invalid position.
 
 The source-only mouse gaze simulator bypasses tracker discovery and feeds the
 primary-screen cursor position into the same gaze interaction path with both eyes
@@ -209,7 +213,8 @@ maintenance, Guest, calibration and test targets. A rejected candidate does not
 block later candidates; exhaustion returns the manual tray-icon route. Existing
 Guest calibration entry points retain their behavior and also exclude
 maintenance targets. The [user guide](USER_GUIDE.md#gaze-check) owns calibration
-instructions and the caregiver flow. No diagnostic history or result is saved.
+instructions and the caregiver flow. The check retains no result history for reuse. An explicitly enabled
+[diagnostic trace](#diagnostic-logging) can save its measurement fields.
 
 Coordinates follow Tobii's [Stream Engine API](https://developer.tobii.com/product-integration/)
 and [track-box description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
@@ -281,11 +286,74 @@ data/speech_library.json saved categories, answers, phrases, and phrase use coun
 data/speech_phrases.json rollback-compatible standalone phrases for older releases
 data/speech_learning.json versioned local word and short-context counts
 logs/latest.txt          current application log when logging is enabled
+logs/diagnostics/*.jsonl bounded structured diagnostic sessions
 ```
 
 Missing or malformed settings fall back safely to defaults, with supported
 values clamped to the same ranges as the Settings UI. Installation, update, and
 rollback work must preserve `data/` and `logs/`.
+
+### Diagnostic logging
+
+`logging_setup.py` owns the existing logging switch and standard-stream/Qt hooks.
+`log_transport.py` owns one persistent daemon writer in the main process. Both
+the text file and console run behind its bounded queue. Producers copy bounded
+primitive fields and never wait for output, queue space or a shared thread pool.
+The writer releases the queue mutex before formatting, archiving, writing and
+flushing. Overflow drops log records, with cumulative process counts and the
+time span of loss in `logging_health`; it never drops input packets. The x86
+bridge uses a separate bounded stderr writer, while its stdout input protocol
+retains its existing lock, JSON, newline and flush contract.
+
+The queue admits at most 1,024 records of approximately 8 KiB including copied
+object overhead; 64 slots are reserved for lifecycle, error and summary records.
+Priority records also drop when full. Output flushes about every 250 ms. Shutdown
+waits at most two seconds for the worker; file objects are owned only by that
+daemon, so Python's handler shutdown cannot synchronously close a blocked sink.
+The OS may finish an already-started write after logging is disabled. Pending
+records are discarded on disable; a new enable creates a new session and archives
+the previous text log on the same writer. A crash or blocked writer can leave an
+incomplete last batch. Existing archives are never automatically deleted.
+
+`diagnostics.py` collects separate native input, provider delivery, application
+gate and selection observations. Native valid-time accounting expires after
+500 ms without another eye sample; application gate time records the gate's
+actual state at Qt delivery, separately from native receipt. Validity is a reported SDK measurement, not physical eye closure.
+Provider replacement is intentional sampling for Qt, not a disconnect. Basic
+summaries run about once per second, with their actual interval duration. Basic
+state events allow four records per event type per second and report suppressed
+counts. Trace records the fuller sequence subject to queue and file limits.
+
+JSONL schema version 1 uses `event`, `session_id`, `process_instance`, `event_seq`,
+`wall_time` with timezone, `monotonic_s` and an explicit `data` payload. Event time
+is captured before queueing. `data` supplies stream generations, context and
+attempt IDs where applicable. Sequence numbers also include text records, so a
+gap in JSONL alone is not proof of a dropped event. SDK timestamps keep their
+own source and microsecond unit; they are not subtracted from main-process time.
+The runtime record reports source/frozen mode and known versions; absent build
+revision is explicitly unknown. Structured sessions are capped at 64 MiB.
+
+Basic events include stream/selection summaries, gate receipt/application,
+delivery gaps, settings, screen mapping, dialog lifecycle, UI action origin,
+tracking notices and input suspension during the caregiver check. Trace adds
+native/provider samples, actual target bounds, selection timing, normalized
+track-box positions and already-computed fixation/trial results. Logging never
+activates or recalculates the check telemetry from PR #73. Its observers retain
+the same generation guard and both-eye rule. An existing `gaze_invalid` callback
+cannot distinguish SDK-invalid from nonfinite input, so it is labeled
+`sdk_invalid_or_nonfinite`. The UI's notice timing stays independent of input
+cancellation. Settings construction and the Windows startup query are timed
+separately; logging does not change that synchronous query.
+
+Typed text, suggestions, phrases, key labels and content action IDs are excluded
+from added events. Such actions receive random IDs local to the current context;
+safe control names such as `confirm:accept` remain readable. Exception snapshots
+retain their type and bounded frame locations, without traceback locals or
+exception text. Trace coordinates and target geometry can still reveal activity;
+these local recordings are not anonymous. Trace is explicitly enabled, lasts at
+most ten minutes or 32 MiB of additional records, then returns to basic logging.
+See [collection instructions](USER_GUIDE.md#diagnostic-log-collection) and
+[developer analysis](DEVELOPMENT.md#diagnostic-log-analysis).
 
 Unreadable speech-library files block all library writes, including rollback
 synchronization and phrase use counts. Only a successful reload clears this

@@ -4,11 +4,35 @@ import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
+from test_hotbar_e2e import hotbar_gaze as hotbar_gaze
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("eyes", [(True, False), (False, True), (False, False)])
+def test_speech_marker_waits_for_fresh_gaze_after_eye_loss(hotbar_gaze, qtbot, eyes):
+    hotbar, _controller, feed, _actions, _progress = hotbar_gaze
+    hotbar._open_speech()
+    qtbot.waitUntil(hotbar._speech_window.isVisible)
+    bubble = hotbar._gaze_bubble
+    feed(QPoint(300, 250), 0)
+    assert bubble.isVisible()
+
+    hotbar._gaze.eye_status_changed.emit(*eyes)
+    assert bubble.isHidden()
+    bubble.set_enabled(False)
+    bubble.set_enabled(True)
+    assert bubble.isHidden()
+
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert bubble.isHidden()
+    feed(QPoint(600, 450), 600)
+    assert bubble.isVisible()
+    assert bubble.pos() == QPoint(600 - bubble.width() // 2, 450 - bubble.height() // 2)
 
 
 @pytest.mark.e2e

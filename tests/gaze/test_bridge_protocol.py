@@ -31,6 +31,28 @@ def test_bridge_position_capability_requires_boolean():
     assert backend.eye_position_supported is None
 
 
+def test_bridge_metadata_is_optional_bounded_and_does_not_change_position_capability():
+    backend = TobiiStreamEngineBridgeBackend(lambda *_args: None, lambda *_args: None)
+    backend._on_started(
+        {
+            "eye_position_supported": False,
+            "diagnostic_metadata": {
+                "sdk_version": "x" * 1000,
+                "eye_validity_source": "gaze-origin",
+                "firmware_version": ["bad"],
+                "serial_number": "private identifier",
+            },
+        }
+    )
+    assert backend.eye_position_supported is False
+    assert backend.diagnostic_metadata == {
+        "sdk_version": "x" * 128,
+        "eye_validity_source": "gaze-origin",
+    }
+    backend._on_started({"eye_position_supported": True, "diagnostic_metadata": "bad"})
+    assert backend.eye_position_supported is True
+
+
 def test_bridge_forwards_valid_positions_and_never_converts_bad_payloads_into_green():
     backend = TobiiStreamEngineBridgeBackend(lambda *_args: None, lambda *_args: None)
     positions = []

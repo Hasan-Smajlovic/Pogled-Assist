@@ -37,4 +37,11 @@
     gazeDemo.reset();
   });
 
+  $('marker-state-preview').addEventListener('change', event => {
+    const state = event.target.value;
+    const visible = state === 'fresh' || state === 'resumed';
+    $('marker-preview-dot').hidden = !visible;
+    $('marker-preview-dot').style.left = state === 'resumed' ? '40%' : '60%';
+    $('marker-preview-status').textContent = visible ? 'Svježa pozicija pogleda' : 'Oznaka je skrivena do novog validnog pogleda';
+  });
 })();

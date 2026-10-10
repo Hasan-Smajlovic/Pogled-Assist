@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import diagnostics
 from ..keyboard_layouts import switch_label
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
@@ -52,6 +53,8 @@ class SpeechSurface(QWidget):
         self._main_dynamic_actions: set[str] = set()
         self._gaze_target_action: str | None = None
         self._tracking_notice: TrackingNotice | None = None
+        self._diagnostic_context = diagnostics.TargetContext("speech")
+        self._diagnostic_snapshot_pending = False
         self._build_ui(keyboard_script)
         self._dialogs = SpeechDialogs(
             self, self._make_button, self._context_changed, self._restore_input_focus
@@ -368,6 +371,9 @@ class SpeechSurface(QWidget):
         button = self._available_button(action)
         return button_bounds(button) if button is not None else None
 
+    def diagnostic_context(self, _action: str | None = None) -> diagnostics.TargetContext:
+        return self._diagnostic_context
+
     def _available_button(self, action: str) -> QPushButton | None:
         if self._dialogs.active is not None and action not in self._dialogs.actions:
             return None
@@ -394,6 +400,8 @@ class SpeechSurface(QWidget):
     def _open_dialog(self, dialog: QDialog, height: int) -> None:
         self._dialogs.open(dialog, height)
         self._render_tracking_notice()
+        self._diagnostic_context.kind = self._dialogs.kind(dialog)
+        self._schedule_diagnostic_geometry()
 
     def set_tracking_notice(
         self, notice: TrackingNotice | None, *, immediate: bool = False
@@ -531,8 +539,68 @@ class SpeechSurface(QWidget):
             set_gaze_feedback(button, selected)
 
     def _context_changed(self) -> None:
+        previous = self._diagnostic_context
+        self._diagnostic_context = diagnostics.TargetContext("speech")
+        diagnostics.emit(
+            "interaction_context",
+            priority=True,
+            context_id=self._diagnostic_context.id,
+            previous_context_id=previous.id,
+            kind="speech",
+        )
+        self._schedule_diagnostic_geometry()
         self._set_gaze_target_action(None)
         self.interaction_context_changed.emit()
+
+    def _schedule_diagnostic_geometry(self) -> None:
+        if diagnostics.enabled() and not self._diagnostic_snapshot_pending:
+            self._diagnostic_snapshot_pending = True
+            QTimer.singleShot(0, self, self._diagnostic_geometry)
+
+    def _diagnostic_geometry(self) -> None:
+        self._diagnostic_snapshot_pending = False
+        if not diagnostics.enabled() or not self.isVisible():
+            return
+        context = self._diagnostic_context
+        active = self._dialogs.active
+        kind = self._dialogs.kind(active) if active is not None else "speech"
+        actions = self._dialogs.actions if active is not None else self._action_buttons.keys()
+        records = []
+        for action in actions:
+            if not diagnostics.tracing() and diagnostics.safe_action(action) not in {
+                "confirm:accept",
+                "confirm:cancel",
+            }:
+                continue
+            button = self._action_buttons.get(action)
+            if button is None:
+                continue
+            rect = button_bounds(button)
+            records.append(
+                {
+                    "target_id": context.token(action),
+                    "logical_bounds": (rect.x(), rect.y(), rect.width(), rect.height()),
+                    "visible": button.isVisible(),
+                    "enabled": button.isEnabled(),
+                }
+            )
+            if len(records) == 4:
+                diagnostics.emit(
+                    "target_geometry",
+                    trace=kind != "confirm",
+                    context_id=context.id,
+                    kind=kind,
+                    targets=records,
+                )
+                records = []
+        if records:
+            diagnostics.emit(
+                "target_geometry",
+                trace=kind != "confirm",
+                context_id=context.id,
+                kind=kind,
+                targets=records,
+            )
 
     def _action(self, name: str) -> str:
         return f"{SPEECH_WINDOW_ACTION_PREFIX}{name}"

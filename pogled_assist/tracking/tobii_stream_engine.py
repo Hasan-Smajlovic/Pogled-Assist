@@ -117,6 +117,7 @@ class TobiiStreamEngineBackend:
         # Optional diagnostic observer; never participates in the input gate.
         self.eye_position_callback: EyePositionCallback | None = None
         self.gaze_invalid_callback: GazeInvalidCallback | None = None
+        self.diagnostic_metadata: dict = {"eye_validity_source": "unknown"}
         self._lib: ctypes.CDLL | None = None
         self._dll_path = ""
         self._api = ctypes.c_void_p()
@@ -304,6 +305,9 @@ class TobiiStreamEngineBackend:
         version = TobiiVersion()
         status = self._lib.tobii_get_api_version(ctypes.byref(version))
         if status == TOBII_ERROR_NO_ERROR:
+            self.diagnostic_metadata["sdk_version"] = (
+                f"{version.major}.{version.minor}.{version.revision}.{version.build}"
+            )
             logger.info(
                 "Tobii Stream Engine API version: %s.%s.%s.%s",
                 version.major,
@@ -395,6 +399,8 @@ class TobiiStreamEngineBackend:
             _decode_char_array(info.generation),
             _decode_char_array(info.serial_number),
         ]
+        self.diagnostic_metadata["model"] = _decode_char_array(info.model)
+        self.diagnostic_metadata["firmware_version"] = _decode_char_array(info.firmware_version)
         return " ".join(part for part in parts if part) or "Tobii Stream Engine tracker"
 
     def _subscribe(self) -> None:
@@ -450,6 +456,7 @@ class TobiiStreamEngineBackend:
             return False
 
         logger.info("Subscribed to Stream Engine normalized eye-position stream.")
+        self.diagnostic_metadata["eye_validity_source"] = "eye-position"
         return True
 
     def _subscribe_gaze_origin(self, errors: list[str]) -> bool:
@@ -484,6 +491,7 @@ class TobiiStreamEngineBackend:
             return False
 
         logger.info("Subscribed to Stream Engine gaze-origin stream for eye validity.")
+        self.diagnostic_metadata["eye_validity_source"] = "gaze-origin"
         return True
 
     def _handle_eye_validity_sample(

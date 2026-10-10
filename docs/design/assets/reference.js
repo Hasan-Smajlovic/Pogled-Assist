@@ -48,6 +48,10 @@
   function followLegacyHash() {
     if (currentPage !== 'index') return;
     const key = location.hash.slice(1);
+    if (key === 'marker') {
+      location.replace(pageUrl('hotbar') + '#marker-screen');
+      return;
+    }
     if (pages.some(page => page[0] === key)) location.replace(pageUrl(key));
   }
   followLegacyHash();
