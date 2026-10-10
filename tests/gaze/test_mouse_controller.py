@@ -39,6 +39,30 @@ def make_controller():
     return controller
 
 
+def test_diagnostic_suspension_blocks_input_and_cannot_resume_pending_dwell(monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.interaction.mouse_controller.time.monotonic", lambda: now[0])
+    controller = make_controller()
+    controller.update_settings(GazeSettings(use_precision_zoom=False))
+    controller.handle_eye_status(True, True)
+    controller.set_mode(LEFT_CLICK)
+    controller.handle_gaze(0.5, 0.5, 1)
+    moves = list(controller._input.moves)
+    controller.set_input_suspended(True)
+    now[0] = 30
+    controller.handle_gaze(0.5, 0.5, 2)
+    assert controller._input.moves == moves
+    assert controller._input.clicks == []
+    controller.handle_eye_status(False, True)
+    controller.set_input_suspended(False)
+    controller.handle_gaze(0.5, 0.5, 3)
+    assert controller._input.moves == moves
+    controller.handle_eye_status(True, True)
+    controller.handle_gaze(0.6, 0.5, 4)
+    assert len(controller._input.moves) == len(moves) + 1
+    assert controller._input.clicks == []
+
+
 def test_screen_mapping_clamps_and_maps_logical_to_physical():
     controller = make_controller()
 
@@ -123,6 +147,8 @@ def test_click_modes_call_native_input_and_reset():
 
 def test_right_click_arms_direct_left_click_for_context_menu():
     controller = make_controller()
+    statuses = []
+    controller.status_changed.connect(statuses.append)
     target = GazeScreenPoint(QPoint(20, 30), QPoint(200, 300))
     controller.set_mode(RIGHT_CLICK)
 
@@ -131,6 +157,7 @@ def test_right_click_arms_direct_left_click_for_context_menu():
     assert controller._input.clicks == [(200, 300, {"button": "right"})]
     assert controller.active_mode == LEFT_CLICK
     assert controller._native_menu_click_pending is True
+    assert statuses[-1] == "Desni klik je otvorio meni. Lijevi klik je spreman za odabir."
 
 
 def test_target_dwell_opens_zoom_before_click():
@@ -251,6 +278,20 @@ def test_mouse_action_cancels_pending_desktop_dwell_until_gaze_moves_away():
     controller._handle_target_dwell(moved_target, 3800)
 
     assert requested == [QPoint(100, 120)]
+
+
+def test_quick_menu_status_uses_bosnian_terminology():
+    controller = make_controller()
+    controller.update_settings(
+        GazeSettings(dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=False)
+    )
+    controller.set_quick_actions_enabled(True)
+    statuses = []
+    controller.status_changed.connect(statuses.append)
+    target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+    for moment in (1000, 1500, 1700):
+        controller._handle_quick_action_dwell(target, moment)
+    assert statuses[-1] == "Otvoren je meni brzih radnji."
 
 
 def test_quick_actions_and_click_modes_are_mutually_exclusive():

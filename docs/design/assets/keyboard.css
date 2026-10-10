@@ -1,0 +1,12 @@
+.sidebar-reference { width: 380px; height: calc(100dvh - 110px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #171d29; }
+.sidebar-reference nav, .sidebar-reference footer { display: flex; gap: 8px; }
+.sidebar-reference nav button, .sidebar-reference footer button { flex: 1; min-height: 52px; font-size: 18px; }
+.sidebar-reference footer button { min-height: 58px; }
+.sidebar-reference-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.sidebar-reference-grid button { min-height: 54px; }
+.sidebar-reference > [data-script-toggle] { min-height: 52px; font-size: 18px; padding: 6px; }
+.sidebar-reference-grid button { white-space: pre-line; font-size: 19px; padding: 6px; }
+.sidebar-reference .sidebar-pages button { min-height: 52px; font-size: 16px; }
+#controller-screen .sidebar-reference nav, #controller-screen .sidebar-reference footer, #controller-screen .sidebar-reference-grid { width: 100%; min-width: 0; }
+#controller-screen .sidebar-reference nav button, #controller-screen .sidebar-reference footer button { flex: 1 1 0; }
+.system-actions button { white-space: normal; }

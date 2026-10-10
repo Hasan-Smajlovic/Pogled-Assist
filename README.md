@@ -17,6 +17,7 @@ and a compact controller panel.
   next-word suggestions, reusable phrases, and local personal learning.
 - Right-side Keyboard and Controller panels for typing and common shortcuts.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
+- An optional caregiver gaze check with live positioning, timed targets, and a local dwell trial.
 - Tobii Pro SDK, Stream Engine, and optional 32-bit Stream Engine bridge support.
 
 ## Install
@@ -133,9 +134,11 @@ the [development guide](docs/DEVELOPMENT.md).
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
 
 The [application UI reference](docs/design/speech-keyboard-reference.html) is a
-development-only HTML prototype for the visible PySide6 interface. Its
-historical filename is retained for stable links. The application does not load
-or package it.
+development-only collection of HTML prototypes for the visible PySide6
+interface. Its historical filename remains the entry point, linking to a
+separate document for each screen or feature. The application does not load or
+package these files. The [development guide](docs/DEVELOPMENT.md#application-design-reference-workflow)
+maps the pages and shared assets.
 
 ## Runtime requirements
 

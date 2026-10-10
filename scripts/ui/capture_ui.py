@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from contextlib import ExitStack
 from dataclasses import replace
 from html import escape
@@ -15,7 +16,8 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
@@ -26,10 +28,14 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
+from pogled_assist.tracking.feedback import TrackingNotice
+from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_check_views import TARGETS
+from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
@@ -256,6 +262,7 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
         try:
             session.capture_hotbar()
             session.capture_settings()
+            session.capture_gaze_check()
             session.capture_speech()
             session.capture_sidebars()
             session.capture_arabic()
@@ -339,6 +346,178 @@ class _CaptureSession:
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
 
+    def capture_gaze_check(self) -> None:
+        window = GazeCheckWindow(self.gaze_settings)
+        self.widgets.append(window)
+        size = min(self.size[0], 1280), min(self.size[1], 720)
+        # Static synthetic data and frozen UI ticks keep the gallery deterministic.
+        window._timer.timeout.disconnect(window._tick)
+        self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
+        window._snapshot = CheckSnapshot(position_supported=False)
+        window._render_position()
+        self.capture(
+            window, "gaze-check-unsupported", "Gaze check: eye positions unsupported", size=size
+        )
+        window.handle_tracking_status(TrackingStatus(TrackingState.RETRYING))
+        self.capture(window, "gaze-check-disconnected", "Gaze check: disconnected", size=size)
+        window.handle_tracking_status(TrackingStatus(TrackingState.CONNECTED))
+        window._snapshot = CheckSnapshot(
+            True,
+            True,
+            (0.6, 0.5, 0.45),
+            (0.4, 0.5, 0.45),
+            gaze=(0.5, 0.5),
+            observed_seconds=10,
+            available_fraction=0.98,
+            longest_loss_seconds=0.15,
+        )
+        window._render_position()
+        self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
+        window._snapshot = replace(
+            window._snapshot,
+            left=False,
+            right=False,
+            gaze=None,
+            available_fraction=0.6,
+            longest_loss_seconds=1.1,
+        )
+        window._render_position()
+        self.capture(
+            window,
+            "gaze-check-position-without-gaze",
+            "Gaze check: eye positions without valid gaze",
+            size=size,
+        )
+        waiting_snapshot = window._snapshot
+        for name, title, left, right in (
+            ("too-close", "move display away", (0.6, 0.5, -0.2), (0.4, 0.5, -0.1)),
+            ("too-far", "move display closer", (0.6, 0.5, 1.2), (0.4, 0.5, 1.1)),
+            ("outside-frame", "align display", (1.2, -0.1, 0.5), (1.1, -0.1, 0.5)),
+        ):
+            window._snapshot = replace(waiting_snapshot, left_position=left, right_position=right)
+            window._render_position()
+            self.capture(window, f"gaze-check-{name}", f"Gaze check: {title}", size=size)
+        window._snapshot = replace(
+            waiting_snapshot,
+            left=True,
+            right_position=None,
+        )
+        window._render_position()
+        self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
+        window._start_precision()
+        self.capture(window, "gaze-check-precision", "Gaze check: fixation target", size=size)
+        window._snapshot = CheckSnapshot(True, False)
+        window._snapshot_at = time.monotonic()
+        window._check.started_at = time.monotonic() - 1.2
+        window._tick()
+        self.capture(
+            window, "gaze-check-precision-waiting", "Gaze check: fixation eye loss", size=size
+        )
+        targets = list(TARGETS)
+        window._check = FixationCheck(targets, size, 36, 0)
+        window._check.results = [
+            FixationResult(name, 90, 0.9 if near is not None else 0.2, error, spread, near, center)
+            for name, error, spread, near, center in (
+                ("Sredina", 12, 8, True, (0.51, 0.5)),
+                ("Gore lijevo", 14, 10, True, (0.05, 0.07)),
+                ("Gore desno", 48, 12, False, (0.92, 0.09)),
+                ("Dolje lijevo", 18, 9, True, (0.05, 0.93)),
+                ("Dolje desno", None, None, None, None),
+            )
+        ]
+        window._show_results()
+        self.capture(window, "gaze-check-results", "Gaze check: measured results", size=size)
+        window._details_button.click()
+        self.capture(
+            window, "gaze-check-results-details", "Gaze check: optional measurements", size=size
+        )
+        window._details_button.click()
+        window._check.results[-1] = FixationResult(
+            "Dolje desno", 90, 0.9, 48, 12, False, (0.92, 0.9)
+        )
+        window._show_results()
+        self.capture(window, "gaze-check-results-misses", "Gaze check: measured misses", size=size)
+        window._check.results = [
+            FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in targets
+        ]
+        window._show_results()
+        self.capture(window, "gaze-check-results-ready", "Gaze check: targets passed", size=size)
+        window._start_trial()
+        window._target.progress = 0.6
+        window._target.progress_target = window._target.expected_button
+        self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
+        window._selection.update(
+            window._target.expected_button,
+            time.monotonic() * 1000,
+            pause_ms=500,
+            dwell_ms=500,
+        )
+        window.handle_eye_status(True, False)
+        self.capture(
+            window, "gaze-check-trial-interrupted", "Gaze check: cancelled selection", size=size
+        )
+        wrong = window._target.mapToGlobal(window._target.button_rect(0).center())
+        screen = QGuiApplication.primaryScreen().geometry()
+        gaze = (
+            (wrong.x() - screen.left()) / (screen.width() - 1),
+            (wrong.y() - screen.top()) / (screen.height() - 1),
+        )
+        start = time.monotonic()
+        duration = (self.gaze_settings.selection_pause_ms + self.gaze_settings.dwell_ms) / 1000
+        for sample in range(round(duration / 0.02) + 3):
+            at = start + sample * 0.02
+            window._trial_sample(CheckSnapshot(True, True, gaze=gaze, gaze_at=at), at)
+        self.capture(window, "gaze-check-trial-wrong", "Gaze check: neighbor selected", size=size)
+        window._finish_trial_target(True, time.monotonic())
+        window._target.progress = 0.6
+        window._target.progress_target = window._target.expected_button
+        self.capture(
+            window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size
+        )
+        window._finish_trial_target(True, time.monotonic())
+        window._target.progress = 0.6
+        window._target.progress_target = window._target.expected_button
+        self.capture(
+            window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
+        )
+        window._finish_trial_target(False, time.monotonic())
+        window._trial_tracked_targets = {0, 1, 2}
+        window._show_results()
+        self.capture(
+            window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
+        )
+        window._trial_results = [True] * 3
+        window._trial_losses = window._trial_wrong_selections = 0
+        window._show_results()
+        self.capture(
+            window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
+        )
+        window._start_trial()
+        for _ in range(3):
+            window._finish_trial_target(False, time.monotonic())
+        self.capture(
+            window, "gaze-check-trial-no-gaze", "Gaze check: trial without gaze data", size=size
+        )
+        window._start_free()
+        screen = QGuiApplication.primaryScreen().geometry()
+        point = window._target.mapToGlobal(window._target.rect().center() + QPoint(16, -10))
+        window._snapshot = CheckSnapshot(
+            True,
+            True,
+            gaze=(
+                (point.x() - screen.left()) / (screen.width() - 1),
+                (point.y() - screen.top()) / (screen.height() - 1),
+            ),
+            gaze_at=time.monotonic(),
+        )
+        window._render_free()
+        self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
+        window._snapshot = CheckSnapshot()
+        window._render_free()
+        self.capture(
+            window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size
+        )
+
     def capture_speech(self) -> None:
         sample_phrases = [
             PhraseRecord("Trebam pomoć", 8),
@@ -355,6 +534,7 @@ class _CaptureSession:
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.capture_tracking_feedback()
         self.speech._view_mode = "categories"
         self.speech._show_list_level()
         self.capture(self.speech, "speech-categories", "Speech categories")
@@ -379,6 +559,61 @@ class _CaptureSession:
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
         self.capture(dialog, name, title, size=(dialog.width(), dialog.height()))
+
+    def capture_tracking_feedback(self) -> None:
+        self.speech._input.setText("TREBAM VODE")
+        for name, notice in (
+            (
+                "warning",
+                TrackingNotice(
+                    "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
+                ),
+            ),
+            (
+                "waiting",
+                TrackingNotice(
+                    "Čekam podatke o pogledu", "odabir je zaustavljen", "quiet", (True, True)
+                ),
+            ),
+            ("disconnected", TrackingNotice("Uređaj nije povezan", "pokušavam ponovo", "error")),
+            (
+                "frequent",
+                TrackingNotice(
+                    "Praćenje često prekida", "provjerite položaj uređaja", eyes=(True, True)
+                ),
+            ),
+            ("recovered", TrackingNotice("Možete nastaviti", tone="ready", eyes=(True, True))),
+        ):
+            self.speech.set_tracking_notice(notice, immediate=True)
+            self.capture(self.speech, f"speech-tracking-{name}", f"Speech tracking: {name}")
+        self.speech._open_letter_dialog(0)
+        self.speech.set_tracking_notice(
+            TrackingNotice(
+                "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
+            ),
+            immediate=True,
+        )
+        self.capture_dialog(
+            self.speech._dialogs.letter,
+            "speech-tracking-letters",
+            "Speech letters: tracking interrupted",
+        )
+        self.speech._close_dialog()
+        self.speech._open_clear_dialog()
+        self.speech.set_tracking_notice(
+            TrackingNotice(
+                "Lijevo oko se trenutno ne prati", "odabir je zaustavljen", eyes=(False, True)
+            ),
+            immediate=True,
+        )
+        self.capture_dialog(
+            self.speech._dialogs.confirm,
+            "speech-tracking-confirm",
+            "Clear message: tracking interrupted",
+        )
+        self.speech._close_dialog()
+        self.speech.set_tracking_notice(None, immediate=True)
+        self.speech._input.clear()
 
     def capture_speech_dialogs(self) -> None:
         self.speech._start_alarm()

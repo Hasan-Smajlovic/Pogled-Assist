@@ -5,6 +5,8 @@ on:
     workflows:
       - CI
     types:
+      - requested
+      - in_progress
       - completed
   workflow_dispatch:
 
@@ -12,7 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ui-gallery-pages
+  group: >-
+    ${{ github.event_name == 'workflow_run' && github.event.action != 'completed' &&
+        format('ui-gallery-status-{0}', github.event.workflow_run.head_branch) || 'ui-gallery-pages' }}
   cancel-in-progress: false
 
 jobs:
@@ -21,7 +25,8 @@ jobs:
     if: >-
       github.repository == 'Hasan-Smajlovic/Pogled-Assist' &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'pull_request')
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.event == 'pull_request' && github.event.action == 'completed'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -85,7 +90,11 @@ jobs:
 
   comment:
     name: comment-ui-gallery
-    needs: deploy
+    needs: [build, deploy]
+    if: >-
+      always() && github.repository == 'Hasan-Smajlovic/Pogled-Assist' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -105,13 +114,43 @@ jobs:
           python-version: "3.10"
 
       - name: Download the trusted comment data from this workflow
+        if: needs.deploy.result == 'success'
         uses: actions/download-artifact@v5
         with:
           name: ui-gallery-comments
           path: ${{ runner.temp }}/ui-gallery-comments
 
       - name: Update one bot comment per open pull request
+        if: needs.deploy.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           COMMENTS_PATH: ${{ runner.temp }}/ui-gallery-comments/comments.json
-        run: python scripts/ui/prepare_ui_gallery_site.py comment --comments "$COMMENTS_PATH"
+        run: >-
+          python scripts/ui/prepare_ui_gallery_site.py comment --comments "$COMMENTS_PATH"
+          --publication-run-id "$GITHUB_RUN_ID"
+
+      - name: Show progress while CI is queued or running
+        if: github.event_name == 'workflow_run' && github.event.action != 'completed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: >-
+          python scripts/ui/prepare_ui_gallery_site.py status --publication preparing
+          --publication-run-id "$GITHUB_RUN_ID" --ci-run-id "$CI_RUN_ID" --ci-attempt "$CI_ATTEMPT"
+
+      - name: Report a failed gallery build or deployment
+        if: >-
+          (github.event_name == 'workflow_dispatch' || github.event.action == 'completed') &&
+          (needs.build.result == 'failure' || needs.deploy.result == 'failure' ||
+           needs.build.result == 'cancelled' || needs.deploy.result == 'cancelled')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          arguments=(--publication failed --publication-run-id "$GITHUB_RUN_ID")
+          if [[ -n "$CI_RUN_ID" ]]; then
+            arguments+=(--ci-run-id "$CI_RUN_ID" --ci-attempt "$CI_ATTEMPT")
+          fi
+          python scripts/ui/prepare_ui_gallery_site.py status "${arguments[@]}"

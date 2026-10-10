@@ -27,6 +27,114 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
+def test_tracking_notice_uses_provider_signals_without_changing_eye_safety(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import tracking_feedback
+
+    hotbar, controller, feed, _actions, _progress = hotbar_gaze
+    clock = [20.0]
+    monkeypatch.setattr(tracking_feedback, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    feedback = hotbar._tracking_feedback
+    feedback._timer.stop()
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(*controller._logical_screen_rect)
+    qtbot.wait(1)
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice is None
+    window._input.setText("Synthetic test message")
+    original_message = window._input.text()
+    window._open_clear_dialog()
+    qtbot.wait(1)
+    target = window._dialogs.confirm_button
+    point = target.mapToGlobal(target.rect().center())
+    feed(point, 0)
+    feed(point, 700)
+    assert target.property("gazeTarget")
+    hotbar._gaze.eye_status_changed.emit(True, False)
+    assert not controller._both_eyes_open
+    assert not target.property("gazeTarget")
+    assert feedback.notice is None
+    clock[0] += 0.81
+    feedback.refresh()
+    qtbot.waitUntil(lambda: window._dialogs.confirm_notice.progress == 1)
+    assert feedback.notice.title.startswith("Desno oko")
+    assert window._dialogs.confirm_notice.isVisible()
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert feedback.notice.title == "Čekam podatke o pogledu"
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice.title == "Praćenje se vraća"
+    clock[0] += 0.51
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice.title == "Možete nastaviti"
+    clock[0] += 2.01
+    hotbar._gaze.gaze_updated.emit(0.5, 0.5, 0)
+    assert feedback.notice is None
+    hotbar._gaze.eye_status_changed.emit(False, True)
+    clock[0] += 0.81
+    feedback.refresh()
+    assert feedback.notice.title.startswith("Lijevo oko")
+    hotbar._update_gaze_settings(replace(controller.settings, show_tracking_notifications=False))
+    assert feedback.notice is None
+    assert window._dialogs.confirm_notice.isHidden()
+    feed(point, 2500)
+    feed(point, 5000)
+    assert window._input.text() == original_message
+    assert not controller._both_eyes_open
+
+    hotbar._update_gaze_settings(replace(controller.settings, show_tracking_notifications=True))
+    assert feedback.notice is None
+    clock[0] += 0.81
+    feedback.refresh()
+    assert feedback.notice.title.startswith("Lijevo oko")
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("context", ["sleep", "hidden", "minimized", "settings", "check"])
+def test_intentional_contexts_suppress_tracking_notices(hotbar_gaze, qtbot, monkeypatch, context):
+    from types import SimpleNamespace
+
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import settings_window, tracking_feedback
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    clock = [20.0]
+    monkeypatch.setattr(tracking_feedback, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    hotbar = hotbar_gaze[0]
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    feedback = hotbar._tracking_feedback
+    feedback._timer.stop()
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    hotbar._gaze.eye_status_changed.emit(False, True)
+    clock[0] += 1
+    feedback.refresh()
+    assert feedback.notice is not None
+    if context == "sleep":
+        window._start_sleep()
+    elif context == "hidden":
+        window.hide()
+    elif context == "minimized":
+        window.showMinimized()
+    else:
+        hotbar._open_settings()
+        if context == "check":
+            hotbar._open_gaze_check()
+    feedback.refresh()
+    assert feedback.notice is None
+    clock[0] += 10
+    feedback.refresh()
+    assert feedback.notice is None
+
+
+@pytest.mark.e2e
 def test_keyboard_script_is_global_and_persisted(hotbar_gaze, qtbot, monkeypatch):
     from pogled_assist import toolbar
     from pogled_assist.ui import settings_window
@@ -182,6 +290,130 @@ def hotbar_gaze(qtbot, monkeypatch, request):
 
 
 @pytest.mark.e2e
+def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar, controller, feed, _actions, _progress = hotbar_gaze
+    controller._input = FakeHotbarInput()
+    controller._pointer_movement_enabled = True
+    feed(QPoint(600, 500), 0)
+    assert controller._input.moves  # Exercise the real pointer path, not simulator suppression.
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._select_tab(1)
+    qtbot.wait(1)
+    point = settings._gaze_check_button.mapToGlobal(settings._gaze_check_button.rect().center())
+    feed(point, 100)
+    feed(point, 600)
+    assert hotbar._gaze_check_window is None
+    controller._input.moves.clear()
+    feed(point, 1200)
+    assert hotbar._gaze_check_window is not None
+    assert controller._input_suspended
+    assert controller._input.moves == []
+
+
+@pytest.mark.e2e
+def test_gaze_check_suspends_all_input_and_preserves_speech_and_settings(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from pogled_assist.tracking.status import TrackingState, TrackingStatus
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._open_speech()
+    hotbar._speech_window._input.setText("Synthetic test message")
+    original_message = hotbar._speech_window._input.text()
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    qtbot.wait(1)
+    assert check.isVisible()
+    assert controller._input_suspended
+    assert not settings.isVisible()
+    positions = []
+    controller.gaze_position_changed.connect(positions.append)
+    for at in (0, 500, 1100, 3000):
+        feed(QPoint(500, 400), at)
+    assert positions == actions == []
+    check._start_trial()
+    hotbar._gaze.tracking_status_changed.emit(TrackingStatus(TrackingState.RETRYING))
+    assert check._phase == "position"
+    check.close()
+    assert hotbar._gaze_check_window is None
+    assert not controller._input_suspended
+    assert settings.isVisible()
+    assert hotbar._speech_window._input.text() == original_message
+    feed(QPoint(500, 400), 3100)
+    assert positions
+    assert actions == []
+
+
+@pytest.mark.e2e
+def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
+    hotbar_gaze, qtbot, monkeypatch
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    requests = []
+    monkeypatch.setattr(
+        toolbar, "launch_tobii_settings", lambda: requests.append(True) or "Requested"
+    )
+    hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._open_settings()
+    settings = hotbar._settings_window
+    settings._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    check._calibration_button.click()
+    qtbot.wait(1)
+    assert requests == [True]
+    assert controller._input_suspended
+    assert check.isMinimized()
+    hotbar._open_settings()
+    assert not check.isMinimized()
+    hotbar.close()
+    assert hotbar._gaze_check_window is None
+    assert not settings.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("launch_fails", [False, True])
+def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
+    hotbar_gaze, qtbot, monkeypatch, launch_fails
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import settings_window
+
+    def launch():
+        if launch_fails:
+            raise RuntimeError("Synthetic launch failure")
+        return "Otvaranje Tobii postavki je zatraženo."
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(toolbar, "launch_tobii_settings", launch)
+    hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._open_settings()
+    hotbar._settings_window._gaze_check_button.click()
+    check = hotbar._gaze_check_window
+    check._calibration_button.click()
+    qtbot.wait(1)
+    assert controller._input_suspended
+    assert check._notice.text().count("Test and recalibrate") == 1
+    assert "> Recalibrate" in check._notice.text()
+    assert "profil korisnika" in check._notice.text()
+    if launch_fails:
+        assert not check.isMinimized()
+        assert "pored sata" in check._notice.text()
+    else:
+        assert check.isMinimized()
+
+
+@pytest.mark.e2e
 def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hotbar_gaze):
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._gaze.start()
@@ -190,7 +422,7 @@ def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hot
     assert status._detail.text() == "Upravljanje mišem"
     hotbar._gaze.status_changed.emit("Praćenje simulacijom miša je aktivno.")
     hotbar._gaze.tracker_changed.emit("retrying")
-    hotbar._set_status("Otvoren je izbornik brzih radnji.")
+    hotbar._set_status("Otvoren je meni brzih radnji.")
     assert status._title.text() == "Simulacija mišem"
     hotbar._gaze.stop()
     assert status._title.text() == "Praćenje zaustavljeno"

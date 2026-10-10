@@ -95,6 +95,18 @@ def launch_tobii_guest_calibration() -> str:
     )
 
 
+def launch_tobii_settings() -> str:
+    """Open the installed settings UI without sending the Guest shortcut."""
+    if sys.platform != "win32":
+        raise RuntimeError("Tobii postavke se mogu otvoriti samo na Windowsu.")
+    errors: list[str] = []
+    for target in _ranked_tobii_launch_targets(settings_only=True):
+        if _shell_execute(str(target), errors):
+            logger.info("Tobii settings launch requested: %s", _short_display_path(target))
+            return "Otvaranje Tobii postavki je zatraženo."
+    raise RuntimeError("Tobii postavke se nisu mogle otvoriti. Otvorite Tobii ikonu pored sata.")
+
+
 def _open_calibration_ui(errors: list[str]) -> str | None:
     configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
     if configured and _launch_configured_command(configured, errors):
@@ -125,8 +137,22 @@ def _launch_configured_command(command: str, errors: list[str]) -> bool:
     return True
 
 
-def _best_tobii_launch_target() -> Path | None:
+def _best_tobii_launch_target(*, settings_only: bool = False) -> Path | None:
+    candidates = _ranked_tobii_launch_targets(settings_only=settings_only)
+    return candidates[0] if candidates else None
+
+
+def _ranked_tobii_launch_targets(*, settings_only: bool = False) -> list[Path]:
     candidates = _start_menu_shortcuts() + _installed_tobii_executables()
+    excluded = (*_EXCLUDED_EXE_KEYWORDS, "install", "setup", "repair")
+    if settings_only:
+        excluded += ("calibr", "guest", "test")
+    candidates = [
+        candidate
+        for candidate in candidates
+        # Folder scores must never turn a maintenance executable into an app UI.
+        if not any(word in candidate.stem.lower() for word in excluded)
+    ]
     ranked = sorted(
         ((candidate, _target_score(candidate)) for candidate in candidates),
         key=lambda item: item[1],
@@ -135,13 +161,13 @@ def _best_tobii_launch_target() -> Path | None:
     ranked = [(candidate, score) for candidate, score in ranked if score > 0]
     if not ranked:
         logger.warning("No Tobii calibration/configuration launch target was found.")
-        return None
+        return []
 
     logger.info(
         "Best Tobii launch candidates: %s",
         [f"{_short_display_path(path)} score={score}" for path, score in ranked[:8]],
     )
-    return ranked[0][0]
+    return [path for path, _score in ranked]
 
 
 def _start_menu_shortcuts() -> list[Path]:

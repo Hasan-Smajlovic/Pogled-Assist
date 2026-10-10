@@ -64,7 +64,7 @@ class LearnedWordsPage(QFrame):
         self._retry_button.setEnabled(bool(self._suggestions.store.error) and not self._busy)
         self._selection_label.setText(self._selection_text(learned))
         self._status_label.setText(
-            "Spremam promjenu…"
+            "Čuvam promjenu…"
             if self._busy
             else self._suggestions.store.error or "Učenje je sačuvano."
         )
