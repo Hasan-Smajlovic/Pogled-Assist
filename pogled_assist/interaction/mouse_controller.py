@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, QPoint, QRect, Signal
 from PySide6.QtGui import QGuiApplication
 
+from .. import diagnostics
 from ..windows.windows_input import WindowsInputController
 from .gaze_selection import DEFAULT_SELECTION_PAUSE_MS, GazeSelectionTimer
 from .gaze_targets import GazeTarget
@@ -105,11 +106,11 @@ class GazeMouseController(QObject):
         self._input: WindowsInputController | None = None
         self._smooth_physical_point: QPoint | None = None
         self._toolbar_gaze_target: str | None = None
-        self._toolbar_selection = GazeSelectionTimer()
+        self._toolbar_selection = GazeSelectionTimer("toolbar")
         self._target_anchor: QPoint | None = None
-        self._target_selection = GazeSelectionTimer()
+        self._target_selection = GazeSelectionTimer("desktop")
         self._quick_anchor: GazeScreenPoint | None = None
-        self._quick_selection = GazeSelectionTimer()
+        self._quick_selection = GazeSelectionTimer("quick_action")
         self._quick_target: GazeScreenPoint | None = None
         self._quick_menu_open = False
         self._click_zoom_open = False
@@ -125,6 +126,8 @@ class GazeMouseController(QObject):
         self._interaction_source: str | None = None
         self._both_eyes_open = False
         self._input_suspended = False
+        self._diagnostic_settings_revision = 0
+        self._diagnostic_context = diagnostics.TargetContext("input")
 
     def start(self) -> None:
         logger.info("Starting mouse controller.")
@@ -228,7 +231,9 @@ class GazeMouseController(QObject):
         self._reset_quick_dwell()
 
     def cancel_toolbar_interaction(self, *, require_leave: bool = False) -> None:
-        self._toolbar_selection.cancel(require_leave=require_leave)
+        self._toolbar_selection.cancel(
+            require_leave=require_leave, reason="interaction_context_changed"
+        )
         self._cancel_interaction("toolbar")
         self._set_toolbar_gaze_target(None)
 
@@ -278,6 +283,22 @@ class GazeMouseController(QObject):
         if not self.settings.use_precision_zoom:
             self._cancel_zoomed_click_state()
         logger.info("Gaze mouse settings updated: %s", settings)
+        self._diagnostic_settings_revision += 1
+        diagnostics.emit(
+            "gaze_settings",
+            priority=True,
+            settings_revision=self._diagnostic_settings_revision,
+            smoothing=settings.smoothing,
+            selection_pause_ms=settings.selection_pause_ms,
+            dwell_ms=settings.dwell_ms,
+            click_cooldown_ms=settings.click_cooldown_ms,
+            dwell_radius_px=settings.dwell_radius_px,
+            move_mouse=settings.move_mouse,
+            use_precision_zoom=settings.use_precision_zoom,
+            show_tracking_notifications=settings.show_tracking_notifications,
+            edge_margin_logical_px=TOOLBAR_EDGE_MARGIN_PX,
+            leave_grace_ms=TOOLBAR_LEAVE_GRACE_MS,
+        )
         self.status_changed.emit("Postavke su ažurirane.")
 
     def handle_eye_status(self, left_open: bool, right_open: bool) -> None:
@@ -311,6 +332,9 @@ class GazeMouseController(QObject):
     def set_input_suspended(self, suspended: bool) -> None:
         """Pause for a caregiver check without changing saved settings or eye validity."""
         self._input_suspended = bool(suspended)
+        diagnostics.emit(
+            "input_suspended_for_check", priority=True, suspended=self._input_suspended
+        )
         self.cancel_gaze_interactions_for_mouse()
         self.cancel_zoomed_click(reset_mode=False)
         self.cancel_quick_action_menu()
@@ -320,6 +344,11 @@ class GazeMouseController(QObject):
 
     def handle_gaze(self, normalized_x: float, normalized_y: float, _timestamp: object) -> None:
         if self._input_suspended or not self._both_eyes_open:
+            diagnostics.emit(
+                "controller_rejected",
+                trace=True,
+                reason="input_suspended_for_check" if self._input_suspended else "eye_gate_closed",
+            )
             self._set_toolbar_gaze_target(None)
             return
 
@@ -335,9 +364,39 @@ class GazeMouseController(QObject):
             return
 
         if overlay_was_open or self._overlay_open():
+            diagnostics.emit("controller_rejected", trace=True, reason="overlay_open")
             return
 
         hit = self._toolbar_hit(point.logical)
+        if diagnostics.enabled():
+            context_getter = getattr(self._target, "diagnostic_context", None)
+            context = (
+                context_getter(hit.action)
+                if context_getter is not None
+                else self._diagnostic_context
+            )
+            self._toolbar_selection.set_diagnostic_context(context)
+            bounds = (
+                self._target.action_bounds(hit.action)
+                if hit.action is not None and diagnostics.tracing()
+                else None
+            )
+            diagnostics.emit(
+                "target_hit",
+                trace=True,
+                context_id=context.id,
+                target_id=context.token(hit.action),
+                normalized=(normalized_x, normalized_y),
+                logical=(point.logical.x(), point.logical.y()),
+                physical=(point.physical.x(), point.physical.y()),
+                logical_bounds=(bounds.x(), bounds.y(), bounds.width(), bounds.height())
+                if bounds is not None
+                else None,
+                over_app_ui=hit.over_app_ui,
+                edge_hold_allowed=hit.can_hold,
+                cooldown_remaining_ms=max(0.0, self._pause_until_ms - now_ms),
+                settings_revision=self._diagnostic_settings_revision,
+            )
         if not hit.over_app_ui:
             self._move_cursor(cursor_point)
 
@@ -514,7 +573,7 @@ class GazeMouseController(QObject):
             self._toolbar_selection.complete()
             self._finish_interaction("toolbar", center, _action_label(action))
             self._set_toolbar_gaze_target(None)
-            logger.info("Toolbar dwell action fired: %s", action)
+            logger.info("Toolbar dwell action fired: %s", diagnostics.safe_action(action))
             self.toolbar_action_requested.emit(action)
 
     def _handle_target_dwell(self, point: GazeScreenPoint, now_ms: float) -> None:
@@ -674,7 +733,7 @@ class GazeMouseController(QObject):
         self._set_toolbar_gaze_target(None)
 
     def _pause_toolbar_dwell(self) -> None:
-        self._toolbar_selection.pause()
+        self._toolbar_selection.pause(reason="eye_gate_closed")
         self._cancel_interaction("toolbar")
         self._set_toolbar_gaze_target(None)
 
@@ -691,7 +750,7 @@ class GazeMouseController(QObject):
         self._target_anchor = None
 
     def _pause_target_dwell(self) -> None:
-        self._target_selection.pause()
+        self._target_selection.pause(reason="eye_gate_closed")
         self._cancel_interaction("target")
         self._target_anchor = None
 
@@ -701,7 +760,7 @@ class GazeMouseController(QObject):
         self._quick_anchor = None
 
     def _pause_quick_dwell(self) -> None:
-        self._quick_selection.pause()
+        self._quick_selection.pause(reason="eye_gate_closed")
         self._cancel_interaction("quick")
         self._quick_anchor = None
 
@@ -763,6 +822,12 @@ class GazeMouseController(QObject):
             physical_top,
             physical_width,
             physical_height,
+        )
+        diagnostics.emit(
+            "screen_mapping",
+            priority=True,
+            logical=(logical_left, logical_top, logical_width, logical_height),
+            physical=(physical_left, physical_top, physical_width, physical_height),
         )
 
 

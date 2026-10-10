@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from .. import diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +33,15 @@ def is_windows_startup_enabled() -> bool:
         return False
 
     try:
+        started_at = time.monotonic()
         completed = _run_powershell(_query_script())
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.warning("Could not query Windows startup task: %s", exc)
         return False
+    finally:
+        diagnostics.emit(
+            "startup_task_query", priority=True, duration_ms=(time.monotonic() - started_at) * 1000
+        )
 
     if completed.returncode != 0:
         logger.warning(

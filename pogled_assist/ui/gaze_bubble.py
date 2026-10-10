@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from .. import diagnostics
 from ..tracking.gaze_provider import GAZE_DELIVERY_GAP_SECONDS
 from ..windows.windows_z_order import force_window_topmost
 
@@ -40,6 +41,9 @@ class GazeBubbleWindow(QWidget):
         self._last_gaze_ms = 0.0
         self._last_raise_ms = 0.0
         self._windows_click_through_applied = False
+        self._diagnostic_gaze_at: float | None = None
+        self._diagnostic_hide_reason = "hidden_or_closed"
+        self._diagnostic_metrics = diagnostics.StreamMetrics()
         self._topmost_timer = QTimer(self)
         self._topmost_timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
         self._topmost_timer.timeout.connect(self._refresh_windows_topmost)
@@ -60,7 +64,7 @@ class GazeBubbleWindow(QWidget):
         self._enabled = enabled
         logger.info("Gaze bubble %s.", "enabled" if enabled else "disabled")
         if not enabled:
-            self.clear()
+            self.clear(reason="disabled")
             return
 
         if self._last_point is not None and self._gaze_is_fresh():
@@ -69,15 +73,18 @@ class GazeBubbleWindow(QWidget):
             self._last_move_ms = time.monotonic() * 1000
             self._show_without_focus()
         else:
-            self.clear()
+            self.clear(reason="no_fresh_gaze")
 
-    def clear(self) -> None:
+    def clear(self, *, reason: str = "input_invalidated") -> None:
+        self._diagnostic_hide_reason = reason
         self._topmost_timer.stop()
         self._last_point = None
         self._last_moved_point = None
         self.hide()
 
     def handle_gaze(self, point: QPoint) -> None:
+        self._diagnostic_gaze_at = time.monotonic()
+        self._diagnostic_metrics.summary(event_name="marker_summary")
         self._last_point = QPoint(point)
         self._last_gaze_ms = time.monotonic() * 1000
         if not self._enabled:
@@ -92,6 +99,29 @@ class GazeBubbleWindow(QWidget):
         self._last_move_ms = now_ms
         if not self.isVisible() or self._raise_due():
             self._show_without_focus()
+
+    def showEvent(self, event) -> None:
+        self._diagnostic_hide_reason = "hidden_or_closed"
+        super().showEvent(event)
+        self._diagnostic_metrics.event(
+            "marker_visibility",
+            visible=True,
+            reason="shown",
+            gaze_age_ms=(time.monotonic() - self._diagnostic_gaze_at) * 1000
+            if self._diagnostic_gaze_at is not None
+            else None,
+        )
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self._diagnostic_metrics.event(
+            "marker_visibility",
+            visible=False,
+            reason=self._diagnostic_hide_reason,
+            gaze_age_ms=(time.monotonic() - self._diagnostic_gaze_at) * 1000
+            if self._diagnostic_gaze_at is not None
+            else None,
+        )
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
@@ -146,7 +176,7 @@ class GazeBubbleWindow(QWidget):
             return
 
         if not self._gaze_is_fresh():
-            self.clear()
+            self.clear(reason="gaze_stale")
             return
 
         force_window_topmost(self, show=True, aggressive=True)

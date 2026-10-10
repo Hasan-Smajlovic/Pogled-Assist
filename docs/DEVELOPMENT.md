@@ -538,6 +538,40 @@ On the Tobii machine, additionally verify:
 
 Record software-only and hardware results separately in the pull request.
 
+## Diagnostic log analysis
+
+The [architecture](ARCHITECTURE.md#diagnostic-logging) owns schema, clocks,
+queue, privacy and session limits. The [user guide](USER_GUIDE.md#diagnostic-log-collection)
+owns collection and the short trace launch. For source launches, set the same
+`POGLED_ASSIST_GAZE_DIAGNOSTICS=trace` variable before `dev.ps1 run`.
+
+An offline reader imports neither Qt nor a Tobii backend:
+
+```powershell
+.\.venv\Scripts\python.exe -m pogled_assist.log_reader .\logs\diagnostics\<session-id>.jsonl
+```
+
+It counts provider rejection reasons from summaries, selection-end reasons from
+events, and reports process-cumulative writer health. Do not sum those cumulative
+loss counts repeatedly. Basic event counts can be lower than actual transitions;
+check suppressed counters in the summaries. Missing start/end, malformed or
+partial last lines, dropped records and size limits constrain the conclusion.
+Read the requested time range's raw events when explaining a specific attempt.
+Compare event timestamps with video time; file rotation names are not session
+start timestamps. Do not infer tracking accuracy without a known intended target.
+
+For changes to diagnostics, test the same provider/controller/Qt input sequence
+with logging off, basic, trace and a blocked writer. Include the existing gaze
+check and tracking-feedback suites: their snapshots, coverage, interruption
+counts and UI state must agree. Test actual blocked file/console sinks, overflow,
+runtime rotation, missing streams, exceptions and bounded shutdown. Keep stdout
+IPC atomic and independent of droppable logging. Use the existing pytest fakes
+and repository verification commands; Mac-only checks are not Windows or Tobii
+hardware verification. Measure producer/Qt latency, CPU, memory and output size
+on the same reference Windows device before release. A background thread still
+shares Python scheduling and the GIL, so asynchronous output alone does not
+establish zero overhead.
+
 ## Lint and formatting
 
 actionlint checks GitHub Actions YAML syntax and workflow expressions before a

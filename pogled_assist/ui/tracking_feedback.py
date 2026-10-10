@@ -10,6 +10,7 @@ from PySide6.QtCore import QEasingCurve, QObject, QRectF, Qt, QTimer, QVariantAn
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QStyle, QWidget
 
+from .. import diagnostics
 from ..tracking.feedback import TrackingFeedbackState, TrackingNotice
 from ..tracking.status import TrackingState, TrackingStatus
 
@@ -68,6 +69,13 @@ class TrackingFeedback(QObject):
         )
         if notice != self.notice:
             self.notice = notice
+            diagnostics.emit(
+                "tracking_notice",
+                tone=notice.tone if notice is not None else None,
+                eyes=notice.eyes if notice is not None else None,
+                tracking_state=self._status.state.value,
+                enabled=self._enabled,
+            )
             self.changed.emit(notice)
 
     def stop(self) -> None:

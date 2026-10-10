@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any
 
+from pogled_assist.log_transport import LogWriter, QueueLogHandler
 from pogled_assist.tracking.tobii_stream_engine import TobiiStreamEngineBackend
 
 logger = logging.getLogger(__name__)
@@ -19,12 +20,23 @@ _output_lock = threading.Lock()
 
 
 def main() -> int:
+    writer = LogWriter(capacity=128)
+    writer.start_segment(None, sys.stderr, trace=False)
+    handler = QueueLogHandler(writer)
+    root = logging.getLogger()
+    previous_handlers, previous_level = root.handlers[:], root.level
+    root.handlers = [handler]
+    root.setLevel(logging.INFO)
+    try:
+        return _run_bridge()
+    finally:
+        handler.close()
+        root.handlers = previous_handlers
+        root.setLevel(previous_level)
+
+
+def _run_bridge() -> int:
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stderr,
-    )
 
     logger.info("Starting Tobii Stream Engine bridge with Python: %s", sys.executable)
     logger.info("Bridge pointer size: %s-bit", 8 * _pointer_size())
@@ -51,6 +63,7 @@ def main() -> int:
             label=backend.label,
             dll_path=backend.dll_path,
             eye_position_supported=backend.eye_position_supported,
+            diagnostic_metadata=getattr(backend, "diagnostic_metadata", {}),
         )
         while _running:
             time.sleep(0.25)

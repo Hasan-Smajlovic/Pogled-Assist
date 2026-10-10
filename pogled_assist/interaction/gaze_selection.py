@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .. import diagnostics
+
 DEFAULT_SELECTION_PAUSE_MS = 500
 MIN_SELECTION_PAUSE_MS = 100
 MAX_SELECTION_PAUSE_MS = 2000
@@ -20,12 +22,48 @@ class GazeSelectionUpdate:
 class GazeSelectionTimer:
     """Track pause, dwell progress, and leave-before-repeat for one interaction."""
 
-    def __init__(self) -> None:
+    def __init__(self, diagnostic_source: str | None = None) -> None:
         self._target: object | None = None
         self._blocked_target: object | None = None
         self._started_ms = 0.0
         self._last_seen_ms = 0.0
         self._away_since_ms: float | None = None
+        self._observer = (
+            diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
+        )
+        self._diagnostic_pause_ms = 0
+        self._diagnostic_dwell_ms = 0
+        self._advancing = False
+
+    def diagnostic_snapshot(self) -> dict:
+        """Read timing state without advancing or resetting selection."""
+        credited = (
+            max(0.0, self._last_seen_ms - self._started_ms) if self._target is not None else 0.0
+        )
+        return {
+            "target": self.target,
+            "active": self._target is not None,
+            "blocked": self.is_blocked,
+            "held": self._away_since_ms is not None,
+            "credited_ms": credited,
+        }
+
+    def set_diagnostic_context(self, context: diagnostics.TargetContext) -> None:
+        if self._observer is not None:
+            self._observer.context = context
+
+    def _observe(self, reason: str) -> None:
+        if self._observer is not None and not self._advancing:
+            try:
+                self._observer.observe(
+                    self.diagnostic_snapshot(),
+                    reason=reason,
+                    pause_ms=self._diagnostic_pause_ms,
+                    dwell_ms=self._diagnostic_dwell_ms,
+                )
+            except Exception:
+                # A failed observation must not prevent completion or cancellation.
+                diagnostics.observation_failed()
 
     @property
     def target(self) -> object | None:
@@ -47,6 +85,35 @@ class GazeSelectionTimer:
         restart: bool = False,
         can_hold: bool = False,
         hold_ms: int = 0,
+    ) -> GazeSelectionUpdate:
+        self._diagnostic_pause_ms = pause_ms
+        self._diagnostic_dwell_ms = dwell_ms
+        self._advancing = True
+        try:
+            result = self._advance(
+                target,
+                now_ms,
+                pause_ms=pause_ms,
+                dwell_ms=dwell_ms,
+                restart=restart,
+                can_hold=can_hold,
+                hold_ms=hold_ms,
+            )
+        finally:
+            self._advancing = False
+        self._observe("sample")
+        return result
+
+    def _advance(
+        self,
+        target: object | None,
+        now_ms: float,
+        *,
+        pause_ms: int,
+        dwell_ms: int,
+        restart: bool,
+        can_hold: bool,
+        hold_ms: int,
     ) -> GazeSelectionUpdate:
         """Hold only when the caller confirms that gaze is near the current target."""
 
@@ -81,8 +148,9 @@ class GazeSelectionTimer:
         if self._target is not None:
             self._blocked_target = self._target
         self._clear_target()
+        self._observe("completed")
 
-    def cancel(self, *, require_leave: bool = False) -> None:
+    def cancel(self, *, require_leave: bool = False, reason: str = "cancelled") -> None:
         """Drop pending progress and optionally block the target until gaze leaves."""
 
         if require_leave:
@@ -91,11 +159,13 @@ class GazeSelectionTimer:
         else:
             self._blocked_target = None
         self._clear_target()
+        self._observe(reason)
 
-    def pause(self) -> None:
+    def pause(self, *, reason: str = "paused") -> None:
         """Drop pending progress without treating invalid gaze as leaving the target."""
 
         self._clear_target()
+        self._observe(reason)
 
     def _holds(self, target: object | None, now_ms: float, hold_ms: int) -> bool:
         if self.target is None or target == self.target or hold_ms <= 0:

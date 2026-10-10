@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import diagnostics
 from ..interaction.gaze_selection import GazeSelectionTimer
 from ..interaction.mouse_controller import (
     TOOLBAR_EDGE_MARGIN_PX,
@@ -287,8 +288,10 @@ class GazeCheckWindow(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._timer.start()
+        diagnostics.emit("gaze_check_open", priority=True, phase=self._phase)
 
     def closeEvent(self, event) -> None:
+        diagnostics.emit("gaze_check_close", priority=True, phase=self._phase)
         self._timer.stop()
         self._selection.cancel()
         self._check = None
@@ -503,6 +506,7 @@ class GazeCheckWindow(QWidget):
             self._start_trial()
 
     def reset_check(self) -> None:
+        diagnostics.emit("gaze_check_phase", priority=True, phase="position", previous=self._phase)
         self._phase = "position"
         self._check = None
         self._selection.cancel()
@@ -524,6 +528,7 @@ class GazeCheckWindow(QWidget):
         self._render_position()
 
     def _set_test_mode(self, phase: str) -> None:
+        diagnostics.emit("gaze_check_phase", priority=True, phase=phase, previous=self._phase)
         self._pages.setCurrentIndex(1)
         self._phase = phase
         self._target.trial = phase == "trial"
@@ -638,6 +643,21 @@ class GazeCheckWindow(QWidget):
         self._pages.setCurrentIndex(2)
         self._step.setText("Rezultat provjere")
         results = self._check.results if self._check is not None else []
+        diagnostics.emit("gaze_check_phase", priority=True, phase="results")
+        if diagnostics.tracing():
+            for index, result in enumerate(results):
+                diagnostics.emit(
+                    "fixation_result",
+                    trace=True,
+                    priority=True,
+                    target_index=index,
+                    samples=result.samples,
+                    coverage=result.coverage,
+                    median_error_logical_px=result.median_error,
+                    spread_logical_px=result.spread,
+                    near=result.near,
+                    gaze_center_normalized=result.gaze_center,
+                )
         near = sum(result.near is True for result in results)
         missing = sum(result.near is None for result in results)
         trial_finished = len(self._trial_results) == 3
@@ -865,6 +885,17 @@ class GazeCheckWindow(QWidget):
         ):
             self._trial_tracked_targets.add(len(self._trial_results))
         self._trial_results.append(selected)
+        diagnostics.emit(
+            "trial_result",
+            trace=True,
+            priority=True,
+            target_index=len(self._trial_results) - 1,
+            selected=selected,
+            tracked=len(self._trial_results) - 1 in self._trial_tracked_targets,
+            eye_losses=self._trial_losses,
+            departures=self._trial_departures,
+            wrong_selections=self._trial_wrong_selections,
+        )
         self._selection.cancel()
         self._target.progress = 0.0
         self._target.progress_target = None
