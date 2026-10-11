@@ -398,6 +398,31 @@ saved immediately to `data\app_settings.json`.
 
 ## Update
 
+In the installed Windows application, open **Postavke > Opće postavke**.
+The current version is always shown separately from **Verzija za instalaciju**.
+Settings checks the official stable release list when opened; **Provjeri verzije**
+refreshes it. A notice identifies a newer stable version. A failed check does
+not mean your installed version is the latest.
+
+Choose an older or newer version in the dropdown, then select **Instaliraj i
+ponovo pokreni**. With gaze, dwelling on the dropdown cycles through its values.
+Selection alone does not install anything. Internet access is required for the
+list and package download. The app stays open while the package is downloaded
+and verified. If a message or entry is unfinished, choose **Odustani** to keep
+it or **Odbaci unos i ponovo pokreni** to continue. Unsaved drafts are not
+restored after restart. Closing Settings cancels a pending installation.
+
+Saved phrases, categories, answers, usage counts, settings, learned words and
+logs are preserved, including a return from an older version. The installer
+also keeps pre-install data snapshots as described in the
+[persistent-data contract](ARCHITECTURE.md#persistent-data-and-logs).
+The selected version remains active after restarts. Updates are never installed
+automatically. Older releases may not have this selector or version notices;
+returning from them can require their updater or a manual verified installation.
+There is no device selector, offline version list or separate recovery launcher.
+
+If the application cannot open, use the manual update procedure:
+
 Close Pogled Assist, open PowerShell in `C:\PogledAssist`, and run:
 
 ```powershell

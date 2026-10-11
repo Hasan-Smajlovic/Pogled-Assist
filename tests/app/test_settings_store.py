@@ -84,6 +84,46 @@ def point_settings_at(monkeypatch, tmp_path):
     return path
 
 
+def test_unknown_settings_survive_saves_and_downgrade_round_trip(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    original = {
+        "version": 1,
+        "future": {"enabled": True},
+        "speech": {"keyboard_script": "arabic", "future_voice": "keep", "speed": 180},
+        "gaze": {"show_tracking_notifications": False},
+    }
+    path.write_text(json.dumps(original), encoding="utf-8")
+    gaze, speech = load_app_settings()
+    assert save_app_settings(gaze, speech)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["future"] == original["future"]
+    assert saved["speech"]["future_voice"] == "keep"
+    history = path.parent / "version-history" / "20261011-checkpoint"
+    history.mkdir(parents=True)
+    (history / path.name).write_bytes(path.read_bytes())
+    path.write_text(
+        json.dumps({"version": 1, "speech": {"speed": 210}, "gaze": {"dwell_ms": 950}}),
+        encoding="utf-8",
+    )
+    gaze, speech = load_app_settings()
+    assert speech.keyboard_script == "arabic"
+    assert speech.speed == 210
+    assert gaze.show_tracking_notifications is False
+    assert gaze.dwell_ms == 950
+    assert save_app_settings(gaze, speech)
+    assert json.loads(path.read_text(encoding="utf-8"))["speech"]["future_voice"] == "keep"
+
+
+@pytest.mark.parametrize("contents", ["invalid json", '{"version":999,"speech":{"speed":220}}'])
+def test_unsupported_or_unreadable_settings_are_never_overwritten(monkeypatch, tmp_path, contents):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(contents, encoding="utf-8")
+    assert not save_app_settings(GazeSettings(), SpeechSettings())
+    assert path.read_text(encoding="utf-8") == contents
+
+
 def test_load_returns_defaults_when_file_is_missing(monkeypatch, tmp_path):
     point_settings_at(monkeypatch, tmp_path)
 

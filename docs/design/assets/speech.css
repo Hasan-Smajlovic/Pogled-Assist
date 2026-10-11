@@ -96,7 +96,7 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
 #speech-closed-screen .closed-content, #closed-screen .closed-content { text-align: center; padding: 24px; }
 #speech-closed-screen button, #closed-screen button { width: min(420px, 80vw); }
 @media (max-height: 760px) and (min-width: 901px) {
-  .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 96px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 10px; }
+  .speech-screen { height: calc(100dvh - 16px); min-height: 620px; grid-template-rows: 96px auto minmax(288px, 1fr) 76px; padding: 10px; gap: 9px; }
   .word { min-height: 68px; }
   .key-grid, .item-grid { grid-template-rows: repeat(3, minmax(64px, 1fr)); }
 }

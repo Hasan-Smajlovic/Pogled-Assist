@@ -43,11 +43,18 @@
         <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">
           <div class="update-copy">
-            <h3 id="update-title">Ažuriranja</h3>
-            <p id="update-status">Provjeravam posljednje stabilno izdanje...</p>
+            <h3 id="update-title">Trenutno koristite v0.3.5</h3>
+            <p id="update-status" role="status">Dostupna je novija verzija v0.4.0.</p>
           </div>
-          <button type="button" data-settings-action="check-update">↻&nbsp;&nbsp;Provjeri ažuriranja</button>
-          <button class="settings-primary" type="button" data-settings-action="install-update" hidden>↓&nbsp;&nbsp;Ažuriraj na v0.2.0</button>
+          <button type="button" data-settings-action="check-update">↻&nbsp;&nbsp;Provjeri verzije</button>
+          <label class="version-choice">Verzija za instalaciju<select id="release-version"><option>v0.4.0</option><option>v0.3.5</option><option>v0.3.4</option><option>v0.1.0</option></select></label>
+          <button class="settings-primary" type="button" data-settings-action="install-update">↓&nbsp;&nbsp;Instaliraj i ponovo pokreni</button>
+          <p class="version-note">Sačuvani podaci ostaju dostupni. Starija verzija može zahtijevati ručnu instalaciju za povratak.</p>
+          <section id="version-warning" class="version-warning" hidden>
+            <p>Imate nesačuvanu poruku ili nedovršen unos. Ponovno pokretanje će odbaciti taj tekst. Sačuvani podaci ostaju dostupni.</p>
+            <button type="button" data-settings-action="cancel-install">Odustani</button>
+            <button class="settings-primary" type="button" data-settings-action="confirm-install">Odbaci unos i ponovo pokreni</button>
+          </section>
         </section>
       </section>
       <section id="gaze-settings" class="settings-page settings-panel" hidden>
@@ -107,7 +114,8 @@
     <ul>
       <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
 <li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Svi redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px.</li>
-<li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li>
+<li>Opće postavke provjeravaju sva službena stabilna izdanja s Windows paketom. Trenutna verzija je uvijek odvojena od izbora za instalaciju. Odabir sam po sebi ne mijenja instalaciju. Pogledom se prolazi kroz izbore; miš otvara dropdown.</li>
+<li>Instaliraj i ponovo pokreni prvo preuzima i provjerava paket dok aplikacija radi. Prije zatvaranja upozorava na nesačuvan unos i omogućava odustajanje. Greška ostavlja aplikaciju i podatke dostupnim. Nema automatske instalacije.</li>
 <li>Provjera i promjena pokretanja uz Windows rade u pozadini. Ostale kontrole ostaju dostupne. Dok promjena traje, označeno stanje prati posljednji izbor. Zatvaranje Postavki ne odbacuje zatražene promjene dok aplikacija radi; ponovo otvorene Postavke provjeravaju stanje nakon tih promjena. Izbor prikaza PowerShell prozora primjenjuje se i kada je napravljen prije završetka početne provjere.</li></ul>
 <p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p></details>
 </body>

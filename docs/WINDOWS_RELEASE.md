@@ -46,6 +46,30 @@ installing if a portable copy is preferred.
 
 ## Update an installed release
 
+The installed app offers version selection in General Settings. See the
+[user flow](USER_GUIDE.md#update). It lists all official stable releases with
+the exact Windows ZIP and checksum assets, newest version first. It shows the
+installed version independently of the selection and checks again whenever
+Settings opens. No startup popup or automatic installation is used.
+
+The Settings action pins `-TargetVersion <major.minor.patch>` in the updater.
+That uses the official `/releases/tags/v<version>` endpoint and verifies the
+returned tag, stability flags, asset URLs, checksum and package `VERSION`.
+An explicit selection permits a downgrade. The app and updater use a private
+temporary request directory: the updater reports package readiness, and the
+app authorizes installation only after warning about unsaved input. The
+updater waits for that process to exit and refuses installation without the
+authorization or after cancellation. Closing Settings or the app cancels the
+request. Downloads and verification leave the running app available.
+
+For selected historical packages, the updater uses the currently installed
+transactional installer, rather than the historical package's installer. This
+keeps the current data-copy checks, snapshots and failure recovery in force.
+Installation code checks the copied `data` and `logs` before changing binaries;
+see the [data contract](ARCHITECTURE.md#persistent-data-and-logs).
+
+The command below remains a manual latest-stable update:
+
 Close Pogled Assist, open PowerShell in `C:\PogledAssist`, and run:
 
 ```powershell
@@ -71,9 +95,9 @@ after a successful update. Update details are appended to
 Before updating, close File Explorer windows showing the installation folder or
 its subfolders. If another process still holds that folder open when the
 installer swaps directories, the installer makes a few short attempts and then
-stops with an instruction to close those windows and retry. An update started
-from the app keeps its console open on failure so the instruction remains
-visible. When the old directory could not be moved, the previous installation
+stops with an instruction to close those windows and retry. Preparation failures
+appear in Settings. Details of later installation failures remain in the updater
+log. When the old directory could not be moved, the previous installation
 stays in place. If a later step fails, the installer restores the backup or
 keeps the transaction data for recovery if Windows also blocks the rollback.
 
@@ -254,6 +278,15 @@ Software-only checks on a clean Windows x64 environment:
   matches the latest stable release.
 - Confirm a deliberately invalid checksum leaves the older version unchanged.
 - Confirm an installed smoke-test failure restores the older version.
+- From Settings, select an older release and verify selection alone does not
+  install it. Start installation, cancel at the unsaved-input warning and verify
+  the text remains. Then confirm installation and check the active version after
+  application and Windows restarts. Verify the current-version label and notice
+  of a newer stable release, including a failed network check.
+- Exercise a newer-to-older-to-newer round trip with saved phrases, categories,
+  answers, counts, learned words and settings, including Arabic script and
+  tracking notices missing from older settings writers. Edit supported values
+  in the older app and verify those edits survive the return.
 - Hold the installation folder open in File Explorer during an update. Confirm
   the updater reports which folder to close, leaves the older version and user
   files intact, and succeeds after the Explorer window is closed and retried.
@@ -305,6 +338,10 @@ Hardware checks on the target Tobii machine:
 
 ## Rollback
 
+Prefer the Settings selector while the installed app can open. Older releases
+can lack version controls; use a verified manual installation to return from
+them when their updater cannot do it.
+
 Download an earlier immutable release, verify its checksum, extract it, and run
 its `install_windows.ps1`. Close Pogled Assist first. The installer validates
 the older package before replacing application binaries, preserves
@@ -318,6 +355,8 @@ or rename either file during rollback. They also preserve
 release resumes using it. An older release reads and updates the
 list-only file. When a current release is installed again, it imports newer
 standalone phrase changes while retaining categories and answers from the full
-library. If saved settings from a newer version are incompatible, back up `data`,
-remove only `data\app_settings.json`, and restart the older version. Never move or
-recreate an existing release tag during rollback.
+library. Keep `data\version-history` during all later installations: current
+settings loading uses it to restore fields omitted by older writers while
+retaining their supported edits. Do not reset settings to force a version
+change. If saved data cannot be preserved, stop and resolve that problem first.
+Never move or recreate an existing release tag during rollback.

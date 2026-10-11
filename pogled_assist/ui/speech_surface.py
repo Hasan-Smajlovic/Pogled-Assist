@@ -66,7 +66,7 @@ class SpeechSurface(QWidget):
         self.setStyleSheet(SPEECH_STYLE)
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 10, 12, 10)
-        root.setSpacing(10)
+        root.setSpacing(9)
         root.addLayout(self._build_topbar())
         root.addLayout(self._build_predictions())
         root.addLayout(self._build_workspace(), 1)
