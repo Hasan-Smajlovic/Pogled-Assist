@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
+import weakref
 from collections import Counter
 
 from .logging_setup import diagnostic_writer
+
+_metrics = weakref.WeakSet()
+_metrics_lock = threading.Lock()
+
 
 SAFE_ACTIONS = frozenset(
     {
@@ -34,6 +40,17 @@ SAFE_ACTIONS = frozenset(
         "quick_actions",
     }
 )
+
+
+def flush_summaries() -> None:
+    """Queue partial intervals before the logging segment closes."""
+    with _metrics_lock:
+        metrics = tuple(_metrics)
+    for item in metrics:
+        try:
+            item.summary(force=True)
+        except Exception:
+            observation_failed()
 
 
 def enabled() -> bool:
@@ -95,13 +112,19 @@ class TargetContext:
 class StreamMetrics:
     """One-second summaries; stale last-known eye states earn no extra valid time."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, event_name: str = "stream_summary", **summary_fields) -> None:
+        self._lock = threading.RLock()
+        self._event_name = event_name
+        self._summary_fields = summary_fields
+        self._known_states: dict[str, str] = {}
         self._writer = None
         self.started = time.monotonic()
         self.counts: Counter = Counter()
         self.durations: Counter = Counter()
         self._states: dict[str, tuple[str, float, float]] = {}
         self._rates: dict[str, tuple[float, int]] = {}
+        with _metrics_lock:
+            _metrics.add(self)
 
     def _ready(self) -> bool:
         writer = diagnostic_writer()
@@ -115,24 +138,37 @@ class StreamMetrics:
             self.counts.clear()
             self.durations.clear()
             self._states.clear()
+            # Applied gates remain known while logging is off. Native eye
+            # samples must be received again before earning valid time.
+            for stream, state in self._known_states.items():
+                self._states[stream] = state, self.started, float("inf")
             self._rates.clear()
         return True
 
     def count(self, reason: str, amount: int = 1) -> None:
-        if self._ready():
-            self.counts[reason] += amount
+        with self._lock:
+            if self._ready():
+                self.counts[reason] += amount
 
     def eyes(self, stream: str, state: str, *, sampled: bool, stale_after: float | None) -> None:
-        if not self._ready():
-            return
-        now = time.monotonic()
-        self._accrue(stream, now)
-        old = self._states.get(stream)
-        fresh_at = now if sampled or old is None else old[2]
-        expires = (
-            float("inf") if stale_after is None else fresh_at + stale_after if sampled else fresh_at
-        )
-        self._states[stream] = state, now, expires
+        with self._lock:
+            ready = self._ready()
+            if stale_after is None:
+                self._known_states[stream] = state
+            if not ready:
+                return
+            now = time.monotonic()
+            self._accrue(stream, now)
+            old = self._states.get(stream)
+            fresh_at = now if sampled or old is None else old[2]
+            expires = (
+                float("inf")
+                if stale_after is None
+                else fresh_at + stale_after
+                if sampled
+                else fresh_at
+            )
+            self._states[stream] = state, now, expires
 
     def _accrue(self, stream: str, now: float) -> None:
         previous = self._states.get(stream)
@@ -145,49 +181,58 @@ class StreamMetrics:
         self._states[stream] = state, now, expires
 
     def event(self, event: str, **fields) -> None:
-        if not self._ready():
-            return
-        now = time.monotonic()
-        start, count = self._rates.get(event, (now, 0))
-        if now - start >= 1:
-            start, count = now, 0
-        self._rates[event] = start, count + 1
-        if tracing() or count < 4:
-            emit(event, trace=count >= 4, **fields)
-        else:
-            self.counts[f"suppressed:{event}"] += 1
+        with self._lock:
+            if not self._ready():
+                return
+            now = time.monotonic()
+            start, count = self._rates.get(event, (now, 0))
+            if now - start >= 1:
+                start, count = now, 0
+            self._rates[event] = start, count + 1
+            if tracing() or count < 4:
+                emit(event, trace=count >= 4, **fields)
+            else:
+                self.counts[f"suppressed:{event}"] += 1
 
     def summary(
         self,
         *,
         generation: int | None = None,
         backend: str | None = None,
-        event_name: str = "stream_summary",
+        event_name: str | None = None,
+        force: bool = False,
         **fields,
     ) -> bool:
-        if not self._ready():
-            return False
-        now = time.monotonic()
-        if now - self.started < 1:
-            return False
-        for stream in tuple(self._states):
-            self._accrue(stream, now)
-        if generation is not None:
-            fields["stream_generation"] = generation
-        if backend is not None:
-            fields["backend"] = backend
-        emit(
-            event_name,
-            priority=True,
-            interval_s=now - self.started,
-            counts=dict(self.counts),
-            eye_state_seconds=dict(self.durations),
-            **fields,
-        )
-        self.started = now
-        self.counts.clear()
-        self.durations.clear()
-        return True
+        with self._lock:
+            if event_name is not None:
+                self._event_name = event_name
+            if generation is not None:
+                fields["stream_generation"] = generation
+            if backend is not None:
+                fields["backend"] = backend
+            self._summary_fields.update(fields)
+            if not self._ready():
+                return False
+            now = time.monotonic()
+            interval = max(0.0, now - self.started)
+            if interval < 1 and not force:
+                return False
+            for stream in tuple(self._states):
+                self._accrue(stream, now)
+            if force and not self.counts and not any(self.durations.values()):
+                return False
+            emit(
+                self._event_name,
+                priority=True,
+                interval_s=interval,
+                counts=dict(self.counts),
+                eye_state_seconds=dict(self.durations),
+                **self._summary_fields,
+            )
+            self.started = now
+            self.counts.clear()
+            self.durations.clear()
+            return True
 
 
 def eye_state(left: bool, right: bool) -> str:
@@ -211,7 +256,9 @@ class SelectionObserver:
         self._writer = None
         self._started_at: float | None = None
         self._credited_ms = 0.0
-        self._rates = StreamMetrics()
+        self._rates = StreamMetrics(
+            event_name="selection_summary", source=source, context_id=self.context.id
+        )
 
     def observe(self, snapshot: dict, *, reason: str, pause_ms: int = 0, dwell_ms: int = 0) -> None:
         writer = diagnostic_writer()
@@ -235,6 +282,8 @@ class SelectionObserver:
             )
         state = (self.context.id, target, phase)
         previous = self._state
+        if previous is not None and previous[0] != self.context.id:
+            self._rates.summary(force=True)
         self._rates.summary(
             event_name="selection_summary", source=self.source, context_id=self.context.id
         )
@@ -299,3 +348,5 @@ class SelectionObserver:
             self._started_at = None
         self._state = state
         self._credited_ms = snapshot["credited_ms"]
+        if not snapshot["active"]:
+            self._rates.summary(force=True)

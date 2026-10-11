@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .. import diagnostics
@@ -34,6 +35,7 @@ class GazeSelectionTimer:
         self._diagnostic_pause_ms = 0
         self._diagnostic_dwell_ms = 0
         self._advancing = False
+        self._context_getter: Callable[[object], diagnostics.TargetContext] | None = None
 
     def diagnostic_snapshot(self) -> dict:
         """Read timing state without advancing or resetting selection."""
@@ -48,15 +50,25 @@ class GazeSelectionTimer:
             "credited_ms": credited,
         }
 
-    def set_diagnostic_context(self, context: diagnostics.TargetContext) -> None:
-        if self._observer is not None:
-            self._observer.context = context
+    def set_diagnostic_context_getter(
+        self, getter: Callable[[object], diagnostics.TargetContext]
+    ) -> None:
+        self._context_getter = getter
 
     def _observe(self, reason: str) -> None:
         if self._observer is not None and not self._advancing:
             try:
+                snapshot = self.diagnostic_snapshot()
+                if (
+                    diagnostics.enabled()
+                    and self._context_getter is not None
+                    and snapshot["target"] is not None
+                ):
+                    # Edge hold keeps the selection's target even when the raw
+                    # hit is empty or briefly belongs to another window.
+                    self._observer.context = self._context_getter(snapshot["target"])
                 self._observer.observe(
-                    self.diagnostic_snapshot(),
+                    snapshot,
                     reason=reason,
                     pause_ms=self._diagnostic_pause_ms,
                     dwell_ms=self._diagnostic_dwell_ms,

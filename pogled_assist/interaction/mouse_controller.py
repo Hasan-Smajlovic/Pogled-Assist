@@ -107,6 +107,7 @@ class GazeMouseController(QObject):
         self._smooth_physical_point: QPoint | None = None
         self._toolbar_gaze_target: str | None = None
         self._toolbar_selection = GazeSelectionTimer("toolbar")
+        self._toolbar_selection.set_diagnostic_context_getter(self._toolbar_diagnostic_context)
         self._target_anchor: QPoint | None = None
         self._target_selection = GazeSelectionTimer("desktop")
         self._quick_anchor: GazeScreenPoint | None = None
@@ -369,13 +370,7 @@ class GazeMouseController(QObject):
 
         hit = self._toolbar_hit(point.logical)
         if diagnostics.enabled():
-            context_getter = getattr(self._target, "diagnostic_context", None)
-            context = (
-                context_getter(hit.action)
-                if context_getter is not None
-                else self._diagnostic_context
-            )
-            self._toolbar_selection.set_diagnostic_context(context)
+            context = self._toolbar_diagnostic_context(hit.action)
             bounds = (
                 self._target.action_bounds(hit.action)
                 if hit.action is not None and diagnostics.tracing()
@@ -427,6 +422,10 @@ class GazeMouseController(QObject):
 
     def _overlay_open(self) -> bool:
         return self._quick_menu_open or self._click_zoom_open
+
+    def _toolbar_diagnostic_context(self, action: object) -> diagnostics.TargetContext:
+        getter = getattr(self._target, "diagnostic_context", None)
+        return getter(action) if getter is not None else self._diagnostic_context
 
     def _toolbar_hit(self, logical: QPoint) -> _ToolbarHit:
         action = self._target.action_at_global_point(logical)

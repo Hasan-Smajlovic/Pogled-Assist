@@ -257,9 +257,20 @@ class TobiiGazeProvider(QObject):
 
     def _invalidate_stream_callbacks(self) -> None:
         with self._sample_lock:
-            self._metrics.summary(generation=self._stream_generation, backend=self._backend_name)
+            self._metrics.summary(
+                generation=self._stream_generation, backend=self._backend_name, force=True
+            )
             self._stream_generation += 1
-            self._metrics = diagnostics.StreamMetrics()
+            self._metrics = diagnostics.StreamMetrics(
+                stream_generation=self._stream_generation, backend=self._backend_name
+            )
+            if self._delivered_eye_status is not None:
+                self._metrics.eyes(
+                    "application_gate",
+                    "open" if all(self._delivered_eye_status) else "closed",
+                    sampled=True,
+                    stale_after=None,
+                )
             self._pending_sample_id = None
             self._diagnostic_tick_at = None
             self._diagnostic_max_late_ms = 0.0

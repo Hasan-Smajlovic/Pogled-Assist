@@ -170,3 +170,118 @@ def test_application_gate_duration_waits_for_the_qt_delivery(monkeypatch, qtbot)
     assert provider._delivered_eye_status == (False, True)
     assert provider._metrics._states["application_gate"][0] == "closed"
     provider.stop()
+
+
+@pytest.mark.parametrize("off_eyes", [(True, True), (True, False)])
+def test_reenabled_logging_keeps_the_applied_gate_without_a_new_signal(
+    monkeypatch, qtbot, off_eyes
+):
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+    now = [10.0]
+    events = []
+    writer = SimpleNamespace(
+        _generation=1, trace=False, event=lambda name, data, **_kwargs: events.append((name, data))
+    )
+    current = [writer]
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: current[0])
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    provider = TobiiGazeProvider()
+    delivered = []
+    provider.eye_status_changed.connect(lambda *eyes: delivered.append(eyes))
+    _gaze, eyes = provider._new_stream_callbacks()
+    try:
+        eyes(True, True, 1)
+        current[0] = None
+        now[0] += 0.1
+        eyes(*off_eyes, 2)
+        before = list(delivered)
+        writer._generation += 1
+        current[0] = writer
+        now[0] += 0.1
+        eyes(*off_eyes, 3)
+        assert delivered == before
+        state = "open" if all(off_eyes) else "closed"
+        assert provider._metrics._states["application_gate"][0] == state
+        now[0] += 0.25
+        assert provider._metrics.summary(force=True)
+        summary = events[-1][1]
+        assert summary["eye_state_seconds"][f"application_gate:{state}"] == pytest.approx(0.25)
+        native_state = "native:" + diagnostics.eye_state(*off_eyes)
+        assert summary["eye_state_seconds"][native_state] == pytest.approx(0.25)
+    finally:
+        provider.stop()
+
+
+def test_rotating_logging_retains_the_gate_but_does_not_reuse_native_validity(monkeypatch):
+    now = [10.0]
+    writer = SimpleNamespace(_generation=1, trace=False, event=lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    metrics = diagnostics.StreamMetrics()
+    metrics.eyes("native", "both_valid", sampled=True, stale_after=0.5)
+    metrics.eyes("application_gate", "open", sampled=True, stale_after=None)
+    writer._generation += 1
+    now[0] = 20
+    metrics.count("new_segment")
+    assert metrics._states["application_gate"][0] == "open"
+    assert "native" not in metrics._states
+    assert not metrics.durations
+
+
+def test_provider_stop_flushes_suppressed_events_in_a_partial_interval(
+    monkeypatch, qtbot, tmp_path
+):
+    from pogled_assist.log_transport import LogWriter
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+    now = [10.0]
+    writer = LogWriter()
+    latest = tmp_path / "logs" / "latest.txt"
+    writer.start_segment(latest, None, trace=False)
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    provider = TobiiGazeProvider()
+    _gaze, eyes = provider._new_stream_callbacks()
+    try:
+        for stamp in range(20):
+            now[0] += 0.01
+            eyes(True, bool(stamp % 2), stamp)
+        expected = dict(provider._metrics.counts)
+        assert expected["suppressed:eye_gate_applied"] > 0
+        provider.stop()
+    finally:
+        assert writer.stop()
+    report = summarize(next((latest.parent / "diagnostics").glob("*.jsonl")))
+    assert report["complete"]
+    assert report["analysis"]["evidence_incomplete"]
+    suppressed = report["analysis"]["suppressed_events"]
+    for reason, count in expected.items():
+        if reason.startswith("suppressed:"):
+            assert suppressed[reason] >= count
+    assert report["analysis"]["eye_state_seconds"]["native:right_invalid"] > 0
+
+
+def test_logging_shutdown_flushes_partial_summaries_before_session_end(monkeypatch, tmp_path):
+    from pogled_assist import logging_setup
+    from pogled_assist.log_transport import LogWriter, QueueLogHandler
+
+    now = [10.0]
+    writer = LogWriter()
+    latest = tmp_path / "logs" / "latest.txt"
+    writer.start_segment(latest, None, trace=False)
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    monkeypatch.setattr(logging_setup, "_queue_handler", QueueLogHandler(writer))
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    metrics = diagnostics.StreamMetrics(event_name="selection_summary", source="toolbar")
+    try:
+        for _ in range(10):
+            metrics.event("selection_end")
+        now[0] += 0.1
+        logging_setup.shutdown_application_logging()
+    finally:
+        assert writer.stop()
+    report = summarize(next((latest.parent / "diagnostics").glob("*.jsonl")))
+    assert report["complete"]
+    assert report["analysis"]["evidence_incomplete"]
+    assert report["analysis"]["suppressed_events"]["suppressed:selection_end"] == 6

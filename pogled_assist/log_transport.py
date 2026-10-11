@@ -141,6 +141,12 @@ class LogWriter:
                 "bounded_snapshots": self._truncated,
             }
 
+    def note_drop(self, reason: str) -> None:
+        """Count producer-side loss without writing or logging recursively."""
+        with self._condition:
+            if self.enabled:
+                self._drop(reason)
+
     def stop(self, timeout: float = 2.0) -> bool:
         with self._condition:
             if not self._stopping:

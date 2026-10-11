@@ -35,7 +35,11 @@ from pogled_assist.interaction.mouse_controller import GazeMouseController
 from pogled_assist.log_reader import summarize
 from pogled_assist.log_transport import LogWriter, QueueLogHandler
 from pogled_assist.suggestions.service import SuggestionService
-from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+from pogled_assist.tracking.gaze_provider import (
+    GAZE_DELIVERY_GAP_SECONDS,
+    GAZE_EMIT_INTERVAL_MS,
+    TobiiGazeProvider,
+)
 from pogled_assist.ui.speech_window import SpeechWindow
 
 pytestmark = pytest.mark.skipif(
@@ -121,12 +125,16 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
             "controller_work",
             "producer_work",
             "qt_timer_lateness",
+            "delivery_interval",
         )
     }
     measuring = threading.Event()
     stopped = threading.Event()
     worker_errors = []
     produced = [0]
+    eligible = [0]
+    last_delivery_at = [None]
+    max_delivery_gap_ms = [0.0]
     memory = []
 
     def handle_gaze(x, y, stamp):
@@ -136,6 +144,12 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         if measuring.is_set():
             metrics["callback_to_controller_done"].add((after - stamp) / 1e6)
             metrics["controller_work"].add((after - before) / 1e6)
+            delivered_at = after / 1e9
+            if last_delivery_at[0] is not None:
+                gap_ms = max(0.0, (delivered_at - last_delivery_at[0]) * 1000)
+                metrics["delivery_interval"].add(gap_ms)
+                max_delivery_gap_ms[0] = max(max_delivery_gap_ms[0], gap_ms)
+            last_delivery_at[0] = delivered_at
 
     def produce():
         sequence = 0
@@ -149,10 +163,12 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
                 was_measuring = active
                 before = time.perf_counter_ns()
                 # Same 60 Hz input and brief eye loss in every logging mode.
-                eyes(True, sequence % 180 < 174, before)
+                both_valid = sequence % 180 < 174
+                eyes(True, both_valid, before)
                 gaze(0.5, 0.5, before)
                 if active:
                     produced[0] += 1
+                    eligible[0] += int(both_valid)
                     metrics["producer_work"].add((time.perf_counter_ns() - before) / 1e6)
                 sequence += 1
                 deadline += 1 / 60
@@ -217,11 +233,20 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         if initial_memory is not None:
             memory.append(initial_memory)
         before_cpu, before_wall = time.process_time(), time.perf_counter()
+        with provider._sample_lock:
+            replaced_before = provider._dropped_sample_count
+        last_delivery_at[0] = before_wall
         measuring.set()
         surfaces.start()
         qtbot.wait(6500)
         measuring.clear()
         elapsed = time.perf_counter() - before_wall
+        measurement_end = before_wall + elapsed
+        max_delivery_gap_ms[0] = max(
+            max_delivery_gap_ms[0], (measurement_end - last_delivery_at[0]) * 1000
+        )
+        with provider._sample_lock:
+            replaced_samples = provider._dropped_sample_count - replaced_before
         cpu = time.process_time() - before_cpu
         final_memory = _working_set_bytes()
         if final_memory is not None:
@@ -245,7 +270,12 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         logging.disable(previous_disabled)
     assert not worker.is_alive()
     assert not worker_errors
-    assert metrics["callback_to_controller_done"].count > 0
+    delivered_samples = metrics["callback_to_controller_done"].count
+    delivered_hz = delivered_samples / elapsed
+    # A short latency among a few surviving samples cannot make a starved
+    # pipeline a valid performance result. Include eye-loss pauses in the gap.
+    assert delivered_hz >= 0.5 * (1000 / GAZE_EMIT_INTERVAL_MS), "Too few delivered samples"
+    assert max_delivery_gap_ms[0] < GAZE_DELIVERY_GAP_SECONDS * 1000, "Gaze delivery stalled"
     assert phase[0] == 12, "The complete surface workload must run in every mode"
     assert drained, "The logging worker did not finish"
     health = writer.health() if writer else None
@@ -262,6 +292,12 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
     return {
         "mode": mode,
         "produced_samples": produced[0],
+        "eligible_samples": eligible[0],
+        "delivered_samples": delivered_samples,
+        "produced_hz": produced[0] / elapsed,
+        "delivered_hz": delivered_hz,
+        "provider_replaced_samples": replaced_samples,
+        "max_delivery_gap_ms": max_delivery_gap_ms[0],
         "surface_changes": phase[0],
         "duration_s": elapsed,
         "cpu_percent_of_one_core": cpu / elapsed * 100,
@@ -306,6 +342,10 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
                 "cpu_percentage_point_delta": (
                     run["cpu_percent_of_one_core"] - baseline["cpu_percent_of_one_core"]
                 ),
+                "delivered_hz_delta": run["delivered_hz"] - baseline["delivered_hz"],
+                "max_delivery_gap_delta_ms": (
+                    run["max_delivery_gap_ms"] - baseline["max_delivery_gap_ms"]
+                ),
                 "callback_to_controller_p95_delta_ms": (
                     run["latency"]["callback_to_controller_done"]["p95_ms"]
                     - baseline["latency"]["callback_to_controller_done"]["p95_ms"]
@@ -322,6 +362,9 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
             "CPU covers this pytest process, including the producer and logging workers. "
             "Memory is sampled, not an OS peak. File logging has no console sink. "
             "Log byte totals include warmup and shutdown; CPU and latency cover measurement only. "
+            "Provider replacements are expected with 60 Hz input and a 20 ms delivery timer. "
+            "Delivery rate and maximum gaps include intentional short eye-loss periods. "
+            "Delivery guards reject a starved workload; comparisons measure logging overhead. "
             "Use repeated same-PC comparisons; these numbers are not portable pass/fail thresholds."
         ),
     }

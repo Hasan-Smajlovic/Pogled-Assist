@@ -43,7 +43,7 @@ class GazeBubbleWindow(QWidget):
         self._windows_click_through_applied = False
         self._diagnostic_gaze_at: float | None = None
         self._diagnostic_hide_reason = "hidden_or_closed"
-        self._diagnostic_metrics = diagnostics.StreamMetrics()
+        self._diagnostic_metrics = diagnostics.StreamMetrics(event_name="marker_summary")
         self._topmost_timer = QTimer(self)
         self._topmost_timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
         self._topmost_timer.timeout.connect(self._refresh_windows_topmost)
