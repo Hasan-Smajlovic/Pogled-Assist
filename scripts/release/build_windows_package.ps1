@@ -163,6 +163,7 @@ $requiredFiles = @(
     "_internal\pogled_assist\assets\bosnian-islamic-model.meta.json",
     "_internal\pogled_assist\assets\checkbox_x.svg",
     "_internal\pogled_assist\__init__.py",
+    "_internal\pogled_assist\log_snapshot.py",
     "_internal\pogled_assist\log_transport.py",
     "_internal\pogled_assist\tracking\__init__.py",
     "_internal\pogled_assist\tracking\tobii_stream_engine.py",

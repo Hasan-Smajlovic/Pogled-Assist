@@ -30,6 +30,7 @@ datas = [
         "pogled_assist/assets",
     ),
     (str(repo_root / "pogled_assist" / "__init__.py"), "pogled_assist"),
+    (str(repo_root / "pogled_assist" / "log_snapshot.py"), "pogled_assist"),
     (str(repo_root / "pogled_assist" / "log_transport.py"), "pogled_assist"),
     (str(repo_root / "pogled_assist" / "tracking" / "__init__.py"), "pogled_assist/tracking"),
     (

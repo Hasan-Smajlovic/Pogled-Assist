@@ -644,9 +644,7 @@ class TobiiGazeProvider(QObject):
         if gap and self._last_eye_status == (True, True):
             # A resumed callback can beat the watchdog after a stall or sleep.
             # Cancel pending dwell before forwarding it, retaining repeat locks.
-            logger.info(
-                "Gaze delivery resumed after gap_ms=%s.", round((now - previous) * 1000)
-            )
+            logger.info("Gaze delivery resumed after gap_ms=%s.", round((now - previous) * 1000))
             self._metrics.count("delivery_gap")
             self._metrics.event(
                 "delivery_gap",
