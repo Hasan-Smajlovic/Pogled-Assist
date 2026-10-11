@@ -331,3 +331,42 @@ def test_geometry_batch_keeps_field_names_and_all_four_target_rectangles():
     assert not snapshot.get("_snapshot_truncated")
     assert len(snapshot["targets"]) == 4
     assert all(target["logical_bounds"] == (400, 250, 480, 200) for target in snapshot["targets"])
+
+
+def test_closing_summaries_share_the_queue_bound_across_rapid_toggles(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+
+    class Console:
+        def write(self, _text):
+            entered.set()
+            release.wait(5)
+
+        def flush(self):
+            pass
+
+    writer = LogWriter(capacity=8)
+    latest = tmp_path / "logs/latest.txt"
+    writer.start_segment(latest, Console(), trace=False)
+    writer.record(logging.makeLogRecord({"msg": "blocked", "args": (), "levelno": 20}))
+    try:
+        assert entered.wait(1)
+        for index in range(20):
+            writer.event("stream_summary", {"counts": {"sample": index}}, priority=True)
+            writer.disable()
+            assert writer.health()["queued"] <= writer.capacity
+            writer.start_segment(latest, None, trace=False)
+            assert writer.health()["queued"] <= writer.capacity
+        assert writer.health()["dropped"], "bounded overflow must be reported"
+    finally:
+        release.set()
+        assert writer.stop()
+    assert writer.health()["queued"] == 0
+    assert writer.health()["writer_errors"] == 0
+    events = read_events(latest)
+    assert any(event["event"] == "stream_summary" for event in events)
+    sessions_with_summaries = {
+        event["session_id"] for event in events if event["event"] == "stream_summary"
+    }
+    for session in sessions_with_summaries:
+        names = [event["event"] for event in events if event["session_id"] == session]
+        assert names.count("session_start") == names.count("session_end") == 1

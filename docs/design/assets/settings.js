@@ -4,6 +4,23 @@
   let learnedWords = ['ĆEVAPI', 'DŽEZ', 'KAHVA', 'LJETO', 'NJIVA', 'ŠETNJA'];
   let selectedWord = null;
   let arabic = ReferenceKeyboard.readScript();
+  let startupTimer;
+  function previewStartupChange() {
+    clearTimeout(startupTimer);
+    $('settings-status').textContent = $('startup-enabled').checked
+      ? 'Uključujem pokretanje uz Windows.' : 'Isključujem pokretanje uz Windows.';
+    startupTimer = setTimeout(() => {
+      $('settings-status').textContent = $('startup-enabled').checked
+        ? 'Pokretanje uz Windows je uključeno.' : 'Pokretanje uz Windows je isključeno.';
+    }, 800);
+  }
+  $('startup-enabled').addEventListener('change', previewStartupChange);
+  $('startup-launcher').addEventListener('change', () => {
+    if ($('startup-enabled').checked) previewStartupChange();
+    else $('settings-status').textContent = $('startup-launcher').checked
+      ? 'PowerShell prozor će biti prikazan pri pokretanju.'
+      : 'PowerShell pokretač će raditi tiho u pozadini.';
+  });
   function renderScript() {
     $('settings-script-preview').textContent = arabic ? 'Arapski' : 'Latinica';
     $('voice-hint').textContent = arabic ? 'Arapski koristi prirodni muški glas Hamed. Potreban je internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.';

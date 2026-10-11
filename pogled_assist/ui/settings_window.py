@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
 from contextlib import suppress
-from dataclasses import replace
-from functools import partial
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSignalBlocker, QSize, Qt, Signal, Slot
@@ -45,6 +45,8 @@ from .settings_controls import (
 
 logger = logging.getLogger(__name__)
 _startup_task_lock = threading.Lock()
+_startup_order = threading.Condition()
+_startup_turns: deque = deque()
 
 ARABIC_VOICE_ITEM = "arabic_hamed"
 BOSNIAN_VOICE_HINT = (
@@ -299,9 +301,8 @@ class SettingsWindow(QWidget):
         self._startup_revision = 0
         self._startup_busy = False
         self._startup_closed = False
-        self._startup_stop = threading.Event()
-        self._startup_pending: tuple | None = None
-        self._startup_desired_enabled = self._gaze_settings.start_with_windows
+        self._startup_desired_enabled: bool | None = None
+        self._startup_tasks = _StartupTasks(self._startup_task_completed.emit)
         self._startup_task_completed.connect(
             self._finish_startup_task, Qt.ConnectionType.QueuedConnection
         )
@@ -332,9 +333,7 @@ class SettingsWindow(QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Settings window closed.")
         self._startup_closed = True
-        self._startup_stop.set()
-        self._startup_revision += 1
-        self._startup_pending = None
+        self._startup_tasks.close()
         self.cancel_gaze_interaction()
         self.closed.emit()
         super().closeEvent(event)
@@ -781,7 +780,11 @@ class SettingsWindow(QWidget):
         self._emit_gaze_settings(status)
 
     def _toggle_start_with_windows(self) -> None:
-        desired = not self._startup_desired_enabled
+        desired = not (
+            self._gaze_settings.start_with_windows
+            if self._startup_desired_enabled is None
+            else self._startup_desired_enabled
+        )
         self._startup_desired_enabled = desired
         self._set_status(
             "Uključujem pokretanje uz Windows." if desired else "Isključujem pokretanje uz Windows."
@@ -809,8 +812,12 @@ class SettingsWindow(QWidget):
         )
         self._gaze_settings = replace(self._gaze_settings, show_launcher_window=desired)
 
-        if self._startup_desired_enabled:
-            self._queue_startup_task(True, status=status)
+        if self._startup_desired_enabled is not False:
+            # None means the initial query has not established the OS state.
+            # Resolve it in the worker before deciding whether to update the task.
+            self._queue_startup_task(
+                self._startup_desired_enabled, status=status, update_launcher=True
+            )
 
         self._emit_gaze_settings(status)
 
@@ -928,7 +935,11 @@ class SettingsWindow(QWidget):
             self._gaze_settings.show_tracking_notifications
         )
         self._precision_zoom_checkbox.setChecked(self._gaze_settings.use_precision_zoom)
-        self._startup_checkbox.setChecked(self._gaze_settings.start_with_windows)
+        self._startup_checkbox.setChecked(
+            self._gaze_settings.start_with_windows
+            if self._startup_desired_enabled is None
+            else self._startup_desired_enabled
+        )
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(self._gaze_settings.show_launcher_window)
         self._sync_voice_combo()
@@ -967,92 +978,152 @@ class SettingsWindow(QWidget):
     def _sync_startup_setting_from_windows(self) -> None:
         self._queue_startup_task(None)
 
-    def _queue_startup_task(self, enabled: bool | None, *, status: str | None = None) -> None:
+    def _queue_startup_task(
+        self,
+        enabled: bool | None,
+        *,
+        status: str | None = None,
+        update_launcher: bool = False,
+    ) -> None:
         if self._startup_closed:
             return
         self._startup_revision += 1
-        request = (
+        request = _StartupRequest(
             self._startup_revision,
             enabled,
             self._gaze_settings.show_launcher_window,
             status,
+            update_launcher,
         )
-        if self._startup_busy:
-            # Keep only the latest requested state while PowerShell is busy.
-            self._startup_pending = request
-        else:
-            self._start_startup_task(request)
-
-    def _start_startup_task(self, request: tuple) -> None:
         self._startup_busy = True
-        revision, enabled, show_launcher, status = request
-        operation = (
-            is_windows_startup_enabled
-            if enabled is None
-            else partial(set_windows_startup_enabled, enabled, show_launcher_window=show_launcher)
-        )
-        worker = threading.Thread(
-            target=_run_startup_task,
-            args=(
-                self._startup_task_completed.emit,
-                revision,
-                operation,
-                status,
-                self._startup_stop,
-            ),
-            name="pogled-startup-task",
-            daemon=True,
-        )
-        try:
-            worker.start()
-        except RuntimeError:
-            logger.exception("Could not start Windows startup worker.")
-            self._finish_startup_task(revision, None, status)
+        self._startup_tasks.submit(request)
 
     @Slot(int, object, object)
     def _finish_startup_task(self, revision: int, result: object, status: str | None) -> None:
+        if revision != self._startup_revision:
+            return
         self._startup_busy = False
         if self._startup_closed:
             return
-        if revision == self._startup_revision:
-            if isinstance(result, bool):
-                self._startup_desired_enabled = result
-                self._gaze_settings = replace(self._gaze_settings, start_with_windows=result)
-                self._refresh_values()
-            elif isinstance(result, StartupTaskResult):
-                self._startup_desired_enabled = result.enabled
-                self._gaze_settings = replace(self._gaze_settings, start_with_windows=result.enabled)
-                self._emit_gaze_settings(
-                    status if status is not None and result.success else result.message
-                )
-            else:
-                self._startup_desired_enabled = self._gaze_settings.start_with_windows
-                self._set_status("Ažuriranje pokretanja uz Windows nije uspjelo.")
-        pending = self._startup_pending
-        self._startup_pending = None
-        if pending is not None:
-            self._start_startup_task(pending)
+        if isinstance(result, bool):
+            self._startup_desired_enabled = result
+            self._gaze_settings = replace(self._gaze_settings, start_with_windows=result)
+            self._refresh_values()
+        elif isinstance(result, StartupTaskResult):
+            self._startup_desired_enabled = result.enabled
+            self._gaze_settings = replace(self._gaze_settings, start_with_windows=result.enabled)
+            self._emit_gaze_settings(
+                status if status is not None and result.success else result.message
+            )
+        else:
+            self._startup_desired_enabled = self._gaze_settings.start_with_windows
+            self._set_status("Ažuriranje pokretanja uz Windows nije uspjelo.")
 
 
-def _run_startup_task(completed, revision, operation, status, stop) -> None:
-    result = None
-    try:
-        # A closed window's active command can still finish. Serialize it with
-        # a newly opened window so its query sees that command's final state.
-        while not stop.is_set():
-            if not _startup_task_lock.acquire(timeout=0.1):
-                continue
-            try:
-                if not stop.is_set():
-                    result = operation()
-            finally:
+@dataclass(frozen=True)
+class _StartupRequest:
+    revision: int
+    enabled: bool | None
+    show_launcher: bool
+    status: str | None
+    update_launcher: bool = False
+
+    @property
+    def read_only(self) -> bool:
+        return self.enabled is None and not self.update_launcher
+
+
+class _StartupTasks:
+    """Own pending writes independently of the Settings widget's lifetime."""
+
+    def __init__(self, completed) -> None:
+        self._completed = completed
+        self._query = is_windows_startup_enabled
+        self._update = set_windows_startup_enabled
+        self._lock = threading.Lock()
+        self._pending: _StartupRequest | None = None
+        self._running = False
+        self._closed = False
+
+    def submit(self, request: _StartupRequest) -> None:
+        with self._lock:
+            self._pending = request
+            if self._running:
+                return
+            self._running = True
+        turn = object()
+        with _startup_order:
+            _startup_turns.append(turn)
+        try:
+            threading.Thread(
+                target=self._run, args=(turn,), name="pogled-startup-task", daemon=True
+            ).start()
+        except RuntimeError:
+            logger.exception("Could not start Windows startup worker.")
+            with self._lock:
+                self._running = False
+                self._pending = None
+            self._release_turn(turn)
+            self._finish(request, None)
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+
+    def _take(self) -> _StartupRequest | None:
+        with self._lock:
+            request, self._pending = self._pending, None
+            if request is None:
+                self._running = False
+            return request
+
+    def _cancelled(self, request: _StartupRequest) -> bool:
+        with self._lock:
+            return self._closed and request.read_only
+
+    def _run(self, turn: object) -> None:
+        acquired = False
+        try:
+            while (request := self._take()) is not None:
+                result = None
+                try:
+                    while not self._cancelled(request):
+                        if not acquired:
+                            with _startup_order:
+                                if _startup_turns[0] is not turn:
+                                    _startup_order.wait(timeout=0.1)
+                                    continue
+                            acquired = _startup_task_lock.acquire(timeout=0.1)
+                            if not acquired:
+                                continue
+                        if self._cancelled(request):
+                            break
+                        enabled = self._query() if request.enabled is None else request.enabled
+                        result = (
+                            self._update(enabled, show_launcher_window=request.show_launcher)
+                            if request.enabled is not None or (request.update_launcher and enabled)
+                            else enabled
+                        )
+                        break
+                except Exception:
+                    logger.exception("Could not read or update Windows startup state.")
+                self._finish(request, result)
+        finally:
+            # Drain this window's latest write before a reopened window queries
+            # the state. No Qt callback is needed to continue after deletion.
+            if acquired:
                 _startup_task_lock.release()
-            break
-    except Exception:
-        logger.exception("Could not read or update Windows startup state.")
-    # The window may have been deleted while PowerShell was running.
-    with suppress(RuntimeError):
-        completed(revision, result, status)
+            self._release_turn(turn)
+
+    @staticmethod
+    def _release_turn(turn: object) -> None:
+        with _startup_order:
+            _startup_turns.remove(turn)
+            _startup_order.notify_all()
+
+    def _finish(self, request: _StartupRequest, result: object) -> None:
+        with suppress(RuntimeError):
+            self._completed(request.revision, result, request.status)
 
 
 def _clamp_int(value: int, minimum: int, maximum: int) -> int:

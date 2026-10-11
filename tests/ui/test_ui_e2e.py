@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+from types import SimpleNamespace
+
 import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
@@ -10,6 +13,45 @@ from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    entered, release = threading.Event(), threading.Event()
+    now = [10.0]
+
+    def query():
+        entered.set()
+        release.wait(5)
+        return False
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
+    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    window = settings_window.SettingsWindow(
+        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
+    )
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        window._gaze_tab_button.click()
+        qtbot.wait(1)
+        target = window._gaze_bubble_button
+        center = target.mapToGlobal(target.rect().center())
+        for stamp in (10.0, 10.1, 10.251):
+            now[0] = stamp
+            window.handle_gaze(center)
+        assert not window._gaze_settings.show_gaze_bubble
+        assert window._startup_busy
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        assert not window._gaze_settings.show_gaze_bubble
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
 
 
 @pytest.mark.e2e

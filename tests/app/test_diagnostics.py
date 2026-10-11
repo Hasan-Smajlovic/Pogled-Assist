@@ -285,3 +285,56 @@ def test_logging_shutdown_flushes_partial_summaries_before_session_end(monkeypat
     assert report["complete"]
     assert report["analysis"]["evidence_incomplete"]
     assert report["analysis"]["suppressed_events"]["suppressed:selection_end"] == 6
+
+
+@pytest.mark.parametrize("rotate", [False, True])
+def test_logging_toggle_keeps_partial_summaries_when_the_writer_is_blocked(
+    monkeypatch, tmp_path, rotate
+):
+    import json
+    import logging
+    import threading
+
+    from pogled_assist import logging_setup
+    from pogled_assist.log_transport import LogWriter
+
+    entered, release = threading.Event(), threading.Event()
+
+    class Console:
+        def write(self, text):
+            if "hold-writer" in text:
+                entered.set()
+                release.wait(5)
+
+        def flush(self):
+            pass
+
+    writer = LogWriter()
+    latest = tmp_path / "logs" / "latest.txt"
+    writer.start_segment(latest, Console(), trace=False)
+    session = writer._desired[3]
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    monkeypatch.setattr(logging_setup, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(logging_setup, "_disable_python_logging", lambda: None)
+    writer.record(logging.makeLogRecord({"msg": "hold-writer", "args": (), "levelno": 20}))
+    try:
+        assert entered.wait(1)
+        metrics = diagnostics.StreamMetrics(event_name="selection_summary", source="toolbar")
+        for _ in range(10):
+            metrics.event("selection_end")
+        if rotate:
+            logging_setup._flush_diagnostic_summaries()
+            writer.start_segment(latest, None, trace=False)
+        else:
+            logging_setup.set_application_logging_enabled(False)
+        # The sink remains blocked; neither transition waited for disk/console.
+        assert not release.is_set()
+    finally:
+        release.set()
+        assert writer.stop()
+    path = latest.parent / "diagnostics" / f"{session}.jsonl"
+    report = summarize(path)
+    assert report["lifecycle_complete"]
+    assert report["analysis"]["suppressed_events"]["suppressed:selection_end"] == 6
+    events = [json.loads(line)["event"] for line in path.read_text().splitlines()]
+    assert events.index("selection_summary") < events.index("session_end")

@@ -356,6 +356,13 @@ active until the app closes. **Pokušaj sačuvati** retries saving the latest
 values. Changing tabs or reopening Settings keeps the notice until saving
 succeeds. This also applies to settings changed from the sidebars or Speech.
 
+Windows startup queries and changes run in the background, so other settings
+remain usable. The startup checkbox follows the latest requested choice while
+a change is pending. Closing Settings keeps requested Windows changes running
+while the application remains open. Reopening Settings reads the state after
+those changes finish. A launcher-window choice made during the initial query
+also applies to an existing enabled startup task.
+
 General settings controls startup, logging, and whether the PowerShell launcher
 window stays visible. Start with Windows creates a per-user Scheduled Task that
 runs the launcher with administrator privileges.

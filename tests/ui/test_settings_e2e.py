@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 
 import pytest
-from PySide6.QtCore import QPoint, QRect, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt, QTimer
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -92,9 +92,7 @@ def test_startup_query_does_not_overwrite_newer_choices_and_pending_work_is_boun
 
 
 @pytest.mark.e2e
-def test_slow_startup_update_keeps_qt_running_and_preserves_later_gaze_changes(
-    qtbot, monkeypatch
-):
+def test_slow_startup_update_keeps_qt_running_and_preserves_later_gaze_changes(qtbot, monkeypatch):
     entered, release = threading.Event(), threading.Event()
     monkeypatch.setattr(
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
@@ -179,6 +177,151 @@ def test_closed_settings_cancels_a_startup_query_waiting_for_another_window(qtbo
         window.close()
         qtbot.waitUntil(lambda: not window._startup_busy)
         assert calls == []
+
+
+@pytest.mark.e2e
+def test_deleted_settings_preserves_last_startup_write_before_reopened_query(qtbot, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    actual, writes, reads = [False], [], []
+
+    def query():
+        reads.append(actual[0])
+        return actual[0]
+
+    def update(enabled, **_options):
+        writes.append(enabled)
+        if enabled:
+            entered.set()
+            release.wait(5)
+        actual[0] = enabled
+        return StartupTaskResult(enabled, True, "updated")
+
+    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
+    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    tasks = window._startup_tasks
+    window.show()
+    try:
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        window._startup_checkbox.click()
+        qtbot.waitUntil(entered.is_set)
+        window._startup_checkbox.click()
+        assert window._startup_desired_enabled is False
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        reopened = SettingsWindow(GazeSettings(), SpeechSettings())
+        qtbot.addWidget(reopened)
+        reopened.show()
+        assert reads == [False]
+        release.set()
+        qtbot.waitUntil(lambda: not reopened._startup_busy)
+        assert writes == [True, False]
+        assert reads == [False, False]
+        assert not actual[0]
+        assert not reopened._startup_checkbox.isChecked()
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not tasks._running)
+
+
+@pytest.mark.e2e
+def test_waiting_startup_write_finishes_before_a_reopened_window_can_query(qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    actual, writes, reads = [False], [], []
+
+    def query():
+        reads.append(actual[0])
+        return actual[0]
+
+    def update(enabled, **_options):
+        writes.append(enabled)
+        actual[0] = enabled
+        return StartupTaskResult(enabled, True, "updated")
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
+    monkeypatch.setattr(settings_window, "set_windows_startup_enabled", update)
+    with settings_window._startup_task_lock:
+        window = SettingsWindow(GazeSettings(), SpeechSettings())
+        window.show()
+        window._startup_checkbox.click()
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        reopened = SettingsWindow(GazeSettings(), SpeechSettings())
+        qtbot.addWidget(reopened)
+        reopened.show()
+        assert writes == reads == []
+    qtbot.waitUntil(lambda: not reopened._startup_busy)
+    assert writes == [True]
+    assert reads == [True]
+    assert reopened._startup_checkbox.isChecked()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("saved,actual", [(False, True), (True, True), (True, False)])
+def test_launcher_change_during_initial_query_uses_actual_windows_state(
+    qtbot, monkeypatch, saved, actual
+):
+    entered, release = threading.Event(), threading.Event()
+    writes = []
+
+    def query():
+        entered.set()
+        release.wait(5)
+        return actual
+
+    def update(enabled, **options):
+        writes.append((enabled, options["show_launcher_window"]))
+        return StartupTaskResult(enabled, True, "updated")
+
+    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
+    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
+    window = SettingsWindow(GazeSettings(start_with_windows=saved), SpeechSettings())
+    qtbot.addWidget(window)
+    window.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        window._launcher_window_checkbox.click()
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        assert writes == ([(True, True)] if actual else [])
+        assert window._gaze_settings.start_with_windows is actual
+        assert window._gaze_settings.show_launcher_window
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+
+
+@pytest.mark.e2e
+def test_pending_startup_choice_stays_checked_when_other_settings_refresh(qtbot, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+
+    def update(enabled, **_options):
+        entered.set()
+        release.wait(5)
+        return StartupTaskResult(enabled, True, "updated")
+
+    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.show()
+    try:
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        window._startup_checkbox.click()
+        qtbot.waitUntil(entered.is_set)
+        window._adjust_dwell_ms(100)
+        assert window._startup_checkbox.isChecked()
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        assert window._gaze_settings.start_with_windows
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
 
 
 @pytest.mark.e2e

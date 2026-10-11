@@ -23,6 +23,7 @@ TRACE_SECONDS = 600
 TRACE_BYTES = 32 * 1024 * 1024
 SESSION_BYTES = 64 * 1024 * 1024
 PROCESS_INSTANCE = uuid.uuid4().hex
+SUMMARY_EVENTS = frozenset({"stream_summary", "selection_summary", "marker_summary"})
 
 
 class LogWriter:
@@ -32,6 +33,8 @@ class LogWriter:
         self.capacity = capacity
         self._condition = threading.Condition()
         self._queue: deque = deque()
+        self._closing_segments: deque = deque()
+        self._closing_records = 0
         self._generation = 0
         self._desired: tuple | None = None
         self._stopping = False
@@ -73,6 +76,7 @@ class LogWriter:
         with self._condition:
             if self._stopping:
                 return
+            self._seal_summaries("segment_replaced")
             self._discard_pending("segment_replaced")
             self._generation += 1
             self._sequence = 0
@@ -86,6 +90,7 @@ class LogWriter:
 
     def disable(self) -> None:
         with self._condition:
+            self._seal_summaries("logging_disabled")
             self._desired = None
             self._change_at = (time.monotonic(), time.time())
             self._trace = False
@@ -131,7 +136,7 @@ class LogWriter:
     def health(self) -> dict:
         with self._condition:
             return {
-                "queued": len(self._queue),
+                "queued": len(self._queue) + self._closing_records,
                 "capacity": self.capacity,
                 "high_water": self._high_water,
                 "dropped": dict(self._dropped),
@@ -166,7 +171,7 @@ class LogWriter:
                 return False
             reserve = min(PRIORITY_RESERVE, self.capacity // 4)
             limit = self.capacity if priority else self.capacity - reserve
-            if len(self._queue) >= limit:
+            if len(self._queue) + self._closing_records >= limit:
                 self._drop(kind)
                 return False
             self._sequence += 1
@@ -174,7 +179,7 @@ class LogWriter:
             if isinstance(copied, dict) and copied.get("_snapshot_truncated"):
                 self._truncated += 1
             self._queue.append((self._generation, self._sequence, kind, payload))
-            self._high_water = max(self._high_water, len(self._queue))
+            self._high_water = max(self._high_water, len(self._queue) + self._closing_records)
             self._condition.notify()
             return True
 
@@ -190,18 +195,56 @@ class LogWriter:
             self._drop(reason, len(self._queue))
             self._queue.clear()
 
+    def _seal_summaries(self, reason: str) -> None:
+        """Retain bounded technical footers for the writer, never wait for I/O."""
+        if self._desired is None:
+            return
+        if not any(item[2] == "event" and item[3][0] in SUMMARY_EVENTS for item in self._queue):
+            return
+        # If the writer has not opened this segment, retain its lifecycle start
+        # too. Ordinary backlog still follows the existing discard policy.
+        retained, pending = [], deque()
+        footer_events = SUMMARY_EVENTS | {"session_start"}
+        for item in self._queue:
+            if item[2] == "event" and item[3][0] in footer_events:
+                retained.append(item)
+            else:
+                pending.append(item)
+        self._queue = pending
+        self._closing_records += len(retained)
+        self._closing_segments.append(
+            (self._desired, (time.monotonic(), time.time()), reason, retained)
+        )
+
     def _run(self) -> None:
         last_flush = time.monotonic()
         end_reason = "shutdown"
         try:
             while True:
                 with self._condition:
-                    if not self._queue and not self._stopping and self._desired == self._active:
+                    if (
+                        not self._queue
+                        and not self._closing_segments
+                        and not self._stopping
+                        and self._desired == self._active
+                    ):
                         self._condition.wait(0.25)
+                    closing = self._closing_segments.popleft() if self._closing_segments else None
                     desired = self._desired
                     changed_at = self._change_at
-                    item = self._queue.popleft() if self._queue else None
+                    item = self._queue.popleft() if self._queue and closing is None else None
                     done = self._stopping and item is None
+                if closing is not None:
+                    segment, ended_at, reason, summaries = closing
+                    if self._active != segment:
+                        self._switch_segment(segment, ended_at)
+                    for summary in summaries:
+                        self._write(summary)
+                        with self._condition:
+                            self._closing_records -= 1
+                    self._end_active(reason, ended_at)
+                    self._switch_segment(None, ended_at)
+                    continue
                 if desired != self._active:
                     self._switch_segment(desired, changed_at)
                 if item is not None and self._active and item[0] == self._active[0]:
@@ -218,6 +261,10 @@ class LogWriter:
             with self._condition:
                 self._stopping = True
                 self._discard_pending("writer_failed")
+                if self._closing_records:
+                    self._drop("writer_failed", self._closing_records)
+                self._closing_records = 0
+                self._closing_segments.clear()
         finally:
             self._end_active(end_reason)
             self._close_files()

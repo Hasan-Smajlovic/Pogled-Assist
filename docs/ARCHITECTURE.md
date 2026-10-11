@@ -311,8 +311,12 @@ Priority records also drop when full. Output flushes about every 250 ms. Shutdow
 waits at most two seconds for the worker; file objects are owned only by that
 daemon, so Python's handler shutdown cannot synchronously close a blocked sink.
 The OS may finish an already-started write after logging is disabled. Pending
-records are discarded on disable; a new enable creates a new session and archives
-the previous text log on the same writer. A crash or blocked writer can leave an
+ordinary records are discarded on disable. Queued stream, selection and marker
+summaries finish in their original session before its end record, including
+partial intervals collected at disable or rotation. These retained records share
+the same queue capacity; overflow remains explicit in logging health. A new
+enable creates a new session and archives the previous text log on the same
+writer. A crash or blocked writer can leave an
 incomplete last batch. Existing archives are never automatically deleted.
 
 `diagnostics.py` collects separate native input, provider delivery, application
@@ -343,7 +347,13 @@ the same generation guard and both-eye rule. An existing `gaze_invalid` callback
 cannot distinguish SDK-invalid from nonfinite input, so it is labeled
 `sdk_invalid_or_nonfinite`. The UI's notice timing stays independent of input
 cancellation. Settings construction and the Windows startup query are timed
-separately; logging does not change that synchronous query.
+separately. Startup queries and writes run outside Qt, with one active request
+and one replaceable pending request per Settings window. The worker owns writes
+after the window is deleted and drains its latest choice under the shared startup
+lock before a reopened window can query the state. Closed windows cancel pending
+read-only queries and ignore late UI results. An unresolved startup state stays
+distinct from disabled, so a launcher change can first query the task and update
+it only when enabled.
 
 Typed text, suggestions, phrases, key labels and content action IDs are excluded
 from added events. Such actions receive random IDs local to the current context;
