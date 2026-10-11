@@ -1,9 +1,13 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("help", "setup", "run", "simulate", "ui", "test", "test-ui", "coverage", "lint", "format", "check", "package")]
+    [ValidateSet("help", "setup", "run", "simulate", "ui", "test", "test-ui", "coverage", "lint", "format", "check-fast", "check", "package")]
     [string]$Action = "help",
     [string]$BasePython,
-    [switch]$Open
+    [switch]$Open,
+    [ValidateSet(0, 1, 2)]
+    [int]$Workers = 0,
+    [string[]]$TestPaths = @(),
+    [string]$BaseRef = "origin/development"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +19,31 @@ $PythonPath = Join-Path $VenvRoot "Scripts\python.exe"
 $RequiredPythonVersion = "3.10"
 $AnalyzerVersion = "1.25.0"
 $AnalyzerPath = Join-Path $RepoRoot ".dev-tools\PSScriptAnalyzer\$AnalyzerVersion\PSScriptAnalyzer.psd1"
+$StageTimings = [Collections.Generic.List[object]]::new()
+
+if ($TestPaths.Count -gt 0 -and $Action -notin @("test", "test-ui")) {
+    throw "-TestPaths is supported only by test and test-ui; coverage and check always run the full suite."
+}
+
+function Invoke-CheckStage {
+    param([string]$Name, [scriptblock]$Command)
+
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $status = "FAILED"
+    Write-Host "Starting: $Name"
+    try {
+        & $Command
+        $status = "passed"
+    } finally {
+        $timer.Stop()
+        $StageTimings.Add([PSCustomObject]@{
+            Name = $Name
+            Seconds = $timer.Elapsed.TotalSeconds
+            Status = $status
+        })
+        Write-Host ("Finished: {0} ({1}, {2:N1}s)" -f $Name, $status, $timer.Elapsed.TotalSeconds)
+    }
+}
 
 function Invoke-ExternalCommand {
     param(
@@ -199,24 +228,50 @@ function Backup-DevEnvironment {
 }
 
 function Invoke-LintChecks {
+    param($Plan = $null)
+
     $python = Get-DevPython
-    & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1")
+    if ($null -eq $Plan -or $Plan.actions_check) {
+        & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1")
+    } else {
+        Write-Host "Actions check skipped: no workflow or shared-check changes."
+    }
     Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "check", ".")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "format", "--check", ".")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @(
         "-B", "-m", "compileall", "-q", "pogled_assist", "scripts", "tests", "run_gaze_mouse.py"
     )
-    & (Join-Path $RepoRoot "scripts\checks\check_powershell.ps1") -RequireAnalyzer
+    if ($null -eq $Plan -or $Plan.all_powershell) {
+        & (Join-Path $RepoRoot "scripts\checks\check_powershell.ps1") -RequireAnalyzer
+    } elseif (@($Plan.powershell_paths).Count -gt 0) {
+        & (Join-Path $RepoRoot "scripts\checks\check_powershell.ps1") -RequireAnalyzer -Paths $Plan.powershell_paths
+    } else {
+        Write-Host "PowerShell check skipped: no changed scripts."
+    }
 }
 
 function Invoke-TestSuite {
     param(
         [switch]$UiOnly,
-        [switch]$WithCoverage
+        [switch]$WithCoverage,
+        [string[]]$Paths = @(),
+        [int]$WorkerCount = $Workers
     )
 
     $python = Get-DevPython
     $arguments = @("-B", "-m", "pytest", "-p", "no:cacheprovider")
+    if ($WorkerCount -eq 0) {
+        $WorkerCount = 2
+        if ($WithCoverage) {
+            $WorkerCount = 1
+        }
+    }
+    if ($WorkerCount -gt 1) {
+        $arguments += @("-n", [string]$WorkerCount, "--dist=loadfile")
+    } else {
+        $arguments += @("-n", "0")
+    }
+    Write-Host "Tests: $WorkerCount process(es), grouped by file when parallel."
     if ($UiOnly) {
         $arguments += @("-m", "e2e")
     }
@@ -228,14 +283,69 @@ function Invoke-TestSuite {
             "--cov-report=html:$coverageHtml"
         )
     }
+    $arguments += $Paths
 
     $previousQtPlatform = $env:QT_QPA_PLATFORM
+    $previousPytestOptions = $env:PYTEST_ADDOPTS
     try {
         $env:QT_QPA_PLATFORM = "offscreen"
+        if ($WithCoverage) {
+            if (-not [string]::IsNullOrEmpty($previousPytestOptions)) {
+                Write-Host "Ignoring PYTEST_ADDOPTS for full-suite coverage verification."
+            }
+            $env:PYTEST_ADDOPTS = $null
+        }
         Invoke-ExternalCommand -FilePath $python -ArgumentList $arguments
     } finally {
         $env:QT_QPA_PLATFORM = $previousQtPlatform
+        if ($WithCoverage) {
+            $env:PYTEST_ADDOPTS = $previousPytestOptions
+        }
     }
+}
+
+function Get-FastCheckPlan {
+    $python = Get-DevPython
+    $planJson = & $python -B -m scripts.checks.select_tests --base-ref $BaseRef
+    if ($LASTEXITCODE -ne 0) {
+        throw "Test selection failed with exit code $LASTEXITCODE."
+    }
+    $plan = ($planJson -join "`n") | ConvertFrom-Json
+    foreach ($reason in $plan.reasons) {
+        Write-Host ("Changed: {0} -> {1}" -f $reason.path, $reason.reason)
+    }
+    if ($plan.full_suite) {
+        Write-Host "Selection: FULL suite (conservative fallback)."
+    }
+    Write-Host "Selected $(@($plan.test_paths).Count) test file(s):"
+    foreach ($path in $plan.test_paths) {
+        Write-Host "  $path"
+    }
+    return $plan
+}
+
+function Invoke-FastCheck {
+    $plan = Get-FastCheckPlan
+    Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks -Plan $plan }
+    $paths = @($plan.test_paths)
+    if ($paths.Count -gt 0 -or $plan.full_suite) {
+        $workerCount = $Workers
+        if ($workerCount -eq 0) {
+            $workerCount = 2
+            if (-not $plan.full_suite -and $paths.Count -lt 4) {
+                $workerCount = 1
+            }
+        }
+        if ($plan.full_suite) {
+            $paths = @()
+        }
+        Invoke-CheckStage -Name "Tests (without coverage)" -Command {
+            Invoke-TestSuite -Paths $paths -WorkerCount $workerCount
+        }
+    } else {
+        Write-Host "No changed paths require tests."
+    }
+    Write-Host "Coverage and Windows package: skipped by check-fast. Run .\dev.ps1 check before a PR."
 }
 
 function Invoke-PackageBuild {
@@ -254,16 +364,25 @@ Pogled Assist development commands
   .\dev.ps1 ui          Render deterministic UI screenshots under dist\ui-preview
   .\dev.ps1 ui -Open    Render UI screenshots and open the HTML gallery
   .\dev.ps1 test        Run the complete hardware-independent test suite
+  .\dev.ps1 test -TestPaths tests/gaze    Run an explicitly focused selection
   .\dev.ps1 test-ui     Run only end-to-end UI workflow and rendering tests
   .\dev.ps1 coverage    Run tests with the enforced coverage floor and HTML report
   .\dev.ps1 lint        Run Actions, Ruff, formatting, compile, and PowerShell checks
   .\dev.ps1 format      Apply Ruff import fixes and Python formatting
+  .\dev.ps1 check-fast  Lint and relevant changed tests, without coverage or package
+  .\dev.ps1 check-fast -BaseRef origin/development    Override the comparison ref
+  .\dev.ps1 check-fast -Workers 2    Use two workers even for a small selection
   .\dev.ps1 check       Run all local checks, including the Windows package
+  .\dev.ps1 test -Workers 1    Run tests sequentially (default without coverage: two)
+  .\dev.ps1 coverage -Workers 2    Opt in to parallel coverage (default: one process)
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
+
+  coverage and check ignore PYTEST_ADDOPTS, then restore it after testing.
 "@
 }
 
 Push-Location $RepoRoot
+$totalTimer = [Diagnostics.Stopwatch]::StartNew()
 try {
     switch ($Action) {
         "setup" {
@@ -290,16 +409,16 @@ try {
             }
         }
         "test" {
-            Invoke-TestSuite
+            Invoke-CheckStage -Name "Tests" -Command { Invoke-TestSuite -Paths $TestPaths }
         }
         "test-ui" {
-            Invoke-TestSuite -UiOnly
+            Invoke-CheckStage -Name "UI tests" -Command { Invoke-TestSuite -UiOnly -Paths $TestPaths }
         }
         "coverage" {
-            Invoke-TestSuite -WithCoverage
+            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
         }
         "lint" {
-            Invoke-LintChecks
+            Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
         }
         "format" {
             $python = Get-DevPython
@@ -307,17 +426,28 @@ try {
             Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "format", ".")
         }
         "check" {
-            Invoke-LintChecks
-            Invoke-TestSuite -WithCoverage
-            Invoke-PackageBuild
+            Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
+            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+            Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
+        }
+        "check-fast" {
+            Invoke-FastCheck
         }
         "package" {
-            Invoke-PackageBuild
+            Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
         }
         default {
             Write-Help
         }
     }
 } finally {
+    $totalTimer.Stop()
+    if ($StageTimings.Count -gt 0) {
+        Write-Host "Verification timings:"
+        foreach ($stage in $StageTimings) {
+            Write-Host ("  {0}: {1:N1}s ({2})" -f $stage.Name, $stage.Seconds, $stage.Status)
+        }
+        Write-Host ("Total: {0:N1}s" -f $totalTimer.Elapsed.TotalSeconds)
+    }
     Pop-Location
 }

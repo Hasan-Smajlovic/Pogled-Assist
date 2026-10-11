@@ -20,10 +20,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import diagnostics
 from ..keyboard_layouts import switch_label
+from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
+from .tracking_feedback import MessageTrackingHeader
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
 KEY_GRID_MAX_COLUMNS = 8
@@ -49,11 +52,15 @@ class SpeechSurface(QWidget):
         self._action_buttons: dict[str, QPushButton] = {}
         self._main_dynamic_actions: set[str] = set()
         self._gaze_target_action: str | None = None
+        self._tracking_notice: TrackingNotice | None = None
+        self._diagnostic_context = diagnostics.TargetContext("speech")
+        self._diagnostic_snapshot_pending = False
         self._build_ui(keyboard_script)
         self._dialogs = SpeechDialogs(
             self, self._make_button, self._context_changed, self._restore_input_focus
         )
         self._dialogs.closed.connect(self.dialog_closed.emit)
+        self._dialogs.closed.connect(lambda _dialog: self._render_tracking_notice())
 
     def _build_ui(self, keyboard_script: str) -> None:
         self.setStyleSheet(SPEECH_STYLE)
@@ -92,6 +99,7 @@ class SpeechSurface(QWidget):
 
     def _build_message_box(self) -> QWidget:
         message_box = QWidget(self)
+        message_box.setFixedHeight(96)
         message_layout = QVBoxLayout(message_box)
         message_layout.setContentsMargins(0, 0, 0, 0)
         message_layout.setSpacing(4)
@@ -101,16 +109,16 @@ class SpeechSurface(QWidget):
         self._status_label.setObjectName("statusLabel")
         self._status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        message_header = QHBoxLayout()
-        message_header.setContentsMargins(0, 0, 0, 0)
-        message_header.addWidget(self._message_label)
-        message_header.addWidget(self._status_label, 1)
+        self._message_header = MessageTrackingHeader(
+            self._message_label, self._status_label, message_box
+        )
         self._input = QLineEdit(message_box)
         self._input.setObjectName("speechInput")
         self._input.setAlignment(Qt.AlignCenter)
-        self._input.setMinimumHeight(62)
+        self._input.setMinimumHeight(0)
+        self._input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
         self._input.setPlaceholderText("Odaberite grupu slova…")
-        message_layout.addLayout(message_header)
+        message_layout.addWidget(self._message_header)
         message_layout.addWidget(self._input, 1)
 
         return message_box
@@ -278,7 +286,7 @@ class SpeechSurface(QWidget):
         system_layout.addWidget(controls_label)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
-            ("Sleep", "Odmori oči", "sleep:start", "systemSleep"),
+            ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
             ("Izlaz", "Izađi ili ugasi aplikaciju", "exit", "systemExit"),
         ):
             button = self._make_button(
@@ -363,6 +371,9 @@ class SpeechSurface(QWidget):
         button = self._available_button(action)
         return button_bounds(button) if button is not None else None
 
+    def diagnostic_context(self, _action: str | None = None) -> diagnostics.TargetContext:
+        return self._diagnostic_context
+
     def _available_button(self, action: str) -> QPushButton | None:
         if self._dialogs.active is not None and action not in self._dialogs.actions:
             return None
@@ -388,6 +399,29 @@ class SpeechSurface(QWidget):
 
     def _open_dialog(self, dialog: QDialog, height: int) -> None:
         self._dialogs.open(dialog, height)
+        self._render_tracking_notice()
+        self._diagnostic_context.kind = self._dialogs.kind(dialog)
+        self._schedule_diagnostic_geometry()
+
+    def set_tracking_notice(
+        self, notice: TrackingNotice | None, *, immediate: bool = False
+    ) -> None:
+        self._tracking_notice = notice
+        self._render_tracking_notice(immediate=immediate)
+
+    def accepts_tracking_notice(self) -> bool:
+        return (
+            self._dialogs.active is None or self._dialogs.active in self._dialogs.tracking_notices
+        )
+
+    def _render_tracking_notice(self, *, immediate: bool = False) -> None:
+        active = self._dialogs.active
+        hosts = ((None, self._message_header.notice), *self._dialogs.tracking_notices.items())
+        for dialog, widget in hosts:
+            widget.set_notice(
+                self._tracking_notice if active is dialog else None,
+                immediate=immediate or active is not dialog,
+            )
 
     def _close_dialog(self) -> None:
         self._dialogs.close()
@@ -505,8 +539,76 @@ class SpeechSurface(QWidget):
             set_gaze_feedback(button, selected)
 
     def _context_changed(self) -> None:
+        previous = self._diagnostic_context
+        self._diagnostic_context = diagnostics.TargetContext("speech")
+        diagnostics.emit(
+            "interaction_context",
+            priority=True,
+            context_id=self._diagnostic_context.id,
+            previous_context_id=previous.id,
+            kind="speech",
+        )
+        self._schedule_diagnostic_geometry()
         self._set_gaze_target_action(None)
         self.interaction_context_changed.emit()
+
+    def _schedule_diagnostic_geometry(self) -> None:
+        if diagnostics.enabled() and not self._diagnostic_snapshot_pending:
+            self._diagnostic_snapshot_pending = True
+            QTimer.singleShot(0, self, self._diagnostic_geometry)
+
+    def _diagnostic_geometry(self) -> None:
+        self._diagnostic_snapshot_pending = False
+        if not diagnostics.enabled() or not self.isVisible():
+            return
+        context = self._diagnostic_context
+        active = self._dialogs.active
+        kind = self._dialogs.kind(active) if active is not None else "speech"
+        actions = self._dialogs.actions if active is not None else self._action_buttons.keys()
+        records = []
+        for action in actions:
+            if not self._diagnostic_action_visible(action):
+                continue
+            record = self._diagnostic_button_geometry(action, context)
+            if record is None:
+                continue
+            records.append(record)
+            if len(records) == 4:
+                diagnostics.emit(
+                    "target_geometry",
+                    trace=kind != "confirm",
+                    context_id=context.id,
+                    kind=kind,
+                    targets=records,
+                )
+                records = []
+        if records:
+            diagnostics.emit(
+                "target_geometry",
+                trace=kind != "confirm",
+                context_id=context.id,
+                kind=kind,
+                targets=records,
+            )
+
+    @staticmethod
+    def _diagnostic_action_visible(action: str) -> bool:
+        return diagnostics.tracing() or diagnostics.safe_action(action) in {
+            "confirm:accept",
+            "confirm:cancel",
+        }
+
+    def _diagnostic_button_geometry(self, action: str, context) -> dict | None:
+        button = self._action_buttons.get(action)
+        if button is None:
+            return None
+        rect = button_bounds(button)
+        return {
+            "target_id": context.token(action),
+            "logical_bounds": (rect.x(), rect.y(), rect.width(), rect.height()),
+            "visible": button.isVisible(),
+            "enabled": button.isEnabled(),
+        }
 
     def _action(self, name: str) -> str:
         return f"{SPEECH_WINDOW_ACTION_PREFIX}{name}"
@@ -534,8 +636,8 @@ SPEECH_STYLE = """
                 border: 2px solid #465268;
                 border-radius: 8px;
                 color: #ffffff;
-                font-size: 30px;
-                padding: 8px 16px;
+                font-size: 28px;
+                padding: 6px 12px;
                 placeholder-text-color: #a0adbf;
                 selection-background-color: #245f9f;
             }

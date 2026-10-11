@@ -11,12 +11,15 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 
-from .status import TrackingState, TrackingStatus
+from .. import diagnostics
+from .gaze_check import CheckSnapshot, CheckTelemetry
+from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 from .tobii_stream_engine import (
     EyeStatusCallback,
     GazeCallback,
     TobiiStreamEngineBackend,
     TobiiStreamEngineError,
+    finite_eye_position,
 )
 from .tobii_stream_engine_bridge_backend import (
     TobiiStreamEngineBridgeBackend,
@@ -30,7 +33,6 @@ GAZE_EMIT_INTERVAL_MS = 20
 COALESCED_SAMPLE_LOG_INTERVAL = 3000
 STREAM_EYE_STALE_SECONDS = 0.5
 STREAM_RESTART_SECONDS = 3.0
-GAZE_DELIVERY_GAP_SECONDS = 0.5
 
 
 class TobiiGazeProvider(QObject):
@@ -41,6 +43,7 @@ class TobiiGazeProvider(QObject):
     status_changed = Signal(str)
     tracker_changed = Signal(str)
     tracking_status_changed = Signal(object)
+    diagnostics_updated = Signal(object)
     _eye_status_pending = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -54,7 +57,14 @@ class TobiiGazeProvider(QObject):
         self._backend_name = ""
         self._tracking_status = TrackingStatus(TrackingState.STOPPED)
         self._sample_count = 0
+        self._metrics = diagnostics.StreamMetrics()
+        self._diagnostic_sample_id = 0
+        self._pending_sample_id: int | None = None
+        self._diagnostic_tick_at: float | None = None
+        self._diagnostic_max_late_ms = 0.0
         self._sample_lock = threading.RLock()
+        self._check_telemetry = CheckTelemetry()
+        self._check_active = False
         self._pending_gaze_sample: tuple[float, float, object, float] | None = None
         self._last_gaze_emitted_at: float | None = None
         self._stream_generation = 0
@@ -166,6 +176,15 @@ class TobiiGazeProvider(QObject):
         self._backend_name = "tobii-research"
         label = _tracker_label(self._tracker)
         self._set_tracking_status(TrackingState.CONNECTED, label)
+        diagnostics.emit(
+            "backend_metadata",
+            priority=True,
+            backend=self._backend_name,
+            sdk_version=getattr(tr, "__version__", "unknown"),
+            model=getattr(self._tracker, "model", "unknown"),
+            firmware_version=getattr(self._tracker, "firmware_version", "unknown"),
+            eye_validity_source="pro_sdk_gaze_point_validity",
+        )
         self.tracker_changed.emit(label)
         self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
         return True
@@ -174,6 +193,7 @@ class TobiiGazeProvider(QObject):
         logger.info("Trying Tobii Stream Engine fallback.")
         try:
             backend = TobiiStreamEngineBackend(*self._new_stream_callbacks())
+            self._attach_check_observers(backend)
             backend.start()
         except TobiiStreamEngineError as exc:
             logger.warning("Tobii Stream Engine fallback did not start: %s", exc)
@@ -187,6 +207,12 @@ class TobiiGazeProvider(QObject):
         self._stream_engine = backend
         self._running = True
         self._backend_name = "stream-engine"
+        diagnostics.emit(
+            "backend_metadata",
+            priority=True,
+            backend=self._backend_name,
+            **getattr(backend, "diagnostic_metadata", {}),
+        )
         self._stream_started_at = time.monotonic()
         label = backend.label
         self._set_tracking_status(TrackingState.CONNECTED, label)
@@ -202,6 +228,7 @@ class TobiiGazeProvider(QObject):
         self.status_changed.emit("Pokušavam Tobii x86 most za 32-bitni Core Software.")
         try:
             backend = TobiiStreamEngineBridgeBackend(*self._new_stream_callbacks())
+            self._attach_check_observers(backend)
             backend.start()
         except TobiiStreamEngineBridgeError as exc:
             logger.warning("Tobii Stream Engine x86 bridge did not start: %s", exc)
@@ -215,6 +242,12 @@ class TobiiGazeProvider(QObject):
         self._stream_engine = backend
         self._running = True
         self._backend_name = "stream-engine-x86-bridge"
+        diagnostics.emit(
+            "backend_metadata",
+            priority=True,
+            backend=self._backend_name,
+            **getattr(backend, "diagnostic_metadata", {}),
+        )
         self._stream_started_at = time.monotonic()
         label = backend.label
         self._set_tracking_status(TrackingState.CONNECTED, label)
@@ -224,7 +257,27 @@ class TobiiGazeProvider(QObject):
 
     def _invalidate_stream_callbacks(self) -> None:
         with self._sample_lock:
+            self._metrics.summary(
+                generation=self._stream_generation, backend=self._backend_name, force=True
+            )
             self._stream_generation += 1
+            self._metrics = diagnostics.StreamMetrics(
+                stream_generation=self._stream_generation, backend=self._backend_name
+            )
+            if self._delivered_eye_status is not None:
+                self._metrics.eyes(
+                    "application_gate",
+                    "open" if all(self._delivered_eye_status) else "closed",
+                    sampled=True,
+                    stale_after=None,
+                )
+            self._pending_sample_id = None
+            self._diagnostic_tick_at = None
+            self._diagnostic_max_late_ms = 0.0
+            diagnostics.emit(
+                "stream_generation", priority=True, stream_generation=self._stream_generation
+            )
+            self._check_telemetry = CheckTelemetry()
             self._pending_gaze_sample = None
             self._pending_eye_status = None
             self._pending_eye_loss = None
@@ -248,13 +301,90 @@ class TobiiGazeProvider(QObject):
             with self._sample_lock:
                 if generation == self._stream_generation:
                     self._on_stream_engine_gaze(x, y, timestamp)
+                else:
+                    self._metrics.count("callback_old_generation:gaze")
 
         def eyes(left: bool, right: bool, timestamp: int) -> None:
             with self._sample_lock:
                 if generation == self._stream_generation:
                     self._on_stream_engine_eye_status(left, right, timestamp)
+                else:
+                    self._metrics.count("callback_old_generation:eyes")
 
         return gaze, eyes
+
+    def _attach_check_observers(self, backend: object) -> None:
+        generation = self._stream_generation
+
+        backend.eye_position_callback = self._position_callback(generation)
+        backend.gaze_invalid_callback = self._invalid_callback(generation)
+
+    def _position_callback(self, generation: int):
+        def positions(left: object, right: object, _timestamp: int) -> None:
+            with self._sample_lock:
+                if generation == self._stream_generation:
+                    self._metrics.count("eye_position_callback")
+                    if self._check_active:
+                        self._check_telemetry.positions = (
+                            finite_eye_position(left),
+                            finite_eye_position(right),
+                            time.monotonic(),
+                        )
+                        self._check_telemetry.position_supported = True
+                    if diagnostics.tracing():
+                        diagnostics.emit(
+                            "eye_position",
+                            trace=True,
+                            stream_generation=generation,
+                            left=finite_eye_position(left),
+                            right=finite_eye_position(right),
+                            sdk_timestamp=_timestamp,
+                            sdk_timestamp_unit="microseconds",
+                            sdk_timestamp_source="stream_engine",
+                            coordinates="normalized_trackbox",
+                        )
+
+        return positions
+
+    def _invalid_callback(self, generation: int):
+        def gaze_invalid(_timestamp: int) -> None:
+            with self._sample_lock:
+                if generation == self._stream_generation:
+                    self._metrics.count("sdk_invalid_or_nonfinite")
+                    diagnostics.emit(
+                        "native_gaze_invalid",
+                        trace=True,
+                        stream_generation=generation,
+                        reason="sdk_invalid_or_nonfinite",
+                        sdk_timestamp=_timestamp,
+                        sdk_timestamp_unit="microseconds",
+                        sdk_timestamp_source="stream_engine",
+                    )
+                    if self._check_active:
+                        self._check_telemetry.record_gaze_invalid()
+
+        return gaze_invalid
+
+    def check_snapshot(self) -> CheckSnapshot:
+        with self._sample_lock:
+            if self._check_active and self._stream_engine is not None:
+                self._check_telemetry.position_supported = getattr(
+                    self._stream_engine, "eye_position_supported", None
+                )
+            elif self._check_active and self._backend_name == "tobii-research":
+                self._check_telemetry.position_supported = True
+            return self._check_telemetry.snapshot(time.monotonic())
+
+    def set_check_active(self, active: bool) -> None:
+        with self._sample_lock:
+            diagnostics.emit(
+                "check_collection",
+                priority=True,
+                active=bool(active),
+                stream_generation=self._stream_generation,
+            )
+            self._check_active = bool(active)
+            self._check_telemetry = CheckTelemetry()
 
     def _schedule_retry(self, message: str) -> None:
         if not self._start_requested:
@@ -284,7 +414,8 @@ class TobiiGazeProvider(QObject):
             logger.info("Tobii gaze provider stopped.")
             return
 
-        if not self._running or self._tracker is None or self._tr is None:
+        research_available = self._tracker is not None and self._tr is not None
+        if not self._running or not research_available:
             logger.info("Tobii gaze provider stop skipped; provider is not running.")
             return
 
@@ -307,42 +438,124 @@ class TobiiGazeProvider(QObject):
         status = TrackingStatus(state, detail)
         if status != self._tracking_status:
             self._tracking_status = status
+            diagnostics.emit(
+                "tracking_state",
+                priority=True,
+                state=state.value,
+                backend=self._backend_name,
+                stream_generation=self._stream_generation,
+            )
             self.tracking_status_changed.emit(status)
 
     def _on_gaze_data(self, gaze_data: dict[str, Any]) -> None:
+        self._metrics.count("research_callback")
         left = _valid_gaze_point(gaze_data, "left")
         right = _valid_gaze_point(gaze_data, "right")
         left_open = left is not None
         right_open = right is not None
+        self._metrics.eyes(
+            "native",
+            diagnostics.eye_state(left_open, right_open),
+            sampled=True,
+            stale_after=STREAM_EYE_STALE_SECONDS,
+        )
         self._emit_eye_status(left_open, right_open, "tobii-research", sampled=True)
+        diagnostics.emit(
+            "native_research_gaze",
+            trace=True,
+            stream_generation=self._stream_generation,
+            left_valid=left_open,
+            right_valid=right_open,
+            left_normalized=left,
+            right_normalized=right,
+            sdk_timestamp=gaze_data.get("system_time_stamp"),
+            sdk_timestamp_unit="microseconds",
+            sdk_timestamp_source="pro_sdk_system_time_stamp",
+            left_sdk_validity=gaze_data.get("left_gaze_point_validity"),
+            right_sdk_validity=gaze_data.get("right_gaze_point_validity"),
+        )
+        if self._check_active:
+            self._check_telemetry.position_supported = True
+            self._check_telemetry.positions = (
+                finite_eye_position(
+                    gaze_data.get("left_gaze_origin_in_trackbox_coordinate_system"),
+                    gaze_data.get("left_gaze_origin_validity", 0),
+                ),
+                finite_eye_position(
+                    gaze_data.get("right_gaze_origin_in_trackbox_coordinate_system"),
+                    gaze_data.get("right_gaze_origin_validity", 0),
+                ),
+                time.monotonic(),
+            )
 
         if left is None or right is None:
+            self._metrics.count("rejected:" + diagnostics.eye_state(left_open, right_open))
             self._clear_pending_gaze_sample()
             return
 
         x = (left[0] + right[0]) / 2
         y = (left[1] + right[1]) / 2
+        if self._check_active:
+            self._check_telemetry.record_gaze(x, y, time.monotonic())
         timestamp = gaze_data.get("system_time_stamp", time.monotonic_ns())
         self._queue_gaze_sample("tobii-research", x, y, timestamp)
 
     def _on_stream_engine_gaze(self, x: float, y: float, timestamp: int) -> None:
+        self._metrics.count("native_gaze_callback")
+        self._diagnostic_sample_id += 1
+        diagnostics.emit(
+            "native_gaze",
+            trace=True,
+            stream_generation=self._stream_generation,
+            sample_id=self._diagnostic_sample_id,
+            normalized=(x, y),
+            sdk_timestamp=timestamp,
+            sdk_timestamp_unit="microseconds",
+            sdk_timestamp_source="stream_engine",
+        )
         if not math.isfinite(x) or not math.isfinite(y):
+            self._metrics.count("rejected:provider_nonfinite")
             self._clear_pending_gaze_sample()
+            if self._check_active:
+                self._check_telemetry.record_gaze_invalid()
             return
         if not self._stream_eye_status_known:
+            self._metrics.count("rejected:eyes_unknown")
             self._emit_eye_status(False, False, "stream-engine")
             return
 
         if not (self._stream_left_open and self._stream_right_open):
+            self._metrics.count(
+                "rejected:" + diagnostics.eye_state(self._stream_left_open, self._stream_right_open)
+            )
             self._clear_pending_gaze_sample()
             return
 
         normalized_x, normalized_y = _normalize_stream_engine_point(x, y)
+        if self._check_active:
+            self._check_telemetry.record_gaze(x, y, time.monotonic())
         self._queue_gaze_sample("stream-engine", normalized_x, normalized_y, timestamp)
 
     def _on_stream_engine_eye_status(
         self, left_open: bool, right_open: bool, _timestamp: int
     ) -> None:
+        self._metrics.count("native_eye_callback")
+        self._metrics.eyes(
+            "native",
+            diagnostics.eye_state(left_open, right_open),
+            sampled=True,
+            stale_after=STREAM_EYE_STALE_SECONDS,
+        )
+        diagnostics.emit(
+            "native_eyes",
+            trace=True,
+            stream_generation=self._stream_generation,
+            left_valid=bool(left_open),
+            right_valid=bool(right_open),
+            sdk_timestamp=_timestamp,
+            sdk_timestamp_unit="microseconds",
+            sdk_timestamp_source="stream_engine",
+        )
         self._last_stream_eye_sample_at = time.monotonic()
         self._stream_eye_status_known = True
         self._stream_left_open = bool(left_open)
@@ -358,35 +571,30 @@ class TobiiGazeProvider(QObject):
         with self._sample_lock:
             if self._pending_gaze_sample is not None:
                 self._dropped_sample_count += 1
+                self._metrics.count("provider_replaced")
+            self._metrics.count("provider_queued")
+            if backend == "tobii-research":
+                self._diagnostic_sample_id += 1
+            self._pending_sample_id = self._diagnostic_sample_id
             self._pending_gaze_sample = (x, y, timestamp, time.monotonic())
 
     def _emit_latest_gaze_sample(self) -> None:
         self._check_stream_health()
         with self._sample_lock:
+            self._summarize_delivery()
             # Worker notifications and the Qt timer can be dispatched in either
             # order. Apply every intervening eye loss before forwarding gaze.
             self._flush_eye_status()
+            if self._check_active:
+                self.diagnostics_updated.emit(self.check_snapshot())
             sample = self._pending_gaze_sample
+            sample_id = self._pending_sample_id
+            stream_generation = self._stream_generation
             self._pending_gaze_sample = None
+            self._pending_sample_id = None
             dropped_sample_count = self._dropped_sample_count
-            if sample is not None:
-                now = time.monotonic()
-                if now - sample[3] >= GAZE_DELIVERY_GAP_SECONDS:
-                    return
-                previous = self._last_gaze_emitted_at
-                self._last_gaze_emitted_at = now
-                if (
-                    previous is not None
-                    and now - previous >= GAZE_DELIVERY_GAP_SECONDS
-                    and self._last_eye_status == (True, True)
-                ):
-                    # A resumed callback can beat the watchdog after a stall or sleep.
-                    # Cancel pending dwell before forwarding it, retaining repeat locks.
-                    logger.info(
-                        "Gaze delivery resumed after gap_ms=%s.", round((now - previous) * 1000)
-                    )
-                    self._emit_eye_status(False, False, "gaze-gap")
-                    self._emit_eye_status(True, True, "gaze-resumed")
+            if sample is not None and not self._accept_delivery(sample, sample_id):
+                return
 
         if sample is None:
             return
@@ -402,7 +610,73 @@ class TobiiGazeProvider(QObject):
             self._last_reported_dropped_sample_count = dropped_sample_count
 
         x, y, timestamp, _received_at = sample
+        diagnostics.emit(
+            "provider_gaze",
+            trace=True,
+            stream_generation=stream_generation,
+            sample_id=sample_id,
+            normalized=(x, y),
+            received_monotonic_s=_received_at,
+            age_ms=(time.monotonic() - _received_at) * 1000,
+        )
         self.gaze_updated.emit(x, y, timestamp)
+
+    def _accept_delivery(self, sample: tuple, sample_id: object) -> bool:
+        now = time.monotonic()
+        if now - sample[3] >= GAZE_DELIVERY_GAP_SECONDS:
+            self._metrics.count("provider_discarded_stale")
+            self._metrics.event(
+                "provider_discard",
+                stream_generation=self._stream_generation,
+                sample_id=sample_id,
+                reason="delivery_stale",
+                age_ms=(now - sample[3]) * 1000,
+            )
+            return False
+        self._resume_delivery(now)
+        self._metrics.count("provider_emitted")
+        return True
+
+    def _resume_delivery(self, now: float) -> None:
+        previous = self._last_gaze_emitted_at
+        self._last_gaze_emitted_at = now
+        gap = previous is not None and now - previous >= GAZE_DELIVERY_GAP_SECONDS
+        if gap and self._last_eye_status == (True, True):
+            # A resumed callback can beat the watchdog after a stall or sleep.
+            # Cancel pending dwell before forwarding it, retaining repeat locks.
+            logger.info("Gaze delivery resumed after gap_ms=%s.", round((now - previous) * 1000))
+            self._metrics.count("delivery_gap")
+            self._metrics.event(
+                "delivery_gap",
+                stream_generation=self._stream_generation,
+                gap_ms=(now - previous) * 1000,
+            )
+            self._emit_eye_status(False, False, "gaze-gap")
+            self._emit_eye_status(True, True, "gaze-resumed")
+
+    def _summarize_delivery(self) -> None:
+        tick = time.monotonic()
+        late_ms = (
+            max(0.0, (tick - self._diagnostic_tick_at) * 1000 - GAZE_EMIT_INTERVAL_MS)
+            if self._diagnostic_tick_at is not None
+            else None
+        )
+        self._diagnostic_tick_at = tick
+        self._diagnostic_max_late_ms = max(self._diagnostic_max_late_ms, late_ms or 0.0)
+        summarized = self._metrics.summary(
+            generation=self._stream_generation,
+            backend=self._backend_name,
+            qt_timer_max_late_ms=self._diagnostic_max_late_ms,
+            check_active=self._check_active,
+            backend_metadata=getattr(self._stream_engine, "diagnostic_metadata", {})
+            if self._stream_engine is not None
+            else {},
+            eye_age_ms=(tick - self._last_stream_eye_sample_at) * 1000
+            if self._last_stream_eye_sample_at is not None
+            else None,
+        )
+        if summarized:
+            self._diagnostic_max_late_ms = 0.0
 
     def _check_stream_health(self) -> None:
         with self._sample_lock:
@@ -465,6 +739,9 @@ class TobiiGazeProvider(QObject):
 
     def _clear_pending_gaze_sample(self) -> None:
         with self._sample_lock:
+            if self._pending_gaze_sample is not None:
+                self._metrics.count("provider_cleared")
+            self._pending_sample_id = None
             self._pending_gaze_sample = None
 
     def _log_sample(self, backend: str, x: float, y: float, timestamp: object) -> None:
@@ -486,7 +763,7 @@ class TobiiGazeProvider(QObject):
             status = (bool(left_open), bool(right_open))
             first_sample = sampled and not self._eye_sample_received
             if sampled:
-                self._eye_sample_received = True
+                self._record_eye_sample(status)
             if status == self._last_eye_status and not first_sample:
                 return
 
@@ -495,6 +772,14 @@ class TobiiGazeProvider(QObject):
             # so the status can distinguish live invalid eyes from missing data.
             self._pending_eye_status_refresh |= first_sample
             self._last_eye_status = status
+            self._metrics.event(
+                "eye_gate_received",
+                stream_generation=self._stream_generation,
+                source=backend,
+                native_sample=sampled,
+                left_valid=status[0],
+                right_valid=status[1],
+            )
             notify = self._pending_eye_status is None
             self._pending_eye_status = status
             if not all(status):
@@ -512,6 +797,11 @@ class TobiiGazeProvider(QObject):
             # outlive stop/reconnect or arrive after the gaze it should gate.
             self._eye_status_pending.emit()
 
+    def _record_eye_sample(self, status: tuple[bool, bool]) -> None:
+        if self._check_active:
+            self._check_telemetry.record_eyes(*status, time.monotonic())
+        self._eye_sample_received = True
+
     @Slot()
     def _flush_eye_status(self) -> None:
         with self._sample_lock:
@@ -527,9 +817,23 @@ class TobiiGazeProvider(QObject):
             for item in (loss, status):
                 if generation != self._stream_generation:
                     break
-                if item is not None and (refresh or item != self._delivered_eye_status):
+                if item is None:
+                    continue
+                if refresh or item != self._delivered_eye_status:
                     refresh = False
                     self._delivered_eye_status = item
+                    self._metrics.eyes(
+                        "application_gate",
+                        "open" if all(item) else "closed",
+                        sampled=True,
+                        stale_after=None,
+                    )
+                    self._metrics.event(
+                        "eye_gate_applied",
+                        stream_generation=generation,
+                        left_valid=item[0],
+                        right_valid=item[1],
+                    )
                     self.eye_status_changed.emit(*item)
 
 

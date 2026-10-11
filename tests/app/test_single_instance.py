@@ -60,8 +60,46 @@ def test_lock_permission_failure_does_not_start_app(monkeypatch, isolated_lock, 
     assert "jedno pokretanje" in capsys.readouterr().out
 
 
+def test_startup_failure_is_logged_before_writer_shutdown(monkeypatch, isolated_lock, tmp_path):
+    from pogled_assist import logging_setup
+
+    monkeypatch.setattr(sys, "argv", ["run_gaze_mouse.py"])
+    monkeypatch.setattr(logging_setup, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(sys, "__stdout__", None)
+    monkeypatch.setattr(sys, "__stderr__", None)
+
+    def fail(**_kwargs):
+        logging_setup.setup_application_logging()
+        raise RuntimeError("private exception payload")
+
+    monkeypatch.setattr(main, "_run_application", fail)
+    try:
+        with pytest.raises(RuntimeError):
+            main.main()
+        content = (tmp_path / "logs/latest.txt").read_text(encoding="utf-8")
+        assert "RuntimeError" in content
+        assert "test_single_instance.py" in content
+        assert "private exception payload" not in content
+        assert isolated_lock.tryLock(0)
+    finally:
+        isolated_lock.unlock()
+        logging_setup._restore_standard_streams()
+        logging_setup._clear_root_handlers()
+
+
 def test_diagnostics_bypass_interactive_lock(monkeypatch, isolated_lock):
     from pogled_assist.ui import installation_window
+
+    def unexpected_start(*_args, **_kwargs):
+        pytest.fail("Diagnostics must not start the interactive application or its services")
+
+    for name in (
+        "_run_application",
+        "setup_application_logging",
+        "install_qt_message_handler",
+        "enable_windows_dpi_awareness",
+    ):
+        monkeypatch.setattr(main, name, unexpected_start)
 
     assert isolated_lock.tryLock(0)
     try:

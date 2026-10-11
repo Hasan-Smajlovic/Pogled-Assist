@@ -222,8 +222,9 @@ vulnerabilities. Its threshold and GitHub setup are documented in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); it is not currently
 listed as a required branch check.
 
-The separate **UI gallery** workflow publishes screenshots and PR comments after
-CI completes. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery`
+The separate **UI gallery** workflow publishes screenshots after CI completes
+and keeps the existing PR comment current while CI runs or publication fails.
+Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery`
 jobs are not required PR checks. Pages setup and permissions are documented in
 [CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication), and visual review is
 documented in [the development guide](DEVELOPMENT.md#ui-review). Screenshots do not

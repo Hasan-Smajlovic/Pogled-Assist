@@ -89,6 +89,7 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
         move_mouse=bool(settings.move_mouse),
         show_gaze_bubble=bool(settings.show_gaze_bubble),
         show_interaction_overlay=bool(settings.show_interaction_overlay),
+        show_tracking_notifications=bool(settings.show_tracking_notifications),
         use_precision_zoom=bool(settings.use_precision_zoom),
         start_with_windows=bool(settings.start_with_windows),
         logging_enabled=bool(settings.logging_enabled),

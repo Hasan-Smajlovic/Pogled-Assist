@@ -1,0 +1,2 @@
+#gaze-ring { position: fixed; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; pointer-events: none; z-index: 100; background: conic-gradient(#f7d85a var(--progress, 0deg), #f7d85a33 0); mask: radial-gradient(transparent 52%, #000 56%); }
+button.gaze-target { border-color: #f7d85a; box-shadow: inset 0 0 0 2px #f7d85a; }

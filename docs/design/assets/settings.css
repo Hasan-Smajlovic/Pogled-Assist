@@ -1,0 +1,132 @@
+.settings-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 680px;
+  height: calc(100vh - 24px);
+  height: calc(100dvh - 24px);
+  max-width: 2200px;
+  margin: 0 auto;
+  padding: 16px;
+  background: #111312;
+  color: #f4f1ea;
+}
+.settings-screen button {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-color: #414742;
+  border-radius: 10px;
+  background: #272a28;
+  color: #f5f3ef;
+  font-size: 15px;
+}
+.settings-screen button:hover { background: #323633; border-color: #69736d; }
+.settings-screen button[aria-pressed="true"], .settings-screen .settings-primary {
+  border-color: #74d3c6;
+  background: #1d6f68;
+  color: #fff;
+}
+.settings-topbar { display: flex; align-items: center; gap: 16px; }
+.settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
+.settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
+.settings-danger { background: #492326 !important; border-color: #804047 !important; }
+.settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0; }
+.settings-panel { border: 1px solid #343a36; border-radius: 14px; background: #191c1a; }
+.settings-nav { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.settings-nav-label { margin: 4px 8px 2px; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.settings-nav button { justify-content: flex-start; min-height: 66px; text-align: left; }
+.settings-nav-note { margin: auto 8px 6px; color: #8fa099; font-size: 13px; line-height: 1.45; }
+.settings-page { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.settings-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
+.settings-page-header h2 { margin: 0; color: #fff; font-size: 24px; font-weight: 650; }
+.settings-page-header p { margin: 0; color: #aeb9b3; font-size: 14px; }
+.settings-page-header button { grid-column: 2; grid-row: 1 / span 2; }
+.settings-page-header > .settings-checkbox { grid-column: 2; grid-row: 1 / span 2; }
+.settings-group-label { margin: 4px 2px 0; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.settings-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  width: auto;
+  height: 58px;
+  padding: 10px 14px;
+  border: 1px solid #414742;
+  border-radius: 10px;
+  background: #272a28;
+  color: #f5f3ef;
+  font-size: 15px;
+  font-weight: 600;
+}
+.settings-checkbox input { width: 28px; height: 28px; accent-color: #1d6f68; }
+.settings-checkbox:has(input:checked) { background: #1d6f68; border-color: #74d3c6; color: #fff; }
+.update-card {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #3a403c;
+  border-radius: 10px;
+  background: #222522;
+}
+.update-copy h3 { margin: 0 0 6px; color: #fff; font-size: 17px; font-weight: 600; }
+.update-copy p { margin: 0; color: #d8d3c8; font-size: 15px; }
+.update-card button { min-height: 58px; height: 58px; }
+.update-card [data-settings-action="check-update"] { min-width: 210px; }
+.update-card [data-settings-action="install-update"] { min-width: 250px; }
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 104px 216px 104px;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 14px;
+  border: 1px solid #3a403c;
+  border-radius: 10px;
+  background: #222522;
+}
+.setting-copy h3 { margin: 0 0 5px; color: #fff; font-size: 17px; font-weight: 600; }
+.setting-copy p { margin: 0; color: #b9b2a5; font-size: 13px; }
+.setting-row button, .setting-value { height: 58px; }
+.setting-value { display: grid; place-items: center; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
+.setting-choice { grid-template-columns: minmax(260px, 1fr) 260px; }
+.setting-choice button { background: #0f1110; border-color: #4c534e; font-size: 20px; text-align: left; justify-content: flex-start; }
+.settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; height: 58px; }
+.learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.learning-grid button { min-height: 68px; overflow-wrap: anywhere; }
+.learning-actions { display: flex; gap: 12px; align-items: center; }
+.learning-actions button { min-height: 58px; flex: 1; }
+.learning-hint { color: #bac5d4; line-height: 1.5; }
+@media (max-height: 760px) and (min-width: 901px) {
+  .settings-screen { height: calc(100dvh - 16px); min-height: 620px; padding: 8px 16px; }
+  .settings-nav button { min-height: 66px; }
+  .settings-checkbox { min-height: 58px; padding: 10px 14px; }
+  .update-card button { min-height: 58px; }
+}
+@media (max-width: 900px) {
+  .settings-screen { height: auto; min-height: calc(100dvh - 16px); padding: 14px; }
+  .settings-status { min-width: 0; }
+  .settings-body { grid-template-columns: 220px minmax(0, 1fr); }
+  .settings-nav { padding: 10px; }
+  .settings-options { grid-template-columns: 1fr; }
+  .update-card { grid-template-columns: 1fr; }
+  .update-card button { width: 100%; }
+  .setting-row { grid-template-columns: minmax(220px, 1fr) 104px 216px 104px; }
+  .setting-choice { grid-template-columns: minmax(220px, 1fr) 260px; }
+}
+@media (max-width: 560px) {
+  .settings-topbar { flex-wrap: wrap; }
+  .settings-topbar h1 { order: -1; flex-basis: 100%; }
+  .settings-status { flex: 1; text-align: left; }
+  .settings-body { display: flex; flex-direction: column; }
+  .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .settings-nav-label, .settings-nav-note { display: none; }
+  .settings-nav button { min-height: 62px; padding: 8px; font-size: 13px; }
+  .settings-page { padding: 14px; }
+  .setting-row { grid-template-columns: 1fr 1fr 1fr; }
+  .setting-copy { grid-column: 1 / -1; }
+  .settings-action-grid { grid-template-columns: 1fr; }
+  .setting-choice { grid-template-columns: 1fr; }
+}

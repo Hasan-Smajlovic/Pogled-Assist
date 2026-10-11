@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from pogled_assist.speech import alarm_sound
 from pogled_assist.speech.alarm_sound import ALARM_SOUND_FILE, ALARM_UNAVAILABLE_MESSAGE, AlarmSound
 from pogled_assist.speech.speech_library import (
     CategoryRecord,
@@ -18,9 +21,6 @@ from pogled_assist.speech.speech_library import (
     sorted_phrases,
 )
 from pogled_assist.speech.speech_service import (
-    EDGE_PLAYBACK_PITCH,
-    EDGE_PLAYBACK_RATE,
-    EDGE_PLAYBACK_VOICE,
     VOICE_PRESET_HUMAN_LIKE,
     SpeechService,
     SpeechSettings,
@@ -33,22 +33,27 @@ from pogled_assist.tracking.tobii_stream_engine import APP_ROOT_ENV
 from pogled_assist.ui.speech_window import _group_letters
 
 
-def test_alarm_sound_repeats_until_stopped(qtbot):
+def test_alarm_sound_repeats_until_stopped(monkeypatch):
     calls = []
-
-    def play_alarm():
-        calls.append("play")
-
-    def stop_alarm():
-        calls.append("stop")
-
-    alarm = AlarmSound(play_alarm=play_alarm, stop_alarm=stop_alarm)
+    winsound = SimpleNamespace(
+        SND_FILENAME=0x20000,
+        SND_ASYNC=1,
+        SND_LOOP=8,
+        PlaySound=lambda sound, flags: calls.append((sound, flags)),
+    )
+    monkeypatch.setitem(sys.modules, "winsound", winsound)
+    monkeypatch.setattr(alarm_sound.sys, "platform", "win32")
+    alarm = AlarmSound()
 
     assert alarm.start() is True
     assert alarm.is_playing is True
+    assert calls == [
+        (str(ALARM_SOUND_FILE), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
+    ]
+    calls.clear()
     alarm.stop()
 
-    assert calls == ["play", "stop"]
+    assert calls == [(None, 0)]
     assert alarm.is_playing is False
     assert alarm.last_error is None
 
@@ -191,9 +196,9 @@ def test_speech_service_builds_human_voice_command(monkeypatch, tmp_path):
     assert command == [
         str(executable),
         "--voice",
-        EDGE_PLAYBACK_VOICE,
-        f"--rate={EDGE_PLAYBACK_RATE}",
-        f"--pitch={EDGE_PLAYBACK_PITCH}",
+        "bs-BA-GoranNeural",
+        "--rate=-10%",
+        "--pitch=-2Hz",
         "--text",
         "Zdravo",
     ]
@@ -218,8 +223,6 @@ def test_speech_service_rejects_empty_and_reports_missing_engine(monkeypatch, qt
 
 @pytest.mark.parametrize("preset", ["default", "human_like"])
 def test_arabic_speech_uses_hamed_and_preserves_original_unicode(monkeypatch, tmp_path, preset):
-    from pogled_assist.speech.speech_service import ARABIC_EDGE_PLAYBACK_VOICE
-
     executable = tmp_path / "edge-playback.exe"
     monkeypatch.setattr("pogled_assist.speech.speech_service.find_espeak_ng", lambda: None)
     monkeypatch.setattr(
@@ -236,7 +239,7 @@ def test_arabic_speech_uses_hamed_and_preserves_original_unicode(monkeypatch, tm
     settings = SpeechSettings(keyboard_script="arabic", voice_preset=preset)
     assert service.speak(text, settings)
     command, engine = calls[0]
-    assert command[command.index("--voice") + 1] == ARABIC_EDGE_PLAYBACK_VOICE
+    assert command[command.index("--voice") + 1] == "ar-SA-HamedNeural"
     assert command[-2:] == ["--text", text]
     assert engine == "edge-playback"
     assert settings.voice_preset == preset

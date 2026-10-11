@@ -1,14 +1,121 @@
 from __future__ import annotations
 
+import threading
+from types import SimpleNamespace
+
 import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
+from test_hotbar_e2e import hotbar_gaze as hotbar_gaze
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    entered, release = threading.Event(), threading.Event()
+    now = [10.0]
+
+    def query():
+        entered.set()
+        release.wait(5)
+        return False
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
+    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    window = settings_window.SettingsWindow(
+        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
+    )
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        window._gaze_tab_button.click()
+        qtbot.wait(1)
+        target = window._gaze_bubble_button
+        center = target.mapToGlobal(target.rect().center())
+        for stamp in (10.0, 10.1, 10.251):
+            now[0] = stamp
+            window.handle_gaze(center)
+        assert not window._gaze_settings.show_gaze_bubble
+        assert window._startup_busy
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        assert not window._gaze_settings.show_gaze_bubble
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("eyes", [(True, False), (False, True), (False, False)])
+def test_speech_marker_waits_for_fresh_gaze_after_eye_loss(hotbar_gaze, qtbot, eyes):
+    hotbar, _controller, feed, _actions, _progress = hotbar_gaze
+    hotbar._open_speech()
+    qtbot.waitUntil(hotbar._speech_window.isVisible)
+    bubble = hotbar._gaze_bubble
+    feed(QPoint(300, 250), 0)
+    assert bubble.isVisible()
+
+    hotbar._gaze.eye_status_changed.emit(*eyes)
+    assert bubble.isHidden()
+    bubble.set_enabled(False)
+    bubble.set_enabled(True)
+    assert bubble.isHidden()
+
+    hotbar._gaze.eye_status_changed.emit(True, True)
+    assert bubble.isHidden()
+    feed(QPoint(600, 450), 600)
+    assert bubble.isVisible()
+    assert bubble.pos() == QPoint(600 - bubble.width() // 2, 450 - bubble.height() // 2)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
+    qtbot, make_speech_window, script
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("TREBAM ODMOR")
+    rest = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:start"]
+    assert rest.text() == "Odmor\nOdmori oči"
+    rest.click()
+    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.sleep)
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake")
+    assert window._dialogs.active is None
+    assert window._input.text() == "TREBAM ODMOR"
+
+
+def _check_sidebar_row(window, buttons, qtbot):
+    qtbot.wait(1)
+    rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
+    assert min(rect.left() for rect in rects) == 10
+    assert max(rect.right() for rect in rects) == window.width() - 11
+    assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
+    assert all(window.rect().contains(rect) for rect in rects)
+    for button in buttons:
+        _assert_sidebar_hit(window, button)
+
+
+def _assert_sidebar_hit(window, button):
+    center = button.mapToGlobal(button.rect().center())
+    expected = (
+        next(action for action, target in window._action_buttons.items() if target is button)
+        if button.isEnabled()
+        else None
+    )
+    assert window.action_at_global_point(center) == expected
 
 
 @pytest.mark.e2e
@@ -32,22 +139,7 @@ def test_controller_keyboard_rows_fill_sidebar_width(
     prefix = CONTROLLER_WINDOW_ACTION_PREFIX
 
     def check_row(buttons):
-        qtbot.wait(1)
-        rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
-        assert min(rect.left() for rect in rects) == 10
-        assert max(rect.right() for rect in rects) == window.width() - 11
-        assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
-        assert all(window.rect().contains(rect) for rect in rects)
-        for button in buttons:
-            center = button.mapToGlobal(button.rect().center())
-            expected = (
-                next(
-                    action for action, target in window._action_buttons.items() if target is button
-                )
-                if button.isEnabled()
-                else None
-            )
-            assert window.action_at_global_point(center) == expected
+        _check_sidebar_row(window, buttons, qtbot)
 
     window._tab_buttons["keyboard"].click()
     for tab, group_command, key_command in (

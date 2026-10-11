@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..diagnostics import safe_action
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
     KeyboardGroupPage,
@@ -186,7 +187,7 @@ class KeyboardWindow(SidebarPanel):
         if not action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX):
             return
 
-        logger.info("Keyboard sidebar gaze action requested: %s", action)
+        logger.info("Keyboard sidebar gaze action requested: %s", safe_action(action))
         self._trigger_action(action)
 
     def _build_ui(self) -> None:

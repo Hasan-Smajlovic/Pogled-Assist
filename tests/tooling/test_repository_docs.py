@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -17,6 +18,15 @@ REQUIRED_FILES = (
     "docs/WINDOWS_RELEASE.md",
     "docs/features/speech-suggestions.md",
     "docs/design/speech-keyboard-reference.html",
+    "docs/design/speech.html",
+    "docs/design/settings.html",
+    "docs/design/gaze-check.html",
+    "docs/design/tracking.html",
+    "docs/design/hotbar.html",
+    "docs/design/keyboard.html",
+    "docs/design/controller-keyboard.html",
+    "docs/design/installation.html",
+    "docs/design/reference-notes.html",
     ".github/pull_request_template.md",
     ".github/ISSUE_TEMPLATE/bug_report.md",
     ".github/ISSUE_TEMPLATE/feature_request.md",
@@ -90,6 +100,68 @@ INLINE_CODE = re.compile(r"`([^`\n]+)`")
 MARKDOWN_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 HTML_ID = re.compile(r"\bid=[\"']([^\"']+)[\"']")
 LEGACY_RUNTIME_PATH = re.compile(r"(?<![\w/])gaze_mouse/(?:[\w.-]+/)*[\w.-]+")
+DESIGN_ROOT = REPO_ROOT / "docs" / "design"
+SCRIPT_ELEMENT_ID = re.compile(r"(?:\$|checkEl)\(['\"]([^'\"]+)['\"]\)")
+
+
+class _DesignPage(HTMLParser):
+    def __init__(self, content: str) -> None:
+        super().__init__()
+        self.ids: list[str] = []
+        self.links: list[str] = []
+        self.scripts: list[str] = []
+        self.id_references: list[str] = []
+        self.main_count = 0
+        self.feed(content)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if identifier := attributes.get("id"):
+            self.ids.append(identifier)
+        for name in ("href", "src"):
+            if target := attributes.get(name):
+                self.links.append(target)
+        if tag == "script" and (script := attributes.get("src")):
+            self.scripts.append(script)
+        for name in ("for", "aria-labelledby", "aria-describedby", "aria-controls"):
+            self.id_references.extend((attributes.get(name) or "").split())
+        self.main_count += tag == "main"
+
+
+def test_design_pages_keep_local_resources_and_accessible_references() -> None:
+    errors: list[str] = []
+    for document in sorted(DESIGN_ROOT.glob("*.html")):
+        page = _DesignPage(document.read_text(encoding="utf-8"))
+        if page.main_count != 1:
+            errors.append(f"{document.name}: expected one standalone main view")
+        if len(page.ids) != len(set(page.ids)):
+            errors.append(f"{document.name}: duplicate element IDs")
+        for identifier in page.id_references:
+            if identifier not in page.ids:
+                errors.append(f"{document.name}: missing labelled element {identifier}")
+        for target in page.links:
+            parsed = urlsplit(target)
+            if parsed.scheme:
+                continue
+            destination = document.parent / unquote(parsed.path) if parsed.path else document
+            if not destination.is_file():
+                errors.append(f"{document.name}: missing resource {target}")
+            elif parsed.fragment and unquote(parsed.fragment) not in _anchors(destination):
+                errors.append(f"{document.name}: missing fragment {target}")
+    assert not errors, "Broken design pages:\n" + "\n".join(errors)
+
+
+def test_design_scripts_only_require_elements_on_their_own_page() -> None:
+    errors: list[str] = []
+    for document in sorted(DESIGN_ROOT.glob("*.html")):
+        page = _DesignPage(document.read_text(encoding="utf-8"))
+        for script in page.scripts:
+            script_path = document.parent / script
+            content = script_path.read_text(encoding="utf-8")
+            for identifier in SCRIPT_ELEMENT_ID.findall(content):
+                if identifier not in page.ids:
+                    errors.append(f"{document.name}: {script} requires absent #{identifier}")
+    assert not errors, "Coupled design scripts:\n" + "\n".join(errors)
 
 
 def test_required_guides_and_templates_exist() -> None:

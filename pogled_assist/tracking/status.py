@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+GAZE_DELIVERY_GAP_SECONDS = 0.5
+
 
 class TrackingState(Enum):
     CONNECTING = "connecting"

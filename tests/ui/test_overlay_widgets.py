@@ -55,6 +55,47 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     assert overlay.isHidden()
 
 
+def test_gaze_bubble_expires_without_fresh_positions(qtbot, monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.ui.gaze_bubble.time.monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+    )
+    bubble = GazeBubbleWindow()
+    qtbot.addWidget(bubble)
+    point = QPoint(300, 250)
+    bubble.handle_gaze(point)
+
+    now[0] = 10.4
+    bubble.handle_gaze(point)
+    now[0] = 10.899
+    bubble._refresh_windows_topmost()
+    assert bubble.isVisible()
+    now[0] = 10.9
+    bubble._refresh_windows_topmost()
+    assert bubble.isHidden()
+    assert not bubble._topmost_timer.isActive()
+
+    bubble.set_enabled(False)
+    bubble.set_enabled(True)
+    assert bubble.isHidden()
+    bubble.handle_gaze(QPoint(600, 450))
+    assert bubble.isVisible()
+    assert bubble.pos() == QPoint(577, 427)
+
+
+def test_enabling_gaze_bubble_rejects_stale_points_received_while_hidden(qtbot, monkeypatch):
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.ui.gaze_bubble.time.monotonic", lambda: now[0])
+    bubble = GazeBubbleWindow()
+    qtbot.addWidget(bubble)
+    bubble.set_enabled(False)
+    bubble.handle_gaze(QPoint(300, 250))
+    now[0] = 11.0
+    bubble.set_enabled(True)
+    assert bubble.isHidden()
+
+
 def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True

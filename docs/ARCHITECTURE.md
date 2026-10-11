@@ -107,10 +107,22 @@ readiness after 500 ms without gaze; it does not change the input gate, dwell,
 backend subscriptions, or reconnect policy. See the
 [status guide](USER_GUIDE.md#before-starting) for the visible states.
 
+`TrackingFeedback` observes the same delivered lifecycle, eye and gaze signals
+for passive Speech notifications. `TrackingFeedbackState` owns presentation
+timing separately from input safety. Only the message header and active letter
+or confirmation header display a notice; no gaze target or modal action is added.
+The [notification guide](USER_GUIDE.md#tracking-notifications-in-speech) owns
+the setting, timing and suppressed contexts. Neither notification timing nor
+turning the setting off changes pointer movement, dwell cancellation or retries.
+
 Each backend also reports left and right eye validity. Gaze movement and dwell
 actions continue only while both eyes are valid. Losing either eye clears pending
 gaze work, cancels active dwell interactions, closes active Quick action layers,
 and leaves the pointer at its last position.
+The gaze bubble is cleared immediately on eye loss and expires after 500 ms
+without a delivered gaze point, checked by its existing refresh timer. Eye
+validity alone cannot restore it; it reappears on the next accepted gaze point.
+Changing its visibility setting cannot resurrect a stale or invalid position.
 
 The source-only mouse gaze simulator bypasses tracker discovery and feeds the
 primary-screen cursor position into the same gaze interaction path with both eyes
@@ -137,6 +149,77 @@ on the previous button, and a held update can never confirm it. Context changes
 and eye loss discard the hold along with pending progress. Speech also blocks a
 suggestion replaced beneath gaze; that rejection must not count as leaving its
 button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
+
+### Gaze-check measurements
+
+The provider collects ephemeral `CheckTelemetry` only while `GazeCheckWindow`
+is open and clears it on close or stream invalidation. Coalesced snapshots reach
+the Qt thread after pending eye-loss signals. Raw normalized diagnostic gaze is
+kept separate from the clamped control stream. Native Stream Engine reuses its
+eye-position subscription; the x86 bridge validates the optional position and
+invalid-gaze messages. Pro SDK uses valid normalized track-box origins, never
+millimetre coordinates. Position capability, freshness and connection state are
+separate; fresh positions can remain visible without valid gaze.
+
+`tracking/gaze_check.py` owns the measurement rules:
+
+- Eye, position and gaze samples expire independently after 500 ms.
+- Eye availability is time-weighted over at most ten seconds. After three
+  seconds, at least 85% availability with no loss longer than 500 ms is shown as
+  mostly continuous tracking.
+- Position and depth checks use the reported [0, 1] bounds, without a centimetre
+  conversion or invented central zone. Movement guidance uses only fresh
+  positions and takes priority over missing-gaze guidance when outside the box.
+  Recognizing an eye from its position never enables input.
+- Each fixation target has one second to settle and two seconds to measure.
+  A result requires 12 distinct fresh samples and 60% temporal coverage.
+  Consecutive samples contribute at most 100 ms; an invalid or stale snapshot
+  breaks the interval. An interruption counter preserves losses coalesced
+  before Qt delivery. Earlier valid intervals remain counted across a blink.
+- A near result requires 90% of samples inside the displayed 36 logical-pixel
+  radius. Median error and 90th-percentile spread are descriptive heuristics,
+  not Tobii-certified or clinical scores. The result map retains the normalized
+  median centre; clipping off-screen centres affects painting only.
+- Each button trial measures coverage from its ready time until selection or
+  timeout. Only distinct fresh both-eye gaze samples count, including gaze
+  outside the buttons. Consecutive samples contribute at most 100 ms; known
+  losses and stale gaps break the interval. A timed-out target needs at least
+  60% coverage before advice can attribute failure to fixation or calibration.
+  Isolated samples never count as sustained tracking. This threshold only
+  selects advice; it does not change dwell, the eye gate or trial success.
+
+`gaze_check_window.py` owns the flow; `gaze_check_views.py` owns painting and
+geometry. `gaze_check_feedback.py` selects result advice without Qt: missing
+precision data, measured misses, then the completed trial's insufficient gaze
+coverage, cancelled selections, wrong selections and timeout. Successful trials
+with a brief loss still suggest actual use if all precision targets passed.
+Five timed targets cover the centre and corners. The local trial
+reuses `GazeSelectionTimer`, the speech edge-hold constants and the current pause
+and dwell settings, without Windows input. Its three groups have 136 × 64,
+96 × 88 and 180 × 72 logical-pixel controls, each with two neighbors. The edge
+margin is bounded by a quarter of each dimension. Wrong selections retain the
+leave-before-repeat lock across tracking loss. Departures include direct jumps
+to a neighbor. The free check paints nine targets and fresh both-eye gaze,
+without timing, scoring, smoothing or input.
+
+The hotbar owns diagnostic signal connections, Settings return, shutdown and
+Tobii settings handoff. Entry and exit clear pending actions; normal controller
+input is suspended while the check is open without changing saved settings.
+Suspension also applies while minimized and is checked again after synchronous
+gaze slots, so the triggering sample cannot move the pointer.
+
+`launch_tobii_settings` tries discovered UI candidates in rank order, excluding
+maintenance, Guest, calibration and test targets. A rejected candidate does not
+block later candidates; exhaustion returns the manual tray-icon route. Existing
+Guest calibration entry points retain their behavior and also exclude
+maintenance targets. The [user guide](USER_GUIDE.md#gaze-check) owns calibration
+instructions and the caregiver flow. The check retains no result history for reuse. An explicitly enabled
+[diagnostic trace](#diagnostic-logging) can save its measurement fields.
+
+Coordinates follow Tobii's [Stream Engine API](https://developer.tobii.com/product-integration/)
+and [track-box description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf).
+Normalized-position availability and movement guidance still require validation
+on the installed 4C runtime; synthetic tests cannot establish hardware accuracy.
 
 ## UI and service ownership
 
@@ -203,11 +286,84 @@ data/speech_library.json saved categories, answers, phrases, and phrase use coun
 data/speech_phrases.json rollback-compatible standalone phrases for older releases
 data/speech_learning.json versioned local word and short-context counts
 logs/latest.txt          current application log when logging is enabled
+logs/diagnostics/*.jsonl bounded structured diagnostic sessions
 ```
 
 Missing or malformed settings fall back safely to defaults, with supported
 values clamped to the same ranges as the Settings UI. Installation, update, and
 rollback work must preserve `data/` and `logs/`.
+
+### Diagnostic logging
+
+`logging_setup.py` owns the existing logging switch and standard-stream/Qt hooks.
+`log_transport.py` owns one persistent daemon writer in the main process. Both
+the text file and console run behind its bounded queue. Producers copy bounded
+primitive fields and never wait for output, queue space or a shared thread pool.
+The writer releases the queue mutex before formatting, archiving, writing and
+flushing. Overflow drops log records, with cumulative process counts and the
+time span of loss in `logging_health`; it never drops input packets. The x86
+bridge uses a separate bounded stderr writer, while its stdout input protocol
+retains its existing lock, JSON, newline and flush contract.
+
+The queue admits at most 1,024 records of approximately 8 KiB including copied
+object overhead; 64 slots are reserved for lifecycle, error and summary records.
+Priority records also drop when full. Output flushes about every 250 ms. Shutdown
+waits at most two seconds for the worker; file objects are owned only by that
+daemon, so Python's handler shutdown cannot synchronously close a blocked sink.
+The OS may finish an already-started write after logging is disabled. Pending
+ordinary records are discarded on disable. Queued stream, selection and marker
+summaries finish in their original session before its end record, including
+partial intervals collected at disable or rotation. These retained records share
+the same queue capacity; overflow remains explicit in logging health. A new
+enable creates a new session and archives the previous text log on the same
+writer. A crash or blocked writer can leave an
+incomplete last batch. Existing archives are never automatically deleted.
+
+`diagnostics.py` collects separate native input, provider delivery, application
+gate and selection observations. Native valid-time accounting expires after
+500 ms without another eye sample; application gate time records the gate's
+actual state at Qt delivery, separately from native receipt. Validity is a reported SDK measurement, not physical eye closure.
+Provider replacement is intentional sampling for Qt, not a disconnect. Basic
+summaries run about once per second, with their actual interval duration. Basic
+state events allow four records per event type per second and report suppressed
+counts. Trace records the fuller sequence subject to queue and file limits.
+
+JSONL schema version 1 uses `event`, `session_id`, `process_instance`, `event_seq`,
+`wall_time` with timezone, `monotonic_s` and an explicit `data` payload. Event time
+is captured before queueing. `data` supplies stream generations, context and
+attempt IDs where applicable. Sequence numbers also include text records, so a
+gap in JSONL alone is not proof of a dropped event. SDK timestamps keep their
+own source and microsecond unit; they are not subtracted from main-process time.
+The runtime record reports source/frozen mode and known versions; absent build
+revision is explicitly unknown. Structured sessions are capped at 64 MiB.
+
+Basic events include stream/selection summaries, gate receipt/application,
+delivery gaps, settings, screen mapping, dialog lifecycle, UI action origin,
+tracking notices and input suspension during the caregiver check. Trace adds
+native/provider samples, actual target bounds, selection timing, normalized
+track-box positions and already-computed fixation/trial results. Logging never
+activates or recalculates the check telemetry from PR #73. Its observers retain
+the same generation guard and both-eye rule. An existing `gaze_invalid` callback
+cannot distinguish SDK-invalid from nonfinite input, so it is labeled
+`sdk_invalid_or_nonfinite`. The UI's notice timing stays independent of input
+cancellation. Settings construction and the Windows startup query are timed
+separately. Startup queries and writes run outside Qt, with one active request
+and one replaceable pending request per Settings window. The worker owns writes
+after the window is deleted and drains its latest choice under the shared startup
+lock before a reopened window can query the state. Closed windows cancel pending
+read-only queries and ignore late UI results. An unresolved startup state stays
+distinct from disabled, so a launcher change can first query the task and update
+it only when enabled.
+
+Typed text, suggestions, phrases, key labels and content action IDs are excluded
+from added events. Such actions receive random IDs local to the current context;
+safe control names such as `confirm:accept` remain readable. Exception snapshots
+retain their type and bounded frame locations, without traceback locals or
+exception text. Trace coordinates and target geometry can still reveal activity;
+these local recordings are not anonymous. Trace is explicitly enabled, lasts at
+most ten minutes or 32 MiB of additional records, then returns to basic logging.
+See [collection instructions](USER_GUIDE.md#diagnostic-log-collection) and
+[developer analysis](DEVELOPMENT.md#diagnostic-log-analysis).
 
 Unreadable speech-library files block all library writes, including rollback
 synchronization and phrase use counts. Only a successful reload clears this
@@ -245,11 +401,9 @@ next installer restore or finish an update interrupted during the directory swap
 
 ## Design reference
 
-[`design/speech-keyboard-reference.html`](design/speech-keyboard-reference.html)
-is the self-contained visual and interaction reference used while developing
-the visible PySide6 interface. Its historical filename is retained for stable
-links. It is not loaded by the application, included by the PyInstaller build,
-or required to install or run Pogled Assist.
+The [HTML design reference](design/speech-keyboard-reference.html) is separate
+from the runtime and package. The [development guide](DEVELOPMENT.md#application-design-reference-workflow)
+owns its page map and review workflow.
 
 ## Compatibility contract
 

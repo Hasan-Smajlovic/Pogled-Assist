@@ -130,6 +130,13 @@ class FakeAppBar:
 
 
 class FakeHotbarInput(FakeControllerInput):
+    def __init__(self):
+        super().__init__()
+        self.moves = []
+
+    def move_to(self, x, y):
+        self.moves.append((x, y))
+
     def cursor_position(self):
         return 600, 500
 

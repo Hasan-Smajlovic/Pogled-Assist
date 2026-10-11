@@ -266,5 +266,5 @@ def test_speech_deletion_confirmation_clear_and_save_failures(qtbot, make_speech
     window._save_item_button.click()
     assert window._editor is not None
     assert window._input.text() == "NEUSPJELA FRAZA"
-    assert window._status_label.text() == "Spremanje nije uspjelo. Novi unos nije sačuvan."
+    assert window._status_label.text() == "Čuvanje nije uspjelo. Novi unos nije sačuvan."
     assert all(item.text != "NEUSPJELA FRAZA" for item in store.library.phrases)

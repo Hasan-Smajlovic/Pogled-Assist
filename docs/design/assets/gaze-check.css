@@ -1,0 +1,35 @@
+.gaze-check { height: calc(100dvh - 24px); min-height: 640px; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.gaze-check header, .gaze-check footer { display: flex; gap: 14px; align-items: center; }
+.gaze-check header > div { flex: 1; }
+.gaze-check h1 { margin: 0 0 8px; font-size: 32px; }
+.gaze-check h2 { margin: 0 0 16px; font-size: 24px; }
+.gaze-check p { margin: 8px 0; }
+.gaze-check header button { min-height: 58px; }
+.gaze-check footer button { flex: 1; min-height: 64px; font-size: 20px; }
+.check-columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; min-height: 0; }
+.check-card { background: #1c2029; border: 1px solid #394253; border-radius: 12px; padding: 22px; }
+.check-line { font-size: 21px; margin: 18px 0; }
+.check-pass { color: #70dfa1; } .check-attention { color: #f0c84a; }
+.eye-box { height: min(190px, 15dvh); margin-top: 18px; border: 2px dashed #58647a; position: relative; border-radius: 12px; }
+.eye-dot { position: absolute; top: 46%; left: 39%; width: 24px; height: 24px; border: 3px solid #70dfa1; border-radius: 50%; }
+.eye-dot + .eye-dot { left: 57%; }
+.check-depth { height: 8px; margin: 18px 0; border-radius: 4px; background: #394253; position: relative; }
+.check-depth::after { content: ''; position: absolute; left: 45%; top: -2px; width: 12px; height: 12px; background: #70dfa1; border-radius: 50%; }
+.check-stage { flex: 1; position: relative; border: 1px solid #394253; border-radius: 12px; }
+.check-target { position: absolute; left: calc(50% - 36px); top: calc(50% - 36px); width: 72px; height: 72px; border: 2px solid #8bd5f5; border-radius: 50%; background: #1c2029; display: grid; place-items: center; font-size: 26px; }
+.depth-labels { display:flex; justify-content:space-between; font-size:15px; color:#bac5d4; }
+.check-stage.fullscreen { position:fixed; inset:0; z-index:100; background:#111318; border:0; }
+.check-controls { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:min(760px, calc(100% - 32px)); height:148px; padding:10px 14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
+.check-controls p { font-size:17px; margin:0 0 6px; line-height:1.4; }
+.check-controls progress { display:block; width:100%; height:6px; margin:0 0 6px; accent-color:#8bd5f5; }
+.check-trial-progress { position:absolute; left:4px; bottom:4px; height:8px; width:60%; background:#70dfa1; }
+.check-trial-progress.neighbor { background:#f0c84a; }
+.check-stage.free .check-controls { top:calc(72% - 70px); bottom:auto; }
+.check-controls button { min-height:60px; min-width:220px; }
+.check-gaze { position:absolute; left:52%; top:48%; width:20px; height:20px; border:3px solid #70dfa1; border-radius:50%; }
+.check-result-columns { display:grid; grid-template-columns:1fr 3fr; gap:20px; }
+.check-map { position:relative; height:180px; background:#111318; border:1px solid #58647a; border-radius:8px; }
+.check-map span { position:absolute; width:20px; height:20px; border:2px solid #8bd5f5; border-radius:50%; transform:translate(-50%,-50%); }
+.check-map i { position:absolute; width:10px; height:10px; background:#f0c84a; border-radius:50%; }
+.check-metrics { width:100%; border-collapse:collapse; font-size:16px; }
+.check-metrics th, .check-metrics td { padding:7px; text-align:left; border-bottom:1px solid #394253; }
