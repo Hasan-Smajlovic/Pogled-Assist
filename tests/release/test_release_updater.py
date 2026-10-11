@@ -22,8 +22,52 @@ pytestmark = pytest.mark.skipif(
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UPDATER_SCRIPT = REPO_ROOT / "update_windows.ps1"
+UPDATER_RUNNER = UPDATER_SCRIPT
 LATEST_VERSION = "0.2.0"
 ARTIFACT_NAME = f"PogledAssist-v{LATEST_VERSION}-windows-x64.zip"
+
+# Keep machine-wide process inspection independent of other pytest workers.
+# The real updater still performs its running-app checks against these records.
+PROCESS_RUNNER = r"""
+param(
+    [string]$UpdaterPath, [string]$InstallRoot, [string]$ReleaseApiUrl,
+    [switch]$NoElevation, [switch]$NoDesktopShortcut, [switch]$NoPause
+)
+function Get-Process {
+    [CmdletBinding()]
+    param([string[]]$Name, [int[]]$Id)
+    if ($Name -contains "PogledAssist") {
+        if ($env:FAKE_UPDATER_RUNNING_APP -eq "1") {
+            [PSCustomObject]@{ Id = 424242 }
+        }
+        return
+    }
+    Microsoft.PowerShell.Management\Get-Process @PSBoundParameters
+}
+function Get-CimInstance {
+    [CmdletBinding()]
+    param([string]$ClassName)
+    if ($env:FAKE_UPDATER_SOURCE_COMMAND) {
+        [PSCustomObject]@{
+            Name = "python.exe"
+            CommandLine = $env:FAKE_UPDATER_SOURCE_COMMAND
+            ExecutablePath = "python.exe"
+            ProcessId = 424243
+        }
+    }
+}
+& $UpdaterPath -InstallRoot $InstallRoot -ReleaseApiUrl $ReleaseApiUrl `
+    -NoElevation:$NoElevation -NoDesktopShortcut:$NoDesktopShortcut -NoPause:$NoPause
+exit $LASTEXITCODE
+"""
+
+
+@pytest.fixture(autouse=True)
+def isolated_process_inspection(tmp_path, monkeypatch):
+    runner = tmp_path / "run-updater.ps1"
+    runner.write_text(PROCESS_RUNNER, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "UPDATER_RUNNER", runner)
+
 
 FAKE_INSTALLER = r"""[CmdletBinding()]
 param(
@@ -38,8 +82,14 @@ $sourceRoot = Split-Path -Parent $PSCommandPath
 if (-not [string]::IsNullOrWhiteSpace($env:FAKE_INSTALLER_SIGNAL)) {
     Set-Content -LiteralPath $env:FAKE_INSTALLER_SIGNAL -Value "started"
 }
-if ($env:FAKE_INSTALLER_SLEEP -eq "1") {
-    Start-Sleep -Seconds 4
+if (-not [string]::IsNullOrWhiteSpace($env:FAKE_INSTALLER_RELEASE)) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    while (-not (Test-Path -LiteralPath $env:FAKE_INSTALLER_RELEASE)) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            throw "Timed out waiting for the test to release the fake installer"
+        }
+        Start-Sleep -Milliseconds 50
+    }
 }
 if ($env:FAKE_INSTALLER_FAIL -eq "1") {
     Write-Error "Forced fake installer failure"
@@ -112,7 +162,10 @@ def _serve_release(archive: bytes, checksum: str | None = None):
         f"/{ARTIFACT_NAME}": (200, "application/zip", archive),
         f"/{ARTIFACT_NAME}.sha256": (200, "text/plain", checksum_text.encode()),
     }
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # Short polling keeps shutdown fast without changing updater timeouts.
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
+    )
     thread.start()
     try:
         yield server, f"{base_url}/latest"
@@ -163,6 +216,8 @@ def _updater_command(install_root: Path, release_url: str) -> list[str]:
         "-ExecutionPolicy",
         "Bypass",
         "-File",
+        str(UPDATER_RUNNER),
+        "-UpdaterPath",
         str(UPDATER_SCRIPT),
         "-InstallRoot",
         str(install_root),
@@ -177,6 +232,8 @@ def _updater_command(install_root: Path, release_url: str) -> list[str]:
 def _updater_environment(**overrides: str) -> dict[str, str]:
     environment = os.environ.copy()
     environment.pop("PSMODULEPATH", None)
+    environment.pop("FAKE_UPDATER_RUNNING_APP", None)
+    environment.pop("FAKE_UPDATER_SOURCE_COMMAND", None)
     environment["POGLED_ASSIST_TESTING"] = "1"
     environment.update(overrides)
     return environment
@@ -197,6 +254,7 @@ def _run_updater(
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=30,
     )
 
 
@@ -368,9 +426,10 @@ def test_concurrent_updater_is_rejected(tmp_path):
     install_root = _installed_app(tmp_path)
     archive = _release_archive(tmp_path)
     signal_path = tmp_path / "installer-started.txt"
+    release_path = tmp_path / "installer-release.txt"
     environment = _updater_environment(
         FAKE_INSTALLER_SIGNAL=str(signal_path),
-        FAKE_INSTALLER_SLEEP="1",
+        FAKE_INSTALLER_RELEASE=str(release_path),
     )
 
     with _serve_release(archive) as (_server, release_url):
@@ -384,14 +443,60 @@ def test_concurrent_updater_is_rejected(tmp_path):
             encoding="utf-8",
             errors="replace",
         )
-        deadline = time.monotonic() + 15
-        while not signal_path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert signal_path.exists(), "First updater did not reach the fake installer"
+        try:
+            deadline = time.monotonic() + 15
+            while not signal_path.exists() and time.monotonic() < deadline:
+                if first.poll() is not None:
+                    break
+                time.sleep(0.05)
+            assert signal_path.exists(), "First updater did not reach the fake installer"
 
-        second = _run_updater(install_root, release_url)
-        first_stdout, first_stderr = first.communicate(timeout=15)
+            second = _run_updater(install_root, release_url)
+            assert second.returncode != 0
+            assert "already in progress" in second.stdout + second.stderr
+            assert first.poll() is None, "First updater finished before the test released it"
+        finally:
+            release_path.touch()
+            try:
+                first_stdout, first_stderr = first.communicate(timeout=15)
+            except subprocess.TimeoutExpired:
+                # Killing the updater alone would leave its installer process behind.
+                subprocess.run(
+                    ["taskkill.exe", "/PID", str(first.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                    timeout=5,
+                )
+                first.communicate(timeout=5)
+                raise
 
     assert first.returncode == 0, first_stdout + first_stderr
-    assert second.returncode != 0
-    assert "already in progress" in second.stdout + second.stderr
+
+
+@pytest.mark.parametrize("source_install", [False, True])
+def test_running_application_is_rejected_before_network_or_app_changes(tmp_path, source_install):
+    install_root = _installed_app(tmp_path)
+    archive = _release_archive(tmp_path)
+    before = {
+        p.relative_to(install_root): p.read_bytes() for p in install_root.rglob("*") if p.is_file()
+    }
+    environment = (
+        _updater_environment(FAKE_UPDATER_SOURCE_COMMAND=str(install_root / "run_gaze_mouse.py"))
+        if source_install
+        else _updater_environment(FAKE_UPDATER_RUNNING_APP="1")
+    )
+
+    with _serve_release(archive) as (server, release_url):
+        completed = _run_updater(install_root, release_url, environment=environment)
+
+    assert completed.returncode != 0
+    expected = "Close the source-installed" if source_install else "Close Pogled Assist"
+    assert expected in completed.stdout
+    assert str(424243 if source_install else 424242) in completed.stdout
+    assert server.requests == []
+    assert {
+        p.relative_to(install_root): p.read_bytes()
+        for p in install_root.rglob("*")
+        if p.is_file() and p.name != "update_windows.log"
+    } == before
+    assert (install_root / "update_windows.log").is_file()

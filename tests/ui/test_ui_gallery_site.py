@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import io
+import re
 import stat
 import struct
 import zlib
+from copy import deepcopy
+from datetime import datetime
+from urllib.parse import parse_qs, urlsplit
 from zipfile import ZipFile, ZipInfo
 
 import pytest
@@ -234,7 +238,7 @@ def test_comment_updates_only_its_own_bot_comment_without_duplicates(tmp_path):
     site.update_comments(api, galleries)
     site.update_comments(api, galleries)
 
-    assert api.writes == [("PATCH", "issues/comments/3", {"body": galleries[0]["body"]})]
+    assert api.writes == [("PATCH", "issues/comments/3", {"body": api.comments[1][2]["body"]})]
     assert api.comments[1][0]["body"] == site.COMMENT_MARKER
     assert api.comments[1][1]["body"] == "Another bot report"
 
@@ -269,8 +273,202 @@ def test_expired_gallery_updates_an_existing_comment_but_does_not_create_one(tmp
         {"id": 3, "user": {"login": "github-actions[bot]"}, "body": site.COMMENT_MARKER}
     ]
     site.update_comments(api, galleries)
-    assert api.writes == [("PATCH", "issues/comments/3", {"body": galleries[0]["body"]})]
+    assert api.writes == [("PATCH", "issues/comments/3", {"body": api.comments[1][0]["body"]})]
     assert "No UI gallery is available" in api.comments[1][0]["body"]
+
+
+@pytest.mark.e2e
+def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(tmp_path):
+    api = FakeGitHub()
+    first = site.prepare_site(api, tmp_path / "first", BASE_URL)
+    site.update_comments(api, first, publication_run_id=201)
+    assert "Gallery matches the latest PR commit and CI run" in api.comments[1][0]["body"]
+    assert re.search(
+        r"Last updated: \*\*\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC", api.comments[1][0]["body"]
+    )
+    assert len(api.comments[1]) == 1
+
+    api.pulls[0]["head"]["sha"] = SECOND_SHA
+    api.commits[1] = [{"sha": FIRST_SHA}, {"sha": SECOND_SHA}]
+    api.runs[102] = {**_run(1, 102, SECOND_SHA), "status": "in_progress", "conclusion": None}
+    site.update_status(api, "preparing", 202, ci_run_id=102, ci_attempt=1)
+    body = api.comments[1][0]["body"]
+    assert "New gallery is being prepared" in body
+    assert f"Latest PR commit: [`{SECOND_SHA[:7]}`]" in body
+    assert "Latest CI: **in_progress**" in body
+    assert f"Rendered commit: `{FIRST_SHA[:7]}`" in body
+    assert "artifact-101/1440x900/speech.png" in body
+
+    # The start notification can arrive after CI has finished but before Pages does.
+    api.runs[102].update(status="completed", conclusion="success")
+    site.update_status(api, "preparing", 202, ci_run_id=102, ci_attempt=1)
+    assert "Waiting for gallery publication" in api.comments[1][0]["body"]
+    site.update_status(api, "failed", 203, ci_run_id=102, ci_attempt=1)
+    body = api.comments[1][0]["body"]
+    assert "Gallery publication failed" in body
+    assert "/actions/runs/203" in body
+    assert "artifact-101/1440x900/speech.png" in body
+    site.update_status(api, "preparing", 202, ci_run_id=102, ci_attempt=1)
+    assert api.comments[1][0]["body"] == body
+
+    api.artifacts.append(_artifact(102, SECOND_SHA))
+    api.archives[102] = api.archives[101]
+    second = site.prepare_site(api, tmp_path / "second", BASE_URL)
+    site.update_comments(api, second, publication_run_id=204)
+    body = api.comments[1][0]["body"]
+    assert "Gallery matches the latest PR commit and CI run" in body
+    assert f"Rendered commit: `{SECOND_SHA[:7]}`" in body
+    assert "artifact-102/1440x900/speech.png" in body
+    assert "artifact-101" not in body
+    assert "Gallery publication failed" not in body
+    assert body.count(site.STATUS_START) == 1
+    assert len(api.comments[1]) == 1
+    site.update_status(api, "preparing", 202, ci_run_id=102, ci_attempt=1)
+    assert api.comments[1][0]["body"] == body
+
+
+@pytest.mark.parametrize("status", ["queued", "in_progress"])
+def test_rerun_of_same_commit_marks_existing_images_as_older(tmp_path, status):
+    api = FakeGitHub()
+    first = site.prepare_site(api, tmp_path / "first", BASE_URL)
+    site.update_comments(api, first, publication_run_id=201)
+    api.runs[101].update(status=status, conclusion=None, run_attempt=2)
+
+    site.update_status(api, "preparing", 202, ci_run_id=101, ci_attempt=2)
+
+    body = api.comments[1][0]["body"]
+    assert "New gallery is being prepared" in body
+    assert f"Latest CI: **{status}**" in body
+    assert "artifact-101/1440x900/speech.png" in body
+    assert "Gallery matches the latest" not in body
+
+
+def test_rerun_does_not_publish_images_from_its_previous_attempt(tmp_path):
+    api = FakeGitHub()
+    api.runs[101].update(run_attempt=2, run_started_at="2026-10-09T08:00:00Z")
+
+    comments = site.prepare_site(api, tmp_path / "site", BASE_URL)
+
+    assert not comments[0]["create"]
+    assert api.downloads == []
+
+
+@pytest.mark.parametrize("publication", ["preparing", "failed"])
+def test_old_ci_event_cannot_replace_status_for_a_newer_commit(tmp_path, publication):
+    api = FakeGitHub()
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=201)
+    body = api.comments[1][0]["body"]
+    api.pulls[0]["head"]["sha"] = SECOND_SHA
+    api.runs[102] = _run(1, 102, SECOND_SHA)
+
+    site.update_status(api, publication, 202, ci_run_id=101, ci_attempt=1)
+
+    assert api.comments[1][0]["body"] == body
+    assert len(api.writes) == 1
+
+
+def test_old_rerun_event_and_unrelated_pr_do_not_get_a_status_update(tmp_path):
+    api = FakeGitHub()
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=201)
+    api.pulls.append(_pull(2))
+    api.runs[102] = _run(2, 102)
+    api.comments[2] = [
+        {"id": 50, "user": {"login": "github-actions[bot]"}, "body": site.COMMENT_MARKER}
+    ]
+    api.runs[101].update(status="in_progress", conclusion=None, run_attempt=2)
+
+    site.update_status(api, "failed", 202, ci_run_id=101, ci_attempt=1)
+
+    assert len(api.writes) == 1
+    assert api.comments[2][0]["body"] == site.COMMENT_MARKER
+
+
+def test_publication_reads_latest_ci_instead_of_reusing_build_status(tmp_path):
+    api = FakeGitHub()
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    api.runs[102] = {**_run(1, 102), "status": "in_progress", "conclusion": None}
+
+    site.update_comments(api, galleries, publication_run_id=201)
+
+    body = api.comments[1][0]["body"]
+    assert "New gallery is being prepared" in body
+    assert "/actions/runs/102" in body
+    assert "Gallery matches the latest" not in body
+
+
+@pytest.mark.parametrize("publication", ["preparing", "failed"])
+def test_status_only_updates_gallery_bot_comment_and_does_not_create_one(publication):
+    api = FakeGitHub()
+    api.comments[1] = [
+        {"id": 1, "user": {"login": "reviewer"}, "body": site.COMMENT_MARKER},
+        {"id": 2, "user": {"login": "github-actions[bot]"}, "body": "Other report"},
+    ]
+
+    site.update_status(api, publication, 201, ci_run_id=101, ci_attempt=1)
+
+    assert api.writes == []
+
+
+def test_status_keeps_timestamp_when_nothing_else_changes(tmp_path, monkeypatch):
+    api = FakeGitHub()
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=201)
+    api.runs[101].update(status="in_progress", conclusion=None, run_attempt=2)
+    site.update_status(api, "preparing", 202, ci_run_id=101, ci_attempt=2)
+    body = api.comments[1][0]["body"]
+
+    class LaterClock:
+        @staticmethod
+        def now(_timezone):
+            return datetime.fromisoformat("2030-01-01T12:00:00+00:00")
+
+    monkeypatch.setattr(site, "datetime", LaterClock)
+    site.update_status(api, "preparing", 202, ci_run_id=101, ci_attempt=2)
+
+    assert api.comments[1][0]["body"] == body
+    assert len(api.writes) == 2
+
+
+def test_new_push_during_status_lookup_prevents_writing_an_outdated_comment(tmp_path, monkeypatch):
+    api = FakeGitHub()
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=201)
+    original_items = api.items
+
+    def push_during_lookup(path, key=None):
+        result = original_items(path, key)
+        if key == "workflow_runs":
+            api.pulls[0]["head"]["sha"] = SECOND_SHA
+        return result
+
+    monkeypatch.setattr(api, "items", push_during_lookup)
+    site.update_status(api, "failed", 202, ci_run_id=101, ci_attempt=1)
+
+    assert len(api.writes) == 1
+
+
+@pytest.mark.parametrize("option", ["--ci-run-id", "--ci-attempt"])
+def test_status_cli_requires_run_id_and_attempt_together(monkeypatch, option):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "gallery",
+            "status",
+            "--publication",
+            "preparing",
+            "--publication-run-id",
+            "201",
+            option,
+            "1",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        site.main()
+
+    assert raised.value.code == 2
 
 
 class FakeGitHub:
@@ -299,12 +497,17 @@ class FakeGitHub:
         if path.startswith("actions/runs/"):
             return self.runs[int(path.rsplit("/", 1)[1])]
         if path.startswith("pulls/"):
-            return next(pull for pull in self.pulls if pull["number"] == int(path.split("/")[1]))
+            return deepcopy(
+                next(pull for pull in self.pulls if pull["number"] == int(path.split("/")[1]))
+            )
         raise AssertionError(path)
 
     def items(self, path, key=None):
         if path.startswith("pulls?"):
-            return [pull for pull in self.pulls if pull["state"] == "open"]
+            return deepcopy([pull for pull in self.pulls if pull["state"] == "open"])
+        if key == "workflow_runs":
+            sha = parse_qs(urlsplit(path).query)["head_sha"][0]
+            return [run for run in self.runs.values() if run["head_sha"] == sha]
         if key == "artifacts":
             return self.artifacts
         if path.startswith("pulls/"):
@@ -351,6 +554,7 @@ def _run(number, run_id, sha=FIRST_SHA):
         "head_branch": f"feat/{number}-ui",
         "head_sha": sha,
         "run_attempt": 1,
+        "run_started_at": "2026-10-09T07:00:00Z",
         "pull_requests": [{"number": number, "base": {"ref": "development"}}],
     }
 
@@ -361,6 +565,7 @@ def _artifact(run_id, sha=FIRST_SHA, number=1):
         "name": "ui-gallery",
         "expired": False,
         "size_in_bytes": 1024,
+        "created_at": "2026-10-09T07:05:00Z",
         "workflow_run": {
             "id": run_id,
             "repository_id": 10,

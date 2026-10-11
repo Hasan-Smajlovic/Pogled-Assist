@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$RequireAnalyzer)
+param([switch]$RequireAnalyzer, [string[]]$Paths = @())
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -11,18 +11,31 @@ $searchRoots = @(
     (Join-Path $RepoRoot "packaging\windows")
 )
 $files = @(
-    foreach ($root in $searchRoots) {
-        if (-not (Test-Path -LiteralPath $root)) {
-            continue
+    if ($Paths.Count -gt 0) {
+        $repoPrefix = [IO.Path]::GetFullPath($RepoRoot).TrimEnd("\") + "\"
+        foreach ($path in $Paths) {
+            $file = Get-Item -LiteralPath (Join-Path $RepoRoot $path)
+            if ($file.PSIsContainer -or $file.Extension -ne ".ps1" -or
+                -not $file.FullName.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "PowerShell check path must be a script inside the repository: $path"
+            }
+            $file
         }
+    } else {
+        foreach ($root in $searchRoots) {
+            if (-not (Test-Path -LiteralPath $root)) {
+                continue
+            }
 
-        if ($root -eq $RepoRoot) {
-            Get-ChildItem -LiteralPath $root -File -Filter "*.ps1"
-        } else {
-            Get-ChildItem -LiteralPath $root -File -Filter "*.ps1" -Recurse
+            if ($root -eq $RepoRoot) {
+                Get-ChildItem -LiteralPath $root -File -Filter "*.ps1"
+            } else {
+                Get-ChildItem -LiteralPath $root -File -Filter "*.ps1" -Recurse
+            }
         }
     }
 ) | Sort-Object -Property FullName -Unique
+$files = @($files)
 
 $parseFailures = @()
 foreach ($file in $files) {

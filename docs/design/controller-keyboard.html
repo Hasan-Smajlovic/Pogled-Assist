@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Upravljač · tastatura</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/keyboard.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/keyboard-data.js" defer></script>
+  <script src="assets/keyboard.js" defer></script>
+</head>
+<body data-reference-page="controller">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="controller-screen">
+    <section class="sidebar-reference" aria-label="Tastatura u upravljaču">
+      <nav><button type="button">Opće</button><button type="button">Tastatura</button><button type="button">Govor</button><button type="button">Postavke</button></nav>
+      <button type="button" data-script-toggle>Arapski</button>
+      <nav><button type="button" data-side-tab="letters">Slova</button><button type="button" data-side-tab="numbers">Brojevi</button><button type="button" data-side-tab="symbols">Znakovi</button></nav>
+      <div class="sidebar-reference-grid"></div>
+      <nav class="sidebar-pages" hidden><button type="button" data-side-page="-1">Prethodna</button><button type="button" data-side-page="1">Sljedeća</button></nav>
+      <footer><button type="button" data-side-back hidden>Grupe</button><button type="button">Razmak</button><button type="button">Obriši</button></footer>
+    </section>
+    <p>Globalni izbor pisma važi i za tastaturu Upravljača. Komande ostaju na istim mjestima; arapske grupe čitaju se zdesna nalijevo. Znakovi uključuju sve harekate i dodatne kur'anske oznake.</p>
+    <p>Slova, brojevi i znakovi koriste cijelu unutrašnju širinu Upravljača: dvije jednake kolone grupa i tri jednake kolone pojedinačnih tipki. Kartice su jednake širine. Razmak i Obriši dijele cijeli donji red kada Grupe nije prikazano; unutar grupe sve tri komande dijele red jednako. Prethodna i Sljedeća također koriste cijelu širinu.</p>
+  </main>
+  <details class="reference-tools"><summary>Opcije pregleda</summary><label>Broj slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label></details>
+</body>
+</html>

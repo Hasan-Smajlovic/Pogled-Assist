@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import sys
+import time
 import traceback
 from pathlib import Path
 
-from .logging_setup import install_qt_message_handler, setup_application_logging
+from .logging_setup import (
+    install_qt_message_handler,
+    setup_application_logging,
+    shutdown_application_logging,
+)
 from .tracking.tobii_stream_engine import APP_ROOT_ENV
 from .windows.dpi import enable_windows_dpi_awareness
 
@@ -38,16 +44,30 @@ def main() -> int:
 
     lock = application_lock()
     if not lock.tryLock(0):
-        from PySide6.QtCore import QLockFile
+        return _lock_failure(lock)
+    return _run_locked_application(lock, simulate_gaze)
 
-        if lock.error() == QLockFile.LockError.LockFailedError:
-            return 0
-        print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
-        return 1
+
+def _run_locked_application(lock, simulate_gaze: bool) -> int:
     try:
         return _run_application(simulate_gaze=simulate_gaze)
+    except Exception:
+        # The top-level exception hook runs only after finally has stopped the
+        # writer. Capture the private-safe stack while it can still be drained.
+        logging.getLogger("pogled_assist").critical("Application failed", exc_info=True)
+        raise
     finally:
+        shutdown_application_logging()
         lock.unlock()
+
+
+def _lock_failure(lock) -> int:
+    from PySide6.QtCore import QLockFile
+
+    if lock.error() == QLockFile.LockError.LockFailedError:
+        return 0
+    print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
+    return 1
 
 
 def application_lock():
@@ -65,8 +85,7 @@ def _run_application(*, simulate_gaze: bool) -> int:
     setup_application_logging()
     enable_windows_dpi_awareness()
 
-    import logging
-
+    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
 
     from .app_icon import app_icon_path, load_app_icon
@@ -85,6 +104,29 @@ def _run_application(*, simulate_gaze: bool) -> int:
         app.setWindowIcon(icon)
     install_qt_message_handler()
     logger.info("Qt application created.")
+    from PySide6 import __version__ as qt_version
+
+    from . import diagnostics
+
+    diagnostics.emit(
+        "qt_runtime", priority=True, qt_version=qt_version, simulate_gaze=simulate_gaze
+    )
+    last_tick = [time.monotonic()]
+    heartbeat = QTimer(app)
+    heartbeat.setInterval(1000)
+
+    def log_heartbeat() -> None:
+        now = time.monotonic()
+        diagnostics.emit(
+            "ui_heartbeat",
+            priority=True,
+            interval_s=now - last_tick[0],
+            qt_timer_late_ms=max(0.0, (now - last_tick[0]) * 1000 - 1000),
+        )
+        last_tick[0] = now
+
+    heartbeat.timeout.connect(log_heartbeat)
+    heartbeat.start()
     logger.info("Application icon: %s", app_icon_path() or "missing")
 
     window = HotbarWindow(simulate_gaze=simulate_gaze)
@@ -93,6 +135,7 @@ def _run_application(*, simulate_gaze: bool) -> int:
     window.show()
 
     exit_code = app.exec()
+    heartbeat.stop()
     logger.info("Application exited with code %s.", exit_code)
     return exit_code
 
@@ -128,12 +171,7 @@ def package_smoke_test() -> int:
         path_results = [(path, bool(path and path.is_file())) for path in required_paths]
         model = load_model()
         suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
-        if getattr(sys, "frozen", False):
-            from .speech.bundle_check import verify_bundled_speech
-            from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
-
-            verify_bundled_speech(Path(sys.executable).resolve().parent)
-            verify_bundled_bridge(Path(sys.executable).resolve().parent)
+        _verify_bundled_runtime()
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
         return 1
@@ -150,6 +188,15 @@ def package_smoke_test() -> int:
         if imports_loaded and suggestions_loaded and all(exists for _, exists in path_results)
         else 1
     )
+
+
+def _verify_bundled_runtime() -> None:
+    if getattr(sys, "frozen", False):
+        from .speech.bundle_check import verify_bundled_speech
+        from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
+
+        verify_bundled_speech(Path(sys.executable).resolve().parent)
+        verify_bundled_bridge(Path(sys.executable).resolve().parent)
 
 
 def _write_package_smoke_report(lines: list[str]) -> None:

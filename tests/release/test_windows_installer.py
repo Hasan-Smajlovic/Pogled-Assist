@@ -88,7 +88,10 @@ public static class Program
 """
 
 
-def _compile_smoke_app(tmp_path: Path) -> Path:
+@pytest.fixture(scope="module")
+def smoke_app(tmp_path_factory) -> Path:
+    # Share only compiled bytes; each test copies them into its own package.
+    tmp_path = tmp_path_factory.mktemp("installer-smoke-app")
     source_path = tmp_path / "SmokeApp.cs"
     executable_path = tmp_path / "PogledAssist.exe"
     compiler_path = tmp_path / "compile-smoke-app.ps1"
@@ -145,6 +148,10 @@ def _existing_installation(tmp_path: Path) -> Path:
     (install_root / "data" / "speech_phrases.json").write_bytes(b'["keep"]')
     (install_root / "data" / "speech_learning.json").write_bytes(b'{"keep":"learning"}')
     (install_root / "logs" / "latest.txt").write_bytes(b"existing log\r\n")
+    (install_root / "logs" / "diagnostics").mkdir()
+    (install_root / "logs" / "diagnostics" / "session.jsonl").write_bytes(
+        b'{"keep":"diagnostics"}\n'
+    )
     (install_root / "install_info.json").write_bytes(b'{"keep":"metadata"}')
     (install_root / "setup_windows.log").write_bytes(b"existing setup log\r\n")
     (install_root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
@@ -202,6 +209,7 @@ def _persistent_snapshot(install_root: Path) -> dict[str, bytes]:
             "data/speech_phrases.json",
             "data/speech_learning.json",
             "logs/latest.txt",
+            "logs/diagnostics/session.jsonl",
             "install_info.json",
             "setup_windows.log",
         )
@@ -244,24 +252,7 @@ def _hold_directory(path: Path) -> tuple[object, int]:
     return kernel32, handle
 
 
-def test_installer_swaps_verified_package_and_preserves_persistent_content(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
-    package = _release_package(tmp_path, smoke_app)
-    install_root = _existing_installation(tmp_path)
-    persistent_before = _persistent_snapshot(install_root)
-
-    completed = _run_installer(package, install_root)
-
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
-    assert (install_root / "new-app-file.txt").is_file()
-    assert not (install_root / "old-app-file.txt").exists()
-    assert _persistent_snapshot(install_root) == persistent_before
-    _assert_no_transaction_files(install_root)
-
-
-def test_upgrade_replaces_bundled_speech_and_preserves_external_tools(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_upgrade_replaces_bundled_files_and_preserves_user_files(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -276,13 +267,16 @@ def test_upgrade_replaces_bundled_speech_and_preserves_external_tools(tmp_path):
     completed = _run_installer(package, install_root)
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
+    assert (install_root / "new-app-file.txt").is_file()
+    assert not (install_root / "old-app-file.txt").exists()
     assert (install_root / relative).read_bytes() == b"new bundled tool"
     assert external.read_bytes() == b"user provided tool"
     assert _persistent_snapshot(install_root) == persistent_before
+    _assert_no_transaction_files(install_root)
 
 
-def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -307,8 +301,7 @@ def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path):
     _assert_no_transaction_files(install_root)
 
 
-def test_installed_smoke_failure_restores_previous_installation(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_installed_smoke_failure_restores_previous_installation(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -329,8 +322,7 @@ def test_installed_smoke_failure_restores_previous_installation(tmp_path):
     _assert_no_transaction_files(install_root)
 
 
-def test_staged_smoke_failure_never_changes_existing_installation(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_staged_smoke_failure_never_changes_existing_installation(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -350,8 +342,7 @@ def test_staged_smoke_failure_never_changes_existing_installation(tmp_path):
     _assert_no_transaction_files(install_root)
 
 
-def test_interrupted_directory_swap_is_recovered_before_next_attempt(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_interrupted_directory_swap_is_recovered_before_next_attempt(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -386,8 +377,7 @@ def test_interrupted_directory_swap_is_recovered_before_next_attempt(tmp_path):
     _assert_no_transaction_files(install_root)
 
 
-def test_blocked_rollback_keeps_backup_and_never_runs_failed_version(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_blocked_rollback_keeps_backup_and_never_runs_failed_version(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -434,8 +424,7 @@ def test_blocked_rollback_keeps_backup_and_never_runs_failed_version(tmp_path):
     _assert_no_transaction_files(install_root)
 
 
-def test_running_application_blocks_install_before_files_change(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_running_application_blocks_install_before_files_change(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     running_app = subprocess.Popen([str(smoke_app), "--hold"])
@@ -452,8 +441,7 @@ def test_running_application_blocks_install_before_files_change(tmp_path):
     assert (install_root / "old-app-file.txt").is_file()
 
 
-def test_running_source_application_blocks_install_before_files_change(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_running_source_application_blocks_install_before_files_change(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     source_command = f'python.exe "{install_root / "run_gaze_mouse.py"}"'
@@ -469,8 +457,7 @@ def test_running_source_application_blocks_install_before_files_change(tmp_path)
     assert (install_root / "old-app-file.txt").is_file()
 
 
-def test_process_discovery_failure_never_changes_existing_installation(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_process_discovery_failure_never_changes_existing_installation(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
 
@@ -485,8 +472,7 @@ def test_process_discovery_failure_never_changes_existing_installation(tmp_path)
     assert (install_root / "old-app-file.txt").is_file()
 
 
-def test_expected_version_mismatch_stops_before_staging(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_expected_version_mismatch_stops_before_staging(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
 
@@ -498,8 +484,7 @@ def test_expected_version_mismatch_stops_before_staging(tmp_path):
     assert (install_root / "old-app-file.txt").is_file()
 
 
-def test_legacy_install_root_is_never_modified(tmp_path):
-    smoke_app = _compile_smoke_app(tmp_path)
+def test_legacy_install_root_is_never_modified(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
 
     completed = _run_installer(package, Path(r"C:\TobiiExec"))

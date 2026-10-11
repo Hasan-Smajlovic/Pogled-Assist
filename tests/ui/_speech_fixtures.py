@@ -22,6 +22,6 @@ def speech_focus(qtbot, qapp, make_speech_window):
         FakeSpeech(), library_store=FakeLibraryStore(), alarm_sound=FakeAlarmSound()
     )
     window.show_full_screen()
-    qapp.setActiveWindow(window)
+    window.activateWindow()
     qtbot.waitUntil(lambda: qapp.focusWidget() is window._input)
     return qapp, window

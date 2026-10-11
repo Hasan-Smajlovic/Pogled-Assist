@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QDialog, QPushButton, QWidget
 
+from .. import diagnostics
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
     key_label,
@@ -216,7 +217,7 @@ class SpeechWindow(SpeechSurface):
             button = self._action_buttons.get(action)
             if not self._predictions.allows_action(button):
                 return
-        logger.info("Speech window gaze action requested: %s", action)
+        logger.info("Speech window gaze action requested: %s", diagnostics.safe_action(action))
         self._trigger_action(action, source="gaze")
 
     def _after_dialog_closed(self, dialog: QDialog) -> None:
@@ -560,13 +561,16 @@ class SpeechWindow(SpeechSurface):
         self._input.setPlaceholderText(
             "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
         )
+        self._refresh_keyboard_toggle(list_mode)
+        self._refresh_suggestions()
+
+    def _refresh_keyboard_toggle(self, list_mode: bool) -> None:
         if list_mode:
             self._keyboard_toggle_button.setText("Tastatura")
         elif self._symbols_mode:
             self._keyboard_toggle_button.setText("Grupe slova")
         else:
             self._keyboard_toggle_button.setText("Brojevi i znakovi")
-        self._refresh_suggestions()
 
     def _is_list_mode(self) -> bool:
         return self._view_mode in ("categories", "answers", "phrases")
@@ -582,7 +586,23 @@ class SpeechWindow(SpeechSurface):
 
     def _trigger_action(self, action: str, *, source: str = "button") -> None:
         if self._available_button(action) is None:
+            diagnostics.emit(
+                "ui_action_rejected",
+                context_id=self._diagnostic_context.id,
+                target_id=self._diagnostic_context.token(action),
+                source=source,
+                reason="target_unavailable",
+            )
             return
+        context = self._diagnostic_context
+        target_id = context.token(action)
+        diagnostics.emit(
+            "ui_action_requested",
+            priority=True,
+            context_id=context.id,
+            target_id=target_id,
+            source=source,
+        )
         command = action.removeprefix(SPEECH_WINDOW_ACTION_PREFIX)
         handlers = {
             "clear": self._open_clear_dialog,
@@ -619,6 +639,14 @@ class SpeechWindow(SpeechSurface):
             handler()
         else:
             self._trigger_indexed_action(command)
+        diagnostics.emit(
+            "ui_action_returned",
+            priority=True,
+            context_id=context.id,
+            target_id=target_id,
+            source=source,
+            outcome="handler_returned",
+        )
         self._restore_input_focus()
 
     def _trigger_indexed_action(self, command: str) -> None:
@@ -722,7 +750,7 @@ class SpeechWindow(SpeechSurface):
             return
 
         if not self._library_store.save(candidate):
-            self._set_status("Spremanje nije uspjelo. Novi unos nije sačuvan.")
+            self._set_status("Čuvanje nije uspjelo. Novi unos nije sačuvan.")
             return
 
         self._library = candidate

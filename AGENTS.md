@@ -54,7 +54,9 @@ constraint for every change.
 - Follow the application design reference workflow in
   [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before changing any visible UI
   layout, copy, control size, state, or interaction flow. Every UI change must
-  update `docs/design/speech-keyboard-reference.html` in the same pull request.
+  update the matching page and assets under `docs/design/` in the same pull
+  request. `docs/design/speech-keyboard-reference.html` is the entry point;
+  the development guide maps each surface to its files.
 - Do not claim Tobii, AppBar, calibration, or speech hardware validation unless
   it ran on the target Windows machine. Report software-only and hardware results
   separately.
@@ -65,7 +67,7 @@ constraint for every change.
 
 | When you change | Also update |
 | --- | --- |
-| Visible UI in `pogled_assist/ui/` or `pogled_assist/toolbar.py` | `docs/design/speech-keyboard-reference.html` first, then `tests/ui/test_ui_e2e.py`, and `docs/USER_GUIDE.md` when the user flow changes |
+| Visible UI in `pogled_assist/ui/` or `pogled_assist/toolbar.py` | The matching design page and assets under `docs/design/` first (see `docs/DEVELOPMENT.md`), then `tests/ui/test_ui_e2e.py`, and `docs/USER_GUIDE.md` when the user flow changes |
 | The surfaces rendered by `scripts/ui/capture_ui.py` | The snapshot count in `tests/ui/test_ui_rendering.py` and the surface count and list in `docs/DEVELOPMENT.md` |
 | A runtime file under `pogled_assist/assets/` or `assets/` | `datas` in `packaging/windows/PogledAssist.spec`, `$requiredFiles` in `scripts/release/build_windows_package.ps1`, and a `binary` entry in `.gitattributes` for binary files |
 | A field of `GazeSettings` in `pogled_assist/interaction/mouse_controller.py` or `SpeechSettings` in `pogled_assist/speech/speech_service.py` | The clamp in `pogled_assist/settings_store.py`, the same range in `pogled_assist/ui/settings_window.py`, `tests/app/test_settings_store.py`, and `docs/USER_GUIDE.md` |
@@ -94,7 +96,10 @@ equivalent.
 ```
 
 Use the focused commands documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-while iterating. Inspect the full diff before review, and follow the manual
+while iterating, starting with `.\dev.ps1 check-fast` after meaningful changes.
+Run the complete `.\dev.ps1 check` on the final diff before a pull request;
+fast checks do not satisfy the done criteria. Inspect the full diff before review,
+and follow the manual
 checklist in the development guide whenever runtime behavior changes.
 
 ## Done means

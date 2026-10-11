@@ -11,6 +11,7 @@ from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import QToolButton, QWidget
 
+from .. import diagnostics
 from ..windows.appbar import ABE_RIGHT, WindowsAppBar
 from ..windows.windows_input import WindowsInputController
 from .gaze_feedback import set_gaze_feedback
@@ -49,6 +50,17 @@ class SidebarPanel(QWidget):
         self._target_window: int | None = None
         self._full_height = False
         self._reserved_top_height = 0
+        self._diagnostic_context = diagnostics.TargetContext(self.log_name)
+        self.interaction_context_changed.connect(self._renew_diagnostic_context)
+
+    def _renew_diagnostic_context(self) -> None:
+        self._diagnostic_context = diagnostics.TargetContext(self.log_name)
+        diagnostics.emit(
+            "interaction_context", context_id=self._diagnostic_context.id, kind=self.log_name
+        )
+
+    def diagnostic_context(self, _action: str | None = None) -> diagnostics.TargetContext:
+        return self._diagnostic_context
 
     def show_sidebar(self, *, full_height: bool = False) -> None:
         self._full_height = bool(full_height)

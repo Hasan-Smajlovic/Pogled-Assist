@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Tastatura</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/keyboard.css">
+  <link rel="stylesheet" href="assets/gaze-demo.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/keyboard-data.js" defer></script>
+  <script src="assets/gaze-demo.js" defer></script>
+  <script src="assets/keyboard.js" defer></script>
+</head>
+<body data-reference-page="sidebar">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="sidebar-screen">
+    <label>Pregled broja slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label>
+    <section class="sidebar-reference" aria-label="Samostalna tastatura">
+      <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
+      <button type="button" data-script-toggle data-edge-control>Arapski</button>
+      <div class="sidebar-reference-grid">
+        <button type="button" data-edge-control>A B C Č Ć</button><button type="button" data-edge-control>D DŽ Đ E F</button>
+        <button type="button" data-edge-control>G H I J K</button><button type="button" data-edge-control>L LJ M N NJ</button>
+        <button type="button" data-edge-control>O P R S Š</button><button type="button" data-edge-control>T U V Z Ž</button>
+      </div>
+      <nav class="sidebar-pages" hidden><button type="button" data-side-page="-1">Prethodna</button><button type="button" data-side-page="1">Sljedeća</button></nav>
+      <footer><button type="button" data-side-back hidden>Grupe</button><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
+    </section>
+    <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice, do 120 ms. Izvan dugmeta nema potvrde ni napretka. Novo dugme dobija puno vrijeme odabira; promjena grupe, skrivanje ili gubitak oka poništava prethodni odabir.</p>
+    <p>Oba pisma prikazuju najviše osam grupa po stranici. Prethodna i Sljedeća pojavljuju se samo kada ima više stranica. Duže latinične grupe prikazuju se u više redova kako bi zadržale širinu bočne tastature od 380 px. Odabir znaka vraća istu stranicu; promjena pisma ili kartice vraća prvu stranicu. Isti raspored važi u Upravljaču i staje u radni prostor od 640 logičkih piksela ispod trake.</p>
+  </main>
+  <details class="reference-tools"><summary>Opcije pregleda</summary><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
+  <div id="gaze-ring" aria-hidden="true" hidden></div>
+</body>
+</html>

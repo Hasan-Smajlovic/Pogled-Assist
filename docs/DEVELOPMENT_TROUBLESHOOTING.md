@@ -17,6 +17,15 @@ run `.\dev.ps1 check` again. The general model needs the verified local CLASSLA
 archive; the Islamic layer uses the reviewed TSV already in the repository.
 Do not edit metadata hashes by hand or weaken the checksum assertions.
 
+## Debugging parallel test failures
+
+Run `.\dev.ps1 test -Workers 1` to reproduce a failure in a single process.
+For a specific module, use `.\dev.ps1 test -Workers 1 -TestPaths tests/tooling/test_dev_environment.py`.
+The final `.\dev.ps1 check -Workers 1` still performs the complete verification.
+If pytest reports an unrecognized `-n` argument, run `.\dev.ps1 setup` to install
+the declared development dependencies. Do not install plugins into another
+environment or remove coverage/packaging to make a final check pass.
+
 ## Pytest cannot access `pytest-of-<username>`
 
 If many otherwise unrelated tests fail during setup with `PermissionError:
@@ -85,9 +94,9 @@ its safety and rollback tests can run where CIM access is restricted. A direct
 installer run still requires Windows process inspection; report an access-denied
 failure separately from Smart App Control or a package regression.
 
-## One expected skip with Python 3.10
+## Packaging tests for unsupported Python versions
 
-On the supported 64-bit Python 3.10 release environment, pytest skips
-`test_package_rejects_newer_python_before_using_output_directory`. That test
-only applies when the active interpreter is newer than Python 3.10. A single
-skip for this reason is expected and does not make `.\dev.ps1 check` fail.
+`test_package_rejects_newer_python_before_using_output_directory` runs on the
+supported 64-bit Python 3.10 environment. It supplies a fake interpreter probe
+that reports Python 3.12 and checks that packaging rejects it before changing
+the output directory. No newer Python installation is needed for this test.

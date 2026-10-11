@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any
 
+from pogled_assist.log_transport import LogWriter, QueueLogHandler
 from pogled_assist.tracking.tobii_stream_engine import TobiiStreamEngineBackend
 
 logger = logging.getLogger(__name__)
@@ -19,12 +20,23 @@ _output_lock = threading.Lock()
 
 
 def main() -> int:
+    writer = LogWriter(capacity=128)
+    writer.start_segment(None, sys.stderr, trace=False)
+    handler = QueueLogHandler(writer)
+    root = logging.getLogger()
+    previous_handlers, previous_level = root.handlers[:], root.level
+    root.handlers = [handler]
+    root.setLevel(logging.INFO)
+    try:
+        return _run_bridge()
+    finally:
+        handler.close()
+        root.handlers = previous_handlers
+        root.setLevel(previous_level)
+
+
+def _run_bridge() -> int:
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stderr,
-    )
 
     logger.info("Starting Tobii Stream Engine bridge with Python: %s", sys.executable)
     logger.info("Bridge pointer size: %s-bit", 8 * _pointer_size())
@@ -42,9 +54,17 @@ def main() -> int:
 
     _install_signal_handlers()
     backend = TobiiStreamEngineBackend(_emit_gaze, _emit_eye_status)
+    backend.eye_position_callback = _emit_eye_position
+    backend.gaze_invalid_callback = _emit_gaze_invalid
     try:
         backend.start()
-        _emit("started", label=backend.label, dll_path=backend.dll_path)
+        _emit(
+            "started",
+            label=backend.label,
+            dll_path=backend.dll_path,
+            eye_position_supported=backend.eye_position_supported,
+            diagnostic_metadata=getattr(backend, "diagnostic_metadata", {}),
+        )
         while _running:
             time.sleep(0.25)
     except KeyboardInterrupt:
@@ -71,6 +91,14 @@ def _emit_eye_status(left_open: bool, right_open: bool, timestamp: int) -> None:
         right_open=bool(right_open),
         timestamp=timestamp,
     )
+
+
+def _emit_eye_position(left: object, right: object, timestamp: int) -> None:
+    _emit("eye_position", left=left, right=right, timestamp=timestamp)
+
+
+def _emit_gaze_invalid(timestamp: int) -> None:
+    _emit("gaze_invalid", timestamp=timestamp)
 
 
 def _emit(message_type: str, **payload: Any) -> None:

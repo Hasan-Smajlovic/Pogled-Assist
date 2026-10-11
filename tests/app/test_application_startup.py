@@ -77,7 +77,7 @@ def test_dpi_awareness_uses_modern_api_then_falls_back(monkeypatch):
 )
 def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simulate_gaze):
     import PySide6.QtWidgets
-    from PySide6.QtCore import QLockFile
+    from PySide6.QtCore import QLockFile, QObject
 
     from pogled_assist import toolbar
 
@@ -91,8 +91,9 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simu
         def isNull(self):
             return False
 
-    class FakeApp:
+    class FakeApp(QObject):
         def __init__(self, args):
+            super().__init__()
             calls.append(("app", args))
 
         def setApplicationName(self, name):
@@ -153,10 +154,3 @@ def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):
 
     assert main_module.main() == 2
     assert "only from a development checkout" in capsys.readouterr().out
-
-
-def test_main_routes_package_smoke_test_without_starting_gui(monkeypatch):
-    monkeypatch.setattr(main_module.sys, "argv", ["PogledAssist.exe", "--package-smoke-test"])
-    monkeypatch.setattr(main_module, "package_smoke_test", lambda: 23)
-
-    assert main_module.main() == 23

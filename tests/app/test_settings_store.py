@@ -9,6 +9,41 @@ from pogled_assist.settings_store import load_app_settings, save_app_settings
 from pogled_assist.speech.speech_service import SpeechSettings
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        ("off", False),
+        ("true", True),
+        (0, False),
+        (1, True),
+        (None, True),
+        ({}, True),
+        ([], True),
+    ],
+)
+def test_tracking_notification_setting_coercion(tmp_path, monkeypatch, value, expected):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"gaze": {"show_tracking_notifications": value}}), encoding="utf-8")
+    gaze, _speech = load_app_settings()
+    assert gaze.show_tracking_notifications is expected
+
+
+def test_tracking_notifications_default_on_in_old_settings_and_false_survives_restart(
+    tmp_path, monkeypatch
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text('{"gaze": {"dwell_ms": 850}}', encoding="utf-8")
+    gaze, speech = load_app_settings()
+    assert gaze.show_tracking_notifications is True
+    gaze.show_tracking_notifications = False
+    assert save_app_settings(gaze, speech)
+    assert load_app_settings()[0].show_tracking_notifications is False
+
+
 @pytest.mark.parametrize("value", [None, "", "unknown", 99, [], {}])
 def test_invalid_keyboard_script_loads_as_latin(monkeypatch, tmp_path, value):
     path = point_settings_at(monkeypatch, tmp_path)

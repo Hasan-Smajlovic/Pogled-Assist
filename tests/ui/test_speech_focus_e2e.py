@@ -6,7 +6,7 @@ import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
 from _speech_fixtures import speech_focus as speech_focus
 from _ui_fakes import FakeLibraryStore, FakeSpeech, click_speech_action
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QLineEdit
 
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
@@ -39,7 +39,7 @@ def test_speech_can_type_on_open_and_reopen_without_selecting_input(qtbot, speec
     assert window._input.text() == "A"
     window.close()
     window.show_full_screen()
-    qapp.setActiveWindow(window)
+    window.activateWindow()
     qtbot.waitUntil(lambda: qapp.focusWidget() is window._input)
     qtbot.keyClicks(qapp.focusWidget(), "b")
     assert window._input.text() == "AB"
@@ -65,7 +65,7 @@ def test_speech_restores_focus_on_return_without_changing_caret_or_selection(
     other = QLineEdit()
     qtbot.addWidget(other)
     other.show()
-    qapp.setActiveWindow(other)
+    other.activateWindow()
     other.setFocus()
     qapp.processEvents()
     assert qapp.focusWidget() is other
@@ -73,7 +73,7 @@ def test_speech_restores_focus_on_return_without_changing_caret_or_selection(
     assert other.text() == "z"
     assert window._input.text() == "ABCDEFGHIJ"
 
-    qapp.setActiveWindow(window)
+    window.activateWindow()
     qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
     assert window._input.cursorPosition() == cursor
     assert window._input.selectedText() == selected
@@ -144,7 +144,8 @@ def test_speech_dialogs_block_background_typing_and_restore_input_on_close(
         window.handle_gaze_action(open_action)
     qtbot.waitUntil(lambda: qapp.activeModalWidget() is window._dialogs.active)
     # The offscreen platform does not activate modal windows like Windows does.
-    qapp.setActiveWindow(window._dialogs.active)
+    window._dialogs.active.activateWindow()
+    qtbot.waitUntil(lambda: qapp.activeWindow() is window._dialogs.active)
     assert qapp.focusWidget() is not window._input
     qtbot.keyClicks(qapp.focusWidget(), "x")
     assert window._input.text() == "PORUKA"
@@ -153,7 +154,7 @@ def test_speech_dialogs_block_background_typing_and_restore_input_on_close(
         qtbot.mouseClick(window._action_buttons[action], Qt.LeftButton)
     else:
         window.handle_gaze_action(action)
-    qapp.setActiveWindow(window)
+    window.activateWindow()
     qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
     previous = window._input.text()
     qtbot.keyClicks(qapp.focusWidget(), "y")
@@ -206,18 +207,34 @@ def test_speech_keeps_typing_focus_when_tab_is_pressed(qtbot, speech_focus):
 
 
 @pytest.mark.e2e
-def test_speech_queued_focus_return_cannot_take_focus_from_another_window(qtbot, speech_focus):
+def test_speech_queued_focus_return_cannot_take_focus_from_another_window(
+    qtbot, speech_focus, monkeypatch
+):
     qapp, window = speech_focus
+    qapp.processEvents()
+    calls = []
+    restore_focus = window._restore_input_focus
+
+    def restore_after_activation():
+        calls.append(qapp.activeWindow())
+        restore_focus()
+
+    monkeypatch.setattr(window, "_restore_input_focus", restore_after_activation)
+
     other = QLineEdit()
     qtbot.addWidget(other)
     other.show()
-    qapp.setActiveWindow(other)
+    other.activateWindow()
+    qtbot.waitUntil(lambda: qapp.activeWindow() is other)
     other.setFocus()
-    qapp.setActiveWindow(window)
-    # Leave Speech before its deferred activation work reaches the event loop.
-    qapp.setActiveWindow(other)
-    other.setFocus()
+
+    # A stale activation event can reach Speech after another window gains focus.
+    qapp.sendEvent(window, QEvent(QEvent.Type.WindowActivate))
+    assert calls == []
     qapp.processEvents()
+    # Drain window activation requests made by the queued callback.
+    qapp.processEvents()
+    assert calls and all(active is other for active in calls)
     assert qapp.activeWindow() is other
     assert qapp.focusWidget() is other
     qtbot.keyClicks(qapp.focusWidget(), "x")

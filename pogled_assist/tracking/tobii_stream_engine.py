@@ -31,6 +31,9 @@ FIELD_OF_USE_INTERACTIVE = 0
 
 GazeCallback = Callable[[float, float, int], None]
 EyeStatusCallback = Callable[[bool, bool, int], None]
+EyePosition = tuple[float, float, float]
+EyePositionCallback = Callable[[EyePosition | None, EyePosition | None, int], None]
+GazeInvalidCallback = Callable[[int], None]
 
 _DLL_DIRECTORY_HANDLES: list[object] = []
 
@@ -111,6 +114,10 @@ class TobiiStreamEngineBackend:
     ) -> None:
         self._gaze_callback = gaze_callback
         self._eye_status_callback = eye_status_callback
+        # Optional diagnostic observer; never participates in the input gate.
+        self.eye_position_callback: EyePositionCallback | None = None
+        self.gaze_invalid_callback: GazeInvalidCallback | None = None
+        self.diagnostic_metadata: dict = {"eye_validity_source": "unknown"}
         self._lib: ctypes.CDLL | None = None
         self._dll_path = ""
         self._api = ctypes.c_void_p()
@@ -127,6 +134,10 @@ class TobiiStreamEngineBackend:
         self._eye_sample_count = 0
         self._eye_position_api_available = False
         self._gaze_origin_api_available = False
+
+    @property
+    def eye_position_supported(self) -> bool:
+        return bool(self._device) and self._eye_position_receiver is not None
 
     @property
     def label(self) -> str:
@@ -294,6 +305,9 @@ class TobiiStreamEngineBackend:
         version = TobiiVersion()
         status = self._lib.tobii_get_api_version(ctypes.byref(version))
         if status == TOBII_ERROR_NO_ERROR:
+            self.diagnostic_metadata["sdk_version"] = (
+                f"{version.major}.{version.minor}.{version.revision}.{version.build}"
+            )
             logger.info(
                 "Tobii Stream Engine API version: %s.%s.%s.%s",
                 version.major,
@@ -385,6 +399,8 @@ class TobiiStreamEngineBackend:
             _decode_char_array(info.generation),
             _decode_char_array(info.serial_number),
         ]
+        self.diagnostic_metadata["model"] = _decode_char_array(info.model)
+        self.diagnostic_metadata["firmware_version"] = _decode_char_array(info.firmware_version)
         return " ".join(part for part in parts if part) or "Tobii Stream Engine tracker"
 
     def _subscribe(self) -> None:
@@ -419,6 +435,12 @@ class TobiiStreamEngineBackend:
                 int(eye_position.right_validity),
                 int(eye_position.timestamp_us),
             )
+            if self.eye_position_callback is not None:
+                self.eye_position_callback(
+                    finite_eye_position(eye_position.left_xyz, eye_position.left_validity),
+                    finite_eye_position(eye_position.right_xyz, eye_position.right_validity),
+                    int(eye_position.timestamp_us),
+                )
 
         self._eye_position_receiver = EyePositionReceiver(receive_eye_position)
         status = self._lib.tobii_eye_position_normalized_subscribe(
@@ -434,6 +456,7 @@ class TobiiStreamEngineBackend:
             return False
 
         logger.info("Subscribed to Stream Engine normalized eye-position stream.")
+        self.diagnostic_metadata["eye_validity_source"] = "eye-position"
         return True
 
     def _subscribe_gaze_origin(self, errors: list[str]) -> bool:
@@ -468,6 +491,7 @@ class TobiiStreamEngineBackend:
             return False
 
         logger.info("Subscribed to Stream Engine gaze-origin stream for eye validity.")
+        self.diagnostic_metadata["eye_validity_source"] = "gaze-origin"
         return True
 
     def _handle_eye_validity_sample(
@@ -501,12 +525,15 @@ class TobiiStreamEngineBackend:
                 return
 
             gaze_point = gaze_point_ptr.contents
-            if gaze_point.validity != TOBII_VALIDITY_VALID:
-                return
-
             x = float(gaze_point.position_xy[0])
             y = float(gaze_point.position_xy[1])
-            if not math.isfinite(x) or not math.isfinite(y):
+            if (
+                gaze_point.validity != TOBII_VALIDITY_VALID
+                or not math.isfinite(x)
+                or not math.isfinite(y)
+            ):
+                if self.gaze_invalid_callback is not None:
+                    self.gaze_invalid_callback(int(gaze_point.timestamp_us))
                 return
 
             self._sample_count += 1
@@ -565,6 +592,26 @@ class TobiiStreamEngineBackend:
             logger.exception("Could not get Tobii Stream Engine error message.")
 
         return f"status {status}"
+
+
+def finite_eye_position(value: object, validity: object = 1) -> EyePosition | None:
+    """Copy a finite XYZ sample, preserving out-of-box values and its units."""
+    if validity not in (1, True):
+        return None
+    if not isinstance(value, (tuple, list, ctypes.Array)):
+        return None
+    try:
+        if len(value) != 3:
+            return None
+        if any(
+            isinstance(component, bool) or not isinstance(component, (int, float))
+            for component in value
+        ):
+            return None
+        xyz = tuple(float(component) for component in value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return xyz if all(math.isfinite(component) for component in xyz) else None
 
 
 def _load_stream_engine_library() -> tuple[ctypes.CDLL, str]:
