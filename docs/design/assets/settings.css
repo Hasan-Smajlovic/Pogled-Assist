@@ -63,7 +63,7 @@
 .settings-checkbox:has(input:checked) { background: #1d6f68; border-color: #74d3c6; color: #fff; }
 .update-card {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 290px;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
@@ -76,6 +76,11 @@
 .update-card button { min-height: 58px; height: 58px; }
 .update-card [data-settings-action="check-update"] { min-width: 210px; }
 .update-card [data-settings-action="install-update"] { min-width: 250px; }
+.version-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #fff; font-size: 17px; }
+.version-choice select { width: 260px; height: 58px; padding: 10px 14px; border: 1px solid #4c534e; border-radius: 10px; background: #0f1110; color: #fff; font-size: 20px; }
+.version-note { grid-column: 1 / -1; margin: 0; color: #b9b2a5; font-size: 13px; }
+.version-warning { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 8px; border-top: 1px solid #804047; }
+.version-warning p { grid-column: 1 / -1; margin: 0; color: #fff; }
 .setting-row {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 104px 216px 104px;

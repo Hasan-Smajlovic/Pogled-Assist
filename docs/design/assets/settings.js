@@ -5,6 +5,9 @@
   let selectedWord = null;
   let arabic = ReferenceKeyboard.readScript();
   let startupTimer;
+  $('release-version').addEventListener('change', () => {
+    document.querySelector('[data-settings-action="install-update"]').disabled = $('release-version').value === 'v0.3.5';
+  });
   function previewStartupChange() {
     clearTimeout(startupTimer);
     $('settings-status').textContent = $('startup-enabled').checked
@@ -69,14 +72,24 @@
     const checkButton = document.querySelector('[data-settings-action="check-update"]');
     const installButton = document.querySelector('[data-settings-action="install-update"]');
     if (action === 'check-update') {
-      status.textContent = 'Dostupna je verzija v0.2.0. Trenutno koristite v0.1.0.';
-      pageStatus.textContent = 'Dostupno je ažuriranje na v0.2.0.';
+      status.textContent = 'Dostupna je novija verzija v0.4.0.';
+      pageStatus.textContent = 'Lista verzija je osvježena.';
       installButton.hidden = false;
     } else if (action === 'install-update') {
       checkButton.disabled = true;
       installButton.disabled = true;
-      status.textContent = 'Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije.';
-      pageStatus.textContent = 'Pokrećem ažuriranje.';
+      $('release-version').disabled = true;
+      status.textContent = `Paket ${$('release-version').value} je provjeren. Potvrdite ponovno pokretanje.`;
+      $('version-warning').hidden = false;
+      pageStatus.textContent = 'Nesačuvan unos.';
+    } else if (action === 'cancel-install') {
+      $('version-warning').hidden = true;
+      checkButton.disabled = false; installButton.disabled = false;
+      $('release-version').disabled = false;
+      status.textContent = 'Instalacija je otkazana. Trenutna verzija i unos ostaju dostupni.';
+    } else if (action === 'confirm-install') {
+      $('version-warning').hidden = true;
+      status.textContent = 'Instaliram odabranu verziju i ponovo pokrećem aplikaciju.';
     }
   }
 

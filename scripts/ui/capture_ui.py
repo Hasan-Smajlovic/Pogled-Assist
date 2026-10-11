@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
+from pogled_assist.release_update import ReleaseCheckResult, StableVersion
 from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import LearningStore
@@ -52,6 +53,29 @@ class PreviewAppBar:
 
     def set_position(self, *_args: object) -> None:
         return None
+
+
+class PreviewReleaseManager(QObject):
+    check_started = Signal()
+    check_completed = Signal(object)
+    check_failed = Signal(str)
+    supported = True
+    installed_version = StableVersion(0, 3, 5)
+
+    def check(self) -> None:
+        self.check_started.emit()
+        self.check_completed.emit(
+            ReleaseCheckResult(
+                self.installed_version,
+                StableVersion(0, 4, 0),
+                (
+                    StableVersion(0, 4, 0),
+                    self.installed_version,
+                    StableVersion(0, 3, 4),
+                    StableVersion(0, 1, 0),
+                ),
+            )
+        )
 
 
 class PreviewInput:
@@ -327,8 +351,12 @@ class _CaptureSession:
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
+        releases = PreviewReleaseManager()
         self.settings = SettingsWindow(
-            self.gaze_settings, self.speech_settings, suggestions=suggestions
+            self.gaze_settings,
+            self.speech_settings,
+            suggestions=suggestions,
+            update_manager=releases,
         )
         self.widgets.append(self.settings)
         size = min(self.size[0], 1280), min(self.size[1], 720)
@@ -345,6 +373,30 @@ class _CaptureSession:
         self.settings.set_save_error(True)
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
+        self.settings._select_tab(0)
+        row = self.settings._update_row
+        row._version_combo.setCurrentIndex(3)
+        self.capture(
+            self.settings, "settings-older-version", "Settings: older version selected", size=size
+        )
+        row._request_update()
+        self.capture(
+            self.settings,
+            "settings-version-preparing",
+            "Settings: downloading selected version",
+            size=size,
+        )
+        row.confirm_restart()
+        self.capture(
+            self.settings, "settings-version-warning", "Settings: unsaved input warning", size=size
+        )
+        row.show_error("Provjera paketa nije uspjela. Trenutna verzija ostaje dostupna.")
+        row._check_failed(
+            "Provjera verzija nije uspjela. Provjerite internet vezu i pokušajte ponovo."
+        )
+        self.capture(
+            self.settings, "settings-version-error", "Settings: version check failed", size=size
+        )
 
     def capture_gaze_check(self) -> None:
         window = GazeCheckWindow(self.gaze_settings)

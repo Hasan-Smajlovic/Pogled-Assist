@@ -266,7 +266,9 @@ class SettingsWindow(QWidget):
     calibration_requested = Signal()
     gaze_check_requested = Signal()
     speech_test_requested = Signal()
-    update_requested = Signal()
+    update_requested = Signal(object)
+    restart_confirmed = Signal()
+    install_cancelled = Signal()
     quit_requested = Signal()
     interaction_progress_changed = Signal(QPoint, float, str)
     interaction_finished = Signal(QPoint, str)
@@ -397,6 +399,10 @@ class SettingsWindow(QWidget):
 
     def show_update_error(self, message: str) -> None:
         self._update_row.show_error(message)
+
+    def confirm_update_restart(self) -> None:
+        self._select_tab(0)
+        self._update_row.confirm_restart()
 
     def _build_ui(self) -> None:
         self.setStyleSheet(
@@ -529,6 +535,8 @@ class SettingsWindow(QWidget):
         self._update_row = ReleaseUpdateRow(self._controls, self._update_manager, page)
         self._update_row.status_changed.connect(self._set_status)
         self._update_row.update_requested.connect(self.update_requested)
+        self._update_row.restart_confirmed.connect(self.restart_confirmed)
+        self._update_row.install_cancelled.connect(self.install_cancelled)
         layout.addWidget(self._update_row)
         layout.addStretch(1)
         return page

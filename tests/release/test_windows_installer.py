@@ -200,6 +200,101 @@ def _run_installer(
     )
 
 
+def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(
+    tmp_path, smoke_app, monkeypatch
+):
+    from pogled_assist.settings_store import load_app_settings, save_app_settings
+    from pogled_assist.speech.speech_library import (
+        CategoryRecord,
+        PhraseRecord,
+        speech_library_store,
+    )
+    from pogled_assist.suggestions.learning import LearningStore
+
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    data = install_root / "data"
+    (install_root / "VERSION").write_text("0.3.5", encoding="utf-8")
+    (data / "app_settings.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "gaze": {"dwell_ms": 750, "show_tracking_notifications": False},
+                "speech": {"keyboard_script": "arabic", "speed": 180},
+                "future_setting": "keep",
+            }
+        ),
+        encoding="utf-8",
+    )
+    library = {
+        "version": 2,
+        "categories": [{"name": "Synthetic category", "answers": ["Synthetic answer"]}],
+        "phrases": [{"text": "Synthetic phrase", "uses": 7}],
+    }
+    (data / "speech_library.json").write_text(json.dumps(library), encoding="utf-8")
+    (data / "speech_phrases.json").write_text(json.dumps(library["phrases"]), encoding="utf-8")
+    (data / "speech_learning.json").write_text(
+        '{"version":1,"counts":[["kahva",3]]}', encoding="utf-8"
+    )
+    extra = data / "custom" / "entry.txt"
+    extra.parent.mkdir()
+    extra.write_text("Synthetic manual entry", encoding="utf-8")
+    before = _persistent_snapshot(install_root)
+
+    downgrade = _run_installer(package, install_root)
+    assert downgrade.returncode == 0, downgrade.stdout + downgrade.stderr
+    assert _persistent_snapshot(install_root) == before
+    first = next((data / "version-history").iterdir())
+    assert (first / "app_settings.json").read_bytes() == before["data/app_settings.json"]
+    assert not (first / "version-history").exists()
+    assert (first / "custom/entry.txt").read_text() == "Synthetic manual entry"
+
+    (data / "app_settings.json").write_text(
+        '{"version":1,"gaze":{"dwell_ms":950},"speech":{"speed":210}}', encoding="utf-8"
+    )
+    library["categories"][0]["answers"].append("Synthetic older answer")
+    library["phrases"][0]["uses"] = 9
+    (data / "speech_library.json").write_text(json.dumps(library), encoding="utf-8")
+    (data / "speech_phrases.json").write_text(json.dumps(library["phrases"]), encoding="utf-8")
+    (data / "speech_learning.json").write_text(
+        '{"version":1,"counts":[["kahva",4],["ljeto",1]]}', encoding="utf-8"
+    )
+    (package / "VERSION").write_text("0.4.0", encoding="utf-8")
+    upgrade = _run_installer(package, install_root, expected_version="0.4.0")
+    assert upgrade.returncode == 0, upgrade.stdout + upgrade.stderr
+    monkeypatch.setattr("pogled_assist.settings_store.get_project_root", lambda: install_root)
+    gaze, speech = load_app_settings()
+    assert gaze.dwell_ms == 950 and gaze.show_tracking_notifications is False
+    assert speech.speed == 210 and speech.keyboard_script == "arabic"
+    assert save_app_settings(gaze, speech)
+    assert json.loads((data / "app_settings.json").read_text())["future_setting"] == "keep"
+    returned = speech_library_store(install_root).load()
+    assert returned.categories == [
+        CategoryRecord("Synthetic category", ["Synthetic answer", "Synthetic older answer"])
+    ]
+    assert returned.phrases == [PhraseRecord("Synthetic phrase", 9)]
+    assert LearningStore(data / "speech_learning.json").snapshot() == {("kahva",): 4, ("ljeto",): 1}
+    assert extra.read_text() == "Synthetic manual entry"
+    assert len(list((data / "version-history").iterdir())) == 2
+    assert (install_root / "logs/latest.txt").read_bytes() == before["logs/latest.txt"]
+    assert (install_root / "VERSION").read_text().strip() == "0.4.0"
+
+
+def test_unsupported_data_format_stops_before_changing_installation(tmp_path, smoke_app):
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    path = install_root / "data/speech_learning.json"
+    path.write_text('{"version":999,"counts":[["KAHVA",2]]}', encoding="utf-8")
+    before = _persistent_snapshot(install_root)
+    completed = _run_installer(package, install_root)
+    assert completed.returncode != 0
+    _assert_output_contains(completed, "unsupported saved data format")
+    assert _persistent_snapshot(install_root) == before
+    assert (install_root / "old-app-file.txt").exists()
+    assert not (install_root / "data/version-history").exists()
+    _assert_no_transaction_files(install_root)
+
+
 def _persistent_snapshot(install_root: Path) -> dict[str, bytes]:
     return {
         relative_path: (install_root / relative_path).read_bytes()

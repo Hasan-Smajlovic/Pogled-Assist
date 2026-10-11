@@ -176,6 +176,7 @@ data\app_settings.json
 data\speech_library.json
 data\speech_phrases.json
 data\speech_learning.json
+data\version-history\*\
 logs\latest.txt
 logs\diagnostics\*.jsonl
 ```

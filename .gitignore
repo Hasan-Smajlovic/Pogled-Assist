@@ -51,6 +51,7 @@ logs/
 # Runtime settings and user data
 data/*.json
 data/*.tmp
+data/version-history/
 install_info.json
 
 # Generated Windows launchers and shortcut icon output

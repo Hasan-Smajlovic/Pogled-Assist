@@ -273,6 +273,66 @@ function Copy-PersistentContent {
         }
 }
 
+function Save-VersionDataSnapshot {
+    param([string]$ExistingRoot, [string]$StagingRoot)
+
+    $sourceData = Join-Path $ExistingRoot "data"
+    if (-not (Test-Path -LiteralPath $sourceData -PathType Container)) {
+        return
+    }
+    $formats = @{ "app_settings.json" = 1; "speech_library.json" = 2; "speech_phrases.json" = 2; "speech_learning.json" = 1 }
+    foreach ($name in $formats.Keys) {
+        $savedPath = Join-Path $sourceData $name
+        if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
+            try {
+                $payload = Get-Content -LiteralPath $savedPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            } catch {
+                throw "Cannot safely change versions with unreadable saved data: $name. The installation was not changed."
+            }
+            if ($null -ne $payload -and $payload.PSObject.Properties.Name -contains "version" -and $payload.version -ne $formats[$name]) {
+                throw "Cannot safely change versions with an unsupported saved data format: $name. The installation was not changed."
+            }
+        }
+    }
+    $snapshotName = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfffffff") + "-" + [Guid]::NewGuid().ToString("N")
+    $snapshotRoot = Join-Path $StagingRoot "data\version-history\$snapshotName"
+    [IO.Directory]::CreateDirectory($snapshotRoot) | Out-Null
+    Get-ChildItem -LiteralPath $sourceData -Force | Where-Object { $_.Name -ne "version-history" } |
+        ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $snapshotRoot -Recurse -Force
+        }
+}
+
+function Assert-PersistentContentCopied {
+    param([string]$ExistingRoot, [string]$StagingRoot)
+
+    foreach ($directory in @("data", "logs")) {
+        $source = Join-Path $ExistingRoot $directory
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+            continue
+        }
+        if ((Get-Item -LiteralPath $source).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "Cannot safely preserve a linked persistent directory: $source"
+        }
+        Get-ChildItem -LiteralPath $source -Recurse -Force | ForEach-Object {
+            if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Cannot safely preserve linked persistent content: $($_.FullName)"
+            }
+            if (-not $_.PSIsContainer) {
+                $relative = $_.FullName.Substring($ExistingRoot.Length).TrimStart("\")
+                $destination = Join-Path $StagingRoot $relative
+                if (
+                    -not (Test-Path -LiteralPath $destination -PathType Leaf) -or
+                    (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -ne
+                    (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+                ) {
+                    throw "Saved data could not be verified: $relative. The installation was not changed."
+                }
+            }
+        }
+    }
+}
+
 function Get-ExternalComponentPaths {
     return @(
         ".venv",
@@ -660,6 +720,10 @@ function Invoke-TransactionalInstall {
                 -StagingRoot $stagingRoot `
                 -HadExistingInstallation $hadExistingInstallation
         )
+        if ($hadExistingInstallation) {
+            Assert-PersistentContentCopied -ExistingRoot $Paths.Install -StagingRoot $stagingRoot
+            Save-VersionDataSnapshot -ExistingRoot $Paths.Install -StagingRoot $stagingRoot
+        }
         Invoke-PackageSmokeTest -Root $stagingRoot -Label "Staged application verification"
 
         Write-InstallTransaction `

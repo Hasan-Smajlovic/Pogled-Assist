@@ -27,7 +27,7 @@ from .interaction.mouse_controller import (
     GazeMouseController,
 )
 from .logging_setup import get_project_root
-from .release_update import ReleaseUpdateError, ReleaseUpdateManager
+from .release_update import ReleaseUpdateError, ReleaseUpdateManager, StableVersion
 from .settings_store import load_app_settings, save_app_settings
 from .speech.speech_library import speech_library_store
 from .speech.speech_service import SpeechService
@@ -92,6 +92,9 @@ class HotbarWindow(QWidget):
             self, path=get_project_root() / "data" / "speech_learning.json"
         )
         self._release_update_manager = ReleaseUpdateManager(parent=self)
+        self._release_update_manager.install_ready.connect(self._release_install_ready)
+        self._release_update_manager.install_failed.connect(self._release_install_failed)
+        self._restarting_for_update = False
         self._speech_window: SpeechWindow | None = None
         self._keyboard_window: KeyboardWindow | None = None
         self._controller_window: ControllerWindow | None = None
@@ -136,6 +139,8 @@ class HotbarWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Hotbar close event received.")
+        if not self._restarting_for_update:
+            self._release_update_manager.finish_cancel()
         self._closing = True
         self._tracking_feedback.stop()
         if self._gaze_check_window is not None:
@@ -817,6 +822,8 @@ class HotbarWindow(QWidget):
         window.gaze_check_requested.connect(self._open_gaze_check)
         window.speech_test_requested.connect(self._test_current_speech_settings)
         window.update_requested.connect(self._start_release_update)
+        window.restart_confirmed.connect(self._restart_for_update)
+        window.install_cancelled.connect(self._release_update_manager.finish_cancel)
         window.quit_requested.connect(self._quit_application)
         window.closed.connect(self._settings_window_closed)
         self._mouse.gaze_position_changed.connect(window.handle_gaze)
@@ -901,6 +908,8 @@ class HotbarWindow(QWidget):
             self._gaze_check_window.set_calibration_notice(message)
 
     def _settings_window_closed(self) -> None:
+        if not self._restarting_for_update:
+            self._release_update_manager.finish_cancel()
         window = self._settings_window
         if window is None:
             return
@@ -937,17 +946,43 @@ class HotbarWindow(QWidget):
         if app is not None:
             app.quit()
 
-    def _start_release_update(self) -> None:
+    def _start_release_update(self, version: StableVersion) -> None:
         try:
-            self._release_update_manager.launch()
+            if self._settings_save_failed or self._suggestions.store.error:
+                raise ReleaseUpdateError(
+                    "Prvo sačuvajte postavke i naučene riječi pa pokušajte ponovo."
+                )
+            self._release_update_manager.prepare(version)
         except ReleaseUpdateError as error:
-            logger.exception("Could not launch the release updater.")
-            self._set_status("Pokretanje ažuriranja nije uspjelo.")
-            if self._settings_window is not None:
-                self._settings_window.show_update_error(str(error))
-            return
+            self._release_install_failed(str(error))
 
-        logger.info("Release updater started; closing the current application.")
+    def _release_install_failed(self, message: str) -> None:
+        self._set_status("Instalacija nije pokrenuta.")
+        if self._settings_window is not None:
+            self._settings_window.show_update_error(message)
+
+    def _release_install_ready(self) -> None:
+        if self._closing or not self._release_update_manager.ready:
+            return
+        if self._speech_window is not None and self._speech_window.has_unsaved_input:
+            self._open_settings()
+            self._settings_window.confirm_update_restart()
+            return
+        self._restart_for_update()
+
+    def _restart_for_update(self) -> None:
+        try:
+            if self._settings_save_failed or self._suggestions.store.error:
+                raise ReleaseUpdateError(
+                    "Prvo sačuvajte postavke i naučene riječi pa pokušajte ponovo."
+                )
+            self._release_update_manager.authorize_restart()
+        except ReleaseUpdateError as error:
+            self._release_update_manager.finish_cancel()
+            self._release_install_failed(str(error))
+            return
+        self._restarting_for_update = True
+        logger.info("Selected release verified; closing the current application.")
         self._quit_application()
 
     def _update_gaze_settings(self, settings: object) -> None:

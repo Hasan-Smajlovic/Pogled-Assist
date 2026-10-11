@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import zipfile
@@ -31,6 +32,7 @@ ARTIFACT_NAME = f"PogledAssist-v{LATEST_VERSION}-windows-x64.zip"
 PROCESS_RUNNER = r"""
 param(
     [string]$UpdaterPath, [string]$InstallRoot, [string]$ReleaseApiUrl,
+    [string]$TargetVersion, [string]$ControlDirectory, [int]$WaitForProcessId,
     [switch]$NoElevation, [switch]$NoDesktopShortcut, [switch]$NoPause
 )
 function Get-Process {
@@ -57,6 +59,7 @@ function Get-CimInstance {
     }
 }
 & $UpdaterPath -InstallRoot $InstallRoot -ReleaseApiUrl $ReleaseApiUrl `
+    -TargetVersion $TargetVersion -ControlDirectory $ControlDirectory -WaitForProcessId $WaitForProcessId `
     -NoElevation:$NoElevation -NoDesktopShortcut:$NoDesktopShortcut -NoPause:$NoPause
 exit $LASTEXITCODE
 """
@@ -159,6 +162,7 @@ def _serve_release(archive: bytes, checksum: str | None = None):
     }
     server.routes = {
         "/latest": (200, "application/json", json.dumps(metadata).encode()),
+        f"/tags/v{LATEST_VERSION}": (200, "application/json", json.dumps(metadata).encode()),
         f"/{ARTIFACT_NAME}": (200, "application/zip", archive),
         f"/{ARTIFACT_NAME}.sha256": (200, "text/plain", checksum_text.encode()),
     }
@@ -209,8 +213,15 @@ def _installed_app(tmp_path: Path, *, version: str | None = "0.1.0") -> Path:
     return install_root
 
 
-def _updater_command(install_root: Path, release_url: str) -> list[str]:
-    return [
+def _updater_command(
+    install_root: Path,
+    release_url: str,
+    *,
+    target_version: str = "",
+    control_directory: Path | None = None,
+    process_id: int = 0,
+) -> list[str]:
+    command = [
         "powershell.exe",
         "-NoProfile",
         "-ExecutionPolicy",
@@ -227,6 +238,13 @@ def _updater_command(install_root: Path, release_url: str) -> list[str]:
         "-NoDesktopShortcut",
         "-NoPause",
     ]
+    if target_version:
+        command.extend(("-TargetVersion", target_version))
+    if control_directory is not None:
+        command.extend(("-ControlDirectory", str(control_directory)))
+    if process_id:
+        command.extend(("-WaitForProcessId", str(process_id)))
+    return command
 
 
 def _updater_environment(**overrides: str) -> dict[str, str]:
@@ -282,6 +300,89 @@ def test_updater_installs_verified_release_and_preserves_user_files(tmp_path):
         f"/{ARTIFACT_NAME}",
         f"/{ARTIFACT_NAME}.sha256",
     ]
+
+
+def test_explicit_selection_allows_downgrade_and_uses_current_installer(tmp_path):
+    install_root = _installed_app(tmp_path, version="0.3.5")
+    (install_root / "install_windows.ps1").write_text(FAKE_INSTALLER, encoding="utf-8")
+    archive = _release_archive(tmp_path, installer='throw "Do not run the historical installer"')
+    with _serve_release(archive) as (server, release_url):
+        completed = subprocess.run(
+            _updater_command(install_root, release_url, target_version=LATEST_VERSION),
+            env=_updater_environment(),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert (install_root / "VERSION").read_text().strip() == LATEST_VERSION
+    assert server.requests[0] == f"/tags/v{LATEST_VERSION}"
+    assert json.loads((install_root / "data/app_settings.json").read_text()) == {"setting": "keep"}
+
+
+def test_selected_metadata_must_match_requested_version(tmp_path):
+    install_root = _installed_app(tmp_path)
+    archive = _release_archive(tmp_path)
+    with _serve_release(archive) as (server, release_url):
+        server.routes["/tags/v0.1.0"] = server.routes["/latest"]
+        completed = subprocess.run(
+            _updater_command(install_root, release_url, target_version="0.1.0"),
+            env=_updater_environment(),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    assert completed.returncode != 0
+    assert "does not match the selected version" in completed.stdout + completed.stderr
+    assert server.requests == ["/tags/v0.1.0"]
+    assert (install_root / "VERSION").read_text().strip() == "0.1.0"
+
+
+def test_preparation_verifies_package_before_app_closes_and_cancel_preserves_install(tmp_path):
+    install_root = _installed_app(tmp_path, version="0.3.5")
+    (install_root / "install_windows.ps1").write_text(FAKE_INSTALLER, encoding="utf-8")
+    archive = _release_archive(tmp_path)
+    with (
+        tempfile.TemporaryDirectory(prefix="PogledAssistUpdateRequest_") as temporary,
+        _serve_release(archive) as (server, release_url),
+    ):
+        directory = Path(temporary)
+        process = subprocess.Popen(
+            _updater_command(
+                install_root,
+                release_url,
+                target_version=LATEST_VERSION,
+                control_directory=directory,
+                process_id=os.getpid(),
+            ),
+            env=_updater_environment(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 20
+            ready = directory / "ready.json"
+            while not ready.exists() and time.monotonic() < deadline and process.poll() is None:
+                time.sleep(0.05)
+            assert ready.exists(), "Updater did not report package verification"
+            assert json.loads(ready.read_text(encoding="utf-8-sig"))["ready"]
+            assert server.requests == [
+                f"/tags/v{LATEST_VERSION}",
+                f"/{ARTIFACT_NAME}",
+                f"/{ARTIFACT_NAME}.sha256",
+            ]
+            assert process.poll() is None
+            assert (install_root / "VERSION").read_text().strip() == "0.3.5"
+            (directory / "cancel").touch()
+            output, errors = process.communicate(timeout=10)
+            assert process.returncode != 0, output + errors
+            assert (install_root / "old-app-file.txt").exists()
+            assert not (install_root / "new-app-file.txt").exists()
+        finally:
+            if process.poll() is None:
+                (directory / "cancel").touch()
+                process.communicate(timeout=10)
 
 
 @pytest.mark.parametrize("package_dir", ["gaze_mouse", "pogled_assist"])

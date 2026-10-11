@@ -24,12 +24,12 @@ def load_app_settings() -> tuple[GazeSettings, SpeechSettings]:
     """Load persisted app settings, falling back field-by-field to defaults."""
 
     path = _settings_path()
-    if not path.exists():
+    if not path.exists() and not (path.parent / "version-history").exists():
         logger.info("No app settings file found at %s; using defaults.", path)
         return GazeSettings(), SpeechSettings()
 
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _settings_payload(path)
     except Exception:
         logger.exception("Could not load app settings from %s; using defaults.", path)
         return GazeSettings(), SpeechSettings()
@@ -48,13 +48,19 @@ def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> bool:
     """Persist app settings as UTF-8 JSON in the project data folder."""
 
     path = _settings_path()
-    payload = {
-        "version": SETTINGS_VERSION,
-        "gaze": asdict(gaze),
-        "speech": asdict(speech),
-    }
-
     try:
+        payload = _settings_payload(path)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("version", SETTINGS_VERSION) != SETTINGS_VERSION
+        ):
+            raise ValueError("Cannot safely write this settings format")
+        for section, settings in (("gaze", gaze), ("speech", speech)):
+            previous = payload.get(section, {})
+            if not isinstance(previous, dict):
+                previous = {}
+            payload[section] = {**previous, **asdict(settings)}
+        payload["version"] = SETTINGS_VERSION
         path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_suffix(path.suffix + ".tmp")
         temp_path.write_text(
@@ -71,6 +77,32 @@ def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> bool:
 
 def _settings_path() -> Path:
     return get_project_root() / "data" / SETTINGS_FILE
+
+
+def _settings_payload(path: Path) -> Any:
+    payload: Any = {}
+    history = path.parent / "version-history"
+    if history.exists():
+        for snapshot in sorted(history.iterdir()):
+            saved = snapshot / SETTINGS_FILE
+            if saved.is_file():
+                previous = json.loads(saved.read_text(encoding="utf-8-sig"))
+                if not isinstance(previous, dict):
+                    raise ValueError("Invalid settings snapshot")
+                payload = _merge_settings(payload, previous)
+    if path.exists():
+        payload = _merge_settings(payload, json.loads(path.read_text(encoding="utf-8")))
+    return payload
+
+
+def _merge_settings(saved: Any, current: Any) -> Any:
+    # Old releases omit unknown fields when saving; their supported edits still win.
+    if not isinstance(saved, dict) or not isinstance(current, dict):
+        return current
+    return {
+        key: _merge_settings(saved.get(key), current[key]) if key in current else saved[key]
+        for key in saved.keys() | current.keys()
+    }
 
 
 def _coerce_gaze_settings(value: Any) -> GazeSettings:

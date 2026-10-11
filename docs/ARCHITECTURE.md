@@ -285,6 +285,7 @@ data/app_settings.json   gaze, interaction, startup, logging, and speech setting
 data/speech_library.json saved categories, answers, phrases, and phrase use counts
 data/speech_phrases.json rollback-compatible standalone phrases for older releases
 data/speech_learning.json versioned local word and short-context counts
+data/version-history/*/ immutable pre-install copies of saved data
 logs/latest.txt          current application log when logging is enabled
 logs/diagnostics/*.jsonl bounded structured diagnostic sessions
 ```
@@ -292,6 +293,14 @@ logs/diagnostics/*.jsonl bounded structured diagnostic sessions
 Missing or malformed settings fall back safely to defaults, with supported
 values clamped to the same ranges as the Settings UI. Installation, update, and
 rollback work must preserve `data/` and `logs/`.
+The transactional installer verifies the copied data and logs byte for byte
+before swapping directories, and keeps a dated data snapshot under
+`data/version-history`. Snapshots exclude earlier snapshots to avoid recursive
+growth. Settings loading fills fields omitted by older writers from these
+snapshots; current fields and supported edits from the older version take
+precedence. Settings saves retain unknown fields and reject unreadable or
+unsupported formats. Snapshots contain personal saved data and belong with the
+user's local data, never in source control or diagnostic uploads.
 
 ### Diagnostic logging
 
@@ -390,8 +399,9 @@ a separate readiness summary without creating the hotbar or gaze services. See t
 [included speech tools](WINDOWS_RELEASE.md#included-speech-tools) for packaging,
 discovery, and installation behavior.
 
-`update_windows.ps1` reads the installed version, resolves the latest stable
-release from `Hasan-Smajlovic/Pogled-Assist`, downloads the exact Windows
+`update_windows.ps1` reads the installed version, resolves the selected stable
+release (or the latest stable release for a manual update) from
+`Hasan-Smajlovic/Pogled-Assist`, downloads the exact Windows
 ZIP and checksum assets, and verifies them before invoking the package installer.
 The first packaged installer migrates an older source layout. The installer
 stages and smoke-tests the new package, carries persistent data and external

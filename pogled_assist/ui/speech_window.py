@@ -57,6 +57,10 @@ class SpeechWindow(SpeechSurface):
     quit_requested = Signal()
     keyboard_script_changed = Signal(str)
 
+    @property
+    def has_unsaved_input(self) -> bool:
+        return bool(self._input.text().strip() or self._editor is not None)
+
     def __init__(
         self,
         speech: SpeechService,
