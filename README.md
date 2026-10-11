@@ -177,6 +177,7 @@ data\speech_library.json
 data\speech_phrases.json
 data\speech_learning.json
 logs\latest.txt
+logs\diagnostics\*.jsonl
 ```
 
 The launcher also writes `start_gaze_mouse.log`. Source setup and release updates

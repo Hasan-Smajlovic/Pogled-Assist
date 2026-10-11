@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import sys
 import time
@@ -51,6 +52,11 @@ def main() -> int:
         return 1
     try:
         return _run_application(simulate_gaze=simulate_gaze)
+    except Exception:
+        # The top-level exception hook runs only after finally has stopped the
+        # writer. Capture the private-safe stack while it can still be drained.
+        logging.getLogger("pogled_assist").critical("Application failed", exc_info=True)
+        raise
     finally:
         shutdown_application_logging()
         lock.unlock()
@@ -70,8 +76,6 @@ def application_lock():
 def _run_application(*, simulate_gaze: bool) -> int:
     setup_application_logging()
     enable_windows_dpi_awareness()
-
-    import logging
 
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
