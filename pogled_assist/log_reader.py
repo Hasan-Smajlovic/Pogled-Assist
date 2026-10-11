@@ -7,6 +7,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from .diagnostic_report import SessionAnalysis
+
 
 def summarize(path: Path) -> dict:
     counts: Counter = Counter()
@@ -16,6 +18,9 @@ def summarize(path: Path) -> dict:
     started = ended = False
     session = None
     health = {}
+    analysis = SessionAnalysis()
+    process = None
+    identity_set = False
     with path.open(encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, 1):
             try:
@@ -35,17 +40,24 @@ def summarize(path: Path) -> dict:
             ):
                 warnings.append({"line": line_number, "reason": "unsupported_record"})
                 continue
-            if session is not None and session != item.get("session_id"):
+            if identity_set and session != item.get("session_id"):
                 warnings.append({"line": line_number, "reason": "mixed_sessions"})
-            session = item.get("session_id")
+                continue
+            if identity_set and process != item.get("process_instance"):
+                warnings.append({"line": line_number, "reason": "mixed_processes"})
+                continue
             event = item.get("event")
             if not isinstance(event, str):
                 warnings.append({"line": line_number, "reason": "missing_event"})
                 continue
+            session = item.get("session_id")
+            process = item.get("process_instance")
+            identity_set = True
             counts[event] += 1
             started |= event == "session_start"
             ended |= event == "session_end"
             data = item["data"]
+            analysis.observe(item)
             if event == "stream_summary" and isinstance(data.get("counts"), dict):
                 for reason, count in data["counts"].items():
                     if reason.startswith("rejected:") and isinstance(count, int):
@@ -58,6 +70,15 @@ def summarize(path: Path) -> dict:
     missing = isinstance(loss, dict) and any(
         isinstance(count, int) and count > 0 for count in loss.values()
     )
+    complete = (
+        started
+        and ended
+        and not warnings
+        and "session_limit" not in counts
+        and not missing
+        and not health.get("writer_errors")
+        and not health.get("bounded_snapshots")
+    )
     return {
         "schema_version": 1,
         "session_id": session,
@@ -69,13 +90,8 @@ def summarize(path: Path) -> dict:
         "logging_health_process_cumulative": health,
         "parse_warnings": warnings,
         "lifecycle_complete": started and ended,
-        "complete": started
-        and ended
-        and not warnings
-        and "session_limit" not in counts
-        and not missing
-        and not health.get("writer_errors")
-        and not health.get("bounded_snapshots"),
+        "complete": complete,
+        "analysis": analysis.result(complete=complete),
         "limits": "Basic rate limits and queue drops can omit individual events; SDK validity is not physical eye closure.",
     }
 
