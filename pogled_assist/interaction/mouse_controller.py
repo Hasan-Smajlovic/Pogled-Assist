@@ -369,29 +369,12 @@ class GazeMouseController(QObject):
             return
 
         hit = self._toolbar_hit(point.logical)
-        if diagnostics.enabled():
-            context = self._toolbar_diagnostic_context(hit.action)
-            bounds = (
-                self._target.action_bounds(hit.action)
-                if hit.action is not None and diagnostics.tracing()
-                else None
-            )
-            diagnostics.emit(
-                "target_hit",
-                trace=True,
-                context_id=context.id,
-                target_id=context.token(hit.action),
-                normalized=(normalized_x, normalized_y),
-                logical=(point.logical.x(), point.logical.y()),
-                physical=(point.physical.x(), point.physical.y()),
-                logical_bounds=(bounds.x(), bounds.y(), bounds.width(), bounds.height())
-                if bounds is not None
-                else None,
-                over_app_ui=hit.over_app_ui,
-                edge_hold_allowed=hit.can_hold,
-                cooldown_remaining_ms=max(0.0, self._pause_until_ms - now_ms),
-                settings_revision=self._diagnostic_settings_revision,
-            )
+        self._observe_target_hit(hit, point, (normalized_x, normalized_y), now_ms)
+        self._handle_hit(hit, point, cursor_point, now_ms)
+
+    def _handle_hit(
+        self, hit: _ToolbarHit, point: GazeScreenPoint, cursor_point: QPoint, now_ms: float
+    ) -> None:
         if not hit.over_app_ui:
             self._move_cursor(cursor_point)
 
@@ -419,6 +402,33 @@ class GazeMouseController(QObject):
             return
 
         self._handle_desktop_dwell(point, now_ms)
+
+    def _observe_target_hit(
+        self, hit: _ToolbarHit, point: GazeScreenPoint, normalized: tuple, now_ms: float
+    ) -> None:
+        if diagnostics.enabled():
+            context = self._toolbar_diagnostic_context(hit.action)
+            bounds = (
+                self._target.action_bounds(hit.action)
+                if hit.action is not None and diagnostics.tracing()
+                else None
+            )
+            diagnostics.emit(
+                "target_hit",
+                trace=True,
+                context_id=context.id,
+                target_id=context.token(hit.action),
+                normalized=normalized,
+                logical=(point.logical.x(), point.logical.y()),
+                physical=(point.physical.x(), point.physical.y()),
+                logical_bounds=(bounds.x(), bounds.y(), bounds.width(), bounds.height())
+                if bounds is not None
+                else None,
+                over_app_ui=hit.over_app_ui,
+                edge_hold_allowed=hit.can_hold,
+                cooldown_remaining_ms=max(0.0, self._pause_until_ms - now_ms),
+                settings_revision=self._diagnostic_settings_revision,
+            )
 
     def _overlay_open(self) -> bool:
         return self._quick_menu_open or self._click_zoom_open

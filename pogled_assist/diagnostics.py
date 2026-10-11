@@ -194,23 +194,9 @@ class StreamMetrics:
             else:
                 self.counts[f"suppressed:{event}"] += 1
 
-    def summary(
-        self,
-        *,
-        generation: int | None = None,
-        backend: str | None = None,
-        event_name: str | None = None,
-        force: bool = False,
-        **fields,
-    ) -> bool:
+    def summary(self, *, force: bool = False, **fields) -> bool:
         with self._lock:
-            if event_name is not None:
-                self._event_name = event_name
-            if generation is not None:
-                fields["stream_generation"] = generation
-            if backend is not None:
-                fields["backend"] = backend
-            self._summary_fields.update(fields)
+            self._update_summary_fields(fields)
             if not self._ready():
                 return False
             now = time.monotonic()
@@ -219,7 +205,7 @@ class StreamMetrics:
                 return False
             for stream in tuple(self._states):
                 self._accrue(stream, now)
-            if force and not self.counts and not any(self.durations.values()):
+            if force and not self._has_observations():
                 return False
             emit(
                 self._event_name,
@@ -233,6 +219,21 @@ class StreamMetrics:
             self.counts.clear()
             self.durations.clear()
             return True
+
+    def _has_observations(self) -> bool:
+        return bool(self.counts) or any(self.durations.values())
+
+    def _update_summary_fields(self, fields: dict) -> None:
+        event_name = fields.pop("event_name", None)
+        generation = fields.pop("generation", None)
+        backend = fields.pop("backend", None)
+        if event_name is not None:
+            self._event_name = event_name
+        if generation is not None:
+            fields["stream_generation"] = generation
+        if backend is not None:
+            fields["backend"] = backend
+        self._summary_fields.update(fields)
 
 
 def eye_state(left: bool, right: bool) -> str:
@@ -261,6 +262,50 @@ class SelectionObserver:
         )
 
     def observe(self, snapshot: dict, *, reason: str, pause_ms: int = 0, dwell_ms: int = 0) -> None:
+        if not self._ready():
+            return
+        target = self.context.token(snapshot["target"])
+        phase = self._phase(snapshot, pause_ms)
+        state = (self.context.id, target, phase)
+        previous = self._state
+        self._summarize_context()
+        if self._skip_idle(snapshot, state, reason):
+            return
+        self._update_attempt(snapshot["active"], state)
+        fields = {
+            "source": self.source,
+            "context_id": self.context.id,
+            "attempt_id": self.attempt,
+            "target_id": target,
+            "phase": phase,
+            "reason": reason,
+            "credited_ms": snapshot["credited_ms"],
+            "pause_ms": pause_ms,
+            "dwell_ms": dwell_ms,
+        }
+        if state != previous or reason != "sample":
+            self._rates.event("selection_state", elapsed_ms=self._elapsed_ms(), **fields)
+        emit("selection_sample", trace=True, **fields)
+        if not snapshot["active"]:
+            self._end_attempt(reason)
+        self._state = state
+        self._credited_ms = snapshot["credited_ms"]
+        if not snapshot["active"]:
+            self._rates.summary(force=True)
+
+    def _skip_idle(self, snapshot: dict, state: tuple, reason: str) -> bool:
+        if snapshot["active"] or reason == "sample":
+            return False
+        return state == self._state
+
+    def _summarize_context(self) -> None:
+        if self._state is not None and self._state[0] != self.context.id:
+            self._rates.summary(force=True)
+        self._rates.summary(
+            event_name="selection_summary", source=self.source, context_id=self.context.id
+        )
+
+    def _ready(self) -> bool:
         writer = diagnostic_writer()
         identity = (writer, writer._generation) if writer is not None else None
         if identity != self._writer:
@@ -268,85 +313,51 @@ class SelectionObserver:
             self.attempt = None
             self._started_at = None
             self._writer = identity
-        if writer is None:
+        return writer is not None
+
+    @staticmethod
+    def _phase(snapshot: dict, pause_ms: int) -> str:
+        if not snapshot["active"]:
+            return "repeat_locked" if snapshot["blocked"] else "idle"
+        if snapshot["held"]:
+            return "edge_hold"
+        return "pause" if snapshot["credited_ms"] < pause_ms else "dwell"
+
+    def _elapsed_ms(self) -> float | None:
+        if self._started_at is None:
+            return None
+        return max(0.0, time.monotonic() - self._started_at) * 1000
+
+    def _update_attempt(self, active: bool, state: tuple) -> None:
+        if not active:
             return
-        target = self.context.token(snapshot["target"])
-        phase = "repeat_locked" if snapshot["blocked"] else "idle"
-        if snapshot["active"]:
-            phase = (
-                "edge_hold"
-                if snapshot["held"]
-                else "pause"
-                if snapshot["credited_ms"] < pause_ms
-                else "dwell"
-            )
-        state = (self.context.id, target, phase)
         previous = self._state
-        if previous is not None and previous[0] != self.context.id:
-            self._rates.summary(force=True)
-        self._rates.summary(
-            event_name="selection_summary", source=self.source, context_id=self.context.id
-        )
-        if state == previous and not snapshot["active"] and reason != "sample":
+        same_target = previous is not None and previous[:2] == state[:2]
+        if self.attempt is not None and same_target:
             return
-        if snapshot["active"] and (
-            self.attempt is None or previous is None or previous[:2] != state[:2]
-        ):
-            if self.attempt is not None:
-                self._rates.event(
-                    "selection_end",
-                    source=self.source,
-                    context_id=previous[0],
-                    attempt_id=self.attempt,
-                    reason="target_or_context_changed",
-                    credited_ms_before_end=self._credited_ms,
-                )
-            self.attempt = uuid.uuid4().hex
-            self._started_at = time.monotonic()
-        if state != previous or reason != "sample":
-            self._rates.event(
-                "selection_state",
-                source=self.source,
-                context_id=self.context.id,
-                attempt_id=self.attempt,
-                target_id=target,
-                phase=phase,
-                reason=reason,
-                credited_ms=snapshot["credited_ms"],
-                elapsed_ms=max(0.0, time.monotonic() - self._started_at) * 1000
-                if self._started_at is not None
-                else None,
-                pause_ms=pause_ms,
-                dwell_ms=dwell_ms,
-            )
-        emit(
-            "selection_sample",
-            trace=True,
-            source=self.source,
-            context_id=self.context.id,
-            attempt_id=self.attempt,
-            target_id=target,
-            phase=phase,
-            reason=reason,
-            credited_ms=snapshot["credited_ms"],
-            pause_ms=pause_ms,
-            dwell_ms=dwell_ms,
-        )
-        if not snapshot["active"] and self.attempt is not None:
+        if self.attempt is not None:
             self._rates.event(
                 "selection_end",
                 source=self.source,
-                context_id=self.context.id,
+                context_id=previous[0],
                 attempt_id=self.attempt,
-                reason=reason if reason != "sample" else "target_departure",
+                reason="target_or_context_changed",
                 credited_ms_before_end=self._credited_ms,
-                elapsed_ms=max(0.0, time.monotonic() - self._started_at) * 1000
-                if self._started_at is not None
-                else None,
             )
-            self.attempt = None
-            self._started_at = None
-        self._state = state
-        self._credited_ms = snapshot["credited_ms"]
-        if not snapshot["active"]:
-            self._rates.summary(force=True)
+        self.attempt = uuid.uuid4().hex
+        self._started_at = time.monotonic()
+
+    def _end_attempt(self, reason: str) -> None:
+        if self.attempt is None:
+            return
+        self._rates.event(
+            "selection_end",
+            source=self.source,
+            context_id=self.context.id,
+            attempt_id=self.attempt,
+            reason=reason if reason != "sample" else "target_departure",
+            credited_ms_before_end=self._credited_ms,
+            elapsed_ms=self._elapsed_ms(),
+        )
+        self.attempt = None
+        self._started_at = None

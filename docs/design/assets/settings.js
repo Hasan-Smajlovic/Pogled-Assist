@@ -54,20 +54,11 @@
       $('settings-status').textContent = 'Postavke su sačuvane.'; return;
     }
     if (['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings'].includes(action)) {
-      for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
-      for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
-      if (action === 'learning-settings') renderLearning();
+      showSettingsTab(action);
       return;
     }
     if (action === 'forget-word' && selectedWord) {
-      if ($('learning-demo-state').value === 'write') {
-        $('learning-status').textContent = 'Učenje nije sačuvano. Pokušajte ponovo.';
-        $('retry-learning').disabled = false;
-      } else {
-        learnedWords = learnedWords.filter(word => word !== selectedWord);
-        selectedWord = null; renderLearning();
-        $('learning-status').textContent = 'Riječ je zaboravljena. Vaša poruka je sačuvana.';
-      }
+      forgetSelectedWord();
       return;
     }
     if (action === 'retry-learning') {
@@ -86,6 +77,23 @@
       installButton.disabled = true;
       status.textContent = 'Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije.';
       pageStatus.textContent = 'Pokrećem ažuriranje.';
+    }
+  }
+
+  function showSettingsTab(action) {
+    for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
+    for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
+    if (action === 'learning-settings') renderLearning();
+  }
+
+  function forgetSelectedWord() {
+    if ($('learning-demo-state').value === 'write') {
+      $('learning-status').textContent = 'Učenje nije sačuvano. Pokušajte ponovo.';
+      $('retry-learning').disabled = false;
+    } else {
+      learnedWords = learnedWords.filter(word => word !== selectedWord);
+      selectedWord = null; renderLearning();
+      $('learning-status').textContent = 'Riječ je zaboravljena. Vaša poruka je sačuvana.';
     }
   }
 

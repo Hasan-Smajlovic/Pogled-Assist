@@ -561,13 +561,16 @@ class SpeechWindow(SpeechSurface):
         self._input.setPlaceholderText(
             "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
         )
+        self._refresh_keyboard_toggle(list_mode)
+        self._refresh_suggestions()
+
+    def _refresh_keyboard_toggle(self, list_mode: bool) -> None:
         if list_mode:
             self._keyboard_toggle_button.setText("Tastatura")
         elif self._symbols_mode:
             self._keyboard_toggle_button.setText("Grupe slova")
         else:
             self._keyboard_toggle_button.setText("Brojevi i znakovi")
-        self._refresh_suggestions()
 
     def _is_list_mode(self) -> bool:
         return self._view_mode in ("categories", "answers", "phrases")

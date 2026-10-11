@@ -103,21 +103,17 @@ class GazeBubbleWindow(QWidget):
     def showEvent(self, event) -> None:
         self._diagnostic_hide_reason = "hidden_or_closed"
         super().showEvent(event)
-        self._diagnostic_metrics.event(
-            "marker_visibility",
-            visible=True,
-            reason="shown",
-            gaze_age_ms=(time.monotonic() - self._diagnostic_gaze_at) * 1000
-            if self._diagnostic_gaze_at is not None
-            else None,
-        )
+        self._observe_visibility(True, "shown")
 
     def hideEvent(self, event) -> None:
         super().hideEvent(event)
+        self._observe_visibility(False, self._diagnostic_hide_reason)
+
+    def _observe_visibility(self, visible: bool, reason: str) -> None:
         self._diagnostic_metrics.event(
             "marker_visibility",
-            visible=False,
-            reason=self._diagnostic_hide_reason,
+            visible=visible,
+            reason=reason,
             gaze_age_ms=(time.monotonic() - self._diagnostic_gaze_at) * 1000
             if self._diagnostic_gaze_at is not None
             else None,

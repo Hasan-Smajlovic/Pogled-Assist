@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import platform
 import shutil
 import sys
@@ -15,6 +14,8 @@ from collections import Counter, deque
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .log_snapshot import BoundedSnapshot
 
 MAX_RECORD_BYTES = 8192
 MAX_QUEUE_RECORDS = 1024
@@ -100,7 +101,9 @@ class LogWriter:
     def event(
         self, name: str, fields: dict, *, trace: bool = False, priority: bool = False
     ) -> bool:
-        if not self.enabled or (trace and not self.trace):
+        if not self.enabled:
+            return False
+        if trace and not self.trace:
             return False
         now = time.monotonic()
         generation = self._generation
@@ -199,14 +202,14 @@ class LogWriter:
         """Retain bounded technical footers for the writer, never wait for I/O."""
         if self._desired is None:
             return
-        if not any(item[2] == "event" and item[3][0] in SUMMARY_EVENTS for item in self._queue):
+        if not any(_event_in(item, SUMMARY_EVENTS) for item in self._queue):
             return
         # If the writer has not opened this segment, retain its lifecycle start
         # too. Ordinary backlog still follows the existing discard policy.
         retained, pending = [], deque()
         footer_events = SUMMARY_EVENTS | {"session_start"}
         for item in self._queue:
-            if item[2] == "event" and item[3][0] in footer_events:
+            if _event_in(item, footer_events):
                 retained.append(item)
             else:
                 pending.append(item)
@@ -217,57 +220,69 @@ class LogWriter:
         )
 
     def _run(self) -> None:
-        last_flush = time.monotonic()
         end_reason = "shutdown"
         try:
-            while True:
-                with self._condition:
-                    if (
-                        not self._queue
-                        and not self._closing_segments
-                        and not self._stopping
-                        and self._desired == self._active
-                    ):
-                        self._condition.wait(0.25)
-                    closing = self._closing_segments.popleft() if self._closing_segments else None
-                    desired = self._desired
-                    changed_at = self._change_at
-                    item = self._queue.popleft() if self._queue and closing is None else None
-                    done = self._stopping and item is None
-                if closing is not None:
-                    segment, ended_at, reason, summaries = closing
-                    if self._active != segment:
-                        self._switch_segment(segment, ended_at)
-                    for summary in summaries:
-                        self._write(summary)
-                        with self._condition:
-                            self._closing_records -= 1
-                    self._end_active(reason, ended_at)
-                    self._switch_segment(None, ended_at)
-                    continue
-                if desired != self._active:
-                    self._switch_segment(desired, changed_at)
-                if item is not None and self._active and item[0] == self._active[0]:
-                    self._write(item)
-                now = time.monotonic()
-                if now - last_flush >= 0.25 or done:
-                    self._flush()
-                    last_flush = now
-                if done:
-                    break
+            self._drain()
         except Exception:
             end_reason = "writer_failure"
-            self._failure()
-            with self._condition:
-                self._stopping = True
-                self._discard_pending("writer_failed")
-                if self._closing_records:
-                    self._drop("writer_failed", self._closing_records)
-                self._closing_records = 0
-                self._closing_segments.clear()
+            self._abort()
         finally:
             self._end_active(end_reason)
             self._close_files()
+
+    def _drain(self) -> None:
+        last_flush = time.monotonic()
+        while True:
+            closing, desired, changed_at, item, done = self._next_batch()
+            if closing is not None:
+                self._finish_segment(closing)
+                continue
+            if desired != self._active:
+                self._switch_segment(desired, changed_at)
+            if self._belongs_to_active(item):
+                self._write(item)
+            now = time.monotonic()
+            if now - last_flush >= 0.25 or done:
+                self._flush()
+                last_flush = now
+            if done:
+                break
+
+    def _next_batch(self) -> tuple:
+        with self._condition:
+            idle = not (self._queue or self._closing_segments or self._stopping)
+            if idle and self._desired == self._active:
+                self._condition.wait(0.25)
+            closing = self._closing_segments.popleft() if self._closing_segments else None
+            item = self._queue.popleft() if self._queue and closing is None else None
+            done = self._stopping and item is None
+            return closing, self._desired, self._change_at, item, done
+
+    def _finish_segment(self, closing: tuple) -> None:
+        segment, ended_at, reason, summaries = closing
+        if self._active != segment:
+            self._switch_segment(segment, ended_at)
+        for summary in summaries:
+            self._write(summary)
+            with self._condition:
+                self._closing_records -= 1
+        self._end_active(reason, ended_at)
+        self._switch_segment(None, ended_at)
+
+    def _belongs_to_active(self, item: tuple | None) -> bool:
+        if item is None or self._active is None:
+            return False
+        return item[0] == self._active[0]
+
+    def _abort(self) -> None:
+        self._failure()
+        with self._condition:
+            self._stopping = True
+            self._discard_pending("writer_failed")
+            if self._closing_records:
+                self._drop("writer_failed", self._closing_records)
+            self._closing_records = 0
+            self._closing_segments.clear()
 
     def _switch_segment(self, desired: tuple | None, changed_at: tuple) -> None:
         self._end_active(
@@ -284,26 +299,39 @@ class LogWriter:
         _, latest, self._console, session, self._active_trace, _ = desired
         if latest is None:
             return
+        self._open_text(latest)
+        self._open_json(latest, session)
+        self._write_session_header(session)
+        self._write_runtime()
+
+    def _open_text(self, latest: Path) -> None:
         try:
             latest.parent.mkdir(parents=True, exist_ok=True)
-            mode = "w"
-            if latest.exists():
-                archive = latest.with_name(datetime.now().strftime("%Y%m%d_%H%M%S_%f.txt"))
-                try:
-                    shutil.copy2(latest, archive)
-                except OSError:
-                    # An archive failure must not destroy the only copy of the old log.
-                    self._failure()
-                    mode = "a"
-            self._file = latest.open(mode, encoding="utf-8")
+            self._file = latest.open(self._archive_mode(latest), encoding="utf-8")
         except Exception:
             self._failure()
+
+    def _archive_mode(self, latest: Path) -> str:
+        if not latest.exists():
+            return "w"
+        archive = latest.with_name(datetime.now().strftime("%Y%m%d_%H%M%S_%f.txt"))
+        try:
+            shutil.copy2(latest, archive)
+        except OSError:
+            # An archive failure must not destroy the only copy of the old log.
+            self._failure()
+            return "a"
+        return "w"
+
+    def _open_json(self, latest: Path, session: str) -> None:
         try:
             folder = latest.parent / "diagnostics"
             folder.mkdir(parents=True, exist_ok=True)
             self._json = (folder / f"{session}.jsonl").open("w", encoding="utf-8")
         except Exception:
             self._failure()
+
+    def _write_session_header(self, session: str) -> None:
         if self._file is not None:
             try:
                 self._file.write(
@@ -311,6 +339,8 @@ class LogWriter:
                 )
             except Exception:
                 self._failure()
+
+    def _write_runtime(self) -> None:
         try:
             root = (
                 Path(sys.executable).resolve().parent
@@ -330,8 +360,7 @@ class LogWriter:
                     "python": platform.python_version(),
                     "platform": sys.platform,
                 },
-                time.monotonic(),
-                time.time(),
+                (time.monotonic(), time.time()),
             )
         except Exception:
             self._failure()
@@ -341,39 +370,26 @@ class LogWriter:
         self._active_sequence = sequence
         try:
             if kind == "record":
-                fields = dict(data)
-                frames = fields.pop("exception_frames", ())
-                error_type = fields.pop("exception_type", None)
-                truncated = fields.pop("_snapshot_truncated", False)
-                record = logging.makeLogRecord(fields)
-                line = logging.Formatter(
-                    "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                ).format(record)
-                if error_type:
-                    line += f"\n{error_type} (exception message omitted)"
-                    line += "".join(
-                        f"\n  {frame[0]}:{frame[1]} in {frame[2]}"
-                        for frame in frames
-                        if isinstance(frame, tuple) and len(frame) == 3
-                    )
-                if truncated:
-                    line += "\nLog snapshot truncated."
-                for stream in (self._file, self._console):
-                    if stream is not None:
-                        try:
-                            stream.write(line + "\n")
-                        except Exception:
-                            self._failure()
+                self._write_record(data)
             else:
                 self._write_event(sequence, data)
         except Exception:
             self._failure()
 
+    def _write_record(self, data: dict) -> None:
+        line = _format_record(data)
+        for stream in (self._file, self._console):
+            if stream is not None:
+                try:
+                    stream.write(line + "\n")
+                except Exception:
+                    self._failure()
+
     def _write_event(self, sequence: int, data: tuple) -> None:
         name, fields, at, wall, trace = data
         deadline = self._active[5]
-        if self._active_trace and (at >= deadline or self._trace_bytes >= TRACE_BYTES):
+        trace_expired = at >= deadline or self._trace_bytes >= TRACE_BYTES
+        if self._active_trace and trace_expired:
             self._active_trace = False
             with self._condition:
                 # An old session may finish writing after a new one has been enabled.
@@ -383,20 +399,20 @@ class LogWriter:
                 sequence,
                 "trace_limit",
                 {"reason": "time" if at >= deadline else "size"},
-                at,
-                wall,
+                (at, wall),
             )
         if trace and not self._active_trace:
             with self._condition:
                 self._drop("trace_limit")
             return
-        written = self._write_json(sequence, name, fields, at, wall)
+        written = self._write_json(sequence, name, fields, (at, wall))
         if trace:
             self._trace_bytes += written
 
-    def _write_json(self, sequence: int, name: str, fields: dict, at: float, wall: float) -> int:
+    def _write_json(self, sequence: int, name: str, fields: dict, captured_at: tuple) -> int:
         if self._json is None or self._active is None:
             return 0
+        at, wall = captured_at
         record = {
             "schema_version": 1,
             "event": name,
@@ -441,7 +457,7 @@ class LogWriter:
                     self._active_sequence + 1,
                     "session_end",
                     {"reason": reason},
-                    *(changed_at or self._change_at),
+                    changed_at or self._change_at,
                 )
             except Exception:
                 self._failure()
@@ -487,46 +503,34 @@ class QueueLogHandler(logging.Handler):
 
 def bounded_copy(value: object) -> object:
     """Copy only bounded primitive data; never invoke arbitrary object formatting."""
-    remaining = MAX_RECORD_BYTES - 1024
-    truncated = False
-
-    def copy(item: object, depth: int = 0):
-        nonlocal remaining, truncated
-        if remaining < 128 or depth > 4:
-            truncated = True
-            return "<truncated>"
-        if item is None or type(item) in (bool, int, float):
-            result = item
-            if type(item) is int and item.bit_length() > 128:
-                result = "<large integer>"
-                truncated = True
-            if isinstance(item, float) and not math.isfinite(item):
-                result = None
-        elif type(item) is str:
-            result = item[: min(2048, max(0, (remaining - 128) // 4))]
-            truncated |= len(result) < len(item)
-        elif type(item) in (tuple, list):
-            truncated |= len(item) > 32
-            remaining -= 128 + 8 * min(32, len(item))
-            return tuple(copy(part, depth + 1) for part in item[:32])
-        elif type(item) is dict:
-            remaining -= 256 + 64 * min(32, len(item))
-            result = {}
-            for index, (key, part) in enumerate(item.items()):
-                if index >= 32 or remaining < 128:
-                    truncated = True
-                    break
-                if isinstance(key, str):
-                    # Copy keys first so a large value cannot erase its field name.
-                    field = copy(key, depth + 1)
-                    result[field] = copy(part, depth + 1)
-            return result
-        else:
-            result = "<non-primitive>"
-        remaining -= sys.getsizeof(result)
-        return result
-
-    result = copy(value)
-    if truncated and isinstance(result, dict):
+    snapshot = BoundedSnapshot(MAX_RECORD_BYTES - 1024)
+    result = snapshot.copy(value)
+    if snapshot.truncated and isinstance(result, dict):
         result["_snapshot_truncated"] = True
     return result
+
+
+def _event_in(item: tuple, names: frozenset) -> bool:
+    return item[2] == "event" and item[3][0] in names
+
+
+def _format_record(data: dict) -> str:
+    fields = dict(data)
+    frames = fields.pop("exception_frames", ())
+    error_type = fields.pop("exception_type", None)
+    truncated = fields.pop("_snapshot_truncated", False)
+    record = logging.makeLogRecord(fields)
+    line = logging.Formatter(
+        "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ).format(record)
+    if error_type:
+        line += f"\n{error_type} (exception message omitted)"
+        line += "".join(
+            f"\n  {frame[0]}:{frame[1]} in {frame[2]}"
+            for frame in frames
+            if isinstance(frame, tuple) and len(frame) == 3
+        )
+    if truncated:
+        line += "\nLog snapshot truncated."
+    return line

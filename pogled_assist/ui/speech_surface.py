@@ -567,23 +567,12 @@ class SpeechSurface(QWidget):
         actions = self._dialogs.actions if active is not None else self._action_buttons.keys()
         records = []
         for action in actions:
-            if not diagnostics.tracing() and diagnostics.safe_action(action) not in {
-                "confirm:accept",
-                "confirm:cancel",
-            }:
+            if not self._diagnostic_action_visible(action):
                 continue
-            button = self._action_buttons.get(action)
-            if button is None:
+            record = self._diagnostic_button_geometry(action, context)
+            if record is None:
                 continue
-            rect = button_bounds(button)
-            records.append(
-                {
-                    "target_id": context.token(action),
-                    "logical_bounds": (rect.x(), rect.y(), rect.width(), rect.height()),
-                    "visible": button.isVisible(),
-                    "enabled": button.isEnabled(),
-                }
-            )
+            records.append(record)
             if len(records) == 4:
                 diagnostics.emit(
                     "target_geometry",
@@ -601,6 +590,25 @@ class SpeechSurface(QWidget):
                 kind=kind,
                 targets=records,
             )
+
+    @staticmethod
+    def _diagnostic_action_visible(action: str) -> bool:
+        return diagnostics.tracing() or diagnostics.safe_action(action) in {
+            "confirm:accept",
+            "confirm:cancel",
+        }
+
+    def _diagnostic_button_geometry(self, action: str, context) -> dict | None:
+        button = self._action_buttons.get(action)
+        if button is None:
+            return None
+        rect = button_bounds(button)
+        return {
+            "target_id": context.token(action),
+            "logical_bounds": (rect.x(), rect.y(), rect.width(), rect.height()),
+            "visible": button.isVisible(),
+            "enabled": button.isEnabled(),
+        }
 
     def _action(self, name: str) -> str:
         return f"{SPEECH_WINDOW_ACTION_PREFIX}{name}"

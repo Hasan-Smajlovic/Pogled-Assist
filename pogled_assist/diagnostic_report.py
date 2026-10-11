@@ -80,69 +80,65 @@ class SessionAnalysis:
     def observe(self, item: dict) -> None:
         event, data = item["event"], item["data"]
         at = item.get("monotonic_s")
+        self._observe_metrics(event, data)
+        if not finite_number(at):
+            return
+        evidence, interval = _event_evidence(event, data)
+        if evidence:
+            self.details_truncated |= len(self.evidence) == self.evidence.maxlen
+            self.evidence.append((at - interval, at, evidence))
+        if event == "selection_end":
+            self._observe_selection_end(at, data)
+
+    def _observe_metrics(self, event: str, data: dict) -> None:
         if event in {"stream_summary", "selection_summary"}:
-            counts = data.get("counts", {})
-            if isinstance(counts, dict):
-                for reason, count in counts.items():
-                    if reason.startswith("suppressed:") and type(count) is int and count > 0:
-                        self.suppressed[reason] += count
+            self._observe_suppressed(data.get("counts"))
         if event == "stream_summary":
-            durations = data.get("eye_state_seconds", {})
-            if isinstance(durations, dict):
-                for state, seconds in durations.items():
-                    if finite_number(seconds) and seconds >= 0:
-                        self.eye_seconds[state] += seconds
+            self._observe_eye_seconds(data.get("eye_state_seconds"))
             self.latencies["stream_interval_max_lateness"].add(data.get("qt_timer_max_late_ms"))
         if event == "provider_gaze":
             self.latencies["provider_receive_to_emit"].add(data.get("age_ms"))
         if event == "ui_heartbeat":
             self.latencies["heartbeat_lateness"].add(data.get("qt_timer_late_ms"))
-        if not finite_number(at):
+
+    def _observe_suppressed(self, counts: object) -> None:
+        if not isinstance(counts, dict):
             return
-        evidence = None
-        interval = 0.0
-        if event == "eye_gate_applied" and (
-            data.get("left_valid") is False or data.get("right_valid") is False
-        ):
-            evidence = "eye_gate_closed"
-        elif event == "delivery_gap":
-            evidence = "gaze_delivery_gap"
-            gap = data.get("gap_ms")
-            interval = gap / 1000 if finite_number(gap) and gap >= 0 else 0.0
-        elif event == "provider_discard" and data.get("reason") == "delivery_stale":
-            evidence = "stale_gaze_discarded"
-        elif event in {"ui_heartbeat", "stream_summary"}:
-            key = "qt_timer_late_ms" if event == "ui_heartbeat" else "qt_timer_max_late_ms"
-            late, span = data.get(key), data.get("interval_s")
-            if finite_number(late) and late >= 100:
-                evidence = "qt_delay_at_least_100ms"
-                interval = span if finite_number(span) and span >= 0 else 0.0
-        if evidence:
-            self.details_truncated |= len(self.evidence) == self.evidence.maxlen
-            self.evidence.append((at - interval, at, evidence))
-        if event == "selection_end":
-            reason = data.get("reason")
-            reason = reason if isinstance(reason, str) else None
-            outcome = {
-                "completed": "completed",
-                "eye_gate_closed": "eye_gate_closed",
-                "target_departure": "target_departure",
-                "target_or_context_changed": "target_or_context_changed",
-            }.get(reason, "other_or_unknown")
-            self.outcomes[outcome] += 1
-            elapsed = data.get("elapsed_ms")
-            self.details_truncated |= len(self.attempts) == self.attempts.maxlen
-            self.attempts.append(
-                {
-                    "monotonic_s": at,
-                    "source": data.get("source")
-                    if data.get("source")
-                    in ("toolbar", "desktop", "quick_action", "speech", "keyboard", "gaze_check")
-                    else "other",
-                    "outcome": outcome,
-                    "elapsed_ms": elapsed if finite_number(elapsed) and elapsed >= 0 else None,
-                }
-            )
+        for reason, count in counts.items():
+            if type(count) is not int or count <= 0:
+                continue
+            if reason.startswith("suppressed:"):
+                self.suppressed[reason] += count
+
+    def _observe_eye_seconds(self, durations: object) -> None:
+        if not isinstance(durations, dict):
+            return
+        for state, seconds in durations.items():
+            if finite_number(seconds) and seconds >= 0:
+                self.eye_seconds[state] += seconds
+
+    def _observe_selection_end(self, at: float, data: dict) -> None:
+        reason = data.get("reason")
+        reason = reason if isinstance(reason, str) else None
+        outcome = {
+            "completed": "completed",
+            "eye_gate_closed": "eye_gate_closed",
+            "target_departure": "target_departure",
+            "target_or_context_changed": "target_or_context_changed",
+        }.get(reason, "other_or_unknown")
+        self.outcomes[outcome] += 1
+        source = data.get("source")
+        if source not in ("toolbar", "desktop", "quick_action", "speech", "keyboard", "gaze_check"):
+            source = "other"
+        self.details_truncated |= len(self.attempts) == self.attempts.maxlen
+        self.attempts.append(
+            {
+                "monotonic_s": at,
+                "source": source,
+                "outcome": outcome,
+                "elapsed_ms": _nonnegative(data.get("elapsed_ms")),
+            }
+        )
 
     def result(self, *, complete: bool) -> dict:
         attempts = []
@@ -169,3 +165,28 @@ class SessionAnalysis:
                 "Missing observations are not evidence of uninterrupted tracking."
             ),
         }
+
+
+def _nonnegative(value: object, default=None):
+    return value if finite_number(value) and value >= 0 else default
+
+
+def _event_evidence(event: str, data: dict) -> tuple[str | None, float]:
+    if event == "eye_gate_applied":
+        closed = data.get("left_valid") is False or data.get("right_valid") is False
+        return ("eye_gate_closed" if closed else None), 0.0
+    if event == "delivery_gap":
+        return "gaze_delivery_gap", _nonnegative(data.get("gap_ms"), 0.0) / 1000
+    if event == "provider_discard" and data.get("reason") == "delivery_stale":
+        return "stale_gaze_discarded", 0.0
+    if event in {"ui_heartbeat", "stream_summary"}:
+        return _timer_evidence(event, data)
+    return None, 0.0
+
+
+def _timer_evidence(event: str, data: dict) -> tuple[str | None, float]:
+    key = "qt_timer_late_ms" if event == "ui_heartbeat" else "qt_timer_max_late_ms"
+    late = data.get(key)
+    if finite_number(late) and late >= 100:
+        return "qt_delay_at_least_100ms", _nonnegative(data.get("interval_s"), 0.0)
+    return None, 0.0

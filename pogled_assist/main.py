@@ -44,12 +44,11 @@ def main() -> int:
 
     lock = application_lock()
     if not lock.tryLock(0):
-        from PySide6.QtCore import QLockFile
+        return _lock_failure(lock)
+    return _run_locked_application(lock, simulate_gaze)
 
-        if lock.error() == QLockFile.LockError.LockFailedError:
-            return 0
-        print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
-        return 1
+
+def _run_locked_application(lock, simulate_gaze: bool) -> int:
     try:
         return _run_application(simulate_gaze=simulate_gaze)
     except Exception:
@@ -60,6 +59,15 @@ def main() -> int:
     finally:
         shutdown_application_logging()
         lock.unlock()
+
+
+def _lock_failure(lock) -> int:
+    from PySide6.QtCore import QLockFile
+
+    if lock.error() == QLockFile.LockError.LockFailedError:
+        return 0
+    print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
+    return 1
 
 
 def application_lock():
@@ -163,12 +171,7 @@ def package_smoke_test() -> int:
         path_results = [(path, bool(path and path.is_file())) for path in required_paths]
         model = load_model()
         suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
-        if getattr(sys, "frozen", False):
-            from .speech.bundle_check import verify_bundled_speech
-            from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
-
-            verify_bundled_speech(Path(sys.executable).resolve().parent)
-            verify_bundled_bridge(Path(sys.executable).resolve().parent)
+        _verify_bundled_runtime()
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
         return 1
@@ -185,6 +188,15 @@ def package_smoke_test() -> int:
         if imports_loaded and suggestions_loaded and all(exists for _, exists in path_results)
         else 1
     )
+
+
+def _verify_bundled_runtime() -> None:
+    if getattr(sys, "frozen", False):
+        from .speech.bundle_check import verify_bundled_speech
+        from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
+
+        verify_bundled_speech(Path(sys.executable).resolve().parent)
+        verify_bundled_bridge(Path(sys.executable).resolve().parent)
 
 
 def _write_package_smoke_report(lines: list[str]) -> None:

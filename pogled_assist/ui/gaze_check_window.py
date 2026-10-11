@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import replace
 from html import escape
@@ -36,6 +35,13 @@ from ..tracking.gaze_check import (
 )
 from ..tracking.status import TrackingState, TrackingStatus
 from .gaze_check_feedback import result_advice
+from .gaze_check_text import (
+    free_gaze_is_visible,
+    position_guidance,
+    position_notice,
+    precision_feedback,
+    visible_eyes,
+)
 from .gaze_check_views import COLORS, TARGETS, CheckTargetView, EyePositionView, ResultMapView
 
 STYLESHEET = """
@@ -307,11 +313,9 @@ class GazeCheckWindow(QWidget):
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
-        if (
-            event.type() == QEvent.WindowStateChange
-            and self.isMinimized()
-            and self._phase in ("precision", "trial", "free")
-        ):
+        if event.type() != QEvent.WindowStateChange:
+            return
+        if self.isMinimized() and self._phase in ("precision", "trial", "free"):
             self.reset_check()
 
     def handle_snapshot(self, snapshot: CheckSnapshot) -> None:
@@ -358,6 +362,17 @@ class GazeCheckWindow(QWidget):
 
     def _tick(self) -> None:
         now = time.monotonic()
+        self._expire_snapshot(now)
+        if self._phase == "position":
+            self._render_position()
+        elif self._phase == "precision" and self._check is not None:
+            self._tick_precision(now)
+        elif self._phase == "trial" and now >= self._trial_deadline:
+            self._finish_trial_target(False, now)
+        elif self._phase == "free":
+            self._render_free()
+
+    def _expire_snapshot(self, now: float) -> None:
         if self._snapshot_at is None or now - self._snapshot_at >= FRESH_SECONDS:
             self._snapshot = CheckSnapshot(
                 position_supported=self._snapshot.position_supported,
@@ -367,37 +382,21 @@ class GazeCheckWindow(QWidget):
             self._cancel_trial_progress(loss=True)
             if self._phase == "precision" and self._check is not None:
                 self._check.interrupt()
-        if self._phase == "position":
-            self._render_position()
-        elif self._phase == "precision" and self._check is not None:
-            if self._check.advance(now):
-                if self._check.finished:
-                    self._show_results()
-                    return
-                self._target.target_index = self._check.index
-                self._target.update()
-            remaining = max(1, round(TARGET_SECONDS - (now - self._check.started_at)))
-            feedback = f"Zadržite pogled · još {remaining} s."
-            state = None
-            if self._snapshot.left is False and self._snapshot.right is True:
-                feedback, state = "Uređaj ne vidi lijevo oko. Pogledajte prema ekranu.", False
-            elif self._snapshot.right is False and self._snapshot.left is True:
-                feedback, state = "Uređaj ne vidi desno oko. Pogledajte prema ekranu.", False
-            elif (
-                self._snapshot.gaze is None
-                or self._snapshot.gaze_at is None
-                or not 0 <= now - self._snapshot.gaze_at < FRESH_SECONDS
-            ):
-                feedback = "Čekam pogled s oba oka. Ako se ne vrati, odaberite „Prekini test“."
-            self._set_test_hint(
-                f"Meta {self._check.index + 1} od 5 · Gledajte križić u krugu.", feedback, state
-            )
-            elapsed = self._check.index * TARGET_SECONDS + now - self._check.started_at
-            self._test_progress.setValue(round(1000 * elapsed / (5 * TARGET_SECONDS)))
-        elif self._phase == "trial" and now >= self._trial_deadline:
-            self._finish_trial_target(False, now)
-        elif self._phase == "free":
-            self._render_free()
+
+    def _tick_precision(self, now: float) -> None:
+        if self._check.advance(now):
+            if self._check.finished:
+                self._show_results()
+                return
+            self._target.target_index = self._check.index
+            self._target.update()
+        remaining = max(1, round(TARGET_SECONDS - (now - self._check.started_at)))
+        feedback, state = precision_feedback(self._snapshot, remaining, now)
+        self._set_test_hint(
+            f"Meta {self._check.index + 1} od 5 · Gledajte križić u krugu.", feedback, state
+        )
+        elapsed = self._check.index * TARGET_SECONDS + now - self._check.started_at
+        self._test_progress.setValue(round(1000 * elapsed / (5 * TARGET_SECONDS)))
 
     @staticmethod
     def _state(label: QLabel, state: bool | None, text: str) -> None:
@@ -407,23 +406,8 @@ class GazeCheckWindow(QWidget):
 
     def _render_position(self) -> None:
         snapshot = self._snapshot
-        if self._tracking_state in (
-            TrackingState.RETRYING,
-            TrackingState.STOPPED,
-            TrackingState.UNAVAILABLE,
-        ):
-            position_notice = "Veza uređaja je prekinuta. Čekam ponovno povezivanje."
-        elif snapshot.position_supported is False:
-            position_notice = (
-                "Uređaj ne šalje položaje očiju za ovaj prikaz. Koristite Tobii prikaz položaja."
-            )
-        elif snapshot.left_position is None and snapshot.right_position is None:
-            position_notice = "Čekam svježe podatke o položaju očiju."
-        else:
-            position_notice = "Okvir pokazuje položaj očiju, traka ispod udaljenost."
-        self._position_notice.setText(position_notice)
-        left_visible = snapshot.left_position is not None or snapshot.left
-        right_visible = snapshot.right_position is not None or snapshot.right
+        self._position_notice.setText(position_notice(snapshot, self._tracking_state))
+        left_visible, right_visible = visible_eyes(snapshot)
         for name, label, state in (
             ("Lijevo oko", self._left_label, left_visible),
             ("Desno oko", self._right_label, right_visible),
@@ -472,32 +456,7 @@ class GazeCheckWindow(QWidget):
         )
         self._eyes_view.snapshot = snapshot
         self._eyes_view.update()
-        guidance = "Zadržite položaj i odaberite „Provjeri preciznost“."
-        if left_visible is None or right_visible is None:
-            guidance = "Čekam svježe podatke. Provjerite vezu uređaja i pogledajte prema ekranu."
-        elif not (left_visible and right_visible):
-            guidance = "Polako podesite položaj i nagib ekrana dok uređaj ponovo vidi oba oka."
-        elif position is False:
-            guidance = "Pomjerajte i nagnite ekran tako da su obje oznake unutar okvira."
-        elif depth is False:
-            depths = [snapshot.left_position[2], snapshot.right_position[2]]
-            if max(depths) < 0:
-                guidance = "Polako odmaknite ekran od lica."
-            elif min(depths) > 1:
-                guidance = "Polako približite ekran licu."
-            else:
-                guidance = "Podesite udaljenost i nagib ekrana; pratite oznake na traci."
-        elif snapshot.gaze is None:
-            guidance = "Oči su prepoznate, ali pogled se još ne prati. Pogledajte prema ekranu."
-        elif snapshot.stable is False:
-            guidance = (
-                "Zadržite ekran mirno. Ako se prekidi nastave, provjerite položaj i osvjetljenje."
-            )
-        elif position is None or depth is None:
-            guidance = (
-                "Uređaj ne šalje položaj za ovaj prikaz. Podesite ekran uz Tobii prikaz položaja."
-            )
-        self._guidance.setText(guidance)
+        self._guidance.setText(position_guidance(snapshot))
 
     def _next(self) -> None:
         if self._phase == "position":
@@ -603,14 +562,7 @@ class GazeCheckWindow(QWidget):
         snapshot = self._snapshot
         now = time.monotonic()
         point = None
-        if (
-            snapshot.left
-            and snapshot.right
-            and snapshot.gaze is not None
-            and snapshot.gaze_at is not None
-            and 0 <= now - snapshot.gaze_at < FRESH_SECONDS
-            and all(math.isfinite(value) and 0 <= value <= 1 for value in snapshot.gaze)
-        ):
+        if free_gaze_is_visible(snapshot, now):
             x, y = snapshot.gaze
             screen = QGuiApplication.primaryScreen().geometry()
             point = self._target.mapFromGlobal(
@@ -644,20 +596,7 @@ class GazeCheckWindow(QWidget):
         self._step.setText("Rezultat provjere")
         results = self._check.results if self._check is not None else []
         diagnostics.emit("gaze_check_phase", priority=True, phase="results")
-        if diagnostics.tracing():
-            for index, result in enumerate(results):
-                diagnostics.emit(
-                    "fixation_result",
-                    trace=True,
-                    priority=True,
-                    target_index=index,
-                    samples=result.samples,
-                    coverage=result.coverage,
-                    median_error_logical_px=result.median_error,
-                    spread_logical_px=result.spread,
-                    near=result.near,
-                    gaze_center_normalized=result.gaze_center,
-                )
+        self._observe_fixations(results)
         near = sum(result.near is True for result in results)
         missing = sum(result.near is None for result in results)
         trial_finished = len(self._trial_results) == 3
@@ -703,6 +642,23 @@ class GazeCheckWindow(QWidget):
         self._free_button.show()
         self._repeat_button.setText("Podesi položaj" if state is not True else "Ponovi provjeru")
         self._repeat_button.show()
+
+    @staticmethod
+    def _observe_fixations(results) -> None:
+        if diagnostics.tracing():
+            for index, result in enumerate(results):
+                diagnostics.emit(
+                    "fixation_result",
+                    trace=True,
+                    priority=True,
+                    target_index=index,
+                    samples=result.samples,
+                    coverage=result.coverage,
+                    median_error_logical_px=result.median_error,
+                    spread_logical_px=result.spread,
+                    near=result.near,
+                    gaze_center_normalized=result.gaze_center,
+                )
 
     def _render_result_details(self) -> None:
         detailed = self._details_button.isChecked()
@@ -785,21 +741,8 @@ class GazeCheckWindow(QWidget):
         if now >= self._trial_deadline:
             self._finish_trial_target(False, now)
             return
-        if snapshot.gaze is None or not (snapshot.left and snapshot.right):
-            self._cancel_trial_progress(loss=True)
+        if not self._trial_sample_ready(snapshot, now):
             return
-        at = snapshot.gaze_at
-        if at is None or at == self._trial_sample_at or now < self._trial_ready_at:
-            return
-        if not 0 <= now - at < FRESH_SECONDS or at < self._trial_ready_at:
-            self._cancel_trial_progress(loss=True)
-            return
-        if self._trial_sample_at is not None and at - self._trial_sample_at >= FRESH_SECONDS:
-            self._cancel_trial_progress(loss=True)
-        self._trial_sample_at = at
-        if self._trial_coverage is not None:
-            self._trial_coverage.add(at)
-        self._trial_feedback_loss = False
         screen = QGuiApplication.primaryScreen().geometry()
         x, y = snapshot.gaze
         if not (0 <= x <= 1 and 0 <= y <= 1):
@@ -812,6 +755,43 @@ class GazeCheckWindow(QWidget):
             round(screen.top() + y * (screen.height() - 1)),
         )
         point = self._target.mapFromGlobal(global_point)
+        target, result = self._advance_trial_selection(point, snapshot.gaze_at)
+        if result.ready and self._complete_trial_selection(target, now):
+            return
+        self._update_trial_hint(target)
+
+    def _trial_sample_ready(self, snapshot: CheckSnapshot, now: float) -> bool:
+        if snapshot.gaze is None:
+            self._cancel_trial_progress(loss=True)
+            return False
+        if not (snapshot.left and snapshot.right):
+            self._cancel_trial_progress(loss=True)
+            return False
+        at = snapshot.gaze_at
+        if not self._trial_timestamp_ready(at, now):
+            return False
+        self._record_trial_sample(at)
+        return True
+
+    def _trial_timestamp_ready(self, at: float | None, now: float) -> bool:
+        if at is None or at == self._trial_sample_at:
+            return False
+        if now < self._trial_ready_at:
+            return False
+        if not 0 <= now - at < FRESH_SECONDS or at < self._trial_ready_at:
+            self._cancel_trial_progress(loss=True)
+            return False
+        return True
+
+    def _record_trial_sample(self, at: float) -> None:
+        if self._trial_sample_at is not None and at - self._trial_sample_at >= FRESH_SECONDS:
+            self._cancel_trial_progress(loss=True)
+        self._trial_sample_at = at
+        if self._trial_coverage is not None:
+            self._trial_coverage.add(at)
+        self._trial_feedback_loss = False
+
+    def _advance_trial_selection(self, point: QPoint, at: float):
         rect = self._target.button_rect()
         target = next(
             (index for index in range(3) if self._target.button_rect(index).contains(point)), None
@@ -835,12 +815,17 @@ class GazeCheckWindow(QWidget):
         self._target.progress = result.progress or 0.0
         self._target.progress_target = self._selection.target
         self._target.update()
-        if result.ready:
-            self._selection.complete()
-            if target == self._target.expected_button:
-                self._finish_trial_target(True, now)
-                return
-            self._trial_wrong_selections += 1
+        return target, result
+
+    def _complete_trial_selection(self, target: int | None, now: float) -> bool:
+        self._selection.complete()
+        if target == self._target.expected_button:
+            self._finish_trial_target(True, now)
+            return True
+        self._trial_wrong_selections += 1
+        return False
+
+    def _update_trial_hint(self, target: int | None) -> None:
         if target == self._target.expected_button:
             self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
         elif target is None:
@@ -852,24 +837,7 @@ class GazeCheckWindow(QWidget):
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
         if loss:
-            if self._trial_coverage is not None:
-                self._trial_coverage.interrupt()
-            if (
-                self._phase == "trial"
-                and self._selection.target is not None
-                and not self._selection.is_blocked
-            ):
-                self._trial_losses += 1
-                self._trial_feedback_loss = True
-                self._set_trial_hint(
-                    "Praćenje je prekinuto. Pogledajte „Pogledaj“ za novi izbor.", False
-                )
-            elif (
-                self._phase == "trial"
-                and not self._selection.is_blocked
-                and not self._trial_feedback_loss
-            ):
-                self._set_trial_hint("Čekam pogled s oba oka. Pogledajte prema ekranu.")
+            self._record_trial_loss()
             self._selection.pause()
         else:
             self._selection.cancel()
@@ -878,6 +846,20 @@ class GazeCheckWindow(QWidget):
         self._target.progress = 0.0
         self._target.progress_target = None
         self._target.update()
+
+    def _record_trial_loss(self) -> None:
+        if self._trial_coverage is not None:
+            self._trial_coverage.interrupt()
+        if self._phase != "trial" or self._selection.is_blocked:
+            return
+        if self._selection.target is not None:
+            self._trial_losses += 1
+            self._trial_feedback_loss = True
+            self._set_trial_hint(
+                "Praćenje je prekinuto. Pogledajte „Pogledaj“ za novi izbor.", False
+            )
+        elif not self._trial_feedback_loss:
+            self._set_trial_hint("Čekam pogled s oba oka. Pogledajte prema ekranu.")
 
     def _finish_trial_target(self, selected: bool, now: float) -> None:
         if self._trial_coverage is not None and self._trial_coverage.sufficient(

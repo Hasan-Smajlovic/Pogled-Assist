@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6 import __version__ as pyside_version
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 
 from pogled_assist import logging_setup
 from pogled_assist.diagnostic_report import LatencySummary
@@ -88,8 +88,7 @@ def _working_set_bytes() -> int | None:
     return counters.working
 
 
-def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
-    folder.mkdir(parents=True)
+def _benchmark_logging(mode, folder, monkeypatch):
     writer = LogWriter() if mode != "off" else None
     root = logging.getLogger()
     previous_disabled = root.manager.disable
@@ -99,6 +98,121 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
     monkeypatch.setattr(root, "handlers", [QueueLogHandler(writer)] if writer else [])
     monkeypatch.setattr(root, "level", logging.INFO)
     logging.disable(logging.NOTSET if writer else logging.CRITICAL)
+    return writer, previous_disabled
+
+
+class _BenchmarkProbe:
+    def __init__(self, window, controller, gaze, eyes):
+        self.window = window
+        self.controller = controller
+        self.gaze = gaze
+        self.eyes = eyes
+        self.metrics = {
+            name: LatencySummary()
+            for name in (
+                "callback_to_controller_done",
+                "controller_work",
+                "producer_work",
+                "qt_timer_lateness",
+                "delivery_interval",
+            )
+        }
+        self.measuring = threading.Event()
+        self.stopped = threading.Event()
+        self.worker_errors = []
+        self.produced = 0
+        self.eligible = 0
+        self.last_delivery_at = None
+        self.max_delivery_gap_ms = 0.0
+        self.memory = []
+        self.tick_at = time.perf_counter()
+        self.phase = 0
+        self.surfaces = None
+
+    def handle_gaze(self, x, y, stamp):
+        before = time.perf_counter_ns()
+        self.controller.handle_gaze(x, y, stamp)
+        after = time.perf_counter_ns()
+        if self.measuring.is_set():
+            self.metrics["callback_to_controller_done"].add((after - stamp) / 1e6)
+            self.metrics["controller_work"].add((after - before) / 1e6)
+            self._delivery_interval(after / 1e9)
+
+    def _delivery_interval(self, delivered_at):
+        if self.last_delivery_at is not None:
+            gap_ms = max(0.0, (delivered_at - self.last_delivery_at) * 1000)
+            self.metrics["delivery_interval"].add(gap_ms)
+            self.max_delivery_gap_ms = max(self.max_delivery_gap_ms, gap_ms)
+        self.last_delivery_at = delivered_at
+
+    def produce(self):
+        sequence = 0
+        was_measuring = False
+        deadline = time.perf_counter()
+        try:
+            while not self.stopped.is_set():
+                active = self.measuring.is_set()
+                if active and not was_measuring:
+                    sequence = 0
+                was_measuring = active
+                self._produce_sample(sequence, active)
+                sequence += 1
+                deadline += 1 / 60
+                # Do not flood callbacks trying to replay a scheduler backlog.
+                deadline = max(deadline, time.perf_counter())
+                self.stopped.wait(max(0.0, deadline - time.perf_counter()))
+        except Exception as error:
+            self.worker_errors.append(type(error).__name__)
+
+    def _produce_sample(self, sequence, active):
+        before = time.perf_counter_ns()
+        # Same 60 Hz input and brief eye loss in every logging mode.
+        both_valid = sequence % 180 < 174
+        self.eyes(True, both_valid, before)
+        self.gaze(0.5, 0.5, before)
+        if active:
+            self.produced += 1
+            self.eligible += int(both_valid)
+            self.metrics["producer_work"].add((time.perf_counter_ns() - before) / 1e6)
+
+    def heartbeat(self):
+        now = time.perf_counter()
+        if self.measuring.is_set():
+            self.metrics["qt_timer_lateness"].add(max(0.0, (now - self.tick_at) * 1000 - 20))
+        self.tick_at = now
+
+    def change_surface(self):
+        self._show_phase(self.phase % 6)
+        self.phase += 1
+        if self.phase == 12:
+            self.surfaces.stop()
+        if self.measuring.is_set():
+            self.sample_memory()
+
+    def _show_phase(self, step):
+        if step == 0:
+            self.window.hide()
+        elif step == 1:
+            self.window.show()
+        elif step in {2, 3}:
+            self.window._switch_keyboard_script()
+        elif step == 4:
+            self.window._open_letter_dialog(0)
+        else:
+            if self.window._dialogs.active is not None:
+                self.window._dialogs.active.done(0)
+            self.window._input.setText("Dobro jutro" if self.phase % 12 == 5 else "Dobar dan")
+
+    def sample_memory(self):
+        value = _working_set_bytes()
+        if value is not None:
+            self.memory.append(value)
+        return value
+
+
+def _measure_mode(mode, folder, qtbot, monkeypatch):
+    folder.mkdir(parents=True)
+    writer, previous_disabled = _benchmark_logging(mode, folder, monkeypatch)
     suggestions = SuggestionService(path=folder / "learning.json")
     window = SpeechWindow(
         FakeSpeech(),
@@ -118,107 +232,17 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
     provider = TobiiGazeProvider()
     gaze, eyes = provider._new_stream_callbacks()
     provider.eye_status_changed.connect(controller.handle_eye_status)
-    metrics = {
-        name: LatencySummary()
-        for name in (
-            "callback_to_controller_done",
-            "controller_work",
-            "producer_work",
-            "qt_timer_lateness",
-            "delivery_interval",
-        )
-    }
-    measuring = threading.Event()
-    stopped = threading.Event()
-    worker_errors = []
-    produced = [0]
-    eligible = [0]
-    last_delivery_at = [None]
-    max_delivery_gap_ms = [0.0]
-    memory = []
-
-    def handle_gaze(x, y, stamp):
-        before = time.perf_counter_ns()
-        controller.handle_gaze(x, y, stamp)
-        after = time.perf_counter_ns()
-        if measuring.is_set():
-            metrics["callback_to_controller_done"].add((after - stamp) / 1e6)
-            metrics["controller_work"].add((after - before) / 1e6)
-            delivered_at = after / 1e9
-            if last_delivery_at[0] is not None:
-                gap_ms = max(0.0, (delivered_at - last_delivery_at[0]) * 1000)
-                metrics["delivery_interval"].add(gap_ms)
-                max_delivery_gap_ms[0] = max(max_delivery_gap_ms[0], gap_ms)
-            last_delivery_at[0] = delivered_at
-
-    def produce():
-        sequence = 0
-        was_measuring = False
-        deadline = time.perf_counter()
-        try:
-            while not stopped.is_set():
-                active = measuring.is_set()
-                if active and not was_measuring:
-                    sequence = 0
-                was_measuring = active
-                before = time.perf_counter_ns()
-                # Same 60 Hz input and brief eye loss in every logging mode.
-                both_valid = sequence % 180 < 174
-                eyes(True, both_valid, before)
-                gaze(0.5, 0.5, before)
-                if active:
-                    produced[0] += 1
-                    eligible[0] += int(both_valid)
-                    metrics["producer_work"].add((time.perf_counter_ns() - before) / 1e6)
-                sequence += 1
-                deadline += 1 / 60
-                # Do not flood callbacks trying to replay a scheduler backlog.
-                deadline = max(deadline, time.perf_counter())
-                stopped.wait(max(0.0, deadline - time.perf_counter()))
-        except Exception as error:
-            worker_errors.append(type(error).__name__)
-
-    provider.gaze_updated.connect(handle_gaze)
-    tick_at = [time.perf_counter()]
-
-    def heartbeat():
-        now = time.perf_counter()
-        if measuring.is_set():
-            metrics["qt_timer_lateness"].add(max(0.0, (now - tick_at[0]) * 1000 - 20))
-        tick_at[0] = now
-
+    probe = _BenchmarkProbe(window, controller, gaze, eyes)
+    provider.gaze_updated.connect(probe.handle_gaze)
     timer = QTimer()
     timer.setTimerType(Qt.TimerType.PreciseTimer)
     timer.setInterval(20)
-    timer.timeout.connect(heartbeat)
-    phase = [0]
-
-    def change_surface():
-        step = phase[0] % 6
-        if step == 0:
-            window.hide()
-        elif step == 1:
-            window.show()
-        elif step in {2, 3}:
-            window._switch_keyboard_script()
-        elif step == 4:
-            window._open_letter_dialog(0)
-        else:
-            if window._dialogs.active is not None:
-                window._dialogs.active.done(0)
-            window._input.setText("Dobro jutro" if phase[0] % 12 == 5 else "Dobar dan")
-        phase[0] += 1
-        if phase[0] == 12:
-            surfaces.stop()
-        if measuring.is_set():
-            value = _working_set_bytes()
-            if value is not None:
-                memory.append(value)
-
+    timer.timeout.connect(probe.heartbeat)
     surfaces = QTimer()
     surfaces.setInterval(500)
-    surfaces.timeout.connect(change_surface)
-    worker = threading.Thread(target=produce, name="synthetic-gaze-benchmark", daemon=True)
+    surfaces.timeout.connect(probe.change_surface)
+    probe.surfaces = surfaces
+    worker = threading.Thread(target=probe.produce, name="synthetic-gaze-benchmark", daemon=True)
     drained = True
     try:
         provider._emit_timer.start()
@@ -229,33 +253,29 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         qtbot.waitUntil(lambda: not suggestions._predicting, timeout=30_000)
         qtbot.wait(1000)
         assert not suggestions.status
-        initial_memory = _working_set_bytes()
-        if initial_memory is not None:
-            memory.append(initial_memory)
+        initial_memory = probe.sample_memory()
         before_cpu, before_wall = time.process_time(), time.perf_counter()
         with provider._sample_lock:
             replaced_before = provider._dropped_sample_count
-        last_delivery_at[0] = before_wall
-        measuring.set()
+        probe.last_delivery_at = before_wall
+        probe.measuring.set()
         surfaces.start()
         qtbot.wait(6500)
-        measuring.clear()
+        probe.measuring.clear()
         elapsed = time.perf_counter() - before_wall
         measurement_end = before_wall + elapsed
-        max_delivery_gap_ms[0] = max(
-            max_delivery_gap_ms[0], (measurement_end - last_delivery_at[0]) * 1000
+        probe.max_delivery_gap_ms = max(
+            probe.max_delivery_gap_ms, (measurement_end - probe.last_delivery_at) * 1000
         )
         with provider._sample_lock:
             replaced_samples = provider._dropped_sample_count - replaced_before
         cpu = time.process_time() - before_cpu
-        final_memory = _working_set_bytes()
-        if final_memory is not None:
-            memory.append(final_memory)
+        final_memory = probe.sample_memory()
     finally:
-        measuring.clear()
+        probe.measuring.clear()
         surfaces.stop()
         timer.stop()
-        stopped.set()
+        probe.stopped.set()
         if worker.ident is not None:
             worker.join(3)
         provider.stop()
@@ -263,22 +283,48 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         suggestions.close()
         for resource in (window, provider, controller, timer, surfaces, suggestions):
             resource.deleteLater()
-        qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-        qapp.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QCoreApplication.processEvents()
         if writer is not None:
             drained = writer.stop(5)
         logging.disable(previous_disabled)
     assert not worker.is_alive()
-    assert not worker_errors
-    delivered_samples = metrics["callback_to_controller_done"].count
+    assert not probe.worker_errors
+    delivered_samples = probe.metrics["callback_to_controller_done"].count
     delivered_hz = delivered_samples / elapsed
     # A short latency among a few surviving samples cannot make a starved
     # pipeline a valid performance result. Include eye-loss pauses in the gap.
     assert delivered_hz >= 0.5 * (1000 / GAZE_EMIT_INTERVAL_MS), "Too few delivered samples"
-    assert max_delivery_gap_ms[0] < GAZE_DELIVERY_GAP_SECONDS * 1000, "Gaze delivery stalled"
-    assert phase[0] == 12, "The complete surface workload must run in every mode"
+    assert probe.max_delivery_gap_ms < GAZE_DELIVERY_GAP_SECONDS * 1000, "Gaze delivery stalled"
+    assert probe.phase == 12, "The complete surface workload must run in every mode"
     assert drained, "The logging worker did not finish"
     health = writer.health() if writer else None
+    _assert_complete_session(health, folder, mode)
+    return {
+        "mode": mode,
+        "produced_samples": probe.produced,
+        "eligible_samples": probe.eligible,
+        "delivered_samples": delivered_samples,
+        "produced_hz": probe.produced / elapsed,
+        "delivered_hz": delivered_hz,
+        "provider_replaced_samples": replaced_samples,
+        "max_delivery_gap_ms": probe.max_delivery_gap_ms,
+        "surface_changes": probe.phase,
+        "duration_s": elapsed,
+        "cpu_percent_of_one_core": cpu / elapsed * 100,
+        "working_set_initial_bytes": initial_memory,
+        "working_set_final_bytes": final_memory,
+        "working_set_sampled_peak_bytes": max(probe.memory) if probe.memory else None,
+        "latency": {name: summary.result() for name, summary in probe.metrics.items()},
+        "log_bytes": sum(
+            path.stat().st_size for path in (folder / "logs").rglob("*") if path.is_file()
+        ),
+        "writer_drained": drained,
+        "logging_health": health,
+    }
+
+
+def _assert_complete_session(health, folder, mode):
     if health is not None:
         assert not health["writer_errors"], "Logging failed; performance results are invalid"
         assert not health["dropped"], "Logging lost records; performance results are invalid"
@@ -289,28 +335,6 @@ def _measure_mode(mode, folder, qtbot, qapp, monkeypatch):
         assert session["complete"], "The diagnostic session must be readable and complete"
         assert session["events"].get("stream_summary", 0) > 0
         assert bool(session["events"].get("provider_gaze")) == (mode == "trace")
-    return {
-        "mode": mode,
-        "produced_samples": produced[0],
-        "eligible_samples": eligible[0],
-        "delivered_samples": delivered_samples,
-        "produced_hz": produced[0] / elapsed,
-        "delivered_hz": delivered_hz,
-        "provider_replaced_samples": replaced_samples,
-        "max_delivery_gap_ms": max_delivery_gap_ms[0],
-        "surface_changes": phase[0],
-        "duration_s": elapsed,
-        "cpu_percent_of_one_core": cpu / elapsed * 100,
-        "working_set_initial_bytes": initial_memory,
-        "working_set_final_bytes": final_memory,
-        "working_set_sampled_peak_bytes": max(memory) if memory else None,
-        "latency": {name: summary.result() for name, summary in metrics.items()},
-        "log_bytes": sum(
-            path.stat().st_size for path in (folder / "logs").rglob("*") if path.is_file()
-        ),
-        "writer_drained": drained,
-        "logging_health": health,
-    }
 
 
 def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
@@ -323,7 +347,7 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
     for repeat in range(3):
         for mode in modes[repeat:] + modes[:repeat]:
             with monkeypatch.context() as patch:
-                result = _measure_mode(mode, output / f"{repeat}-{mode}", qtbot, qapp, patch)
+                result = _measure_mode(mode, output / f"{repeat}-{mode}", qtbot, patch)
                 runs.append({"repeat": repeat, **result})
     report = {
         "schema_version": 1,

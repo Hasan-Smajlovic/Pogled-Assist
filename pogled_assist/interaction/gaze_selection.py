@@ -32,8 +32,8 @@ class GazeSelectionTimer:
         self._observer = (
             diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
         )
-        self._diagnostic_pause_ms = 0
-        self._diagnostic_dwell_ms = 0
+        self._pause_ms = 0
+        self._dwell_ms = 0
         self._advancing = False
         self._context_getter: Callable[[object], diagnostics.TargetContext] | None = None
 
@@ -59,23 +59,23 @@ class GazeSelectionTimer:
         if self._observer is not None and not self._advancing:
             try:
                 snapshot = self.diagnostic_snapshot()
-                if (
-                    diagnostics.enabled()
-                    and self._context_getter is not None
-                    and snapshot["target"] is not None
-                ):
-                    # Edge hold keeps the selection's target even when the raw
-                    # hit is empty or briefly belongs to another window.
-                    self._observer.context = self._context_getter(snapshot["target"])
+                self._observe_context(snapshot["target"])
                 self._observer.observe(
                     snapshot,
                     reason=reason,
-                    pause_ms=self._diagnostic_pause_ms,
-                    dwell_ms=self._diagnostic_dwell_ms,
+                    pause_ms=self._pause_ms,
+                    dwell_ms=self._dwell_ms,
                 )
             except Exception:
                 # A failed observation must not prevent completion or cancellation.
                 diagnostics.observation_failed()
+
+    def _observe_context(self, target: object | None) -> None:
+        if not diagnostics.enabled() or self._context_getter is None:
+            return
+        if target is not None:
+            # Edge hold retains the selected target even when the raw hit moves.
+            self._observer.context = self._context_getter(target)
 
     @property
     def target(self) -> object | None:
@@ -98,18 +98,15 @@ class GazeSelectionTimer:
         can_hold: bool = False,
         hold_ms: int = 0,
     ) -> GazeSelectionUpdate:
-        self._diagnostic_pause_ms = pause_ms
-        self._diagnostic_dwell_ms = dwell_ms
+        self._pause_ms = pause_ms
+        self._dwell_ms = dwell_ms
         self._advancing = True
         try:
             result = self._advance(
                 target,
                 now_ms,
-                pause_ms=pause_ms,
-                dwell_ms=dwell_ms,
                 restart=restart,
-                can_hold=can_hold,
-                hold_ms=hold_ms,
+                edge_hold=(can_hold, hold_ms),
             )
         finally:
             self._advancing = False
@@ -121,14 +118,14 @@ class GazeSelectionTimer:
         target: object | None,
         now_ms: float,
         *,
-        pause_ms: int,
-        dwell_ms: int,
         restart: bool,
-        can_hold: bool,
-        hold_ms: int,
+        edge_hold: tuple[bool, int],
     ) -> GazeSelectionUpdate:
         """Hold only when the caller confirms that gaze is near the current target."""
 
+        can_hold, hold_ms = edge_hold
+        pause_ms = self._pause_ms
+        dwell_ms = self._dwell_ms
         if restart:
             self.cancel()
             if target is not None:

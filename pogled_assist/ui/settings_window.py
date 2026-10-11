@@ -1087,24 +1087,10 @@ class _StartupTasks:
             while (request := self._take()) is not None:
                 result = None
                 try:
-                    while not self._cancelled(request):
-                        if not acquired:
-                            with _startup_order:
-                                if _startup_turns[0] is not turn:
-                                    _startup_order.wait(timeout=0.1)
-                                    continue
-                            acquired = _startup_task_lock.acquire(timeout=0.1)
-                            if not acquired:
-                                continue
-                        if self._cancelled(request):
-                            break
-                        enabled = self._query() if request.enabled is None else request.enabled
-                        result = (
-                            self._update(enabled, show_launcher_window=request.show_launcher)
-                            if request.enabled is not None or (request.update_launcher and enabled)
-                            else enabled
-                        )
-                        break
+                    if not acquired:
+                        acquired = self._wait_for_turn(turn, request)
+                    if acquired and not self._cancelled(request):
+                        result = self._apply(request)
                 except Exception:
                     logger.exception("Could not read or update Windows startup state.")
                 self._finish(request, result)
@@ -1114,6 +1100,23 @@ class _StartupTasks:
             if acquired:
                 _startup_task_lock.release()
             self._release_turn(turn)
+
+    def _wait_for_turn(self, turn: object, request: _StartupRequest) -> bool:
+        while not self._cancelled(request):
+            with _startup_order:
+                if _startup_turns[0] is not turn:
+                    _startup_order.wait(timeout=0.1)
+                    continue
+            if _startup_task_lock.acquire(timeout=0.1):
+                return True
+        return False
+
+    def _apply(self, request: _StartupRequest) -> object:
+        enabled = self._query() if request.enabled is None else request.enabled
+        update = request.enabled is not None or (request.update_launcher and enabled)
+        if update:
+            return self._update(enabled, show_launcher_window=request.show_launcher)
+        return enabled
 
     @staticmethod
     def _release_turn(turn: object) -> None:

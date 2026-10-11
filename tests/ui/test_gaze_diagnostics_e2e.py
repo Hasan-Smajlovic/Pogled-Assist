@@ -40,13 +40,17 @@ def diagnostic_mode(request, monkeypatch, tmp_path):
     latest = logging_setup.set_application_logging_enabled(mode != "off")
     if mode == "blocked":
         assert entered.wait(1)
-        for _ in range(2000):
-            logging_setup.diagnostic_writer().event("queue_pressure", {})
+        _fill_log_queue()
     yield mode, latest
     release.set()
     logging_setup._restore_standard_streams()
     logging_setup._clear_root_handlers()
     logging.disable(logging.NOTSET)
+
+
+def _fill_log_queue():
+    for _ in range(2000):
+        logging_setup.diagnostic_writer().event("queue_pressure", {})
 
 
 def records(latest):
@@ -112,31 +116,36 @@ def test_clear_confirmation_survives_invalid_eyes_gap_and_logging_failure(
     provider.stop()
     if mode in {"basic", "trace"}:
         logging_setup.shutdown_application_logging()
-        events = records(latest)
-        assert any(
-            item["event"] == "selection_state" and item["data"].get("reason") == "eye_gate_closed"
-            for item in events
-        )
-        assert any(
-            item["event"] == "ui_action_requested"
-            and item["data"]["source"] == "gaze"
-            and item["data"]["target_id"] == "confirm:accept"
-            for item in events
-        )
-        assert any(
-            item["event"] == "stream_summary"
-            and item["data"]["counts"].get("rejected:right_invalid")
-            for item in events
-        )
-        content = latest.read_text() + "".join(
-            path.read_text() for path in (latest.parent / "diagnostics").glob("*.jsonl")
-        )
-        assert "PRIVATE COMPOSED MESSAGE" not in content
-        assert (
-            "native_gaze" in {item["event"] for item in events}
-            if mode == "trace"
-            else not any(item["event"] == "native_gaze" for item in events)
-        )
+        _assert_confirmation_events(mode, latest)
+
+
+def _assert_confirmation_events(mode, latest):
+    events = records(latest)
+    assert any(
+        data.get("reason") == "eye_gate_closed" for data in _event_data(events, "selection_state")
+    )
+    assert any(
+        data["source"] == "gaze" and data["target_id"] == "confirm:accept"
+        for data in _event_data(events, "ui_action_requested")
+    )
+    assert any(
+        data["counts"].get("rejected:right_invalid")
+        for data in _event_data(events, "stream_summary")
+    )
+    _assert_private_text_absent(latest)
+    native_events = {item["event"] for item in events}
+    assert ("native_gaze" in native_events) == (mode == "trace")
+
+
+def _event_data(events, event):
+    return [item["data"] for item in events if item["event"] == event]
+
+
+def _assert_private_text_absent(latest):
+    content = latest.read_text() + "".join(
+        path.read_text() for path in (latest.parent / "diagnostics").glob("*.jsonl")
+    )
+    assert "PRIVATE COMPOSED MESSAGE" not in content
 
 
 def test_pr73_collection_is_identical_with_logging_and_old_callbacks_are_ignored(
@@ -220,10 +229,20 @@ def test_letter_geometry_is_complete_and_uses_opaque_ids(diagnostic_mode, qtbot)
         if mode == "basic":
             assert geometry == []
         else:
-            assert geometry
-            assert not any(item["data"].get("_snapshot_truncated") for item in geometry)
-            targets = [target for item in geometry for target in item["data"]["targets"]]
-            assert len(targets) == expected
-            assert all(len(target["target_id"]) == 32 for target in targets)
-            assert all(len(target["logical_bounds"]) == 4 for target in targets)
-            assert all(target["visible"] and target["enabled"] for target in targets)
+            _assert_letter_geometry(geometry, expected)
+
+
+def _assert_letter_geometry(geometry, expected):
+    assert geometry
+    assert not any(item["data"].get("_snapshot_truncated") for item in geometry)
+    targets = [target for item in geometry for target in item["data"]["targets"]]
+    assert len(targets) == expected
+    for target in targets:
+        _assert_target_geometry(target)
+
+
+def _assert_target_geometry(target):
+    assert len(target["target_id"]) == 32
+    assert len(target["logical_bounds"]) == 4
+    assert target["visible"]
+    assert target["enabled"]

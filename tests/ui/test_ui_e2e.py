@@ -97,6 +97,27 @@ def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
     assert window._input.text() == "TREBAM ODMOR"
 
 
+def _check_sidebar_row(window, buttons, qtbot):
+    qtbot.wait(1)
+    rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
+    assert min(rect.left() for rect in rects) == 10
+    assert max(rect.right() for rect in rects) == window.width() - 11
+    assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
+    assert all(window.rect().contains(rect) for rect in rects)
+    for button in buttons:
+        _assert_sidebar_hit(window, button)
+
+
+def _assert_sidebar_hit(window, button):
+    center = button.mapToGlobal(button.rect().center())
+    expected = (
+        next(action for action, target in window._action_buttons.items() if target is button)
+        if button.isEnabled()
+        else None
+    )
+    assert window.action_at_global_point(center) == expected
+
+
 @pytest.mark.e2e
 @pytest.mark.parametrize("script", ["latin", "arabic"])
 @pytest.mark.parametrize("letters_per_group", [2, 5])
@@ -118,22 +139,7 @@ def test_controller_keyboard_rows_fill_sidebar_width(
     prefix = CONTROLLER_WINDOW_ACTION_PREFIX
 
     def check_row(buttons):
-        qtbot.wait(1)
-        rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
-        assert min(rect.left() for rect in rects) == 10
-        assert max(rect.right() for rect in rects) == window.width() - 11
-        assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
-        assert all(window.rect().contains(rect) for rect in rects)
-        for button in buttons:
-            center = button.mapToGlobal(button.rect().center())
-            expected = (
-                next(
-                    action for action, target in window._action_buttons.items() if target is button
-                )
-                if button.isEnabled()
-                else None
-            )
-            assert window.action_at_global_point(center) == expected
+        _check_sidebar_row(window, buttons, qtbot)
 
     window._tab_buttons["keyboard"].click()
     for tab, group_command, key_command in (

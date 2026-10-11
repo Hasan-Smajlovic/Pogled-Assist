@@ -262,24 +262,18 @@ class HotbarWindow(QWidget):
         return button if button.isEnabled() else None
 
     def diagnostic_context(self, action: str | None) -> diagnostics.TargetContext:
-        if (
-            action
-            and action.startswith(SPEECH_WINDOW_ACTION_PREFIX)
-            and self._speech_window is not None
-        ):
-            return self._speech_window._diagnostic_context
-        if (
-            action
-            and action.startswith(KEYBOARD_WINDOW_ACTION_PREFIX)
-            and self._keyboard_window is not None
-        ):
-            return self._keyboard_window.diagnostic_context(action)
-        if (
-            action
-            and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
-            and self._controller_window is not None
-        ):
-            return self._controller_window.diagnostic_context(action)
+        if not action:
+            return self._diagnostic_context
+        surfaces = (
+            (SPEECH_WINDOW_ACTION_PREFIX, self._speech_window),
+            (KEYBOARD_WINDOW_ACTION_PREFIX, self._keyboard_window),
+            (CONTROLLER_WINDOW_ACTION_PREFIX, self._controller_window),
+        )
+        for prefix, window in surfaces:
+            if window is not None and action.startswith(prefix):
+                if prefix == SPEECH_WINDOW_ACTION_PREFIX:
+                    return window._diagnostic_context
+                return window.diagnostic_context(action)
         return self._diagnostic_context
 
     def _build_ui(self) -> None:
