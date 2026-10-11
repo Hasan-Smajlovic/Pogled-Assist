@@ -4,6 +4,23 @@
   let learnedWords = ['ĆEVAPI', 'DŽEZ', 'KAHVA', 'LJETO', 'NJIVA', 'ŠETNJA'];
   let selectedWord = null;
   let arabic = ReferenceKeyboard.readScript();
+  let startupTimer;
+  function previewStartupChange() {
+    clearTimeout(startupTimer);
+    $('settings-status').textContent = $('startup-enabled').checked
+      ? 'Uključujem pokretanje uz Windows.' : 'Isključujem pokretanje uz Windows.';
+    startupTimer = setTimeout(() => {
+      $('settings-status').textContent = $('startup-enabled').checked
+        ? 'Pokretanje uz Windows je uključeno.' : 'Pokretanje uz Windows je isključeno.';
+    }, 800);
+  }
+  $('startup-enabled').addEventListener('change', previewStartupChange);
+  $('startup-launcher').addEventListener('change', () => {
+    if ($('startup-enabled').checked) previewStartupChange();
+    else $('settings-status').textContent = $('startup-launcher').checked
+      ? 'PowerShell prozor će biti prikazan pri pokretanju.'
+      : 'PowerShell pokretač će raditi tiho u pozadini.';
+  });
   function renderScript() {
     $('settings-script-preview').textContent = arabic ? 'Arapski' : 'Latinica';
     $('voice-hint').textContent = arabic ? 'Arapski koristi prirodni muški glas Hamed. Potreban je internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural.';
@@ -37,20 +54,11 @@
       $('settings-status').textContent = 'Postavke su sačuvane.'; return;
     }
     if (['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings'].includes(action)) {
-      for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
-      for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
-      if (action === 'learning-settings') renderLearning();
+      showSettingsTab(action);
       return;
     }
     if (action === 'forget-word' && selectedWord) {
-      if ($('learning-demo-state').value === 'write') {
-        $('learning-status').textContent = 'Učenje nije sačuvano. Pokušajte ponovo.';
-        $('retry-learning').disabled = false;
-      } else {
-        learnedWords = learnedWords.filter(word => word !== selectedWord);
-        selectedWord = null; renderLearning();
-        $('learning-status').textContent = 'Riječ je zaboravljena. Vaša poruka je sačuvana.';
-      }
+      forgetSelectedWord();
       return;
     }
     if (action === 'retry-learning') {
@@ -69,6 +77,23 @@
       installButton.disabled = true;
       status.textContent = 'Pokrećem updater. Aplikacija će se zatvoriti i pokrenuti nakon instalacije.';
       pageStatus.textContent = 'Pokrećem ažuriranje.';
+    }
+  }
+
+  function showSettingsTab(action) {
+    for (const id of ['general-settings', 'gaze-settings', 'speech-settings', 'learning-settings']) $(id).hidden = id !== action;
+    for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === (action === 'learning-settings' ? 'speech-settings' : action)));
+    if (action === 'learning-settings') renderLearning();
+  }
+
+  function forgetSelectedWord() {
+    if ($('learning-demo-state').value === 'write') {
+      $('learning-status').textContent = 'Učenje nije sačuvano. Pokušajte ponovo.';
+      $('retry-learning').disabled = false;
+    } else {
+      learnedWords = learnedWords.filter(word => word !== selectedWord);
+      selectedWord = null; renderLearning();
+      $('learning-status').textContent = 'Riječ je zaboravljena. Vaša poruka je sačuvana.';
     }
   }
 

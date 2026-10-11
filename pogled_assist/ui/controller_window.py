@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..diagnostics import safe_action
 from ..interaction.mouse_controller import GazeSettings
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
@@ -257,7 +258,7 @@ class ControllerWindow(SidebarPanel):
         if not action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX):
             return
 
-        logger.info("Controller sidebar gaze action requested: %s", action)
+        logger.info("Controller sidebar gaze action requested: %s", safe_action(action))
         self._trigger_action(action, source="gaze")
 
     def _build_ui(self) -> None:

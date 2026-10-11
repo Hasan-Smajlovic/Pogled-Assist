@@ -36,9 +36,9 @@
         </header>
         <p class="settings-group-label">Pokretanje i dijagnostika</p>
         <div class="settings-options">
-          <label class="settings-checkbox"><input type="checkbox">Pokreni uz Windows</label>
+          <label class="settings-checkbox"><input id="startup-enabled" type="checkbox">Pokreni uz Windows</label>
           <label class="settings-checkbox"><input type="checkbox">Uključi zapisivanje</label>
-          <label class="settings-checkbox"><input type="checkbox">Prikaži PowerShell</label>
+          <label class="settings-checkbox"><input id="startup-launcher" type="checkbox">Prikaži PowerShell</label>
         </div>
         <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">
@@ -107,7 +107,8 @@
     <ul>
       <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
 <li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Svi redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px.</li>
-<li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li></ul>
+<li>Opće postavke automatski provjeravaju posljednje stabilno izdanje. Kada je novija verzija dostupna, prikazuje se zasebna akcija koja pokreće instalaciju i ponovno pokretanje aplikacije.</li>
+<li>Provjera i promjena pokretanja uz Windows rade u pozadini. Ostale kontrole ostaju dostupne. Dok promjena traje, označeno stanje prati posljednji izbor. Zatvaranje Postavki ne odbacuje zatražene promjene dok aplikacija radi; ponovo otvorene Postavke provjeravaju stanje nakon tih promjena. Izbor prikaza PowerShell prozora primjenjuje se i kada je napravljen prije završetka početne provjere.</li></ul>
 <p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p></details>
 </body>
 </html>

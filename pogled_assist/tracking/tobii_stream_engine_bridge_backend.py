@@ -53,6 +53,7 @@ class TobiiStreamEngineBridgeBackend:
         self.eye_position_callback: EyePositionCallback | None = None
         self.gaze_invalid_callback: GazeInvalidCallback | None = None
         self.eye_position_supported: bool | None = None
+        self.diagnostic_metadata: dict = {"eye_validity_source": "unknown"}
         self._process: subprocess.Popen[str] | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -256,6 +257,14 @@ class TobiiStreamEngineBridgeBackend:
     def _on_started(self, message: dict) -> None:
         supported = message.get("eye_position_supported")
         self.eye_position_supported = supported if isinstance(supported, bool) else None
+        metadata = message.get("diagnostic_metadata")
+        if isinstance(metadata, dict):
+            self.diagnostic_metadata = {
+                key: value[:128]
+                for key, value in metadata.items()
+                if key in {"sdk_version", "model", "firmware_version", "eye_validity_source"}
+                and isinstance(value, str)
+            }
         label = str(message.get("label") or self._label)
         dll_path = str(message.get("dll_path") or "")
         self._label = f"{label} (x86 bridge)"

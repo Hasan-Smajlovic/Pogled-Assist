@@ -8,18 +8,24 @@ import os
 import platform
 import shutil
 import sys
+import threading
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
+
+from .log_transport import LogWriter, QueueLogHandler
 
 LOGGER_NAME = "pogled_assist"
 LOG_DIR_NAME = "logs"
 LATEST_LOG_NAME = "latest.txt"
 LOG_ROOT_ENV = "POGLED_ASSIST_LOG_ROOT"
 SETTINGS_FILE = "app_settings.json"
+MAX_STREAM_CHARS = 2048
 
 _qt_message_handler = None
+_writer: LogWriter | None = None
+_queue_handler: QueueLogHandler | None = None
 
 
 class StreamToLogger:
@@ -35,35 +41,56 @@ class StreamToLogger:
         self._level = level
         self._fallback_stream = fallback_stream
         self._buffer = ""
-        self._in_write = False
+        self._buffer_lock = threading.Lock()
+        self._local = threading.local()
 
     def write(self, message: object) -> int:
         text = str(message)
         if not text:
             return 0
 
-        if self._in_write:
-            if self._fallback_stream is not None:
-                with suppress(Exception):
-                    return self._fallback_stream.write(text)
+        if getattr(self._local, "in_write", False):
+            self._note_drop("stream_recursive")
             return len(text)
 
-        self._buffer += text
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            self._write_line(line)
-
+        self._local.in_write = True
+        try:
+            for start in range(0, len(text), MAX_STREAM_CHARS):
+                # Never hold the buffer lock while a logging handler runs.
+                # Another producer can proceed even if that handler stalls.
+                if not self._buffer_lock.acquire(blocking=False):
+                    self._note_drop("stream_buffer_busy")
+                    continue
+                try:
+                    parts = (self._buffer + text[start : start + MAX_STREAM_CHARS]).split("\n")
+                    self._buffer = parts.pop()
+                    if len(self._buffer) >= MAX_STREAM_CHARS:
+                        parts.append(self._buffer[:MAX_STREAM_CHARS])
+                        self._buffer = self._buffer[MAX_STREAM_CHARS:]
+                finally:
+                    self._buffer_lock.release()
+                for line in parts:
+                    self._write_line(line)
+        finally:
+            self._local.in_write = False
         return len(text)
 
     def flush(self) -> None:
-        if self._in_write:
+        if getattr(self._local, "in_write", False):
             return
-        if self._buffer:
-            self._write_line(self._buffer)
+        if not self._buffer_lock.acquire(blocking=False):
+            self._note_drop("stream_buffer_busy")
+            return
+        try:
+            line = self._buffer
             self._buffer = ""
-        if self._fallback_stream is not None:
-            with suppress(Exception):
-                self._fallback_stream.flush()
+        finally:
+            self._buffer_lock.release()
+        self._local.in_write = True
+        try:
+            self._write_line(line)
+        finally:
+            self._local.in_write = False
 
     def isatty(self) -> bool:
         return False
@@ -91,13 +118,15 @@ class StreamToLogger:
         self.flush()
 
     def _write_line(self, line: str) -> None:
-        if not line.strip() or self._in_write:
-            return
-        self._in_write = True
-        try:
-            self._logger.log(self._level, line.rstrip())
-        finally:
-            self._in_write = False
+        if line.strip():
+            line = line.rstrip()
+            for start in range(0, len(line), MAX_STREAM_CHARS):
+                self._logger.log(self._level, line[start : start + MAX_STREAM_CHARS])
+
+    def _note_drop(self, reason: str) -> None:
+        writer = diagnostic_writer()
+        if writer is not None:
+            writer.note_drop(reason)
 
 
 def setup_application_logging() -> Path:
@@ -109,45 +138,37 @@ def setup_application_logging() -> Path:
 def set_application_logging_enabled(enabled: bool) -> Path:
     """Apply runtime logging state and return the latest-log path."""
 
+    global _writer, _queue_handler
+
     project_root = get_project_root()
     log_dir = project_root / LOG_DIR_NAME
     latest_log = log_dir / LATEST_LOG_NAME
 
+    _flush_diagnostic_summaries()
+
     if not enabled:
+        if _writer is not None:
+            _writer.disable()
         _disable_python_logging()
         return latest_log
 
     logging.disable(logging.NOTSET)
     _restore_standard_streams()
-    _clear_root_handlers()
-
-    log_dir.mkdir(parents=True, exist_ok=True)
-    archived_log = None
-    archive_error = None
-    try:
-        archived_log = _archive_latest_log(latest_log)
-    except Exception as exc:
-        archive_error = exc
+    _clear_root_handlers(stop_writer=False)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    formatter = logging.Formatter(
-        "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    file_handler = logging.FileHandler(latest_log, mode="w", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    root_logger.addHandler(file_handler)
-
     console_stream = sys.__stdout__ if sys.__stdout__ is not None else sys.__stderr__
-    if console_stream is not None:
-        console_handler = logging.StreamHandler(console_stream)
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(logging.INFO)
-        root_logger.addHandler(console_handler)
+    if _writer is None or _writer.finished:
+        _writer = LogWriter()
+        _queue_handler = QueueLogHandler(_writer)
+    _writer.start_segment(
+        latest_log,
+        console_stream,
+        trace=os.environ.get("POGLED_ASSIST_GAZE_DIAGNOSTICS", "").lower() == "trace",
+    )
+    root_logger.addHandler(_queue_handler)
 
     logging.captureWarnings(True)
     sys.excepthook = _log_unhandled_exception
@@ -158,15 +179,6 @@ def set_application_logging_enabled(enabled: bool) -> Path:
     logger.info("Logging initialized.")
     logger.info("Project root: %s", project_root)
     logger.info("Latest log: %s", latest_log)
-    if archived_log is not None:
-        logger.info("Previous latest log archived to: %s", archived_log)
-    elif archive_error is None:
-        logger.info("No previous latest log was present to archive.")
-    if archive_error is not None:
-        logger.warning(
-            "Failed to archive previous latest log.",
-            exc_info=(type(archive_error), archive_error, archive_error.__traceback__),
-        )
     logger.info("Python executable: %s", sys.executable)
     logger.info("Python version: %s", sys.version.replace("\n", " "))
     logger.info("Platform: %s", platform.platform())
@@ -176,7 +188,7 @@ def set_application_logging_enabled(enabled: bool) -> Path:
 
 def _disable_python_logging() -> None:
     _restore_standard_streams()
-    _clear_root_handlers()
+    _clear_root_handlers(stop_writer=False)
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.CRITICAL + 1)
     root_logger.addHandler(logging.NullHandler())
@@ -185,14 +197,46 @@ def _disable_python_logging() -> None:
     sys.excepthook = sys.__excepthook__
 
 
-def _clear_root_handlers() -> None:
+def _clear_root_handlers(*, stop_writer: bool = True) -> None:
     root_logger = logging.getLogger()
     for handler in list(root_logger.handlers):
         root_logger.removeHandler(handler)
+        if isinstance(handler, QueueLogHandler):
+            continue
         with suppress(Exception):
             handler.flush()
         with suppress(Exception):
             handler.close()
+    if stop_writer:
+        shutdown_application_logging()
+
+
+def diagnostic_writer() -> LogWriter | None:
+    return _writer if _writer is not None and _writer.enabled else None
+
+
+def shutdown_application_logging() -> None:
+    global _writer, _queue_handler
+    _flush_diagnostic_summaries()
+    if _queue_handler is not None:
+        _queue_handler.close()
+    if _writer is None or _writer.finished:
+        _writer = None
+        _queue_handler = None
+
+
+def _flush_diagnostic_summaries() -> None:
+    if diagnostic_writer() is None:
+        return
+    # Import here because observations use this module to find the writer.
+    from .diagnostics import flush_summaries
+
+    try:
+        flush_summaries()
+    except Exception:
+        diagnostic = diagnostic_writer()
+        if diagnostic is not None:
+            diagnostic._failure()
 
 
 def _restore_standard_streams() -> None:

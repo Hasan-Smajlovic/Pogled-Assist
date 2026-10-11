@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from _ui_fakes import (
@@ -12,6 +13,7 @@ from _ui_fakes import (
 )
 from PySide6.QtCore import QPoint, QRect
 
+from pogled_assist import diagnostics
 from pogled_assist.interaction.mouse_controller import (
     CONTROLLER,
     KEYBOARD,
@@ -24,6 +26,49 @@ from pogled_assist.interaction.mouse_controller import (
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+def test_confirmation_edge_hold_keeps_one_diagnostic_attempt(hotbar_gaze, qtbot, monkeypatch):
+    events = []
+    writer = SimpleNamespace(
+        _generation=1, trace=True, event=lambda name, data, **_kwargs: events.append((name, data))
+    )
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(*controller._logical_screen_rect)
+    qtbot.wait(1)
+    window._input.setText("Synthetic message")
+    window._open_clear_dialog()
+    qtbot.wait(1)
+    action = window._action("confirm:accept")
+    button = window._action_buttons[action]
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 2, button.height() // 2))
+    feed(center, 0)
+    feed(center, 700)
+    observer = controller._toolbar_selection._observer
+    attempt, context = observer.attempt, observer.context.id
+    feed(outside, 720)
+    assert controller._toolbar_selection.diagnostic_snapshot()["held"]
+    assert controller._toolbar_selection.target == action
+    assert observer.attempt == attempt
+    assert observer.context.id == context
+    feed(center, 760)
+    assert actions == []
+    assert observer.attempt == attempt
+    assert observer.context.id == context
+    assert not any(name == "selection_end" for name, _data in events)
+    assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 700
+    controller.handle_eye_status(True, False)
+    ends = [data for name, data in events if name == "selection_end"]
+    assert len(ends) == 1
+    assert ends[0]["attempt_id"] == attempt
+    assert ends[0]["reason"] == "eye_gate_closed"
+    assert ends[0]["context_id"] == context
 
 
 @pytest.mark.e2e

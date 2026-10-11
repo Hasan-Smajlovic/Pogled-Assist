@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from .. import diagnostics
 
 DEFAULT_SELECTION_PAUSE_MS = 500
 MIN_SELECTION_PAUSE_MS = 100
@@ -20,12 +23,59 @@ class GazeSelectionUpdate:
 class GazeSelectionTimer:
     """Track pause, dwell progress, and leave-before-repeat for one interaction."""
 
-    def __init__(self) -> None:
+    def __init__(self, diagnostic_source: str | None = None) -> None:
         self._target: object | None = None
         self._blocked_target: object | None = None
         self._started_ms = 0.0
         self._last_seen_ms = 0.0
         self._away_since_ms: float | None = None
+        self._observer = (
+            diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
+        )
+        self._pause_ms = 0
+        self._dwell_ms = 0
+        self._advancing = False
+        self._context_getter: Callable[[object], diagnostics.TargetContext] | None = None
+
+    def diagnostic_snapshot(self) -> dict:
+        """Read timing state without advancing or resetting selection."""
+        credited = (
+            max(0.0, self._last_seen_ms - self._started_ms) if self._target is not None else 0.0
+        )
+        return {
+            "target": self.target,
+            "active": self._target is not None,
+            "blocked": self.is_blocked,
+            "held": self._away_since_ms is not None,
+            "credited_ms": credited,
+        }
+
+    def set_diagnostic_context_getter(
+        self, getter: Callable[[object], diagnostics.TargetContext]
+    ) -> None:
+        self._context_getter = getter
+
+    def _observe(self, reason: str) -> None:
+        if self._observer is not None and not self._advancing:
+            try:
+                snapshot = self.diagnostic_snapshot()
+                self._observe_context(snapshot["target"])
+                self._observer.observe(
+                    snapshot,
+                    reason=reason,
+                    pause_ms=self._pause_ms,
+                    dwell_ms=self._dwell_ms,
+                )
+            except Exception:
+                # A failed observation must not prevent completion or cancellation.
+                diagnostics.observation_failed()
+
+    def _observe_context(self, target: object | None) -> None:
+        if not diagnostics.enabled() or self._context_getter is None:
+            return
+        if target is not None:
+            # Edge hold retains the selected target even when the raw hit moves.
+            self._observer.context = self._context_getter(target)
 
     @property
     def target(self) -> object | None:
@@ -48,8 +98,34 @@ class GazeSelectionTimer:
         can_hold: bool = False,
         hold_ms: int = 0,
     ) -> GazeSelectionUpdate:
+        self._pause_ms = pause_ms
+        self._dwell_ms = dwell_ms
+        self._advancing = True
+        try:
+            result = self._advance(
+                target,
+                now_ms,
+                restart=restart,
+                edge_hold=(can_hold, hold_ms),
+            )
+        finally:
+            self._advancing = False
+        self._observe("sample")
+        return result
+
+    def _advance(
+        self,
+        target: object | None,
+        now_ms: float,
+        *,
+        restart: bool,
+        edge_hold: tuple[bool, int],
+    ) -> GazeSelectionUpdate:
         """Hold only when the caller confirms that gaze is near the current target."""
 
+        can_hold, hold_ms = edge_hold
+        pause_ms = self._pause_ms
+        dwell_ms = self._dwell_ms
         if restart:
             self.cancel()
             if target is not None:
@@ -81,8 +157,9 @@ class GazeSelectionTimer:
         if self._target is not None:
             self._blocked_target = self._target
         self._clear_target()
+        self._observe("completed")
 
-    def cancel(self, *, require_leave: bool = False) -> None:
+    def cancel(self, *, require_leave: bool = False, reason: str = "cancelled") -> None:
         """Drop pending progress and optionally block the target until gaze leaves."""
 
         if require_leave:
@@ -91,11 +168,13 @@ class GazeSelectionTimer:
         else:
             self._blocked_target = None
         self._clear_target()
+        self._observe(reason)
 
-    def pause(self) -> None:
+    def pause(self, *, reason: str = "paused") -> None:
         """Drop pending progress without treating invalid gaze as leaving the target."""
 
         self._clear_target()
+        self._observe(reason)
 
     def _holds(self, target: object | None, now_ms: float, hold_ms: int) -> bool:
         if self.target is None or target == self.target or hold_ms <= 0:

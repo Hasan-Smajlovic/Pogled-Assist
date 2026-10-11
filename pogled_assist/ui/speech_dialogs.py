@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import diagnostics
 from .tracking_feedback import dialog_tracking_header
 
 DIALOG_ACTION_MIN_HEIGHT = 128
@@ -63,6 +64,14 @@ class SpeechDialogs(QObject):
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+        diagnostics.emit(
+            "dialog_open",
+            priority=True,
+            context_id=self._context_id(),
+            kind=self.kind(dialog),
+            logical_geometry=(dialog.x(), dialog.y(), dialog.width(), dialog.height()),
+            modal=dialog.isModal(),
+        )
 
     def close(self) -> None:
         if self.active is not None:
@@ -86,12 +95,28 @@ class SpeechDialogs(QObject):
     def _dialog_finished(self, dialog: QDialog) -> None:
         if dialog is not self.active:
             return
+        diagnostics.emit(
+            "dialog_close",
+            priority=True,
+            context_id=self._context_id(),
+            kind=self.kind(dialog),
+        )
         self.active = None
         self.closed.emit(dialog)
         self.actions.clear()
         self.backdrop.hide()
         self._context_changed()
         QTimer.singleShot(0, self._parent, self._restore_focus)
+
+    def kind(self, dialog: QDialog) -> str:
+        for name in ("letter", "confirm", "exit", "alarm", "sleep"):
+            if dialog is getattr(self, name):
+                return name
+        return "unknown"
+
+    def _context_id(self) -> str | None:
+        context = getattr(self._parent, "_diagnostic_context", None)
+        return context.id if context is not None else None
 
     def _build_dialogs(self) -> None:
         self._build_letter_dialog()

@@ -12,3 +12,8 @@
 .hotbar-status-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
 .hotbar-status-preview select { padding: 8px; font: inherit; }
 #hotbar-restore { width: 86px; min-height: 76px; font-size: 13px; }
+.gaze-marker-preview { position: relative; height: 320px; border: 1px solid var(--border); border-radius: 8px; margin-top: 20px; }
+.gaze-marker-preview > p { margin: 20px; color: #bec9d9; }
+.gaze-marker-dot { position: absolute; top: 170px; left: 60%; width: 46px; height: 46px; border: 5px solid #12b9ff73; border-radius: 50%; background: #12b9ff1c; pointer-events: none; }
+.gaze-marker-dot::before { content: ''; position: absolute; inset: 5px; border: 2px solid #ebfafbbe; border-radius: 50%; background: #12b9ff48; }
+.gaze-marker-dot::after { content: ''; position: absolute; top: 14px; left: 14px; width: 8px; height: 8px; border-radius: 50%; background: #ffffffd2; }
