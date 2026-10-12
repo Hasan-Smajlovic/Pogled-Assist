@@ -28,6 +28,8 @@ system-wide Python environment. The `.venv` always uses Python 3.10.
 If `.venv` points to a removed or unsupported interpreter, setup moves it to
 `.dev-tools\venv-backups` before creating a fresh one. To use a specific
 installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup.
+Interpreter probes start executables directly without the Windows shell, so a
+broken interpreter returns an error without an interactive security warning.
 
 `tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same
 interpreter is used for development, Tobii Pro discovery, automated checks,

@@ -30,31 +30,40 @@ def _run_dev_script(tmp_path: Path, *arguments: str) -> subprocess.CompletedProc
         capture_output=True,
         text=True,
         check=False,
+        timeout=20,
     )
 
 
-def test_lint_reports_broken_virtual_environment_before_running_checks(tmp_path: Path) -> None:
+@pytest.fixture
+def broken_python(tmp_path: Path) -> Path:
     python_path = tmp_path / ".venv" / "Scripts" / "python.exe"
     python_path.parent.mkdir(parents=True)
     python_path.write_bytes(b"not a Python executable")
+    # Mark the fixture as downloaded to expose interactive shell warnings.
+    Path(f"{python_path}:Zone.Identifier").write_text(
+        "[ZoneTransfer]\nZoneId=3\n", encoding="ascii"
+    )
+    return python_path
 
+
+def test_lint_reports_broken_virtual_environment_before_running_checks(
+    tmp_path: Path, broken_python: Path
+) -> None:
     result = _run_dev_script(tmp_path, "lint")
 
     assert result.returncode != 0
     assert "Development environment is broken or unsupported" in result.stderr
-    assert python_path.read_bytes() == b"not a Python executable"
+    assert broken_python.read_bytes() == b"not a Python executable"
 
 
-def test_setup_rejects_missing_base_without_moving_existing_environment(tmp_path: Path) -> None:
-    python_path = tmp_path / ".venv" / "Scripts" / "python.exe"
-    python_path.parent.mkdir(parents=True)
-    python_path.write_bytes(b"not a Python executable")
-
+def test_setup_rejects_missing_base_without_moving_existing_environment(
+    tmp_path: Path, broken_python: Path
+) -> None:
     result = _run_dev_script(tmp_path, "setup", "-BasePython", str(tmp_path / "missing.exe"))
 
     assert result.returncode != 0
     assert "Base Python was not found" in result.stderr
-    assert python_path.read_bytes() == b"not a Python executable"
+    assert broken_python.read_bytes() == b"not a Python executable"
     assert not (tmp_path / ".dev-tools").exists()
 
 
@@ -260,7 +269,32 @@ def _run_dev_driver(tmp_path: Path, body: str) -> subprocess.CompletedProcess[st
         capture_output=True,
         text=True,
         check=False,
+        timeout=20,
     )
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("print(\"quoted value\"); print('second line')", "quoted value"),
+        ("import sys; sys.stderr.write('error' * 20000); print('ok')", "ok"),
+        ("import sys; print('3.10'); sys.exit(1)", "<missing>"),
+    ],
+)
+def test_python_probe_handles_output_and_exit_status(tmp_path: Path, code: str, expected: str):
+    result = _run_dev_driver(
+        tmp_path,
+        """
+$probe = Invoke-PythonProbe -Executable 'PYTHON_PATH' -Code @'
+PROBE_CODE
+'@
+if ($null -eq $probe) { Write-Output "<missing>" } else { Write-Output $probe }
+""".replace("PYTHON_PATH", sys.executable.replace("'", "''")).replace("PROBE_CODE", code),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == expected
+    assert result.stderr == ""
 
 
 @pytest.mark.parametrize(
