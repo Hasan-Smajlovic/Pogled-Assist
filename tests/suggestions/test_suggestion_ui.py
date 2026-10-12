@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import copy
-from dataclasses import replace
-
 import pytest
+from _speech_fakes import FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QObject, QPoint, Signal
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
-from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
+from pogled_assist.speech.speech_library import PhraseRecord
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import WRITE_ERROR, LearningStore
 from pogled_assist.suggestions.model import WordModel
@@ -15,46 +13,6 @@ from pogled_assist.suggestions.service import SuggestionService
 from pogled_assist.suggestions.text import START
 from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
-
-
-class FakeSpeech(QObject):
-    playback_changed = Signal(int, str)
-
-    def __init__(self, *, successful: bool = True) -> None:
-        super().__init__()
-        self.request_id = 0
-        self._settings = SpeechSettings()
-        self.successful = successful
-        self.requests: list[str] = []
-
-    @property
-    def settings(self) -> SpeechSettings:
-        return replace(self._settings)
-
-    def speak(self, text: str, _settings: SpeechSettings | None = None) -> bool:
-        self.request_id += 1
-        self.requests.append(text)
-        return self.successful
-
-    def stop(self) -> None:
-        return None
-
-
-class FakeLibraryStore:
-    read_error = False
-
-    def __init__(self) -> None:
-        self.library = SpeechLibrary(categories=default_categories())
-        self.fail_saves = False
-
-    def load(self) -> SpeechLibrary:
-        return copy.deepcopy(self.library)
-
-    def save(self, library: SpeechLibrary) -> bool:
-        if self.fail_saves:
-            return False
-        self.library = copy.deepcopy(library)
-        return True
 
 
 class ManualSuggestionService(QObject):
@@ -334,7 +292,7 @@ def test_speech_failure_still_learns_once_for_an_unchanged_message(
     window._play_button.click()
     window._play_button.click()
 
-    assert speech.requests == ["HVALA", "HVALA"]
+    assert [text for text, _settings in speech.requests] == ["HVALA", "HVALA"]
     assert service.store.snapshot()[("hvala",)] == 1
 
 
@@ -407,7 +365,7 @@ def test_unavailable_base_model_never_blocks_message_editing_or_speech(qtbot, mo
 
         qtbot.waitUntil(lambda: bool(service.status))
         assert window._input.text() == "HVALA"
-        assert speech.requests == ["HVALA"]
+        assert [text for text, _settings in speech.requests] == ["HVALA"]
         assert all(not button.isEnabled() for button in window._prediction_buttons)
     finally:
         service.close()

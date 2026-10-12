@@ -66,10 +66,6 @@ class SpeechService(QObject):
         return self._executable
 
     @property
-    def edge_playback_executable(self) -> Path | None:
-        return self._edge_playback_executable
-
-    @property
     def available(self) -> bool:
         return self._executable is not None or self._edge_playback_executable is not None
 

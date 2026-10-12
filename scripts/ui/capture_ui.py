@@ -348,6 +348,17 @@ class _CaptureSession:
             hotbar._tracking_status.set_tracking_status(TrackingStatus(state))
             hotbar._tracking_status.set_eye_status(False, True)
             self.capture(hotbar, name, title, size=size)
+        for name, detail in (
+            ("eye-loss", "Lijevo —   Desno ✓"),
+            ("paused", "Isporuka pogleda pauzirana"),
+            ("disconnected", "Veza je prekinuta"),
+        ):
+            hotbar._tracking_status.set_tracking_status(
+                TrackingStatus(TrackingState.SIMULATING, detail)
+            )
+            self.capture(
+                hotbar, f"hotbar-simulation-{name}", f"Hotbar: simulated {name}", size=size
+            )
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()

@@ -20,15 +20,13 @@ from PySide6.QtWidgets import (
 from ..diagnostics import safe_action
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
-    KeyboardGroupPage,
-    group_label,
-    key_label,
     keyboard_group_page,
     other_script,
     sidebar_key_groups,
     switch_label,
 )
 from ..speech.speech_service import SpeechSettings
+from .keyboard_grid import KeyboardGrid
 from .sidebar_panel import SidebarPanel
 
 logger = logging.getLogger(__name__)
@@ -222,6 +220,7 @@ class KeyboardWindow(SidebarPanel):
         self._key_layout.setContentsMargins(0, 0, 0, 0)
         self._key_layout.setHorizontalSpacing(8)
         self._key_layout.setVerticalSpacing(8)
+        self._keys = KeyboardGrid(self._key_layout, self._make_button, self._action)
 
         utility_row = QHBoxLayout()
         utility_row.setContentsMargins(0, 0, 0, 0)
@@ -277,19 +276,12 @@ class KeyboardWindow(SidebarPanel):
         group = self._letter_groups[group_index]
         columns = 3
         self._set_grid_stretch(len(group), columns)
-        for index, letter in enumerate(group):
-            button = self._make_button(
-                letter,
-                self._action(f"letter:{group_index}:{index}"),
-                "keyButton",
-                dynamic=True,
-            )
-            column = (
-                columns - 1 - index % columns
-                if self._settings.keyboard_script == ARABIC_SCRIPT
-                else index % columns
-            )
-            self._key_layout.addWidget(button, index // columns, column)
+        self._keys.add_keys(
+            group,
+            f"letter:{group_index}",
+            columns=columns,
+            reverse_columns=self._settings.keyboard_script == ARABIC_SCRIPT,
+        )
 
     def _show_numpad(self) -> None:
         if self._active_tab != TAB_NUMPAD:
@@ -317,31 +309,16 @@ class KeyboardWindow(SidebarPanel):
         self._clear_dynamic_buttons()
         self._sync_tabs()
         self._groups_button.setVisible(False)
-        arabic = self._settings.keyboard_script == ARABIC_SCRIPT
         page = keyboard_group_page(groups, self._group_page)
         self._group_page = page.index
         self._set_grid_stretch(len(page.groups), columns)
-        for offset, group in enumerate(page.groups):
-            index = page.start + offset
-            button = self._make_button(
-                group_label(group, self._settings.keyboard_script),
-                self._action(f"{action_prefix}:{index}"),
-                "groupButton",
-                dynamic=True,
-            )
-            button.setLayoutDirection(Qt.RightToLeft if arabic else Qt.LeftToRight)
-            column = columns - 1 - offset % columns if arabic else offset % columns
-            self._key_layout.addWidget(button, offset // columns, column)
+        self._keys.add_groups(
+            page, self._settings.keyboard_script, action_prefix, columns=columns
+        )
         if page.count > 1:
-            self._add_page_buttons(page, math.ceil(len(page.groups) / columns))
-
-    def _add_page_buttons(self, page: KeyboardGroupPage, row: int) -> None:
-        for column, (delta, label) in enumerate(((-1, "Prethodna"), (1, "Sljedeća"))):
-            button = self._make_button(
-                label, self._action(f"group-page:{delta}"), "tabButton", dynamic=True
+            self._keys.add_pages(
+                page, math.ceil(len(page.groups) / columns), action="group-page", role="tabButton"
             )
-            button.setEnabled(0 <= page.index + delta < page.count)
-            self._key_layout.addWidget(button, row, column)
 
     def _show_key_group(
         self,
@@ -362,14 +339,7 @@ class KeyboardWindow(SidebarPanel):
         group = groups[group_index]
         columns = 3
         self._set_grid_stretch(len(group), columns)
-        for index, label in enumerate(group):
-            button = self._make_button(
-                key_label(label),
-                self._action(f"{action_prefix}:{index}"),
-                "keyButton",
-                dynamic=True,
-            )
-            self._key_layout.addWidget(button, index // columns, index % columns)
+        self._keys.add_keys(group, action_prefix, columns=columns)
 
     def _trigger_action(self, action: str) -> None:
         command = action.removeprefix(KEYBOARD_WINDOW_ACTION_PREFIX)

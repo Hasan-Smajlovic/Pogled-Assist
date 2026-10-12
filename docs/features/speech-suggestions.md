@@ -8,10 +8,13 @@ bundled language data; the person's learned words stay on the local machine.
 This document defines the feature's behaviour and acceptance criteria. The
 [user guide](../USER_GUIDE.md#speech) explains how to use it. The
 [architecture](../ARCHITECTURE.md) owns runtime responsibilities and persistent
-data, the [development guide](../DEVELOPMENT.md) owns commands and UI review,
-and the [Windows release guide](../WINDOWS_RELEASE.md) owns installation and
-rollback. The [HTML design reference](../design/speech-keyboard-reference.html)
-owns visible layout and interaction states.
+data. The [development guide](../DEVELOPMENT.md) owns automated checks, the
+[UI development guide](../UI_DEVELOPMENT.md) owns visual and manual review, and
+the [Bosnian language guide](../../language/bs/README.md#preparation-and-evaluation)
+owns model preparation and evaluation commands. The
+[Windows release guide](../WINDOWS_RELEASE.md) owns installation and rollback.
+The [HTML design reference](../design/speech-keyboard-reference.html) owns visible
+layout and interaction states.
 
 ## Where suggestions appear
 
@@ -216,7 +219,7 @@ The editable input files, generated reports, and their roles are listed in
 [metadata](../../pogled_assist/assets/bosnian-model.meta.json) and
 [Islamic layer metadata](../../pogled_assist/assets/bosnian-islamic-model.meta.json)
 record exact sources, hashes, counts, and configuration. Rebuild commands live
-in the [development guide](../DEVELOPMENT.md).
+in the [Bosnian language guide](../../language/bs/README.md#preparation-and-evaluation).
 
 ## Evaluation and acceptance
 
@@ -244,7 +247,7 @@ The recorded [development report](../../language/bs/evaluation/reports/developme
 measurements for the models and source checksums recorded in those files. After
 changing model inputs, preparation, tokenisation, ranking, or evaluation code,
 regenerate the affected reports using the
-[development guide](../DEVELOPMENT.md#command-reference) before treating them as
+[language guide](../../language/bs/README.md#preparation-and-evaluation) before treating them as
 evidence for that change. Their timings describe the machine used for each run,
 not the reference Tobii setup. The recorded held-out regression reports a 46.03%
 reduction in ideal button activations against the grouped keyboard. That simulation does not
@@ -268,7 +271,7 @@ laptop with real speech and gaze active:
   [design reference](../design/speech-keyboard-reference.html).
 
 Software tests and model-only measurements do not establish these Windows and
-device results. Follow the [development](../DEVELOPMENT.md#ui-review) and
+device results. Follow the [UI development](../UI_DEVELOPMENT.md#ui-review) and
 [release](../WINDOWS_RELEASE.md) checklists and record what actually ran in the
 reviewing pull request. The installed user's behaviour remains the compatibility
 baseline until those checks are complete.

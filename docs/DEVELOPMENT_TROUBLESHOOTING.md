@@ -12,7 +12,7 @@ intended model behavior is unchanged. A model copied from another checkout can
 also have metadata for different source files.
 
 Rebuild the affected model and regenerate its reports following the
-[model command reference](DEVELOPMENT.md#command-reference), then
+[model command reference](../language/bs/README.md#preparation-and-evaluation), then
 run `.\dev.ps1 check` again. The general model needs the verified local CLASSLA
 archive; the Islamic layer uses the reviewed TSV already in the repository.
 Do not edit metadata hashes by hand or weaken the checksum assertions.

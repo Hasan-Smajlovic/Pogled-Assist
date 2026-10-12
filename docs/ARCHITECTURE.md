@@ -4,6 +4,13 @@ Pogled Assist is one Windows desktop process built with Python and PySide6.
 It turns Tobii gaze samples into pointer movement, dwell actions, speech, and
 on-screen controls while keeping all settings and phrases on the local machine.
 
+- [Runtime flow and components](#runtime-flow)
+- [Gaze and input](#gaze-and-input-path)
+- [UI and service ownership](#ui-and-service-ownership)
+- [Persistent data and diagnostic logging](#persistent-data-and-logs)
+- [Packaging and installation](#packaging-and-installation)
+- [Compatibility contract](#compatibility-contract)
+
 ## Runtime flow
 
 ```text
@@ -125,9 +132,15 @@ validity alone cannot restore it; it reappears on the next accepted gaze point.
 Changing its visibility setting cannot resurrect a stale or invalid position.
 
 The source-only mouse gaze simulator bypasses tracker discovery and feeds the
-primary-screen cursor position into the same gaze interaction path with both eyes
-valid. Automatic pointer movement is disabled in that mode so the cursor can
-remain the simulation input. It is a development aid, not hardware validation.
+primary-screen cursor position into the same gaze interaction path. It starts
+with both eyes valid; development shortcuts can change either eye, pause gaze,
+disconnect, or restore all inputs. Eye loss and disconnection close the normal
+both-eye gate. A delivery gap uses the same false/true gate pulse before fresh
+coordinates as the real provider, preventing waiting time from completing dwell.
+Automatic pointer movement is disabled so the cursor remains the input. The
+hotbar always labels this synthetic input as simulation; Tobii notifications
+remain suppressed. The [UI development guide](UI_DEVELOPMENT.md#mouse-gaze-simulation)
+owns the controls and validation limits.
 
 The controller keeps two coordinate spaces separate:
 
@@ -267,12 +280,27 @@ thread waits for speech completion or stderr EOF.
 
 `SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
 The hotbar propagates Settings and keyboard switch signals to all three input
-surfaces. `keyboard_layouts.py` owns the script-specific Unicode keys and
+surfaces. `ui/keyboard_grid.py` renders shared group, key, and page cells for
+Keyboard and Controller; each window owns its controls, spacing, state, and
+action prefixes. `keyboard_layouts.py` owns the script-specific Unicode keys and
 display-only combining-mark labels. Qt shapes and displays Arabic; Windows input
 receives the original characters. Arabic bypasses Bosnian suggestions and new
 learning, and selects the existing Edge playback boundary with the Hamed voice.
 The Bosnian voice preference and existing model/profile remain intact. See the
 [Arabic keyboard guide](USER_GUIDE.md#arabic-keyboard) for controls and limitations.
+
+`windows/startup_tasks.py` owns startup queries and writes outside Qt,
+with one active request and one replaceable pending request per Settings window.
+The worker owns writes after the window is deleted and drains its latest choice
+under the shared startup lock before a reopened window can query the state.
+Closed windows cancel pending read-only queries and ignore late UI results.
+An unresolved startup state stays distinct from disabled, so a launcher change
+can first query the task and update it only when enabled.
+
+Numeric setting bounds live in `settings_limits.py` and are shared by storage
+validation and Settings controls. Selection-pause bounds remain in
+`interaction/gaze_selection.py` and are imported by both consumers. The settings
+dataclasses retain their existing defaults and persisted field names.
 
 ## Persistent data and logs
 
@@ -301,6 +329,16 @@ snapshots; current fields and supported edits from the older version take
 precedence. Settings saves retain unknown fields and reject unreadable or
 unsupported formats. Snapshots contain personal saved data and belong with the
 user's local data, never in source control or diagnostic uploads.
+
+Unreadable speech-library files block all library writes, including rollback
+synchronization and phrase use counts. Only a successful reload clears this
+guard; fallback categories must never overwrite the original after a read error.
+
+The bundled suggestion model and writable learning profile have independent
+version 1 schemas. A base-model release can therefore be replaced without
+rewriting personal counts. An unreadable personal profile is reported and kept
+unchanged until an explicit retry can merge new in-memory learning with readable
+disk data.
 
 ### Diagnostic logging
 
@@ -356,13 +394,7 @@ the same generation guard and both-eye rule. An existing `gaze_invalid` callback
 cannot distinguish SDK-invalid from nonfinite input, so it is labeled
 `sdk_invalid_or_nonfinite`. The UI's notice timing stays independent of input
 cancellation. Settings construction and the Windows startup query are timed
-separately. Startup queries and writes run outside Qt, with one active request
-and one replaceable pending request per Settings window. The worker owns writes
-after the window is deleted and drains its latest choice under the shared startup
-lock before a reopened window can query the state. Closed windows cancel pending
-read-only queries and ignore late UI results. An unresolved startup state stays
-distinct from disabled, so a launcher change can first query the task and update
-it only when enabled.
+separately.
 
 Typed text, suggestions, phrases, key labels and content action IDs are excluded
 from added events. Such actions receive random IDs local to the current context;
@@ -373,16 +405,6 @@ these local recordings are not anonymous. Trace is explicitly enabled, lasts at
 most ten minutes or 32 MiB of additional records, then returns to basic logging.
 See [collection instructions](USER_GUIDE.md#diagnostic-log-collection) and
 [developer analysis](DEVELOPMENT.md#diagnostic-log-analysis).
-
-Unreadable speech-library files block all library writes, including rollback
-synchronization and phrase use counts. Only a successful reload clears this
-guard; fallback categories must never overwrite the original after a read error.
-
-The bundled suggestion model and writable learning profile have independent
-version 1 schemas. A base-model release can therefore be replaced without
-rewriting personal counts. An unreadable personal profile is reported and kept
-unchanged until an explicit retry can merge new in-memory learning with readable
-disk data.
 
 ## Packaging and installation
 
@@ -412,7 +434,7 @@ next installer restore or finish an update interrupted during the directory swap
 ## Design reference
 
 The [HTML design reference](design/speech-keyboard-reference.html) is separate
-from the runtime and package. The [development guide](DEVELOPMENT.md#application-design-reference-workflow)
+from the runtime and package. The [UI development guide](UI_DEVELOPMENT.md#application-design-reference-workflow)
 owns its page map and review workflow.
 
 ## Compatibility contract

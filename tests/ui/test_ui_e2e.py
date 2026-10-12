@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import threading
-from types import SimpleNamespace
-
 import pytest
+from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from test_hotbar_e2e import hotbar_gaze as hotbar_gaze
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -16,156 +13,39 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
-def test_version_dropdown_keeps_installed_label_and_requires_install_action(qtbot, monkeypatch):
-    from pogled_assist.release_update import StableVersion
-    from pogled_assist.ui.settings_window import SettingsWindow
-    from scripts.ui.capture_ui import PreviewReleaseManager
-
+def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze, monkeypatch):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    point = QPoint(300, 250)
     monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+        "pogled_assist.tracking.mouse_gaze_provider._primary_screen_geometry",
+        lambda: controller._logical_screen_rect,
     )
-    manager = PreviewReleaseManager()
-    window = SettingsWindow(GazeSettings(), SpeechSettings(), update_manager=manager)
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
-    window.show()
-    requested = []
-    window.update_requested.connect(requested.append)
-    row = window._update_row
-    assert row._installed_label.text() == "Trenutno koristite v0.3.5"
-    assert "novija verzija v0.4.0" in row._status_label.text()
-    row._version_combo.setCurrentIndex(3)
-    assert requested == []
-    assert row._installed_label.text() == "Trenutno koristite v0.3.5"
-    assert row._version_combo.currentData() == StableVersion(0, 1, 0)
-    row._update_button.click()
-    assert requested == [StableVersion(0, 1, 0)]
-    assert not row._version_combo.isEnabled()
-    assert "otvorena" in row._status_label.text()
-    row.show_error("Paket nije provjeren.")
-    assert row._version_combo.isEnabled()
-    row._version_combo.setCurrentIndex(1)
-    assert not row._update_button.isEnabled()
-    row._check_failed("Nema internet veze.")
-    assert row._installed_label.text() == "Trenutno koristite v0.3.5"
-    assert not row._version_combo.isEnabled()
-    assert not row._update_button.isEnabled()
-    row._check_button.click()
-    assert row._version_combo.isEnabled()
-    qtbot.wait(1)
-    for control in (row._version_combo, row._update_button, row._check_button):
-        assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
-        assert control.height() >= 58
+    provider = hotbar._gaze
+    provider._cursor_position = lambda: point
+    provider.start()
+    provider._timer.stop()
+    shortcuts = {shortcut.key().toString(): shortcut for shortcut in hotbar._simulation_shortcuts}
+    assert set(shortcuts) == {"F6", "F7", "F8", "F9", "F10"}
+    assert controller._both_eyes_open
+    assert hotbar._gaze_bubble.isVisible()
 
+    shortcuts["F6"].activated.emit()
+    provider._emit_cursor_sample()
+    assert not controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    assert hotbar._tracking_status._view.title == "Simulacija mišem"
+    assert hotbar._tracking_status._view.detail == "Lijevo —   Desno ✓"
+    assert actions == []
 
-@pytest.mark.e2e
-@pytest.mark.parametrize("editing", [False, True])
-def test_version_restart_warning_cancels_without_losing_input(
-    hotbar_gaze, qtbot, monkeypatch, tmp_path, editing
-):
-    from pogled_assist.release_update import ReleaseCheckResult, StableVersion
-
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-    hotbar = hotbar_gaze[0]
-    hotbar._open_speech()
-    speech = hotbar._speech_window
-    speech._input.setText("SYNTHETIC UNSAVED MESSAGE")
-    if editing:
-        speech._categories_button.click()
-        speech._start_editor()
-        assert speech._input.text() == ""
-    hotbar._open_settings()
-    row = hotbar._settings_window._update_row
-    version = StableVersion(0, 1, 0)
-    row._check_completed(
-        ReleaseCheckResult(StableVersion(0, 3, 5), StableVersion(0, 3, 5), (version,))
-    )
-    manager = hotbar._release_update_manager
-    manager._control_directory = tmp_path
-    manager._installing = True
-    monkeypatch.setattr(manager, "prepare", lambda selected: None)
-    quits = []
-    monkeypatch.setattr(hotbar, "_quit_application", lambda: quits.append(True))
-    row._update_button.click()
-    assert quits == []
-    manager._prepare_done.emit(tmp_path, None)
-    qtbot.waitUntil(row._warning.isVisible)
-    assert quits == []
-    row._cancel_button.click()
-    assert quits == []
-    assert speech.has_unsaved_input
-    assert (
-        speech._editor is not None
-        if editing
-        else speech._input.text() == "SYNTHETIC UNSAVED MESSAGE"
-    )
-    assert (tmp_path / "cancel").exists()
-    assert not (tmp_path / "install").exists()
-
-
-@pytest.mark.e2e
-def test_verified_version_restarts_only_after_explicit_confirmation(
-    hotbar_gaze, monkeypatch, tmp_path
-):
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-    hotbar = hotbar_gaze[0]
-    hotbar._open_speech()
-    hotbar._speech_window._input.setText("SYNTHETIC MESSAGE")
-    hotbar._open_settings()
-    manager = hotbar._release_update_manager
-    manager._control_directory = tmp_path
-    manager._installing = True
-    (tmp_path / "ready.json").write_text('{"ready":true}', encoding="utf-8")
-    quits = []
-    monkeypatch.setattr(hotbar, "_quit_application", lambda: quits.append(True))
-    manager._prepare_done.emit(tmp_path, None)
-    assert quits == []
-    hotbar._settings_window._update_row._confirm_button.click()
-    assert quits == [True]
-    assert (tmp_path / "install").exists()
-
-
-@pytest.mark.e2e
-def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
-    from pogled_assist.ui import settings_window
-
-    entered, release = threading.Event(), threading.Event()
-    now = [10.0]
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return False
-
-    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
-    window = settings_window.SettingsWindow(
-        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
-    )
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
-    window.show()
-    try:
-        qtbot.waitUntil(entered.is_set)
-        window._gaze_tab_button.click()
-        qtbot.wait(1)
-        target = window._gaze_bubble_button
-        center = target.mapToGlobal(target.rect().center())
-        for stamp in (10.0, 10.1, 10.251):
-            now[0] = stamp
-            window.handle_gaze(center)
-        assert not window._gaze_settings.show_gaze_bubble
-        assert window._startup_busy
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert not window._gaze_settings.show_gaze_bubble
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
+    shortcuts["F10"].activated.emit()
+    assert controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    provider._emit_cursor_sample()
+    assert hotbar._gaze_bubble.isVisible()
+    shortcuts["F9"].activated.emit()
+    assert not controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    assert hotbar._tracking_status._view.title == "Simulacija mišem"
 
 
 @pytest.mark.e2e

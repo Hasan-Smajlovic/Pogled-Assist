@@ -92,9 +92,11 @@ development-only mouse simulator:
 .\dev.ps1 simulate
 ```
 
-Moving the mouse supplies gaze coordinates and simulates both eyes as valid. The
-simulator does not move the pointer automatically because the pointer is its gaze
-source, but armed dwell click actions still use the normal Windows input path.
+Moving the mouse supplies gaze coordinates, initially with both eyes valid.
+Development shortcuts simulate eye loss, paused samples and a disconnected
+tracker; see [mouse gaze simulation](docs/UI_DEVELOPMENT.md#mouse-gaze-simulation).
+The simulator does not move the pointer automatically because the pointer is
+its gaze source, but armed dwell actions still use the normal Windows input path.
 
 ## Local development
 
@@ -129,6 +131,8 @@ the [development guide](docs/DEVELOPMENT.md).
 | Understand Bosnian word completion, prediction, and its verification | [Speech suggestions](docs/features/speech-suggestions.md) |
 | Find instructions for coding agents and files that change together | [Agent guide](AGENTS.md) |
 | Set up development and run checks | [Development guide](docs/DEVELOPMENT.md) |
+| Change UI, review screenshots, or run manual Windows/Tobii checks | [UI development and review](docs/UI_DEVELOPMENT.md) |
+| Configure or recover gallery publication | [UI gallery publication](docs/UI_GALLERY.md) |
 | Troubleshoot local development checks | [Development troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
 | Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
@@ -137,7 +141,7 @@ The [application UI reference](docs/design/speech-keyboard-reference.html) is a
 development-only collection of HTML prototypes for the visible PySide6
 interface. Its historical filename remains the entry point, linking to a
 separate document for each screen or feature. The application does not load or
-package these files. The [development guide](docs/DEVELOPMENT.md#application-design-reference-workflow)
+package these files. The [UI development guide](docs/UI_DEVELOPMENT.md#application-design-reference-workflow)
 maps the pages and shared assets.
 
 ## Runtime requirements
@@ -198,7 +202,7 @@ and Windows packaging checks. Merges to `master` publish an immutable versioned
 release from the exact merged commit.
 After CI, the UI gallery workflow publishes screenshot galleries and updates a
 PR bot comment with previews and links. The repository owner must complete the
-[Pages setup](CONTRIBUTING.md#ui-gallery-publication) before the first publication.
+[Pages setup](docs/UI_GALLERY.md#activation-and-recovery) before the first publication.
 
 Release construction, manual hardware validation, and rollback are documented in
 the [Windows release guide](docs/WINDOWS_RELEASE.md).

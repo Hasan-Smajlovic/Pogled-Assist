@@ -12,6 +12,17 @@ from .interaction.gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PA
 from .interaction.mouse_controller import GazeSettings
 from .keyboard_layouts import KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from .logging_setup import get_project_root
+from .settings_limits import (
+    CLICK_COOLDOWN_MS_RANGE,
+    DWELL_MS_RANGE,
+    DWELL_RADIUS_RANGE,
+    LETTERS_PER_GROUP_RANGE,
+    SMOOTHING_RANGE,
+    SPEECH_AMPLITUDE_RANGE,
+    SPEECH_PITCH_RANGE,
+    SPEECH_SPEED_RANGE,
+    clamp,
+)
 from .speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
 logger = logging.getLogger(__name__)
@@ -109,15 +120,14 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
     settings = _dataclass_from_mapping(GazeSettings(), value)
     return replace(
         settings,
-        smoothing=_clamp_float(settings.smoothing, 0.05, 1.0),
-        selection_pause_ms=_clamp_int(
+        smoothing=clamp(settings.smoothing, SMOOTHING_RANGE),
+        selection_pause_ms=clamp(
             settings.selection_pause_ms,
-            MIN_SELECTION_PAUSE_MS,
-            MAX_SELECTION_PAUSE_MS,
+            (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
         ),
-        dwell_ms=_clamp_int(settings.dwell_ms, 150, 5000),
-        dwell_radius_px=_clamp_int(settings.dwell_radius_px, 10, 160),
-        click_cooldown_ms=_clamp_int(settings.click_cooldown_ms, 100, 5000),
+        dwell_ms=clamp(settings.dwell_ms, DWELL_MS_RANGE),
+        dwell_radius_px=clamp(settings.dwell_radius_px, DWELL_RADIUS_RANGE),
+        click_cooldown_ms=clamp(settings.click_cooldown_ms, CLICK_COOLDOWN_MS_RANGE),
         move_mouse=bool(settings.move_mouse),
         show_gaze_bubble=bool(settings.show_gaze_bubble),
         show_interaction_overlay=bool(settings.show_interaction_overlay),
@@ -143,10 +153,10 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
             if settings.keyboard_script in dict(KEYBOARD_SCRIPTS)
             else LATIN_SCRIPT
         ),
-        speed=_clamp_int(settings.speed, 80, 320),
-        pitch=_clamp_int(settings.pitch, 0, 99),
-        amplitude=_clamp_int(settings.amplitude, 0, 200),
-        letters_per_group=_clamp_int(settings.letters_per_group, 1, 12),
+        speed=clamp(settings.speed, SPEECH_SPEED_RANGE),
+        pitch=clamp(settings.pitch, SPEECH_PITCH_RANGE),
+        amplitude=clamp(settings.amplitude, SPEECH_AMPLITUDE_RANGE),
+        letters_per_group=clamp(settings.letters_per_group, LETTERS_PER_GROUP_RANGE),
         voice_preset=voice_preset,
     )
 
@@ -208,11 +218,3 @@ def _coerce_float(value: Any, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
-
-
-def _clamp_int(value: int, minimum: int, maximum: int) -> int:
-    return min(maximum, max(minimum, value))
-
-
-def _clamp_float(value: float, minimum: float, maximum: float) -> float:
-    return min(maximum, max(minimum, value))

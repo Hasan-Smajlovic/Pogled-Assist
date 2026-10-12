@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication
 
 from .gaze_check import CheckSnapshot, CheckTelemetry
-from .status import TrackingState, TrackingStatus
+from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,10 @@ class MouseGazeProvider(QObject):
         super().__init__(parent)
         self._cursor_position = cursor_position or QCursor.pos
         self._running = False
+        self._eyes = (True, True)
+        self._connected = True
+        self._paused = False
+        self._last_gaze_at: float | None = None
         self._check_telemetry = CheckTelemetry()
         self._check_active = False
         self._screen_geometry: tuple[int, int, int, int] | None = None
@@ -54,11 +58,13 @@ class MouseGazeProvider(QObject):
             return
 
         self._running = True
+        self._eyes = (True, True)
+        self._connected = True
+        self._paused = False
+        self._last_gaze_at = None
         self._check_telemetry = CheckTelemetry()
-        self.tracking_status_changed.emit(TrackingStatus(TrackingState.SIMULATING))
         self.tracker_changed.emit("Simulator pogleda mišem")
-        self.eye_status_changed.emit(True, True)
-        self.status_changed.emit("Praćenje simulacijom miša je aktivno.")
+        self._publish_state()
         self._emit_cursor_sample()
         self._timer.start()
         logger.info("Mouse gaze simulator started.")
@@ -75,18 +81,85 @@ class MouseGazeProvider(QObject):
         self.eye_status_changed.emit(False, False)
         logger.info("Mouse gaze simulator stopped.")
 
+    def toggle_left_eye(self) -> None:
+        if self._running:
+            self._eyes = (not self._eyes[0], self._eyes[1])
+            self._publish_state()
+
+    def toggle_right_eye(self) -> None:
+        if self._running:
+            self._eyes = (self._eyes[0], not self._eyes[1])
+            self._publish_state()
+
+    def toggle_gaze(self) -> None:
+        if self._running:
+            self._paused = not self._paused
+            self._publish_state()
+
+    def toggle_connection(self) -> None:
+        if self._running:
+            self._connected = not self._connected
+            self._publish_state()
+
+    def reset(self) -> None:
+        if not self._running:
+            return
+        self.eye_status_changed.emit(False, False)
+        self._eyes = (True, True)
+        self._connected = True
+        self._paused = False
+        self._last_gaze_at = None
+        if self._check_active:
+            self._check_telemetry.record_gaze_invalid()
+        self._publish_state()
+
+    def _publish_state(self) -> None:
+        if not self._connected:
+            detail = "Veza je prekinuta"
+        elif not all(self._eyes):
+            detail = (
+                f"Lijevo {'✓' if self._eyes[0] else '—'}   "
+                f"Desno {'✓' if self._eyes[1] else '—'}"
+            )
+        elif self._paused:
+            detail = "Isporuka pogleda pauzirana"
+        else:
+            detail = ""
+        eyes = self._eyes if self._connected else (False, False)
+        if self._check_active:
+            self._check_telemetry.record_eyes(*eyes, now=time.monotonic())
+        self.tracking_status_changed.emit(TrackingStatus(TrackingState.SIMULATING, detail))
+        self.eye_status_changed.emit(*eyes)
+        self.status_changed.emit(
+            f"Simulacija: {detail}." if detail else "Praćenje simulacijom miša je aktivno."
+        )
+        if self._check_active:
+            self.diagnostics_updated.emit(self.check_snapshot())
+
     def _emit_cursor_sample(self) -> None:
         if not self._running or self._screen_geometry is None:
             return
 
-        point = self._cursor_position()
-        x, y = _normalize_cursor_position(point, self._screen_geometry)
         now = time.monotonic()
+        eyes = self._eyes if self._connected else (False, False)
         if self._check_active:
-            self._check_telemetry.record_eyes(True, True, now)
-            self._check_telemetry.record_gaze(x, y, now)
+            self._check_telemetry.record_eyes(*eyes, now=now)
+        if all(eyes) and not self._paused:
+            if (
+                self._last_gaze_at is not None
+                and now - self._last_gaze_at >= GAZE_DELIVERY_GAP_SECONDS
+            ):
+                # Match the provider's gate pulse so waiting time cannot finish a dwell.
+                self.eye_status_changed.emit(False, False)
+                self.eye_status_changed.emit(*eyes)
+            point = self._cursor_position()
+            x, y = _normalize_cursor_position(point, self._screen_geometry)
+            self._last_gaze_at = now
+            if self._check_active:
+                self._check_telemetry.record_gaze(x, y, now)
+            self.gaze_updated.emit(x, y, time.monotonic_ns())
+        if self._check_active:
             self.diagnostics_updated.emit(self.check_snapshot())
-        self.gaze_updated.emit(x, y, time.monotonic_ns())
 
     def check_snapshot(self) -> CheckSnapshot:
         return self._check_telemetry.snapshot(time.monotonic())
