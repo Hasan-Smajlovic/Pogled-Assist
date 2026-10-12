@@ -312,9 +312,7 @@ class KeyboardWindow(SidebarPanel):
         page = keyboard_group_page(groups, self._group_page)
         self._group_page = page.index
         self._set_grid_stretch(len(page.groups), columns)
-        self._keys.add_groups(
-            page, self._settings.keyboard_script, action_prefix, columns=columns
-        )
+        self._keys.add_groups(page, self._settings.keyboard_script, action_prefix, columns=columns)
         if page.count > 1:
             self._keys.add_pages(
                 page, math.ceil(len(page.groups) / columns), action="group-page", role="tabButton"

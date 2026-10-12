@@ -118,8 +118,7 @@ class MouseGazeProvider(QObject):
             detail = "Veza je prekinuta"
         elif not all(self._eyes):
             detail = (
-                f"Lijevo {'✓' if self._eyes[0] else '—'}   "
-                f"Desno {'✓' if self._eyes[1] else '—'}"
+                f"Lijevo {'✓' if self._eyes[0] else '—'}   Desno {'✓' if self._eyes[1] else '—'}"
             )
         elif self._paused:
             detail = "Isporuka pogleda pauzirana"
