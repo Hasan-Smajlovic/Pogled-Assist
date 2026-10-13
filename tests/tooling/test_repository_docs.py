@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REQUIRED_FILES = (
     "AGENTS.md",
+    "CLAUDE.md",
     "README.md",
     "CONTRIBUTING.md",
     "docs/ARCHITECTURE.md",
@@ -49,6 +50,7 @@ REQUIRED_FILES = (
 
 AGENT_GUIDANCE = (
     "AGENTS.md",
+    "CLAUDE.md",
     ".agents/skills/*/SKILL.md",
 )
 
