@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
-from collections import deque
-from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSignalBlocker, QSize, Qt, Signal, Slot
@@ -23,8 +20,18 @@ from ..interaction.mouse_controller import GazeSettings
 from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from ..logging_setup import set_application_logging_enabled
 from ..release_update import ReleaseUpdateManager
+from ..settings_limits import (
+    CLICK_COOLDOWN_MS_RANGE,
+    DWELL_MS_RANGE,
+    DWELL_RADIUS_RANGE,
+    LETTERS_PER_GROUP_RANGE,
+    SMOOTHING_RANGE,
+    SPEECH_SPEED_RANGE,
+    clamp,
+)
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
 from ..suggestions.service import SuggestionService
+from ..windows.startup_tasks import StartupRequest, StartupTasks
 from ..windows.windows_startup import (
     StartupTaskResult,
     is_windows_startup_enabled,
@@ -44,9 +51,6 @@ from .settings_controls import (
 )
 
 logger = logging.getLogger(__name__)
-_startup_task_lock = threading.Lock()
-_startup_order = threading.Condition()
-_startup_turns: deque = deque()
 
 ARABIC_VOICE_ITEM = "arabic_hamed"
 BOSNIAN_VOICE_HINT = (
@@ -304,7 +308,11 @@ class SettingsWindow(QWidget):
         self._startup_busy = False
         self._startup_closed = False
         self._startup_desired_enabled: bool | None = None
-        self._startup_tasks = _StartupTasks(self._startup_task_completed.emit)
+        self._startup_tasks = StartupTasks(
+            self._startup_task_completed.emit,
+            query=is_windows_startup_enabled,
+            update=set_windows_startup_enabled,
+        )
         self._startup_task_completed.connect(
             self._finish_startup_task, Qt.ConnectionType.QueuedConnection
         )
@@ -830,41 +838,40 @@ class SettingsWindow(QWidget):
         self._emit_gaze_settings(status)
 
     def _adjust_dwell_ms(self, delta: int) -> None:
-        value = _clamp_int(self._gaze_settings.dwell_ms + delta, 150, 5000)
+        value = clamp(self._gaze_settings.dwell_ms + delta, DWELL_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, dwell_ms=value)
         self._emit_gaze_settings("Vrijeme zadržavanja pogleda je ažurirano.")
 
     def _adjust_selection_pause(self, delta: int) -> None:
-        value = _clamp_int(
+        value = clamp(
             self._gaze_settings.selection_pause_ms + delta,
-            MIN_SELECTION_PAUSE_MS,
-            MAX_SELECTION_PAUSE_MS,
+            (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
         )
         self._gaze_settings = replace(self._gaze_settings, selection_pause_ms=value)
         self._emit_gaze_settings("Pauza prije odabira je ažurirana.")
 
     def _adjust_dwell_radius(self, delta: int) -> None:
-        value = _clamp_int(self._gaze_settings.dwell_radius_px + delta, 10, 160)
+        value = clamp(self._gaze_settings.dwell_radius_px + delta, DWELL_RADIUS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, dwell_radius_px=value)
         self._emit_gaze_settings("Radijus stabilnog pogleda je ažuriran.")
 
     def _adjust_click_cooldown(self, delta: int) -> None:
-        value = _clamp_int(self._gaze_settings.click_cooldown_ms + delta, 100, 5000)
+        value = clamp(self._gaze_settings.click_cooldown_ms + delta, CLICK_COOLDOWN_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, click_cooldown_ms=value)
         self._emit_gaze_settings("Pauza između radnji je ažurirana.")
 
     def _adjust_smoothing(self, delta: float) -> None:
-        value = round(_clamp_float(self._gaze_settings.smoothing + delta, 0.05, 1.0), 2)
+        value = round(clamp(self._gaze_settings.smoothing + delta, SMOOTHING_RANGE), 2)
         self._gaze_settings = replace(self._gaze_settings, smoothing=value)
         self._emit_gaze_settings("Uglađivanje pokazivača je ažurirano.")
 
     def _adjust_speech_speed(self, delta: int) -> None:
-        value = _clamp_int(self._speech_settings.speed + delta, 80, 320)
+        value = clamp(self._speech_settings.speed + delta, SPEECH_SPEED_RANGE)
         self._speech_settings = replace(self._speech_settings, speed=value)
         self._emit_speech_settings("Brzina govora je ažurirana.")
 
     def _adjust_letters_per_group(self, delta: int) -> None:
-        value = _clamp_int(self._speech_settings.letters_per_group + delta, 1, 12)
+        value = clamp(self._speech_settings.letters_per_group + delta, LETTERS_PER_GROUP_RANGE)
         self._speech_settings = replace(self._speech_settings, letters_per_group=value)
         self._emit_speech_settings("Broj slova u grupi je ažuriran.")
 
@@ -996,7 +1003,7 @@ class SettingsWindow(QWidget):
         if self._startup_closed:
             return
         self._startup_revision += 1
-        request = _StartupRequest(
+        request = StartupRequest(
             self._startup_revision,
             enabled,
             self._gaze_settings.show_launcher_window,
@@ -1026,123 +1033,6 @@ class SettingsWindow(QWidget):
         else:
             self._startup_desired_enabled = self._gaze_settings.start_with_windows
             self._set_status("Ažuriranje pokretanja uz Windows nije uspjelo.")
-
-
-@dataclass(frozen=True)
-class _StartupRequest:
-    revision: int
-    enabled: bool | None
-    show_launcher: bool
-    status: str | None
-    update_launcher: bool = False
-
-    @property
-    def read_only(self) -> bool:
-        return self.enabled is None and not self.update_launcher
-
-
-class _StartupTasks:
-    """Own pending writes independently of the Settings widget's lifetime."""
-
-    def __init__(self, completed) -> None:
-        self._completed = completed
-        self._query = is_windows_startup_enabled
-        self._update = set_windows_startup_enabled
-        self._lock = threading.Lock()
-        self._pending: _StartupRequest | None = None
-        self._running = False
-        self._closed = False
-
-    def submit(self, request: _StartupRequest) -> None:
-        with self._lock:
-            self._pending = request
-            if self._running:
-                return
-            self._running = True
-        turn = object()
-        with _startup_order:
-            _startup_turns.append(turn)
-        try:
-            threading.Thread(
-                target=self._run, args=(turn,), name="pogled-startup-task", daemon=True
-            ).start()
-        except RuntimeError:
-            logger.exception("Could not start Windows startup worker.")
-            with self._lock:
-                self._running = False
-                self._pending = None
-            self._release_turn(turn)
-            self._finish(request, None)
-
-    def close(self) -> None:
-        with self._lock:
-            self._closed = True
-
-    def _take(self) -> _StartupRequest | None:
-        with self._lock:
-            request, self._pending = self._pending, None
-            if request is None:
-                self._running = False
-            return request
-
-    def _cancelled(self, request: _StartupRequest) -> bool:
-        with self._lock:
-            return self._closed and request.read_only
-
-    def _run(self, turn: object) -> None:
-        acquired = False
-        try:
-            while (request := self._take()) is not None:
-                result = None
-                try:
-                    if not acquired:
-                        acquired = self._wait_for_turn(turn, request)
-                    if acquired and not self._cancelled(request):
-                        result = self._apply(request)
-                except Exception:
-                    logger.exception("Could not read or update Windows startup state.")
-                self._finish(request, result)
-        finally:
-            # Drain this window's latest write before a reopened window queries
-            # the state. No Qt callback is needed to continue after deletion.
-            if acquired:
-                _startup_task_lock.release()
-            self._release_turn(turn)
-
-    def _wait_for_turn(self, turn: object, request: _StartupRequest) -> bool:
-        while not self._cancelled(request):
-            with _startup_order:
-                if _startup_turns[0] is not turn:
-                    _startup_order.wait(timeout=0.1)
-                    continue
-            if _startup_task_lock.acquire(timeout=0.1):
-                return True
-        return False
-
-    def _apply(self, request: _StartupRequest) -> object:
-        enabled = self._query() if request.enabled is None else request.enabled
-        update = request.enabled is not None or (request.update_launcher and enabled)
-        if update:
-            return self._update(enabled, show_launcher_window=request.show_launcher)
-        return enabled
-
-    @staticmethod
-    def _release_turn(turn: object) -> None:
-        with _startup_order:
-            _startup_turns.remove(turn)
-            _startup_order.notify_all()
-
-    def _finish(self, request: _StartupRequest, result: object) -> None:
-        with suppress(RuntimeError):
-            self._completed(request.revision, result, request.status)
-
-
-def _clamp_int(value: int, minimum: int, maximum: int) -> int:
-    return min(maximum, max(minimum, value))
-
-
-def _clamp_float(value: float, minimum: float, maximum: float) -> float:
-    return min(maximum, max(minimum, value))
 
 
 def _checkbox_x_image_url() -> str:

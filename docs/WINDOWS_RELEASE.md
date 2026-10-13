@@ -250,8 +250,8 @@ The separate **UI gallery** workflow publishes screenshots after CI completes
 and keeps the existing PR comment current while CI runs or publication fails.
 Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery`
 jobs are not required PR checks. Pages setup and permissions are documented in
-[CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication), and visual review is
-documented in [the development guide](DEVELOPMENT.md#ui-review). Screenshots do not
+[the UI gallery guide](UI_GALLERY.md#activation-and-recovery), and visual review is
+documented in [the UI development guide](UI_DEVELOPMENT.md#ui-review). Screenshots do not
 replace the software checks or manual Windows and Tobii validation.
 
 After an approved merge to `master`, **Publish release** checks out exactly

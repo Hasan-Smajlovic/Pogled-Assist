@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt, QTimer
@@ -8,6 +9,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt, QTimer
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.windows import startup_tasks
 from pogled_assist.windows.windows_startup import StartupTaskResult
 
 
@@ -170,7 +172,7 @@ def test_closed_settings_cancels_a_startup_query_waiting_for_another_window(qtbo
         return False
 
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    with settings_window._startup_task_lock:
+    with startup_tasks._task_lock:
         window = SettingsWindow(GazeSettings(), SpeechSettings())
         qtbot.addWidget(window)
         window.show()
@@ -242,7 +244,7 @@ def test_waiting_startup_write_finishes_before_a_reopened_window_can_query(qtbot
 
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
     monkeypatch.setattr(settings_window, "set_windows_startup_enabled", update)
-    with settings_window._startup_task_lock:
+    with startup_tasks._task_lock:
         window = SettingsWindow(GazeSettings(), SpeechSettings())
         window.show()
         window._startup_checkbox.click()
@@ -592,3 +594,42 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]
+
+
+@pytest.mark.e2e
+def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
+    from pogled_assist.ui import settings_window
+
+    entered, release = threading.Event(), threading.Event()
+    now = [10.0]
+
+    def query():
+        entered.set()
+        release.wait(5)
+        return False
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
+    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    window = settings_window.SettingsWindow(
+        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
+    )
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        window._gaze_tab_button.click()
+        qtbot.wait(1)
+        target = window._gaze_bubble_button
+        center = target.mapToGlobal(target.rect().center())
+        for stamp in (10.0, 10.1, 10.251):
+            now[0] = stamp
+            window.handle_gaze(center)
+        assert not window._gaze_settings.show_gaze_bubble
+        assert window._startup_busy
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)
+        assert not window._gaze_settings.show_gaze_bubble
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not window._startup_busy)

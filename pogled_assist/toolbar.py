@@ -336,6 +336,20 @@ class HotbarWindow(QWidget):
     def _install_shortcuts(self) -> None:
         self._quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
         self._quit_shortcut.activated.connect(self.close)
+        self._simulation_shortcuts: list[QShortcut] = []
+        if self._simulate_gaze:
+            for key, action in (
+                ("F6", self._gaze.toggle_left_eye),
+                ("F7", self._gaze.toggle_right_eye),
+                ("F8", self._gaze.toggle_gaze),
+                ("F9", self._gaze.toggle_connection),
+                ("F10", self._gaze.reset),
+            ):
+                shortcut = QShortcut(QKeySequence(key), self)
+                shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+                shortcut.setAutoRepeat(False)
+                shortcut.activated.connect(action)
+                self._simulation_shortcuts.append(shortcut)
 
     def _start_services(self) -> None:
         logger.info("Starting hotbar services.")

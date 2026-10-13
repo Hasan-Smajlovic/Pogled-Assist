@@ -218,14 +218,6 @@ class WindowsInputController:
         ]
         self._user32.mouse_event.restype = None
 
-        self._user32.keybd_event.argtypes = [
-            ctypes.c_ubyte,
-            ctypes.c_ubyte,
-            wintypes.DWORD,
-            self._extra_info_type,
-        ]
-        self._user32.keybd_event.restype = None
-
         self._user32.SendInput.argtypes = [
             wintypes.UINT,
             ctypes.POINTER(_INPUT),
@@ -279,9 +271,6 @@ class WindowsInputController:
     def _mouse_event(self, flags: int, data: int = 0) -> None:
         mouse_data = int(data) & 0xFFFFFFFF
         self._user32.mouse_event(flags, 0, 0, mouse_data, self._extra_info_type(0))
-
-    def _keybd_event(self, key_code: int, flags: int) -> None:
-        self._user32.keybd_event(key_code, 0, flags, self._extra_info_type(0))
 
     def _send_unicode_character(self, character: str) -> None:
         for code_unit in _utf16_code_units(character):

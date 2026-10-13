@@ -71,8 +71,7 @@ function Get-DevPython {
 function Get-PythonVersion {
     param([string]$Executable)
 
-    # Legacy PowerShell drops quotes inside arguments passed to native commands.
-    return Invoke-PythonProbe -Executable $Executable -Code 'import sys; print(str(sys.version_info.major)+chr(46)+str(sys.version_info.minor) if sys.maxsize > 2**32 else 32)'
+    return Invoke-PythonProbe -Executable $Executable -Code 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}" if sys.maxsize > 2**32 else 32)'
 }
 
 function Get-PythonBaseExecutable {
@@ -87,14 +86,33 @@ function Invoke-PythonProbe {
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
         return $null
     }
+    $process = [Diagnostics.Process]::new()
     try {
-        $probe = & $Executable -c $Code 2>$null
-        if ($LASTEXITCODE -ne 0) {
+        $process.StartInfo.FileName = $Executable
+        # Passing code through stdin avoids legacy PowerShell argument quoting.
+        $process.StartInfo.Arguments = "-"
+        # The Windows shell can prompt before rejecting a broken executable.
+        $process.StartInfo.UseShellExecute = $false
+        $process.StartInfo.CreateNoWindow = $true
+        $process.StartInfo.RedirectStandardInput = $true
+        $process.StartInfo.RedirectStandardOutput = $true
+        $process.StartInfo.RedirectStandardError = $true
+        $process.Start() | Out-Null
+        $output = $process.StandardOutput.ReadToEndAsync()
+        $errors = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.WriteLine($Code)
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        $probe = $output.GetAwaiter().GetResult()
+        $errors.GetAwaiter().GetResult() | Out-Null
+        if ($process.ExitCode -ne 0) {
             return $null
         }
-        return ([string]($probe | Select-Object -First 1)).Trim()
+        return ($probe -split "`n")[0].Trim()
     } catch {
         return $null
+    } finally {
+        $process.Dispose()
     }
 }
 

@@ -5,18 +5,27 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+import pytest
+import yaml
+from yaml.constructor import ConstructorError
+from yaml.nodes import MappingNode
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REQUIRED_FILES = (
     "AGENTS.md",
+    "CLAUDE.md",
     "README.md",
     "CONTRIBUTING.md",
     "docs/ARCHITECTURE.md",
     "docs/DEVELOPMENT.md",
+    "docs/UI_DEVELOPMENT.md",
+    "docs/UI_GALLERY.md",
     "docs/DEVELOPMENT_TROUBLESHOOTING.md",
     "docs/USER_GUIDE.md",
     "docs/WINDOWS_RELEASE.md",
     "docs/features/speech-suggestions.md",
+    "language/bs/README.md",
     "docs/design/speech-keyboard-reference.html",
     "docs/design/speech.html",
     "docs/design/settings.html",
@@ -32,12 +41,16 @@ REQUIRED_FILES = (
     ".github/ISSUE_TEMPLATE/feature_request.md",
     ".github/ISSUE_TEMPLATE/maintenance_task.md",
     ".github/ISSUE_TEMPLATE/config.yml",
+    ".agents/skills/blast-radius/SKILL.md",
+    ".agents/skills/grill-me/SKILL.md",
+    ".agents/skills/interrogate/SKILL.md",
     ".agents/skills/security-review/SKILL.md",
     ".agents/skills/shipping-a-change/SKILL.md",
 )
 
 AGENT_GUIDANCE = (
     "AGENTS.md",
+    "CLAUDE.md",
     ".agents/skills/*/SKILL.md",
 )
 
@@ -170,6 +183,124 @@ def test_required_guides_and_templates_exist() -> None:
     assert not missing, "Missing required repository files:\n" + "\n".join(missing)
 
 
+def test_skills_have_valid_metadata() -> None:
+    errors = [
+        f"{document.relative_to(REPO_ROOT)}: {error}"
+        for document in sorted(REPO_ROOT.glob(".agents/skills/*/SKILL.md"))
+        for error in _skill_metadata_errors(document)
+    ]
+
+    assert not errors, "Invalid skill metadata:\n" + "\n".join(errors)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "name: example-skill\ndescription: Review project changes.\n",
+        'name: "example-skill"\ndescription: "Review changes: code and docs."\n',
+        "name: 'example-skill'\ndescription: >\n  Review project changes\n  and their consequences.\n",
+        "name: example-skill\ndescription: |\n  Review project changes.\n  Check their consequences.\n",
+        "name: example-skill\ndescription: Review changes.\n"
+        "metadata:\n  owner: contributors\n  areas: [code, docs]\n",
+    ],
+    ids=["plain", "quoted", "folded", "literal", "additional-metadata"],
+)
+def test_skill_metadata_accepts_valid_documents(tmp_path: Path, metadata: str) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    document.write_text(
+        f"---\n{metadata}---\n\n# Example skill\n\nBody: [this is Markdown, not YAML.\n",
+        encoding="utf-8",
+    )
+
+    assert _skill_metadata_errors(document) == []
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_error"),
+    [
+        pytest.param("", "must start with ---", id="empty-file"),
+        pytest.param("# Example skill\n", "must start with ---", id="missing-frontmatter"),
+        pytest.param(
+            "# Heading\n---\nname: example-skill\ndescription: Review changes.\n---\n",
+            "must start with ---",
+            id="frontmatter-after-body",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n",
+            "missing closing ---",
+            id="unclosed-frontmatter",
+        ),
+        pytest.param("---\n---\n", "must be a YAML mapping", id="empty-frontmatter"),
+        pytest.param("---\n- example-skill\n---\n", "must be a YAML mapping", id="sequence"),
+        pytest.param("---\nexample-skill\n---\n", "must be a YAML mapping", id="scalar"),
+        pytest.param(
+            "---\nname: example-skill\ndescription: [unfinished\n---\n",
+            "invalid YAML",
+            id="invalid-yaml",
+        ),
+        pytest.param(
+            "---\nname: other-skill\ndescription: Review changes.\n---\n",
+            "name must match directory 'example-skill'",
+            id="wrong-name",
+        ),
+        pytest.param(
+            "---\ndescription: Review changes.\n---\n",
+            "name must be a non-empty string",
+            id="missing-name",
+        ),
+        pytest.param(
+            "---\nname: example-skill\n---\n",
+            "description must be a non-empty string",
+            id="missing-description",
+        ),
+        pytest.param(
+            "---\nname: wrong-name\nname: example-skill\ndescription: Review changes.\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-name",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: First.\ndescription: Second.\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-description",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n"
+            "metadata:\n  owner: first\n  owner: second\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-nested-key",
+        ),
+    ],
+)
+def test_skill_metadata_rejects_invalid_documents(
+    tmp_path: Path, content: str, expected_error: str
+) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    document.write_text(content, encoding="utf-8")
+
+    assert any(expected_error in error for error in _skill_metadata_errors(document))
+
+
+@pytest.mark.parametrize("field", ["name", "description"])
+@pytest.mark.parametrize(
+    "value",
+    ["null", "''", "'   '", "true", "42", "[text]", "{text: value}"],
+    ids=["null", "empty", "whitespace", "boolean", "number", "sequence", "mapping"],
+)
+def test_skill_metadata_rejects_empty_or_non_text_fields(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    metadata = {"name": "example-skill", "description": "Review changes."}
+    metadata[field] = value
+    content = "\n".join(f"{key}: {item}" for key, item in metadata.items())
+    document.write_text(f"---\n{content}\n---\n", encoding="utf-8")
+
+    assert f"{field} must be a non-empty string" in _skill_metadata_errors(document)
+
+
 def test_agent_guidance_names_existing_paths() -> None:
     missing: list[str] = []
 
@@ -227,6 +358,44 @@ def test_blank_issues_are_disabled() -> None:
     config = (REPO_ROOT / ".github/ISSUE_TEMPLATE/config.yml").read_text(encoding="utf-8")
 
     assert re.search(r"^blank_issues_enabled:\s*false\s*$", config, re.MULTILINE)
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[object, object]:
+        mapping = super().construct_mapping(node, deep=deep)
+        if len(mapping) != len(node.value):
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "duplicate mapping keys",
+                node.start_mark,
+            )
+        return mapping
+
+
+def _skill_metadata_errors(document: Path) -> list[str]:
+    lines = document.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0] != "---":
+        return ["metadata must start with --- on the first line"]
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return ["metadata is missing closing ---"]
+    try:
+        metadata = yaml.load("\n".join(lines[1:end]), Loader=_UniqueKeyLoader)
+    except yaml.YAMLError as error:
+        return [f"invalid YAML metadata: {error}"]
+    if not isinstance(metadata, dict):
+        return ["metadata must be a YAML mapping"]
+
+    errors = []
+    for field in ("name", "description"):
+        value = metadata.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{field} must be a non-empty string")
+        elif field == "name" and value != document.parent.name:
+            errors.append(f"name must match directory '{document.parent.name}', got {value!r}")
+    return errors
 
 
 def _agent_guidance() -> list[Path]:

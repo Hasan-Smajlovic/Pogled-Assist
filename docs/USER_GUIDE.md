@@ -1,5 +1,12 @@
 # User guide
 
+- [Installation readiness](#installation-readiness) and [before starting](#before-starting)
+- [Tracking notifications](#tracking-notifications-in-speech) and [gaze check](#gaze-check)
+- [Hotbar controls](#hotbar-controls) and [quick actions](#quick-actions)
+- [Speech](#speech), [Keyboard](#keyboard), and [Controller](#controller)
+- [Settings](#settings) and [updates](#update)
+- [Troubleshooting](#troubleshooting) and [exit](#exit)
+
 ## Installation readiness
 
 After installation, **Provjera instalacije** shows whether the speech tools and
@@ -40,7 +47,9 @@ valid data and a dash means no valid data. This does not identify whether an eye
 is physically open or closed, or confirm calibration accuracy.
 **Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery,
 and **Uređaj nije povezan** reports automatic retry. Source simulation instead
-shows **Simulacija mišem**, without pretending that Tobii eyes were measured.
+shows **Simulacija mišem**, including when development controls simulate an
+eye loss or disconnection. Its [shortcuts](UI_DEVELOPMENT.md#mouse-gaze-simulation)
+use synthetic input, without pretending that Tobii eyes were measured.
 Gaze control pauses when either eye becomes invalid.
 It also pauses if Stream Engine stops sending eye status. A prolonged interruption
 in the x86 bridge or a closed bridge starts automatic reconnection; normal
@@ -329,7 +338,7 @@ Automated checks verify Unicode entry, switching, layout, and voice commands.
 They do not establish audible playback, pronunciation, online service
 availability, external application text direction, or physical Tobii accuracy.
 Review those on the target Windows machine at 1920 × 1080 and 150% scaling
-using the [development checklist](DEVELOPMENT.md#ui-review).
+using the [UI development checklist](UI_DEVELOPMENT.md#ui-review).
 
 ## Keyboard
 

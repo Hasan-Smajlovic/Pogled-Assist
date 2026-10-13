@@ -1,39 +1,51 @@
 ---
 name: shipping-a-change
-description: Use before changing a visible Pogled Assist UI surface, setting, bundled runtime file, or Bosnian model data, and again before opening the pull request.
+description: Apply when changing Pogled Assist UI, settings, bundled runtime assets, or Bosnian model inputs; use the applicable workflow before implementation and when preparing that change for review.
 ---
 
 # Shipping a change
 
-`AGENTS.md` owns the maintenance matrix and the `## Done means` list. This
-skill adds the order of the steps, which the matrix does not show.
+[AGENTS.md](../../../AGENTS.md) owns the maintenance matrix, verification rules,
+done criteria, and human review requirements. Read only the sections that match
+the change. This skill adds the workflow order; the linked guides own detailed
+references. Use the [development guide](../../../docs/DEVELOPMENT.md#verification-before-a-pull-request)
+for final verification and deferred execution; focused checks below do not
+establish readiness for review.
 
 ## Change or add a visible UI surface
 
-1. Update `docs/design/speech-keyboard-reference.html` and review it at the
-   target display size before touching Qt code.
-2. Implement the change in the matching `pogled_assist/ui/*_window.py` or overlay
-   module.
+1. Use the [design surface map](../../../docs/UI_DEVELOPMENT.md#application-design-reference-workflow)
+   to find the matching page and assets under `docs/design/`. Update and review
+   them at the target display size before touching Qt code. The entry point
+   `docs/design/speech-keyboard-reference.html` changes only when navigation does.
+2. Implement the change in the matching `pogled_assist/ui/` module or
+   `pogled_assist/toolbar.py`.
 3. For a new window, tab, dialog, or view, render it in `capture_ui()` in
    `scripts/ui/capture_ui.py`.
-4. Update the snapshot count in `tests/ui/test_ui_rendering.py` and the surface
-   count and list in `docs/DEVELOPMENT.md`.
-5. Cover the flow in `tests/ui/test_ui_e2e.py` with its existing fakes.
+4. When rendered surfaces change, update the snapshot count in
+   `tests/ui/test_ui_rendering.py` and the surface count and list in
+   `docs/UI_DEVELOPMENT.md`.
+5. Cover the changed flow in the matching test module under `tests/ui/`.
+   Reuse the shared fixtures and fakes in the
+   [test strategy](../../../docs/DEVELOPMENT.md#test-strategy), rather than
+   importing from another test module.
 6. Run `.\dev.ps1 test-ui`, then `.\dev.ps1 ui -Open`, and review the gallery
-   for clipping, overlap, spacing, and gaze-sized targets.
+   using the [UI review guide](../../../docs/UI_DEVELOPMENT.md#rendered-ui-gallery).
+   Record applicable manual Windows and Tobii results separately.
 
 ## Add a setting
 
-1. For a visible control, update the Settings section of
-   `docs/design/speech-keyboard-reference.html` and review it at the target
-   display size as described in `docs/DEVELOPMENT.md`.
+1. For a visible control, update `docs/design/settings.html` and its assets and
+   review them at the target display size using the design workflow above.
 2. Add the field and its default to `GazeSettings` in
    `pogled_assist/interaction/mouse_controller.py` or `SpeechSettings` in
    `pogled_assist/speech/speech_service.py`. Settings files written by older releases
    lack the field and must load with the default.
 3. Clamp or coerce it in `_coerce_gaze_settings` or `_coerce_speech_settings`
-   in `pogled_assist/settings_store.py`.
-4. Add the control to `pogled_assist/ui/settings_window.py` with the same range
+   in `pogled_assist/settings_store.py`. For a numeric range, define or reuse
+   its limits in `pogled_assist/settings_limits.py` for storage and UI controls.
+   Selection-pause limits remain owned by `pogled_assist/interaction/gaze_selection.py`.
+4. Add the control to `pogled_assist/ui/settings_window.py` with those same limits
    and update `docs/USER_GUIDE.md`.
 5. Test missing, malformed, and out-of-range values in
    `tests/app/test_settings_store.py`.
@@ -51,10 +63,12 @@ skill adds the order of the steps, which the matrix does not show.
 
 1. Edit the TSV under `language/bs/model/`, the tokenizer in
    `pogled_assist/suggestions/text.py`, or a `scripts/speech_suggestions/prepare_*_model.py` script.
-2. Rebuild the affected model with the commands in `docs/DEVELOPMENT.md`. The
-   Islamic layer rebuilds offline. The general model needs the local CLASSLA
-   archive, so say so in the pull request if it was not available.
+2. Format before rebuilding, then regenerate the affected model and metadata
+   with the [preparation commands](../../../language/bs/README.md#preparation-and-evaluation).
+   The Islamic layer rebuilds offline. The general model needs the local CLASSLA
+   archive; report a missing archive and any rebuild left Not run. Do not edit
+   recorded checksums by hand.
 3. Regenerate the evaluation and benchmark reports under `language/bs/` with
    the same guide. Tune only against the development set.
-4. Run `tests/suggestions/test_suggestion_text.py`, which checks the recorded input and
-   model checksums.
+4. Run `.\dev.ps1 test -TestPaths tests/suggestions/test_suggestion_text.py`
+   to check the recorded input and model checksums.

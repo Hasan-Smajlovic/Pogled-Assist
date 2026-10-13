@@ -645,6 +645,7 @@ function Get-RequiredRepositoryFiles {
         "pogled_assist\logging_setup.py",
         "pogled_assist\release_update.py",
         "pogled_assist\settings_store.py",
+        "pogled_assist\settings_limits.py",
         "pogled_assist\main.py",
         "pogled_assist\toolbar.py",
         "pogled_assist\assets\checkbox_x.svg",
@@ -671,6 +672,7 @@ function Get-RequiredRepositoryFiles {
         "pogled_assist\ui\hotbar_controls.py",
         "pogled_assist\ui\interaction_overlay.py",
         "pogled_assist\ui\keyboard_window.py",
+        "pogled_assist\ui\keyboard_grid.py",
         "pogled_assist\ui\quick_action_menu.py",
         "pogled_assist\ui\quick_action_zoom.py",
         "pogled_assist\ui\settings_window.py",
@@ -694,6 +696,7 @@ function Get-RequiredRepositoryFiles {
         "pogled_assist\windows\windows_input.py",
         "pogled_assist\windows\windows_keyboard.py",
         "pogled_assist\windows\windows_startup.py",
+        "pogled_assist\windows\startup_tasks.py",
         "pogled_assist\windows\windows_z_order.py"
     )
 }
