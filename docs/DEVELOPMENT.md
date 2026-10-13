@@ -166,7 +166,8 @@ The suite uses five layers:
 3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise
    Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
 4. Repository tests check required guides and templates, local documentation
-   links, and the minimum sections agents need for issues and pull requests.
+   links, skill metadata, and the minimum sections agents need for issues and
+   pull requests.
 5. Manual Tobii checks verify the device runtime, calibration, gaze quality,
    AppBar behavior, clicks, and speech on the target machine.
 
@@ -182,6 +183,13 @@ Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`,
 Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
 data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from
 the repository root; pytest discovers all of these folders through `tests/`.
+
+`tests/tooling/test_repository_docs.py` checks every `.agents/skills/*/SKILL.md`.
+Each skill must start with a closed YAML metadata block containing non-empty
+text fields `name` and `description`; `name` must match the skill directory.
+Mapping keys must be unique. Quoted values, multiline descriptions, and
+additional metadata are supported. PyYAML is a development dependency; run
+`.\dev.ps1 setup` after pulling this change to install it.
 
 Updater tests use deterministic native and source-process records so another
 worker's installer smoke executable cannot block an unrelated update test.
