@@ -188,8 +188,11 @@ the repository root; pytest discovers all of these folders through `tests/`.
 Each skill must start with a closed YAML metadata block containing non-empty
 text fields `name` and `description`; `name` must match the skill directory.
 Mapping keys must be unique. Quoted values, multiline descriptions, and
-additional metadata are supported. PyYAML is a development dependency; run
-`.\dev.ps1 setup` after pulling this change to install it.
+additional metadata are supported. Each skill also needs a pointer at
+`.claude/skills/<name>/SKILL.md` with identical metadata that links to its
+source, so Claude Code discovers the same skills as Codex. PyYAML is a
+development dependency; run `.\dev.ps1 setup` after pulling this change to
+install it.
 
 Updater tests use deterministic native and source-process records so another
 worker's installer smoke executable cannot block an unrelated update test.
