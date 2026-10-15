@@ -98,6 +98,14 @@ def test_frozen_smoke_fails_when_bundled_speech_is_missing(monkeypatch, tmp_path
     assert "missing bundled speech" in report.read_text(encoding="utf-8")
 
 
+def test_edge_source_archive_matches_pinned_edge_tts_version():
+    asset = next(asset for asset in bundler.SOURCE_ASSETS if asset[0].startswith("edge_tts-"))
+
+    assert asset[0] == f"edge_tts-{bundler.EDGE_TTS_VERSION}.tar.gz"
+    assert asset[0] in asset[1]
+    assert asset[3] == f"edge_tts-{bundler.EDGE_TTS_VERSION}/LICENSE"
+
+
 def test_download_rejects_corrupt_cache_without_network(monkeypatch, tmp_path):
     asset = tmp_path / "speech.msi"
     asset.write_bytes(b"corrupted")
