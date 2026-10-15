@@ -157,6 +157,7 @@ explanations within the task's scope.
 | A file under `data/` | The data lists in `README.md` and `docs/ARCHITECTURE.md`, and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |
 | A job name in `.github/workflows/ci.yml` | The full CI job list and the separately identified required checks in `CONTRIBUTING.md` and `docs/WINDOWS_RELEASE.md`; Hasan decides whether branch rulesets should change |
+| A skill under `.agents/skills/` | Its pointer under `.claude/skills/` with the same `name` and `description` |
 | A required guide or template | `REQUIRED_FILES` or `REQUIRED_TEMPLATE_SECTIONS` in `tests/tooling/test_repository_docs.py` |
 
 ## Verification

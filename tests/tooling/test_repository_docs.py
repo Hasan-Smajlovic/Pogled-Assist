@@ -52,12 +52,14 @@ AGENT_GUIDANCE = (
     "AGENTS.md",
     "CLAUDE.md",
     ".agents/skills/*/SKILL.md",
+    ".claude/skills/*/SKILL.md",
 )
 
 # Runtime folders such as data/ and logs/ exist only on an installed machine,
 # so inline code under them is not checked.
 PATH_ROOTS = {
     ".agents",
+    ".claude",
     ".github",
     "assets",
     "docs",
@@ -191,6 +193,56 @@ def test_skills_have_valid_metadata() -> None:
     ]
 
     assert not errors, "Invalid skill metadata:\n" + "\n".join(errors)
+
+
+def test_claude_skill_pointers_match_agent_skills() -> None:
+    errors = _claude_skill_pointer_errors(REPO_ROOT)
+
+    assert not errors, "Claude Code skill pointers are out of sync:\n" + "\n".join(errors)
+
+
+@pytest.mark.parametrize(
+    ("pointer", "expected_error"),
+    [
+        pytest.param(None, "missing .claude/skills/example-skill/SKILL.md", id="missing"),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Other text.\n---\n"
+            "[source](../../../.agents/skills/example-skill/SKILL.md)\n",
+            "metadata differs",
+            id="drifted-description",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n---\nCopied workflow.\n",
+            "does not link to",
+            id="no-source-link",
+        ),
+    ],
+)
+def test_claude_skill_pointer_check_rejects_unsynced_pointers(
+    tmp_path: Path, pointer: str | None, expected_error: str
+) -> None:
+    source = tmp_path / ".agents" / "skills" / "example-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\nname: example-skill\ndescription: Review changes.\n---\n", encoding="utf-8"
+    )
+    if pointer is not None:
+        target = tmp_path / ".claude" / "skills" / "example-skill" / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_text(pointer, encoding="utf-8")
+
+    assert any(expected_error in error for error in _claude_skill_pointer_errors(tmp_path))
+
+
+def test_claude_skill_pointer_check_rejects_pointer_without_source(tmp_path: Path) -> None:
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
+    pointer = tmp_path / ".claude" / "skills" / "orphan" / "SKILL.md"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text("---\nname: orphan\ndescription: Orphan.\n---\n", encoding="utf-8")
+
+    assert _claude_skill_pointer_errors(tmp_path) == [
+        ".claude/skills/orphan/SKILL.md: no matching .agents/skills/orphan/SKILL.md"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -395,6 +447,32 @@ def _skill_metadata_errors(document: Path) -> list[str]:
             errors.append(f"{field} must be a non-empty string")
         elif field == "name" and value != document.parent.name:
             errors.append(f"name must match directory '{document.parent.name}', got {value!r}")
+    return errors
+
+
+def _skill_metadata(document: Path) -> object:
+    lines = document.read_text(encoding="utf-8").splitlines()
+    end = lines.index("---", 1)
+    return yaml.load("\n".join(lines[1:end]), Loader=_UniqueKeyLoader)
+
+
+def _claude_skill_pointer_errors(root: Path) -> list[str]:
+    sources = {path.parent.name: path for path in (root / ".agents" / "skills").glob("*/SKILL.md")}
+    pointers = {path.parent.name: path for path in (root / ".claude" / "skills").glob("*/SKILL.md")}
+    errors = [
+        f".claude/skills/{name}/SKILL.md: no matching .agents/skills/{name}/SKILL.md"
+        for name in sorted(pointers.keys() - sources.keys())
+    ]
+    for name in sorted(sources):
+        if name not in pointers:
+            errors.append(f"missing .claude/skills/{name}/SKILL.md")
+            continue
+        pointer = pointers[name]
+        if _skill_metadata(pointer) != _skill_metadata(sources[name]):
+            errors.append(f".claude/skills/{name}/SKILL.md: metadata differs from its source")
+        source_link = f"../../../.agents/skills/{name}/SKILL.md"
+        if f"]({source_link})" not in pointer.read_text(encoding="utf-8"):
+            errors.append(f".claude/skills/{name}/SKILL.md: does not link to {source_link}")
     return errors
 
 
