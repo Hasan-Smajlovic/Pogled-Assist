@@ -16,14 +16,14 @@
   grid-template-columns: minmax(100px, .8fr) minmax(132px, 1fr) minmax(240px, 4fr) minmax(132px, 1fr) minmax(115px, .9fr);
   gap: var(--gap);
 }
-.message-box { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 5px; }
-.message-header { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.message-box { display: grid; grid-template-rows: 18px minmax(0, 1fr); min-width: 0; gap: 5px; }
+.message-header { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .message-box label, #status { font-size: 13px; color: #bac5d4; }
 #status { flex: 1; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 #message {
   width: 100%;
   flex: 1;
-  min-height: 60px;
+  min-height: 0;
   padding: 6px 12px;
   border: 2px solid #465268;
   border-radius: 8px;
@@ -33,6 +33,16 @@
   text-align: center;
 }
 #message::placeholder { color: #a0adbf; font-size: .8em; }
+.message-box[data-voice-notice="true"] { grid-template-rows: 38px minmax(0, 1fr); }
+.message-box[data-voice-notice="true"] .message-header > label, .message-box[data-voice-notice="true"] #status { visibility: hidden; }
+.speech-voice-notice { --notice-color: #f0cd83; position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 2px 8px; border: 1px solid #76623c; border-left: 3px solid var(--notice-color); border-radius: 7px; background: #2b261c; }
+.voice-notice-mark { display: grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; color: var(--notice-color); font-size: 13px; font-weight: 700; }
+.speech-voice-notice p { display: flex; align-items: center; gap: 12px; min-width: 0; margin: 0; font-size: 14px; line-height: 1.1; }
+.speech-voice-notice strong { display: block; font-size: 15px; font-weight: 600; color: var(--notice-color); }
+.speech-voice-notice p span { display: block; color: #e1dbcd; }
+.speech-voice-notice[data-tone="ready"] { --notice-color: #91dfbc; border-color: #3d6854; border-left-color: var(--notice-color); background: #1b2a23; }
+.speech-voice-notice[data-tone="error"] { --notice-color: #ffb3b8; border-color: #89505b; border-left-color: var(--notice-color); background: #322229; }
+.voice-prototype-note { margin: 12px; color: #bdc9dc; font-size: 12px; line-height: 1.5; }
 .section-label { margin: 0; color: #bac5d4; font-size: 14px; font-weight: 500; }
 .predictions { display: grid; gap: 7px; }
 .prediction-controls { display: flex; gap: var(--gap); }

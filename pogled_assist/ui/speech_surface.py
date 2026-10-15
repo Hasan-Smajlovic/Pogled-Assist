@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from .. import diagnostics
 from ..keyboard_layouts import switch_label
+from ..speech.voice_state import RECOVERY_NOTICE_MS, VoiceState
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
 from .speech_buttons import WrappedButton, button_bounds
@@ -53,6 +54,11 @@ class SpeechSurface(QWidget):
         self._main_dynamic_actions: set[str] = set()
         self._gaze_target_action: str | None = None
         self._tracking_notice: TrackingNotice | None = None
+        self._speech_notice: TrackingNotice | None = None
+        self._speech_recovery = False
+        self._speech_notice_timer = QTimer(self)
+        self._speech_notice_timer.setSingleShot(True)
+        self._speech_notice_timer.timeout.connect(self._hide_speech_recovery)
         self._diagnostic_context = diagnostics.TargetContext("speech")
         self._diagnostic_snapshot_pending = False
         self._build_ui(keyboard_script)
@@ -409,6 +415,28 @@ class SpeechSurface(QWidget):
         self._tracking_notice = notice
         self._render_tracking_notice(immediate=immediate)
 
+    def set_speech_notice(self, state: VoiceState | None, *, immediate: bool = False) -> None:
+        notice = state.notice if state is not None else None
+        self._speech_notice = (
+            TrackingNotice(notice[1], notice[2], notice[0]) if notice is not None else None
+        )
+        self._speech_recovery = state is not None and state.recovered
+        self._speech_notice_timer.stop()
+        self._render_tracking_notice(immediate=immediate)
+
+    def _hide_speech_recovery(self) -> None:
+        self._speech_notice = None
+        self._speech_recovery = False
+        self._render_tracking_notice()
+
+    def hideEvent(self, event) -> None:
+        self._speech_notice_timer.stop()
+        super().hideEvent(event)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._render_tracking_notice()
+
     def accepts_tracking_notice(self) -> bool:
         return (
             self._dialogs.active is None or self._dialogs.active in self._dialogs.tracking_notices
@@ -418,10 +446,21 @@ class SpeechSurface(QWidget):
         active = self._dialogs.active
         hosts = ((None, self._message_header.notice), *self._dialogs.tracking_notices.items())
         for dialog, widget in hosts:
+            notice = self._tracking_notice
+            if dialog is None and notice is None:
+                notice = self._speech_notice
             widget.set_notice(
-                self._tracking_notice if active is dialog else None,
+                notice if active is dialog else None,
                 immediate=immediate or active is not dialog,
             )
+        recovery_visible = (
+            self._speech_recovery and self._tracking_notice is None
+            and active is None and self.isVisible()
+        )
+        if not recovery_visible:
+            self._speech_notice_timer.stop()
+        elif not self._speech_notice_timer.isActive():
+            self._speech_notice_timer.start(RECOVERY_NOTICE_MS)
 
     def _close_dialog(self) -> None:
         self._dialogs.close()

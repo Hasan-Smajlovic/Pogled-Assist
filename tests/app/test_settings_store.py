@@ -240,3 +240,38 @@ def test_failed_replace_preserves_settings_and_retry_saves_latest_values(monkeyp
     assert save_app_settings(GazeSettings(dwell_ms=800), SpeechSettings(speed=180))
     gaze, speech = load_app_settings()
     assert gaze.dwell_ms == 800 and speech.speed == 180
+
+
+@pytest.mark.parametrize("value", [None, 123, [], {}, "", "../voice", "bad voice", "x" * 129])
+def test_invalid_elevenlabs_identifiers_load_safe_defaults(monkeypatch, tmp_path, value):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {
+        "elevenlabs_voice_id": value, "elevenlabs_model_id": value,
+    }}), encoding="utf-8")
+    settings = load_app_settings()[1]
+    assert settings.elevenlabs_voice_id == ""
+    assert settings.elevenlabs_model_id == "eleven_v3"
+
+
+def test_elevenlabs_selection_survives_restart_and_older_release_without_storing_key(
+    monkeypatch, tmp_path
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "synthetic-private-key")
+    speech = SpeechSettings(
+        voice_preset="efendija", elevenlabs_voice_id="synthetic-voice",
+        elevenlabs_model_id="eleven_v3",
+    )
+    assert save_app_settings(GazeSettings(), speech)
+    assert load_app_settings()[1] == speech
+    assert "synthetic-private-key" not in path.read_text(encoding="utf-8")
+    snapshot = path.parent / "version-history" / "synthetic-snapshot"
+    snapshot.mkdir(parents=True)
+    (snapshot / path.name).write_bytes(path.read_bytes())
+    path.write_text('{"version": 1, "speech": {"speed": 200}}', encoding="utf-8")
+    restored = load_app_settings()[1]
+    assert restored.voice_preset == "efendija"
+    assert restored.elevenlabs_voice_id == "synthetic-voice"
+    assert restored.elevenlabs_model_id == "eleven_v3"
+    assert restored.speed == 200

@@ -26,6 +26,21 @@
   let savedUndo = null;
   let autoSpace = false;
   let lastText = '';
+  let previewSpeechTimer;
+  let recoveryNoticeTimer;
+  const requestedVoiceState = new URLSearchParams(location.search).get('voice-demo');
+  const voiceStates = {
+    efendija: null,
+    quota: ['Nema dovoljno ElevenLabs kredita.', 'Koristi se Prirodni glas.', 'warning'],
+    offline: ['ElevenLabs trenutno nije dostupan.', 'Koristi se Prirodni glas.', 'warning'],
+    timeout: ['Efendijin glas se predugo priprema.', 'Koristi se Prirodni glas.', 'warning'],
+    invalid: ['Provjerite ElevenLabs ključ u Postavkama.', 'Koristi se Prirodni glas.', 'warning'],
+    standard: ['Online glasovi trenutno nisu dostupni.', 'Koristi se Standardni glas.', 'warning'],
+    cached: ['Koristi se sačuvani Efendijin glas.', 'Ovaj snimak ne troši nove kredite.', 'ready'],
+    recovered: ['Efendijin glas je ponovo dostupan.', 'Naredne poruke koriste Efendiju.', 'ready'],
+    partial: ['Izgovor nije završen.', 'Za ponavljanje odaberite Izgovori.', 'error'],
+  };
+  if (Object.hasOwn(voiceStates, requestedVoiceState)) $('voice-demo-state').value = requestedVoiceState;
   const savedPreview = ReferenceDesign.readSession('speech', null);
   if (savedPreview && typeof savedPreview.message === 'string') {
     message.value = savedPreview.message;
@@ -36,6 +51,40 @@
       editor = savedPreview.editor;
       savedMessage = typeof savedPreview.savedMessage === 'string' ? savedPreview.savedMessage : '';
     }
+  }
+  if (requestedVoiceState && !message.value) message.value = 'TREBAM VODE, MOLIM TE.';
+  $('voice-demo-state').addEventListener('change', () => {
+    clearTimeout(recoveryNoticeTimer); recoveryNoticeTimer = null;
+    renderVoiceNotice();
+  });
+  $('voice-demo-tracking').addEventListener('change', renderVoiceNotice);
+  renderVoiceNotice();
+
+  function renderVoiceNotice() {
+    const state = $('voice-demo-state').value;
+    const tracking = $('voice-demo-tracking').checked;
+    if (tracking || arabic || state !== 'recovered') {
+      clearTimeout(recoveryNoticeTimer); recoveryNoticeTimer = null;
+    } else if (!recoveryNoticeTimer) {
+      recoveryNoticeTimer = setTimeout(() => {
+        recoveryNoticeTimer = null;
+        $('voice-demo-state').value = 'efendija';
+        renderVoiceNotice();
+      }, 5000);
+    }
+    const notice = tracking
+      ? ['Praćenje oba oka je prekinuto', 'pogledajte prema ekranu', 'warning']
+      : arabic ? null : voiceStates[state];
+    document.querySelector('.message-box').dataset.voiceNotice = String(Boolean(notice));
+    $('speech-voice-notice').hidden = !notice;
+    if (notice) {
+      $('voice-notice-title').textContent = notice[0];
+      $('voice-notice-detail').textContent = notice[1];
+      $('speech-voice-notice').dataset.tone = notice[2];
+      document.querySelector('.voice-notice-mark').textContent = tracking ? '!' : notice[2] === 'ready' ? '✓' : '!';
+    } else if (arabic && state !== 'none') say('Glas: Prirodni · Hamed');
+    else if (state === 'efendija') say('Glas: Efendija');
+    else say('');
   }
   $('library-read-error').addEventListener('change', () => { deleting = false; render(); });
   $('single-letter-preview').addEventListener('click', () => {
@@ -50,7 +99,7 @@
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
     if ($('letters-dialog').open) closeDialog($('letters-dialog'));
-    symbols = false; render(); restoreMessageFocus();
+    symbols = false; render(); renderVoiceNotice(); restoreMessageFocus();
   });
 
   document.addEventListener('click', event => {
@@ -395,6 +444,12 @@
   function speak() {
     const text = message.value.trim();
     if (!text) { say('Prvo sastavite poruku.'); return; }
+    if ($('voice-demo-state').value !== 'none') {
+      clearTimeout(previewSpeechTimer);
+      say('Pripremam govor…');
+      previewSpeechTimer = setTimeout(() => { say('Čitanje je završeno.'); renderVoiceNotice(); }, 650);
+      return;
+    }
     if (!('speechSynthesis' in window)) { say('Izgovor nije podržan u ovom pregledniku.'); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);

@@ -371,17 +371,17 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     qtbot.wait(1)
     assert updates[-1].keyboard_script == "arabic"
     assert updates[-1].voice_preset == preset
-    assert window._voice_combo.currentText() == "Prirodni · Hamed"
-    assert not window._voice_combo.isEnabled()
+    assert window._arabic_voice.text() == "Prirodni · Hamed"
+    assert not window._voice_choices.isVisible()
     assert window.width() <= 1280 and window.height() <= 720
-    for control in (window._script_combo, window._voice_combo, window._test_speech_button):
+    for control in (window._script_combo, window._arabic_voice, window._test_speech_button):
         assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
         assert control.height() >= 58
     window._cycle_keyboard_script()
     assert updates[-1].keyboard_script == "latin"
     assert updates[-1].voice_preset == preset
-    assert window._voice_combo.currentData() == preset
-    assert window._voice_combo.isEnabled()
+    assert window._voice_buttons[preset].isChecked()
+    assert window._voice_choices.isVisible()
 
 
 @pytest.mark.e2e
@@ -419,7 +419,7 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     for _ in range(100):
         window._adjust_speech_speed(10)
         window._adjust_letters_per_group(1)
-    window._cycle_voice_preset()
+    window._voice_buttons["human_like"].click()
 
     assert window._stack.currentIndex() == 2
     assert gaze_updates[-1].move_mouse is False
@@ -516,10 +516,10 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
     qtbot.waitUntil(window.isVisible)
     assert (window.width(), window.height()) == size
     script_rect = QRect(window._script_combo.mapTo(window, QPoint()), window._script_combo.size())
-    voice_rect = QRect(window._voice_combo.mapTo(window, QPoint()), window._voice_combo.size())
-    assert script_rect.size() == voice_rect.size()
+    voice = window._arabic_voice if script == "arabic" else window._voice_choices
+    voice_rect = QRect(voice.mapTo(window, QPoint()), voice.size())
     assert script_rect.height() == 58
-    assert script_rect.left() == voice_rect.left()
+    assert voice_rect.height() >= 58
     assert script_rect.bottom() < voice_rect.top()
     original_columns = None
     for speed, letters in ((80, 1), (155, 5), (320, 12)):
@@ -527,17 +527,22 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
             SpeechSettings(keyboard_script=script, speed=speed, letters_per_group=letters)
         )
         qtbot.wait(1)
+        values = (window._letters_group_value,) if script == "arabic" else (
+            window._speed_value, window._letters_group_value
+        )
         columns = [
             _assert_speech_row(window, value)
-            for value in (window._speed_value, window._letters_group_value)
+            for value in values
         ]
-        assert columns[0] == columns[1]
+        assert all(column == columns[0] for column in columns)
         assert original_columns is None or columns[0] == original_columns
         original_columns = columns[0]
-    assert voice_rect.bottom() < window._speed_value.mapTo(window, QPoint()).y()
-    speed_row = window._speed_value.parentWidget().layout()
-    speed_row.itemAtPosition(0, 1).widget().click()
-    assert window._speech_settings.speed == 315
+    assert window._speed_row.isVisible() == (script != "arabic")
+    if script != "arabic":
+        assert voice_rect.bottom() < window._speed_value.mapTo(window, QPoint()).y()
+        speed_row = window._speed_value.parentWidget().layout()
+        speed_row.itemAtPosition(0, 1).widget().click()
+        assert window._speech_settings.speed == 315
     letters_row = window._letters_group_value.parentWidget().layout()
     letters_row.itemAtPosition(0, 1).widget().click()
     assert window._speech_settings.letters_per_group == 11

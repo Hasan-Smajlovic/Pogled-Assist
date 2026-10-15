@@ -34,6 +34,7 @@ from ..speech.speech_library import (
     speech_library_store,
 )
 from ..speech.speech_service import SpeechService, SpeechSettings
+from ..speech.voice_state import EFENDIJA, VoiceState
 from ..suggestions.composition import Composition
 from ..suggestions.service import SuggestionService
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
@@ -80,6 +81,7 @@ class SpeechWindow(SpeechSurface):
         self._speech = speech
         self._playback_id: int | None = None
         self._speech.playback_changed.connect(self._playback_changed)
+        self._speech.voice_changed.connect(self._voice_changed)
         self._speech_settings = initial_settings
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         self._letter_groups = _group_letters(
@@ -91,6 +93,7 @@ class SpeechWindow(SpeechSurface):
         self._alarm_sound = alarm_sound or AlarmSound(self)
         self._alarm_sound.failed.connect(self._alarm_failed)
         self._library = self._library_store.load()
+        self._sync_saved_audio()
         self._list_page = 0
         self._category_index: int | None = None
         self._deletion_mode = False
@@ -118,6 +121,7 @@ class SpeechWindow(SpeechSurface):
         self.dialog_closed.connect(self._after_dialog_closed)
         self._input.returnPressed.connect(self._play)
         self._sync_script_controls()
+        self._sync_voice_notice()
         self._input.textChanged.connect(self._text_changed)
         self._input.cursorPositionChanged.connect(self._refresh_suggestions)
         self._input.selectionChanged.connect(self._refresh_suggestions)
@@ -169,6 +173,33 @@ class SpeechWindow(SpeechSurface):
             self._refresh_suggestions()
 
         logger.info("Speech window settings updated: %s", self._speech_settings)
+        self._sync_voice_notice()
+
+    def _sync_saved_audio(self) -> None:
+        texts = set()
+        if not self._library_store.read_error:
+            texts.update(phrase.text for phrase in self._library.phrases)
+            texts.update(
+                answer for category in self._library.categories for answer in category.answers
+            )
+        self._speech.set_saved_texts(texts)
+
+    def _sync_voice_notice(self) -> None:
+        enabled = (
+            self._speech_settings.keyboard_script != ARABIC_SCRIPT
+            and self._speech_settings.voice_preset == EFENDIJA
+        )
+        self.set_speech_notice(self._speech.voice_state if enabled else None)
+
+    def _voice_changed(self, request_id: int, state: VoiceState) -> None:
+        if request_id == self._playback_id:
+            enabled = (
+                self._speech_settings.keyboard_script != ARABIC_SCRIPT
+                and self._speech_settings.voice_preset == EFENDIJA
+            )
+            self.set_speech_notice(state if enabled else None)
+            if enabled:
+                self._status_label.setText(f"Glas: {state.label}")
 
     def _sync_script_controls(self) -> None:
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
@@ -758,6 +789,7 @@ class SpeechWindow(SpeechSurface):
             return
 
         self._library = candidate
+        self._sync_saved_audio()
         if (
             editor.kind in ("phrase", "answer")
             and self._speech_settings.keyboard_script != ARABIC_SCRIPT
@@ -839,6 +871,7 @@ class SpeechWindow(SpeechSurface):
             self._set_status("Dodano u poruku, ali broj korištenja nije sačuvan.")
             return
         self._library = candidate
+        self._sync_saved_audio()
         self._list_page = self._page_for_saved_item("phrase", phrase.text)
         self._show_list_level()
         self._set_status("Fraza je dodana u poruku.")
@@ -892,6 +925,7 @@ class SpeechWindow(SpeechSurface):
             self._set_status("Brisanje nije sačuvano. Stavka nije obrisana.")
             return
         self._library = candidate
+        self._sync_saved_audio()
         self._clamp_list_page()
         self._show_list_level()
         self._set_status("Stavka je obrisana.")
@@ -974,9 +1008,11 @@ class SpeechWindow(SpeechSurface):
     def _retry_library(self) -> None:
         library = self._library_store.load()
         if self._library_store.read_error:
+            self._sync_saved_audio()
             self._set_status("Učitavanje nije uspjelo. Biblioteka nije promijenjena.")
             return
         self._library = library
+        self._sync_saved_audio()
         self._category_index = None
         self._list_page = 0
         self._deletion_mode = False
@@ -989,11 +1025,17 @@ class SpeechWindow(SpeechSurface):
         if request_id != self._playback_id:
             return
         message = {
+            "preparing": "Pripremam govor.",
             "speaking": "Poruka se izgovara.",
             "finished": "Čitanje je završeno.",
             "failed": "Govor nije uspio. Pokušajte ponovo.",
             "stopped": "Govor je zaustavljen.",
         }[state]
+        if (
+            state == "finished" and self._speech_settings.voice_preset == EFENDIJA
+            and self._speech_settings.keyboard_script != ARABIC_SCRIPT
+        ):
+            message = f"Glas: {self._speech.voice_state.label}"
         self._set_status(message)
 
     def _play(self, *, source: str = "keyboard") -> None:

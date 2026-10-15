@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -29,7 +30,13 @@ from ..settings_limits import (
     SPEECH_SPEED_RANGE,
     clamp,
 )
-from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS, SpeechSettings
+from ..speech.eleven_account import ElevenAccount
+from ..speech.speech_service import (
+    VOICE_PRESET_DEFAULT,
+    VOICE_PRESET_EFENDIJA,
+    VOICE_PRESETS,
+    SpeechSettings,
+)
 from ..suggestions.service import SuggestionService
 from ..windows.startup_tasks import StartupRequest, StartupTasks
 from ..windows.windows_startup import (
@@ -37,6 +44,7 @@ from ..windows.windows_startup import (
     is_windows_startup_enabled,
     set_windows_startup_enabled,
 )
+from .elevenlabs_settings import ElevenLabsPage, SavedAudioPage
 from .gaze_feedback import set_gaze_feedback
 from .learned_words_page import LearnedWordsPage
 from .release_update_row import ReleaseUpdateRow
@@ -52,9 +60,8 @@ from .settings_controls import (
 
 logger = logging.getLogger(__name__)
 
-ARABIC_VOICE_ITEM = "arabic_hamed"
 BOSNIAN_VOICE_HINT = (
-    "Standardni glas koristi eSpeak NG. Prirodni glas koristi Microsoft Edge bs-BA-GoranNeural."
+    "Standardni radi bez interneta. Prirodni i Efendija trebaju internet."
 )
 ARABIC_VOICE_HINT = (
     "Arapski koristi prirodni muški glas Hamed. Potreban je internet. "
@@ -227,6 +234,14 @@ SETTINGS_STYLESHEET = """
                 font-weight: 650;
                 padding: 10px 14px;
             }
+            QLineEdit {
+                background: #0f1110;
+                border: 1px solid #4c534e;
+                border-radius: 10px;
+                color: #ffffff;
+                font-size: 18px;
+                padding: 8px 12px;
+            }
             QComboBox:hover {
                 background: #181a18;
                 border-color: #69736d;
@@ -270,6 +285,7 @@ class SettingsWindow(QWidget):
     calibration_requested = Signal()
     gaze_check_requested = Signal()
     speech_test_requested = Signal()
+    efendija_test_requested = Signal()
     update_requested = Signal(object)
     restart_confirmed = Signal()
     install_cancelled = Signal()
@@ -287,6 +303,8 @@ class SettingsWindow(QWidget):
         *,
         update_manager: ReleaseUpdateManager | None = None,
         suggestions: SuggestionService | None = None,
+        eleven_account: ElevenAccount | None = None,
+        clear_audio: Callable[[], bool] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Postavke")
@@ -295,6 +313,9 @@ class SettingsWindow(QWidget):
 
         self._gaze_settings = replace(gaze_settings)
         self._speech_settings = replace(speech_settings)
+        self._eleven_account = eleven_account or ElevenAccount(self)
+        self._eleven_account.configure(self._speech_settings)
+        self._clear_audio = clear_audio or (lambda: False)
         self._update_manager = update_manager
         self._suggestions = suggestions or SuggestionService(self)
         self._controls = SettingsControls(
@@ -321,6 +342,7 @@ class SettingsWindow(QWidget):
         self._suggestions.status_changed.connect(self._learning_status_changed)
         self._install_shortcuts()
         self._refresh_values()
+        self._eleven_account.changed.connect(self._account_changed)
         self._update_row.start()
         self._sync_startup_setting_from_windows()
         logger.info("Settings window initialized.")
@@ -344,6 +366,8 @@ class SettingsWindow(QWidget):
         logger.info("Settings window closed.")
         self._startup_closed = True
         self._startup_tasks.close()
+        self._eleven_page.clear_input()
+        self._eleven_account.cancel_check()
         self.cancel_gaze_interaction()
         self.closed.emit()
         super().closeEvent(event)
@@ -403,6 +427,7 @@ class SettingsWindow(QWidget):
 
     def update_speech_settings(self, settings: SpeechSettings) -> None:
         self._speech_settings = replace(settings)
+        self._eleven_account.configure(self._speech_settings)
         self._refresh_values()
 
     def show_update_error(self, message: str) -> None:
@@ -435,6 +460,14 @@ class SettingsWindow(QWidget):
         self._learning_page.back_requested.connect(lambda: self._select_tab(2))
         self._learning_page.status_changed.connect(self._set_status)
         self._stack.addWidget(self._learning_page)
+        self._eleven_page = ElevenLabsPage(self._controls, self._eleven_account, self)
+        self._eleven_page.back_requested.connect(lambda: self._select_tab(2))
+        self._eleven_page.selection_changed.connect(self._eleven_selection)
+        self._eleven_page.test_requested.connect(self.efendija_test_requested.emit)
+        self._stack.addWidget(self._eleven_page)
+        self._audio_page = SavedAudioPage(self._controls, self._clear_audio, self)
+        self._audio_page.back_requested.connect(lambda: self._select_tab(2))
+        self._stack.addWidget(self._audio_page)
         body.addWidget(self._stack, 1)
 
         self._select_tab(0)
@@ -676,12 +709,32 @@ class SettingsWindow(QWidget):
         script_layout.addWidget(self._script_combo, 0, 1, 2, 1)
         layout.addWidget(script_row)
 
-        self._voice_combo = self._controls.choice(
-            VOICE_PRESETS, self._voice_combo_changed, self._cycle_voice_preset, "Glas"
+        self._voice_choices = QWidget(page)
+        voices = QHBoxLayout(self._voice_choices)
+        voices.setContentsMargins(0, 0, 0, 0)
+        voices.setSpacing(12)
+        self._voice_buttons = {}
+        for value, label in VOICE_PRESETS:
+            button = self._controls.toggle_button(
+                label, lambda preset=value: self._set_voice_preset(preset), QSize(180, 58)
+            )
+            voices.addWidget(button, 1)
+            self._voice_buttons[value] = button
+        layout.addWidget(self._voice_choices)
+        self._voice_hint = styled_label(BOSNIAN_VOICE_HINT, "settingHint", page)
+        self._voice_hint.setWordWrap(True)
+        layout.addWidget(self._voice_hint)
+        self._arabic_voice = styled_label("Prirodni · Hamed", "settingTitle", page)
+        self._arabic_voice.setFixedHeight(58)
+        layout.addWidget(self._arabic_voice)
+        self._eleven_summary, grid, self._eleven_summary_hint = setting_row(
+            self, "Efendija · ElevenLabs", "Zamjenski glasovi: Prirodni → Standardni."
         )
-        voice_row, voice_layout, self._voice_hint = setting_row(self, "Glas", BOSNIAN_VOICE_HINT)
-        voice_layout.addWidget(self._voice_combo, 0, 1, 2, 1)
-        layout.addWidget(voice_row)
+        self._eleven_button = self._controls.button(
+            "Podesi ElevenLabs", self._open_eleven, QSize(220, 58)
+        )
+        grid.addWidget(self._eleven_button, 0, 1, 2, 1)
+        layout.addWidget(self._eleven_summary)
 
         row, self._speed_value = self._controls.adjust_row(
             "Brzina govora",
@@ -690,6 +743,7 @@ class SettingsWindow(QWidget):
             5,
         )
         layout.addWidget(row)
+        self._speed_row = row
         row, self._letters_group_value = self._controls.adjust_row(
             "Broj slova u grupi",
             "Broj slova u svakoj grupi na ekranima za govor i tastaturu.",
@@ -706,9 +760,35 @@ class SettingsWindow(QWidget):
         self._learned_words_button = self._controls.button(
             "Naučene riječi", self._open_learning, QSize(240, 58)
         )
-        layout.addLayout(action_grid((self._test_speech_button, self._learned_words_button)))
+        self._saved_audio_button = self._controls.button(
+            "Sačuvani zvuk", self._open_audio, QSize(220, 58)
+        )
+        layout.addLayout(action_grid((
+            self._test_speech_button, self._saved_audio_button, self._learned_words_button
+        )))
         layout.addStretch(1)
         return page
+
+    def _open_eleven(self) -> None:
+        self._select_tab(2)
+        self._eleven_page.configure(self._speech_settings)
+        self._stack.setCurrentWidget(self._eleven_page)
+
+    def _open_audio(self) -> None:
+        self._select_tab(2)
+        self._stack.setCurrentWidget(self._audio_page)
+
+    def _eleven_selection(self, voice: str, model: str) -> None:
+        if not model:
+            model = self._speech_settings.elevenlabs_model_id
+        self._speech_settings = replace(
+            self._speech_settings, elevenlabs_voice_id=voice, elevenlabs_model_id=model
+        )
+        self._eleven_account.configure(self._speech_settings)
+        self._emit_speech_settings("ElevenLabs glas i model su ažurirani.")
+
+    def _account_changed(self, state) -> None:
+        self._refresh_values()
 
     def _open_learning(self) -> None:
         self._select_tab(2)
@@ -758,6 +838,8 @@ class SettingsWindow(QWidget):
 
     def _select_tab(self, index: int) -> None:
         self.cancel_gaze_interaction(require_leave=True)
+        if hasattr(self, "_eleven_page"):
+            self._eleven_page.clear_input()
         self._stack.setCurrentIndex(index)
         for tab, button in enumerate(self._tab_buttons):
             button.setChecked(tab == index)
@@ -875,16 +957,12 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, letters_per_group=value)
         self._emit_speech_settings("Broj slova u grupi je ažuriran.")
 
-    def _voice_combo_changed(self, index: int) -> None:
+    def _set_voice_preset(self, value: str) -> None:
         if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
             return
-        value = self._voice_combo.itemData(index)
-        if not isinstance(value, str) or not value:
-            value = VOICE_PRESET_DEFAULT
-
         if value == self._speech_settings.voice_preset:
             return
-
+        self.cancel_gaze_interaction(require_leave=True)
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
         self._emit_speech_settings("Glas je ažuriran.")
 
@@ -902,16 +980,6 @@ class SettingsWindow(QWidget):
         self._script_combo.setCurrentIndex(
             (self._script_combo.currentIndex() + 1) % self._script_combo.count()
         )
-
-    def _cycle_voice_preset(self) -> None:
-        if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
-            return
-        count = self._voice_combo.count()
-        if count <= 0:
-            return
-
-        next_index = (self._voice_combo.currentIndex() + 1) % count
-        self._voice_combo.setCurrentIndex(next_index)
 
     def _emit_gaze_settings(self, status: str) -> None:
         self._refresh_values()
@@ -957,30 +1025,36 @@ class SettingsWindow(QWidget):
         )
         self._logging_checkbox.setChecked(self._gaze_settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(self._gaze_settings.show_launcher_window)
-        self._sync_voice_combo()
         with QSignalBlocker(self._script_combo):
             self._script_combo.setCurrentIndex(
                 max(0, self._script_combo.findData(self._speech_settings.keyboard_script))
             )
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
-        self._voice_combo.setEnabled(not arabic)
+        self._voice_choices.setVisible(not arabic)
+        self._arabic_voice.setVisible(arabic)
+        for preset, button in self._voice_buttons.items():
+            button.setChecked(preset == self._speech_settings.voice_preset)
+        efendija = not arabic and self._speech_settings.voice_preset == VOICE_PRESET_EFENDIJA
+        self._eleven_summary.setVisible(efendija)
+        self._eleven_summary_hint.setText(
+            self._eleven_account.state.message + "\nZamjenski glasovi: Prirodni → Standardni."
+        )
+        self._speed_row.setVisible(
+            not arabic and self._speech_settings.voice_preset == VOICE_PRESET_DEFAULT
+        )
+        self._saved_audio_button.setVisible(not arabic)
+        test_label = "Isprobaj Efendiju" if efendija else "Isprobaj govor"
+        self._test_speech_button.setText(test_label)
+        self._controls.rename(self._test_speech_button, test_label)
+        account = self._eleven_account.state
+        self._test_speech_button.setEnabled(
+            not efendija or bool(
+                account.has_key and account.options and not account.busy
+                and self._eleven_account.config.voice
+            )
+        )
         self._voice_hint.setText(ARABIC_VOICE_HINT if arabic else BOSNIAN_VOICE_HINT)
-
-    def _sync_voice_combo(self) -> None:
-        arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
-        arabic_index = self._voice_combo.findData(ARABIC_VOICE_ITEM)
-        with QSignalBlocker(self._voice_combo):
-            if arabic and arabic_index < 0:
-                self._voice_combo.addItem("Prirodni · Hamed", ARABIC_VOICE_ITEM)
-            elif not arabic and arabic_index >= 0:
-                self._voice_combo.removeItem(arabic_index)
-            self._voice_combo.setCurrentIndex(self._voice_combo.findData(self._shown_voice(arabic)))
-
-    def _shown_voice(self, arabic: bool) -> str:
-        if arabic:
-            return ARABIC_VOICE_ITEM
-        desired = self._speech_settings.voice_preset or VOICE_PRESET_DEFAULT
-        return desired if self._voice_combo.findData(desired) >= 0 else VOICE_PRESET_DEFAULT
+        self._eleven_page.configure(self._speech_settings)
 
     def _set_status(self, text: str) -> None:
         logger.info("Settings status: %s", text)

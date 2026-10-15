@@ -24,8 +24,12 @@ from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
 from pogled_assist.release_update import ReleaseCheckResult, StableVersion
+from pogled_assist.speech.audio_cache import AudioCache
+from pogled_assist.speech.eleven_account import AccountState, ElevenAccount
+from pogled_assist.speech.elevenlabs import AccountOptions, Subscription
 from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
+from pogled_assist.speech.voice_state import VoiceState
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
@@ -89,14 +93,28 @@ class PreviewInput:
         return 640, 360
 
 
+class PreviewCredentials:
+    def read(self):
+        return ""
+
+
 class PreviewSpeech(QObject):
     playback_changed = Signal(int, str)
+    voice_changed = Signal(int, object)
+    test_finished = Signal(int, str)
     available = True
 
     def __init__(self) -> None:
         super().__init__()
         self.request_id = 0
         self._settings = SpeechSettings()
+        self.voice_state = VoiceState()
+        self.audio_cache = AudioCache(None)
+        self.account = ElevenAccount(self, store=PreviewCredentials())
+        self.account.configure(self._settings)
+
+    def set_saved_texts(self, _texts) -> None:
+        return None
 
     @property
     def settings(self) -> SpeechSettings:
@@ -104,6 +122,7 @@ class PreviewSpeech(QObject):
 
     def update_settings(self, settings: SpeechSettings) -> None:
         self._settings = replace(settings)
+        self.account.configure(self._settings)
 
     def speak(self, _text: str, settings: SpeechSettings | None = None) -> bool:
         if settings is not None:
@@ -310,6 +329,9 @@ class _CaptureSession:
 
     def patches(self) -> tuple:
         return (
+            patch.dict(os.environ, {
+                "ELEVENLABS_API_KEY": "", "ELEVENLABS_VOICE_ID": "", "ELEVENLABS_MODEL_ID": "",
+            }),
             patch.object(toolbar_module, "WindowsAppBar", PreviewAppBar),
             patch.object(toolbar_module, "WindowsInputController", PreviewInput),
             patch.object(toolbar_module, "SpeechService", PreviewSpeech),
@@ -368,6 +390,8 @@ class _CaptureSession:
             self.speech_settings,
             suggestions=suggestions,
             update_manager=releases,
+            eleven_account=ElevenAccount(suggestions, store=PreviewCredentials()),
+            clear_audio=lambda: True,
         )
         self.widgets.append(self.settings)
         size = min(self.size[0], 1280), min(self.size[1], 720)
@@ -378,6 +402,7 @@ class _CaptureSession:
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
+        self.capture_eleven_settings(size)
         self.settings._open_learning()
         self.capture(self.settings, "settings-learned-words", "Settings: learned words", size=size)
         self.settings._select_tab(1)
@@ -597,6 +622,7 @@ class _CaptureSession:
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.capture_speech_voices()
         self.capture_tracking_feedback()
         self.speech._view_mode = "categories"
         self.speech._show_list_level()
@@ -619,6 +645,57 @@ class _CaptureSession:
         self.speech._start_editor()
         self.capture(self.speech, "speech-editor", "Speech shared editor")
         self.capture_speech_dialogs()
+
+    def capture_eleven_settings(self, size) -> None:
+        settings = replace(
+            self.speech_settings, voice_preset="efendija",
+            elevenlabs_voice_id="preview-voice", elevenlabs_model_id="eleven_v3",
+        )
+        account = self.settings._eleven_account
+        options = AccountOptions(
+            (("preview-voice", "Efendija FIkret"),), (("eleven_v3", "Eleven v3"),),
+            Subscription(0, 30000, 2000000000),
+        )
+        account.state = AccountState(True, message="ElevenLabs je povezan.", options=options)
+        self.settings.update_speech_settings(settings)
+        self.settings._account_changed(account.state)
+        self.settings._select_tab(2)
+        self.capture(self.settings, "settings-efendija", "Settings: Efendija", size=size)
+        self.settings._open_eleven()
+        for name, state in (
+            ("connected", account.state),
+            ("missing", AccountState()),
+            ("invalid", AccountState(True, message="Provjerite ElevenLabs ključ u Postavkama.")),
+            ("quota", AccountState(True, message="Nema dovoljno ElevenLabs kredita. Koristi se Prirodni glas.", options=options)),
+        ):
+            account.state = state
+            self.settings._eleven_page.refresh(state)
+            self.capture(self.settings, f"settings-elevenlabs-{name}", f"ElevenLabs: {name}", size=size)
+        self.settings._open_audio()
+        self.capture(self.settings, "settings-saved-audio", "Settings: saved audio", size=size)
+        account.state = AccountState()
+        self.settings.update_speech_settings(self.speech_settings)
+
+    def capture_speech_voices(self) -> None:
+        settings = replace(self.speech_settings, voice_preset="efendija")
+        self.speech.update_settings(settings)
+        self.speech._input.setText("SELAM. DOBRO MI DOŠLI.")
+        for name, state in (
+            ("efendija", VoiceState()),
+            ("quota", VoiceState("human_like", "quota")),
+            ("offline", VoiceState("human_like", "offline")),
+            ("timeout", VoiceState("human_like", "timeout")),
+            ("invalid", VoiceState("human_like", "invalid_key")),
+            ("standard", VoiceState("default", "offline")),
+            ("cached", VoiceState(cached=True)),
+            ("partial", VoiceState(partial=True)),
+            ("recovered", VoiceState(recovered=True)),
+        ):
+            self.speech.set_speech_notice(state, immediate=True)
+            self.speech._status_label.setText(f"Glas: {state.label}")
+            self.capture(self.speech, f"speech-voice-{name}", f"Speech voice: {name}")
+        self.speech.update_settings(self.speech_settings)
+        self.speech._input.clear()
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
         self.capture(dialog, name, title, size=(dialog.width(), dialog.height()))

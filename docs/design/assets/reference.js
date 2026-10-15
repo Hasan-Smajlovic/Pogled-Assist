@@ -12,6 +12,7 @@
   ];
   const currentPage = document.body.dataset.referencePage;
   const query = new URLSearchParams(location.search);
+  if (query.get('presentation') === 'clean') document.body.dataset.presentation = 'clean';
   const memory = new Map();
   function readSession(key, fallback) {
     try { return JSON.parse(sessionStorage.getItem('pogled-assist-reference-' + key)) ?? fallback; }

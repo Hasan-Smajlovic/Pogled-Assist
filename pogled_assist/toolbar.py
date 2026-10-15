@@ -31,6 +31,7 @@ from .release_update import ReleaseUpdateError, ReleaseUpdateManager, StableVers
 from .settings_store import load_app_settings, save_app_settings
 from .speech.speech_library import speech_library_store
 from .speech.speech_service import SpeechService
+from .speech.voice_state import EFENDIJA
 from .suggestions.service import SuggestionService
 from .tracking.feedback import TrackingNotice
 from .tracking.gaze_provider import TobiiGazeProvider
@@ -83,11 +84,19 @@ class HotbarWindow(QWidget):
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
         self._speech = SpeechService()
         self._speech_test_id: int | None = None
+        self._efendija_test_id: int | None = None
         self._speech.playback_changed.connect(self._speech_playback_changed)
+        self._speech.test_finished.connect(self._efendija_test_finished)
         self._settings_save_failed = False
         self._speech.update_settings(self._initial_speech_settings)
         self._speech_library_store = speech_library_store(get_project_root())
-        self._speech_library_store.load()
+        library = self._speech_library_store.load()
+        self._speech.set_saved_texts(
+            set() if self._speech_library_store.read_error else {
+                *(phrase.text for phrase in library.phrases),
+                *(answer for category in library.categories for answer in category.answers),
+            }
+        )
         self._suggestions = SuggestionService(
             self, path=get_project_root() / "data" / "speech_learning.json"
         )
@@ -823,6 +832,8 @@ class HotbarWindow(QWidget):
             self,
             update_manager=self._release_update_manager,
             suggestions=self._suggestions,
+            eleven_account=self._speech.account,
+            clear_audio=self._speech.audio_cache.clear,
         )
         diagnostics.emit(
             "settings_constructed",
@@ -835,6 +846,7 @@ class HotbarWindow(QWidget):
         window.calibration_requested.connect(self._launch_tobii_calibration)
         window.gaze_check_requested.connect(self._open_gaze_check)
         window.speech_test_requested.connect(self._test_current_speech_settings)
+        window.efendija_test_requested.connect(self._test_efendija)
         window.update_requested.connect(self._start_release_update)
         window.restart_confirmed.connect(self._restart_for_update)
         window.install_cancelled.connect(self._release_update_manager.finish_cancel)
@@ -922,6 +934,9 @@ class HotbarWindow(QWidget):
             self._gaze_check_window.set_calibration_notice(message)
 
     def _settings_window_closed(self) -> None:
+        if self._efendija_test_id == self._speech.request_id:
+            self._speech.stop()
+        self._efendija_test_id = None
         if not self._restarting_for_update:
             self._release_update_manager.finish_cancel()
         window = self._settings_window
@@ -1045,6 +1060,12 @@ class HotbarWindow(QWidget):
         self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
 
     def _test_current_speech_settings(self) -> None:
+        if (
+            self._speech.settings.voice_preset == EFENDIJA
+            and self._speech.settings.keyboard_script != "arabic"
+        ):
+            self._test_efendija()
+            return
         try:
             text = (
                 ARABIC_SPEECH_TEST_TEXT
@@ -1067,12 +1088,25 @@ class HotbarWindow(QWidget):
         if request_id != self._speech_test_id:
             return
         message = {
+            "preparing": "Pripremam govor.",
             "speaking": "Test govora je pokrenut.",
             "finished": "Test govora je završen.",
             "failed": "Govor nije uspio. Pokušajte ponovo.",
             "stopped": "Govor je zaustavljen.",
         }[state]
         self._set_speech_test_status(message)
+
+    def _test_efendija(self) -> None:
+        self._speech_test_id = None
+        if self._speech.test_efendija():
+            self._efendija_test_id = self._speech.request_id
+            self._set_speech_test_status("Pripremam probu Efendije. Proba troši kredite.")
+        else:
+            self._set_speech_test_status("Proba Efendije se nije mogla pokrenuti.")
+
+    def _efendija_test_finished(self, request_id: int, message: str) -> None:
+        if request_id == self._efendija_test_id:
+            self._set_speech_test_status(message)
 
     def _set_speech_test_status(self, text: str, settings_text: str | None = None) -> None:
         self._set_status(text)

@@ -23,6 +23,7 @@ from .settings_limits import (
     SPEECH_SPEED_RANGE,
     clamp,
 )
+from .speech.elevenlabs import DEFAULT_MODEL, valid_identifier
 from .speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
 
 def _coerce_speech_settings(value: Any) -> SpeechSettings:
     settings = _dataclass_from_mapping(SpeechSettings(), value)
+    mapping = value if isinstance(value, dict) else {}
     language = str(settings.language).strip() or SpeechSettings().language
     voice_preset = str(settings.voice_preset).strip() or VOICE_PRESET_DEFAULT
     if voice_preset not in VOICE_PRESET_LABELS:
@@ -158,6 +160,8 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
         amplitude=clamp(settings.amplitude, SPEECH_AMPLITUDE_RANGE),
         letters_per_group=clamp(settings.letters_per_group, LETTERS_PER_GROUP_RANGE),
         voice_preset=voice_preset,
+        elevenlabs_voice_id=valid_identifier(mapping.get("elevenlabs_voice_id")),
+        elevenlabs_model_id=valid_identifier(mapping.get("elevenlabs_model_id")) or DEFAULT_MODEL,
     )
 
 
