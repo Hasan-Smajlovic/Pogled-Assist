@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -56,6 +57,7 @@ class SpeechSurface(QWidget):
         self._tracking_notice: TrackingNotice | None = None
         self._speech_notice: TrackingNotice | None = None
         self._speech_recovery = False
+        self._playback_state = "stopped"
         self._speech_notice_timer = QTimer(self)
         self._speech_notice_timer.setSingleShot(True)
         self._speech_notice_timer.timeout.connect(self._hide_speech_recovery)
@@ -92,16 +94,41 @@ class SpeechSurface(QWidget):
         self._play_button = self._make_button(
             "Izgovori", "play", "primaryButton", minimum_height=86
         )
+        playback = QWidget(self)
+        playback.setFixedHeight(96)
+        playback_layout = QGridLayout(playback)
+        playback_layout.setContentsMargins(0, 0, 0, 0)
+        playback_layout.setVerticalSpacing(3)
+        playback_layout.addWidget(self._play_button, 0, 0)
+        self._playback_progress = QProgressBar(playback)
+        self._playback_progress.setRange(0, 0)
+        self._playback_progress.setTextVisible(False)
+        self._playback_progress.setAccessibleName("Govor je aktivan")
+        self._playback_progress.setFixedHeight(5)
+        policy = self._playback_progress.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self._playback_progress.setSizePolicy(policy)
+        self._playback_progress.setStyleSheet(
+            "QProgressBar { background: #303747; border: 0; } QProgressBar::chunk { background: #91dec0; }"
+        )
+        playback_layout.addWidget(self._playback_progress, 1, 0)
+        self._playback_progress.hide()
         self._phrases_button = self._make_button(
             "Fraze", "phrases", "topButton", minimum_height=86, checkable=True
         )
         topbar.addWidget(self._clear_button, 8)
         topbar.addWidget(self._categories_button, 10)
         topbar.addWidget(message_box, 40)
-        topbar.addWidget(self._play_button, 10)
+        topbar.addWidget(playback, 10)
         topbar.addWidget(self._phrases_button, 9)
 
         return topbar
+
+    def set_playback_state(self, state: str) -> None:
+        self._playback_state = state
+        active = state in ("preparing", "speaking")
+        self._play_button.setText("Zaustavi" if active else "Izgovori")
+        self._playback_progress.setVisible(active)
 
     def _build_message_box(self) -> QWidget:
         message_box = QWidget(self)
@@ -454,8 +481,10 @@ class SpeechSurface(QWidget):
                 immediate=immediate or active is not dialog,
             )
         recovery_visible = (
-            self._speech_recovery and self._tracking_notice is None
-            and active is None and self.isVisible()
+            self._speech_recovery
+            and self._tracking_notice is None
+            and active is None
+            and self.isVisible()
         )
         if not recovery_visible:
             self._speech_notice_timer.stop()

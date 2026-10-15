@@ -9,7 +9,8 @@ NATURAL = "human_like"
 STANDARD = "default"
 VOICE_TEST_TEXT = "SELAM. DOBRO MI DOŠLI."
 RECOVERY_NOTICE_MS = 5000
-ELEVEN_TIMEOUT = 5.0
+# Non-streaming synthesis includes generation and the full audio download.
+ELEVEN_TIMEOUT = 30.0
 NATURAL_TIMEOUT = 3.0
 
 REASONS = {
@@ -20,6 +21,8 @@ REASONS = {
     "missing_key": "Dodajte ElevenLabs ključ u Postavkama.",
     "configuration": "Provjerite ElevenLabs glas i model u Postavkama.",
     "permission": "ElevenLabs ključ nema potrebne dozvole.",
+    "voices_permission": "Za listu glasova dozvolite čitanje glasova na ElevenLabs ključu.",
+    "models_permission": "Za listu modela dozvolite čitanje modela na ElevenLabs ključu.",
     "rate_limit": "ElevenLabs je trenutno zauzet.",
     "audio": "Efendijin glas se nije mogao reproducirati.",
 }

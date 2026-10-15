@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,16 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.speech.voice_state import VoiceError, VoiceState
 
 
+@pytest.mark.parametrize("reason", ["quota", "offline"])
+def test_passive_credit_refresh_never_resets_speech_cooldown(service, reason):
+    instance, client, _ = service
+    gate = instance._router.gate
+    gate.failure(instance.account.config, reason, None)
+    deadline = gate.retry_at
+    instance.account._finish_subscription(instance.account._revision, client.balance, "")
+    assert gate.retry_at == deadline
+
+
 @pytest.fixture
 def service(monkeypatch, tmp_path):
     for name in ("ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL_ID"):
@@ -21,7 +32,8 @@ def service(monkeypatch, tmp_path):
     monkeypatch.setattr(speech_service, "find_edge_playback", lambda: Path("fake-edge.exe"))
     client = FakeElevenClient()
     instance = speech_service.SpeechService(
-        credentials=FakeCredentials("synthetic-secret"), client=client,
+        credentials=FakeCredentials("synthetic-secret"),
+        client=client,
         cache=AudioCache(tmp_path / "cache"),
     )
     instance.update_settings(SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="voice"))
@@ -39,7 +51,9 @@ def service(monkeypatch, tmp_path):
     instance.stop()
 
 
-def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_voice(service, qtbot):
+def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_voice(
+    service, qtbot
+):
     instance, client, played = service
     client.error = VoiceError("quota")
     instance._router.natural = lambda *_: b"natural audio"
@@ -87,7 +101,9 @@ def test_stop_and_replacement_discard_late_network_audio_and_voice_events(servic
 def test_arabic_keeps_hamed_and_never_contacts_elevenlabs(service, monkeypatch):
     instance, client, played = service
     commands = []
-    monkeypatch.setattr(instance, "_start_process", lambda command, *_args, **_kw: commands.append(command) or True)
+    monkeypatch.setattr(
+        instance, "_start_process", lambda command, *_args, **_kw: commands.append(command) or True
+    )
     assert instance.speak("سَلَامٌ", SpeechSettings(keyboard_script="arabic", voice_preset="efendija"))
     assert "ar-SA-HamedNeural" in commands[0]
     assert client.calls == played == []
@@ -104,6 +120,46 @@ def test_paid_voice_test_emits_failure_instead_of_fallback_success(service, qtbo
     assert "nije uspjela" in results[0]
     assert "kredita" in results[0]
     assert played == []
+
+
+@pytest.mark.parametrize(
+    "setting,value",
+    [
+        ("elevenlabs_model_id", "eleven_v4"),
+        ("elevenlabs_stability", 30),
+        ("elevenlabs_similarity", 95),
+    ],
+)
+def test_model_or_tuning_change_cancels_request_before_native_stop_and_rejects_late_audio(
+    service, qtbot, monkeypatch, setting, value
+):
+    instance, client, played = service
+    entered, release = threading.Event(), threading.Event()
+
+    def blocked(*_args):
+        entered.set()
+        release.wait(3)
+        return b"late old-model audio"
+
+    client.synthesize = blocked
+    try:
+        assert instance.test_efendija()
+        request, cancel = instance.request_id, instance._cancel
+        assert entered.wait(1)
+
+        def stop():
+            assert cancel.is_set()
+            assert instance.request_id != request and instance._cancel is None
+
+        monkeypatch.setattr(instance._audio, "stop", stop)
+        instance.update_settings(replace(instance.settings, **{setting: value}))
+        release.set()
+        qtbot.wait(50)
+        assert played == []
+        assert getattr(instance.settings, setting) == value
+    finally:
+        release.set()
+        monkeypatch.undo()
 
 
 def test_settings_and_http_failures_do_not_log_text_or_key(service, qtbot, caplog):

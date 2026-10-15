@@ -1,0 +1,76 @@
+name: Sync hotfix to development
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-hotfix-development
+  cancel-in-progress: false
+
+jobs:
+  sync-hotfix:
+    name: sync-hotfix-pr
+    if: >-
+      github.repository == 'Hasan-Smajlovic/Pogled-Assist' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # No checkout: a write token must never execute pull-request code.
+      - name: Open or reuse master to development pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          def api(path, payload=None):
+              command = ["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/{path}"]
+              if payload is not None:
+                  command += ["--method", "POST", "--input", "-"]
+              result = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,
+                                      text=True, capture_output=True, check=True)
+              return json.loads(result.stdout)
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+          pull = event["pull_request"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          if (repo != "Hasan-Smajlovic/Pogled-Assist" or not pull["merged"]
+                  or pull["base"]["ref"] != "master"
+                  or pull["head"]["repo"]["full_name"] != repo
+                  or not pull["head"]["ref"].startswith("hotfix/")):
+              raise SystemExit("Only a merged repository hotfix targeting master can open this PR.")
+          owner = repo.split("/")[0]
+          existing = api(f"pulls?state=open&base=development&head={owner}:master&per_page=100")
+          if existing:
+              url = existing[0]["html_url"]
+          elif api("compare/development...master")["ahead_by"] == 0:
+              url = "No PR needed: development already contains master."
+          else:
+              body = (
+                  f"Bring the released hotfix #{pull['number']} from master into development.\n\n"
+                  "This PR follows master, so later master changes also appear here until it is merged.\n\n"
+                  "Run the required checks, review the final diff, and squash-merge manually. "
+                  "Resolve any conflicts on a separate branch from development; do not modify master.\n\n"
+                  "Closes no issues; the original hotfix PR owns issue resolution."
+              )
+              created = api("pulls", {"base": "development", "head": "master",
+                                     "title": "Sync released hotfixes from master to development",
+                                     "body": body})
+              url = created["html_url"]
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write(f"Hotfix sync: {url}\n")
+          PY

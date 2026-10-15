@@ -266,6 +266,12 @@ new `VERSION`. It never moves or overwrites an existing version tag.
 
 ## Manual release validation
 
+After a repository hotfix PR merges into master, **Sync hotfix to development**
+opens or reuses a master → development PR immediately, independently of package
+publication. Its `sync-hotfix-pr` job is not a required PR check. Human review,
+required checks and manual squash merge remain mandatory; see the
+[hotfix process](../CONTRIBUTING.md#hotfix-process) for permissions and recovery.
+
 Report software-only and Tobii hardware checks separately.
 
 Software-only checks on a clean Windows x64 environment:

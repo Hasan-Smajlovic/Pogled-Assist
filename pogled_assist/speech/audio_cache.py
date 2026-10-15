@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from contextlib import suppress
 from pathlib import Path
 from threading import RLock
 
@@ -62,8 +63,9 @@ class AudioCache:
             header = len(MAGIC) + 32
             audio = data[header:]
             if (
-                not audio or not data.startswith(MAGIC)
-                or data[len(MAGIC):header] != hashlib.sha256(audio).digest()
+                not audio
+                or not data.startswith(MAGIC)
+                or data[len(MAGIC) : header] != hashlib.sha256(audio).digest()
             ):
                 self.discard(ticket)
                 return None
@@ -84,19 +86,15 @@ class AudioCache:
             except OSError:
                 return False
             finally:
-                try:
+                with suppress(OSError):
                     temporary.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def discard(self, ticket: tuple[int, str] | None) -> None:
         with self._lock:
             if self._valid(ticket):
                 self._blocked.add(ticket[1])
-                try:
+                with suppress(OSError):
                     (self.root / (ticket[1] + ".audio")).unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def clear(self) -> bool:
         with self._lock:
@@ -109,8 +107,10 @@ class AudioCache:
 
     def _valid(self, ticket: tuple[int, str] | None) -> bool:
         return (
-            self.root is not None and ticket is not None
-            and ticket[0] == self._generation and ticket[1] in self._allowed
+            self.root is not None
+            and ticket is not None
+            and ticket[0] == self._generation
+            and ticket[1] in self._allowed
         )
 
     def _remove_except(self, allowed: set[str]) -> bool:

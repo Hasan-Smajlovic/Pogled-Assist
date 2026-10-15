@@ -38,8 +38,10 @@ executable starts, and creates a desktop shortcut. Future updates are installed
 from verified stable GitHub Release artifacts by the packaged
 `update_windows.ps1`. The release includes Python and the application
 dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools.
-Both voice presets are installed with the app; no separate Python or speech-tool
-installation is needed. The natural voice needs internet access when speaking.
+Standardni and Prirodni are installed with the app; no separate Python or speech-tool
+installation is needed. Prirodni needs internet access when speaking. The optional
+Efendija voice uses an ElevenLabs account, API key and accessible voice; see
+[ElevenLabs setup](docs/USER_GUIDE.md#efendija-voice-and-elevenlabs-setup).
 The optional 32-bit Tobii bridge runtime is also bundled. A setup summary checks
 local components and device presence, with actions for official Tobii downloads
 and calibration. Tobii device software and personal calibration remain separate.

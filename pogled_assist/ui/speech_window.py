@@ -127,6 +127,10 @@ class SpeechWindow(SpeechSurface):
         self._input.selectionChanged.connect(self._refresh_suggestions)
         self._show_group_level()
         self._predictions.show_status(self._suggestions.status)
+        state = getattr(speech, "playback_state", "stopped")
+        if state in ("preparing", "speaking"):
+            self._playback_id = speech.request_id
+            self._playback_changed(speech.request_id, state)
         logger.info("Speech window initialized with %s letter groups.", len(self._letter_groups))
 
     def show_full_screen(self) -> None:
@@ -1023,7 +1027,11 @@ class SpeechWindow(SpeechSurface):
 
     def _playback_changed(self, request_id: int, state: str) -> None:
         if request_id != self._playback_id:
-            return
+            if request_id != self._speech.request_id:
+                return
+            self._playback_id = request_id
+        self.set_playback_state(state)
+        self._update_view_controls()
         message = {
             "preparing": "Pripremam govor.",
             "speaking": "Poruka se izgovara.",
@@ -1032,7 +1040,8 @@ class SpeechWindow(SpeechSurface):
             "stopped": "Govor je zaustavljen.",
         }[state]
         if (
-            state == "finished" and self._speech_settings.voice_preset == EFENDIJA
+            state == "finished"
+            and self._speech_settings.voice_preset == EFENDIJA
             and self._speech_settings.keyboard_script != ARABIC_SCRIPT
         ):
             message = f"Glas: {self._speech.voice_state.label}"
@@ -1042,6 +1051,9 @@ class SpeechWindow(SpeechSurface):
         if self._editor is not None or self._dialogs.active is not None:
             return
         if not self._play_button.isEnabled():
+            return
+        if self._playback_state in ("preparing", "speaking"):
+            self._speech.stop()
             return
         text = self._input.text().strip()
         if not text:
@@ -1053,9 +1065,11 @@ class SpeechWindow(SpeechSurface):
             self._suggestions.persist()
         if self._speech.speak(text, self._speech_settings):
             self._playback_id = self._speech.request_id
+            self.set_playback_state("preparing")
             self._set_status("Pokrećem govor.")
         else:
             self._playback_id = None
+            self.set_playback_state("failed")
             self._set_status("Odabrani glas nije dostupan.")
 
     def _set_status(self, text: str) -> None:

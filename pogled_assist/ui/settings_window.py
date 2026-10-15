@@ -10,7 +10,15 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSignalBlocker, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QProgressBar,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..interaction.gaze_selection import (
     MAX_SELECTION_PAUSE_MS,
@@ -60,9 +68,7 @@ from .settings_controls import (
 
 logger = logging.getLogger(__name__)
 
-BOSNIAN_VOICE_HINT = (
-    "Standardni radi bez interneta. Prirodni i Efendija trebaju internet."
-)
+BOSNIAN_VOICE_HINT = "Standardni radi bez interneta. Prirodni i Efendija trebaju internet."
 ARABIC_VOICE_HINT = (
     "Arapski koristi prirodni muški glas Hamed. Potreban je internet. "
     "Izbor bosanskog glasa ostaje sačuvan."
@@ -285,6 +291,7 @@ class SettingsWindow(QWidget):
     calibration_requested = Signal()
     gaze_check_requested = Signal()
     speech_test_requested = Signal()
+    speech_stop_requested = Signal()
     efendija_test_requested = Signal()
     update_requested = Signal(object)
     restart_confirmed = Signal()
@@ -313,6 +320,7 @@ class SettingsWindow(QWidget):
 
         self._gaze_settings = replace(gaze_settings)
         self._speech_settings = replace(speech_settings)
+        self._speech_playback_state = "stopped"
         self._eleven_account = eleven_account or ElevenAccount(self)
         self._eleven_account.configure(self._speech_settings)
         self._clear_audio = clear_audio or (lambda: False)
@@ -383,7 +391,17 @@ class SettingsWindow(QWidget):
         target = self._controls.action_at(point)
         now_ms = time.monotonic() * 1000
         if target is None:
-            self.cancel_gaze_interaction()
+            blocked = self._gaze_selection.target
+            if (
+                self._gaze_selection.is_blocked
+                and isinstance(blocked, QWidget)
+                and blocked.isVisible()
+                and global_rect(blocked).contains(point)
+            ):
+                # A disabled action under unchanged gaze is not a departure.
+                self.pause_gaze_interaction()
+            else:
+                self.cancel_gaze_interaction()
             return
 
         widget, action = target
@@ -464,6 +482,8 @@ class SettingsWindow(QWidget):
         self._eleven_page.back_requested.connect(lambda: self._select_tab(2))
         self._eleven_page.selection_changed.connect(self._eleven_selection)
         self._eleven_page.test_requested.connect(self.efendija_test_requested.emit)
+        self._eleven_page.stop_requested.connect(self.speech_stop_requested.emit)
+        self._eleven_page.tuning_changed.connect(self._eleven_tuning)
         self._stack.addWidget(self._eleven_page)
         self._audio_page = SavedAudioPage(self._controls, self._clear_audio, self)
         self._audio_page.back_requested.connect(lambda: self._select_tab(2))
@@ -692,6 +712,8 @@ class SettingsWindow(QWidget):
     def _build_speech_page(self) -> QWidget:
         page = QFrame(self)
         layout = content_layout(page)
+        layout.setContentsMargins(16, 8, 16, 8)
+        layout.setSpacing(6)
         layout.addWidget(styled_label("Postavke govora", "sectionTitle", page))
         layout.addWidget(
             styled_label(
@@ -757,15 +779,33 @@ class SettingsWindow(QWidget):
             "Isprobaj govor", self._request_speech_test, QSize(240, 58), "fa5s.play"
         )
         self._test_speech_button.setObjectName("primaryButton")
+        self._stop_speech_button = self._controls.button(
+            "Zaustavi", self.speech_stop_requested.emit, QSize(120, 58), "fa5s.stop"
+        )
+        self._stop_speech_button.hide()
         self._learned_words_button = self._controls.button(
             "Naučene riječi", self._open_learning, QSize(240, 58)
         )
         self._saved_audio_button = self._controls.button(
             "Sačuvani zvuk", self._open_audio, QSize(220, 58)
         )
-        layout.addLayout(action_grid((
-            self._test_speech_button, self._saved_audio_button, self._learned_words_button
-        )))
+        layout.addLayout(
+            action_grid(
+                (self._test_speech_button, self._saved_audio_button, self._learned_words_button)
+            )
+        )
+        layout.addWidget(self._stop_speech_button)
+        self._speech_test_progress = QProgressBar(page)
+        self._speech_test_progress.setRange(0, 0)
+        self._speech_test_progress.setTextVisible(False)
+        self._speech_test_progress.setFixedHeight(5)
+        self._speech_test_progress.setAccessibleName("Govor je aktivan")
+        self._speech_test_progress.hide()
+        layout.addWidget(self._speech_test_progress)
+        for control in (self._stop_speech_button, self._speech_test_progress):
+            policy = control.sizePolicy()
+            policy.setRetainSizeWhenHidden(True)
+            control.setSizePolicy(policy)
         layout.addStretch(1)
         return page
 
@@ -773,6 +813,20 @@ class SettingsWindow(QWidget):
         self._select_tab(2)
         self._eleven_page.configure(self._speech_settings)
         self._stack.setCurrentWidget(self._eleven_page)
+        self._eleven_account.refresh_subscription()
+
+    def _eleven_tuning(self, stability: int, similarity: int) -> None:
+        self._speech_settings = replace(
+            self._speech_settings, elevenlabs_stability=stability, elevenlabs_similarity=similarity
+        )
+        self._eleven_account.configure(self._speech_settings)
+        self._emit_speech_settings("Postavke Efendijinog glasa su ažurirane.")
+
+    def set_speech_playback_state(self, state: str) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_playback_state = state
+        self._eleven_page.set_playback_state(state)
+        self._refresh_values()
 
     def _open_audio(self) -> None:
         self._select_tab(2)
@@ -961,6 +1015,7 @@ class SettingsWindow(QWidget):
         if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
             return
         if value == self._speech_settings.voice_preset:
+            self._voice_buttons[value].setChecked(True)
             return
         self.cancel_gaze_interaction(require_leave=True)
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
@@ -1043,15 +1098,16 @@ class SettingsWindow(QWidget):
             not arabic and self._speech_settings.voice_preset == VOICE_PRESET_DEFAULT
         )
         self._saved_audio_button.setVisible(not arabic)
-        test_label = "Isprobaj Efendiju" if efendija else "Isprobaj govor"
+        active = self._speech_playback_state in ("preparing", "speaking")
+        test_label = {"preparing": "Pripremam…", "speaking": "Izgovaram…"}.get(
+            self._speech_playback_state, "Isprobaj Efendiju" if efendija else "Isprobaj govor"
+        )
+        self._stop_speech_button.setVisible(active)
+        self._speech_test_progress.setVisible(active)
         self._test_speech_button.setText(test_label)
         self._controls.rename(self._test_speech_button, test_label)
-        account = self._eleven_account.state
         self._test_speech_button.setEnabled(
-            not efendija or bool(
-                account.has_key and account.options and not account.busy
-                and self._eleven_account.config.voice
-            )
+            not active and (not efendija or self._eleven_account.can_test_voice)
         )
         self._voice_hint.setText(ARABIC_VOICE_HINT if arabic else BOSNIAN_VOICE_HINT)
         self._eleven_page.configure(self._speech_settings)

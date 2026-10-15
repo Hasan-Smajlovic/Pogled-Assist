@@ -233,12 +233,23 @@ to run** before CI starts. Keep the independent review and required checks.
 4. Obtain one approval, resolve every review conversation, and let Hasan merge it
    with a merge commit.
 5. **Publish release** publishes the patch release from that exact merge commit.
-6. Identify the actual hotfix commit inside the merged hotfix branch, not the merge
-   commit.
-7. Create `backport/<issue>-<short-description>` from the latest `development`.
-8. Cherry-pick the actual hotfix commit onto the backport branch.
-9. Open a normal reviewed pull request from the backport branch to `development`
-   and squash-merge it.
+6. **Sync hotfix to development** immediately opens a `master` → `development`
+   PR after the repository's `hotfix/` PR merges. It reuses an existing open sync
+   PR and skips creation when development already contains master. This runs
+   independently of release publication; a failed release still needs repair.
+7. Review the sync PR, complete required checks, and squash-merge it manually.
+   Its head follows master, so review any later master changes included before
+   merging. It never auto-merges or pushes to either protected branch. If there
+   are conflicts, resolve them on a separate branch from development and replace
+   the sync PR; never edit master to resolve a development conflict.
+
+The workflow must first reach master. Enable **Allow GitHub Actions to create
+and approve pull requests**, as for release preparation. A PR created with
+`GITHUB_TOKEN` may require workflow approval before CI runs. The workflow's
+`sync-hotfix-pr` job has only contents read and pull-request write permissions,
+executes inline trusted code without a checkout, and accepts only merged hotfix
+PRs from this repository targeting master. Rerun the failed Actions run after
+correcting repository permissions; it will reuse a PR already created.
 
 This process prevents unfinished development work from entering an urgent release
 while ensuring the fix remains part of future releases.

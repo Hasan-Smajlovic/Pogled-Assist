@@ -76,9 +76,11 @@ class WindowsCredentialStore:
             ctypes.memset(blob, 0, len(data))
 
     def delete(self) -> None:
-        if not _credential_api().CredDeleteW(TARGET, CRED_TYPE_GENERIC, 0):
-            if ctypes.get_last_error() != ERROR_NOT_FOUND:
-                raise CredentialError("Could not remove the key")
+        if (
+            not _credential_api().CredDeleteW(TARGET, CRED_TYPE_GENERIC, 0)
+            and ctypes.get_last_error() != ERROR_NOT_FOUND
+        ):
+            raise CredentialError("Could not remove the key")
 
 
 def _credential_api():
@@ -86,7 +88,9 @@ def _credential_api():
         raise CredentialError("Windows Credential Manager is unavailable")
     api = ctypes.WinDLL("advapi32", use_last_error=True)
     api.CredReadW.argtypes = [
-        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
         ctypes.POINTER(ctypes.POINTER(Credential)),
     ]
     api.CredReadW.restype = wintypes.BOOL

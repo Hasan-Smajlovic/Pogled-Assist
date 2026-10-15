@@ -41,8 +41,11 @@ def test_inflight_audio_cannot_restore_cleared_or_invalidated_files(cache, chang
     if change == "clear":
         assert cache.clear()
     else:
-        config = ElevenConfig("key", "different" if change == "voice" else "voice",
-                              "eleven_v4" if change == "model" else "eleven_v3")
+        config = ElevenConfig(
+            "key",
+            "different" if change == "voice" else "voice",
+            "eleven_v4" if change == "model" else "eleven_v3",
+        )
         cache.configure(config.audio_identity, set() if change == "delete" else {"Hvala!"})
     assert not cache.write(ticket, b"late audio")
     assert cache.read(cache.ticket("Hvala!")) is None

@@ -123,14 +123,45 @@
 .field-heading label, .eleven-selects label { color: #f4f1ea; font-size: 16px; font-weight: 600; }
 .field-heading span { color: #b9c5be; font-size: 13px; }
 .secret-input-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 170px; gap: 10px; }
+#saved-eleven-key { grid-template-columns: minmax(0, 1fr) 170px 170px; align-items: center; }
+#edit-eleven-key { grid-template-columns: minmax(0, 1fr) 100px 150px 120px; }
+.secret-input-row[hidden] { display: none; }
 .secret-input-row input, .eleven-selects select { width: 100%; height: 58px; min-width: 0; padding: 10px 14px; border: 1px solid #4c534e; border-radius: 10px; background: #0f1110; color: #fff; font-size: 19px; }
 .secret-input-row input::placeholder { color: #8fa099; font-size: 16px; }
 .connection-check-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 170px; align-items: center; gap: 10px; padding-top: 12px; }
 .connection-check-row #remove-eleven-key { color: #d4beb5; background: transparent; }
 .connection-check-row p { margin: 0; padding-left: 2px; font-size: 14px; color: #a8dfc6; line-height: 1.5; }
 .connection-check-row p[data-tone="error"] { color: #ffc4b3; }
+.eleven-key-card .key-help { margin: 8px 0 0; color: #b9c5be; font-size: 13px; line-height: 1.4; }
 .eleven-selects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 4px 0; }
 .eleven-selects label { display: grid; gap: 8px; }
+.voice-tuning { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.voice-tuning label { font-weight: 600; }
+.voice-tuning output { float: right; color: #91dec0; }
+.voice-tuning span, .credit-balance span { display: block; color: #b9c5be; font-size: 12px; }
+.voice-tuning label > div { display: flex; align-items: center; gap: 12px; }
+.voice-tuning button { min-width: 58px; min-height: 58px; }
+.voice-tuning input { width: 100%; min-width: 50px; accent-color: #91dec0; }
+.credit-balance { display: grid; gap: 5px; padding: 10px 14px; border: 1px solid #40574e; border-radius: 10px; }
+.credit-balance progress { width: 100%; accent-color: #91dec0; }
+.credit-balance[data-tone="warning"] progress { accent-color: #edc779; }
+.credit-balance[data-tone="error"] progress { accent-color: #e48c80; }
+#test-voice-progress { width: 100%; grid-column: 1 / -1; }
+#speech-settings { padding-top: 8px; padding-bottom: 8px; gap: 6px; }
+#eleven-settings { padding: 12px; gap: 6px; }
+#eleven-settings .settings-page-header { display: flex; gap: 12px; min-height: 58px; }
+#eleven-settings .settings-page-header h2 { flex: 1; }
+#eleven-settings .eleven-key-card { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-items: center; padding: 4px 14px; }
+#eleven-settings .field-heading { margin: 0; }
+#eleven-settings .field-heading span { display: none; }
+#eleven-connection-status { margin: 0; font-size: 13px; }
+#eleven-settings .eleven-selects label { grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 6px; }
+#eleven-settings .credit-balance { padding: 6px 0; border: 0; }
+#eleven-settings .eleven-test-card { padding: 4px 14px; grid-template-columns: minmax(0, 1fr) 200px 120px; }
+#eleven-settings .speech-test-status:empty { display: none; }
+#test-voice-progress, #selected-voice-progress { height: 5px; }
+#credit-progress { height: 8px; }
+#stop-test-voice[hidden], #stop-selected-voice[hidden], #test-voice-progress[hidden], #selected-voice-progress[hidden] { display: block !important; visibility: hidden; }
 .eleven-test-card { display: grid; grid-template-columns: minmax(0, 1fr) 222px; align-items: center; gap: 8px 14px; }
 .eleven-test-card h3, .audio-clear-row h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
 .eleven-test-card p { margin: 0; color: #d4ded7; font-size: 14px; line-height: 1.5; }

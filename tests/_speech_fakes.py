@@ -46,7 +46,8 @@ class FakeElevenClient:
     def options(self, *_args):
         return AccountOptions(
             (("synthetic-voice", "Probni glas"),),
-            (("eleven_v3", "Eleven v3"),), self.balance,
+            (("eleven_v3", "Eleven v3"),),
+            self.balance,
         )
 
 

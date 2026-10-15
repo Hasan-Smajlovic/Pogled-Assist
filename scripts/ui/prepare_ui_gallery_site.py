@@ -22,7 +22,7 @@ REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
 COMMENT_MARKER = "<!-- pogled-assist-ui-gallery -->"
 STATUS_START = "<!-- pogled-assist-ui-gallery-status -->"
 STATUS_END = "<!-- /pogled-assist-ui-gallery-status -->"
-RESOLUTIONS = ("1280x720", "1440x900")
+RESOLUTIONS = ("1280x720",)
 PREVIEWS = (
     ("speech.png", "Speech"),
     ("settings-general.png", "Settings"),
@@ -442,6 +442,9 @@ def _image_path(entry, images: dict[str, bytes]) -> str | None:
     if entry.is_dir() or path.suffix != ".png":
         return None
     _check_image_name(path)
+    # Older CI archives contain both sizes; retain their 720p gallery during rollout.
+    if path.parts[0] not in RESOLUTIONS:
+        return None
     if entry.file_size > MAX_IMAGE_BYTES or path.as_posix() in images:
         raise ValueError("The UI archive contains an unexpected image.")
     return path.as_posix()
@@ -450,7 +453,7 @@ def _image_path(entry, images: dict[str, bytes]) -> str | None:
 def _check_image_name(path: PurePosixPath) -> None:
     if len(path.parts) != 2:
         raise ValueError("The UI archive contains an unexpected image.")
-    if path.parts[0] not in RESOLUTIONS:
+    if path.parts[0] not in (*RESOLUTIONS, "1440x900"):
         raise ValueError("The UI archive contains an unexpected image.")
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.png", path.name):
         raise ValueError("The UI archive contains an unexpected image.")

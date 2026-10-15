@@ -30,7 +30,7 @@
         </div>
         <input id="message" type="text" aria-labelledby="message-label" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
       </div>
-      <button class="primary" type="button" data-action="speak">Izgovori</button>
+      <div class="speech-playback"><button id="speak-button" class="primary" type="button" data-action="speak">Izgovori</button><progress id="speech-progress" aria-label="Govor je aktivan" hidden></progress></div>
       <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
@@ -141,7 +141,7 @@
 <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
 <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
 <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
-<li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
+<li>Status se prikazuje uz naslov Vaša poruka. Tokom pripreme i izgovora isto dugme Izgovori postaje Zaustavi, uz animirani indikator. Identitet cilja ostaje isti, pa zadržavanje pogleda ne zaustavlja govor bez odlaska s cilja. Poruka i tastatura ostaju dostupne. Završetak, greška i prekid vraćaju Izgovori. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
 <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak za manje od 120 ms nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
 <li>Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta.</li>
 <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>

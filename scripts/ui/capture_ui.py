@@ -295,7 +295,7 @@ def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
     return gallery_path
 
 
-def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> list[Path]:
+def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(["capture-ui"])
     session = _CaptureSession(app, output_dir, (width, height))
@@ -329,9 +329,14 @@ class _CaptureSession:
 
     def patches(self) -> tuple:
         return (
-            patch.dict(os.environ, {
-                "ELEVENLABS_API_KEY": "", "ELEVENLABS_VOICE_ID": "", "ELEVENLABS_MODEL_ID": "",
-            }),
+            patch.dict(
+                os.environ,
+                {
+                    "ELEVENLABS_API_KEY": "",
+                    "ELEVENLABS_VOICE_ID": "",
+                    "ELEVENLABS_MODEL_ID": "",
+                },
+            ),
             patch.object(toolbar_module, "WindowsAppBar", PreviewAppBar),
             patch.object(toolbar_module, "WindowsInputController", PreviewInput),
             patch.object(toolbar_module, "SpeechService", PreviewSpeech),
@@ -343,6 +348,7 @@ class _CaptureSession:
             ),
             patch.object(sidebar_module, "WindowsAppBar", PreviewAppBar),
             patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
+            patch.object(ElevenAccount, "refresh_subscription", return_value=None),
         )
 
     def capture(
@@ -402,6 +408,12 @@ class _CaptureSession:
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
+        for state in ("preparing", "speaking"):
+            self.settings.set_speech_playback_state(state)
+            self.capture(
+                self.settings, f"settings-speech-{state}", f"Speech settings: {state}", size=size
+            )
+        self.settings.set_speech_playback_state("finished")
         self.capture_eleven_settings(size)
         self.settings._open_learning()
         self.capture(self.settings, "settings-learned-words", "Settings: learned words", size=size)
@@ -648,15 +660,24 @@ class _CaptureSession:
 
     def capture_eleven_settings(self, size) -> None:
         settings = replace(
-            self.speech_settings, voice_preset="efendija",
-            elevenlabs_voice_id="preview-voice", elevenlabs_model_id="eleven_v3",
+            self.speech_settings,
+            voice_preset="efendija",
+            elevenlabs_voice_id="preview-voice",
+            elevenlabs_model_id="eleven_v3",
         )
         account = self.settings._eleven_account
         options = AccountOptions(
-            (("preview-voice", "Efendija FIkret"),), (("eleven_v3", "Eleven v3"),),
+            (("preview-voice", "Efendija Fikret"),),
+            (("eleven_v3", "Eleven v3"),),
             Subscription(0, 30000, 2000000000),
         )
-        account.state = AccountState(True, message="ElevenLabs je povezan.", options=options)
+        account.state = AccountState(
+            True,
+            message="ElevenLabs je povezan.",
+            options=options,
+            subscription=Subscription(6000, 30000),
+            credits_message="Posljednje provjereno stanje računa.",
+        )
         self.settings.update_speech_settings(settings)
         self.settings._account_changed(account.state)
         self.settings._select_tab(2)
@@ -664,13 +685,66 @@ class _CaptureSession:
         self.settings._open_eleven()
         for name, state in (
             ("connected", account.state),
+            ("replacing", account.state),
+            (
+                "empty-voices",
+                AccountState(
+                    True,
+                    message="ElevenLabs je povezan.",
+                    options=replace(options, voices=()),
+                ),
+            ),
             ("missing", AccountState()),
             ("invalid", AccountState(True, message="Provjerite ElevenLabs ključ u Postavkama.")),
-            ("quota", AccountState(True, message="Nema dovoljno ElevenLabs kredita. Koristi se Prirodni glas.", options=options)),
+            (
+                "permission",
+                AccountState(
+                    True, message="Za listu glasova dozvolite čitanje glasova na ElevenLabs ključu."
+                ),
+            ),
+            ("save-failed", AccountState(True, message="Ključ nije sačuvan. Pokušajte ponovo.")),
+            (
+                "quota",
+                AccountState(
+                    True,
+                    message="Nema dovoljno ElevenLabs kredita. Koristi se Prirodni glas.",
+                    options=options,
+                    subscription=Subscription(30000, 30000),
+                    credits_message="Posljednje provjereno stanje računa.",
+                ),
+            ),
         ):
             account.state = state
             self.settings._eleven_page.refresh(state)
-            self.capture(self.settings, f"settings-elevenlabs-{name}", f"ElevenLabs: {name}", size=size)
+            if name in ("replacing", "save-failed"):
+                self.settings._eleven_page._replace_key()
+            if name == "save-failed":
+                self.settings._eleven_page.key_input.setText("synthetic-replacement")
+            self.capture(
+                self.settings, f"settings-elevenlabs-{name}", f"ElevenLabs: {name}", size=size
+            )
+            self.settings._eleven_page.clear_input()
+        for name, subscription in (
+            ("low-credits", Subscription(25500, 30000)),
+            ("critical-credits", Subscription(28500, 30000)),
+        ):
+            account.state = AccountState(
+                True,
+                message="ElevenLabs je povezan.",
+                options=options,
+                subscription=subscription,
+                credits_message="Posljednje provjereno stanje računa.",
+            )
+            self.settings._eleven_page.refresh(account.state)
+            self.capture(
+                self.settings, f"settings-elevenlabs-{name}", f"ElevenLabs: {name}", size=size
+            )
+        for state in ("preparing", "speaking"):
+            self.settings.set_speech_playback_state(state)
+            self.capture(
+                self.settings, f"settings-elevenlabs-{state}", f"ElevenLabs: {state}", size=size
+            )
+        self.settings.set_speech_playback_state("finished")
         self.settings._open_audio()
         self.capture(self.settings, "settings-saved-audio", "Settings: saved audio", size=size)
         account.state = AccountState()
@@ -680,6 +754,13 @@ class _CaptureSession:
         settings = replace(self.speech_settings, voice_preset="efendija")
         self.speech.update_settings(settings)
         self.speech._input.setText("SELAM. DOBRO MI DOŠLI.")
+        for state in ("preparing", "speaking"):
+            self.speech.set_playback_state(state)
+            self.speech._status_label.setText(
+                "Pripremam govor." if state == "preparing" else "Poruka se izgovara."
+            )
+            self.capture(self.speech, f"speech-{state}", f"Speech: {state}")
+        self.speech.set_playback_state("finished")
         for name, state in (
             ("efendija", VoiceState()),
             ("quota", VoiceState("human_like", "quota")),
@@ -876,8 +957,8 @@ class _CaptureSession:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("dist/ui-preview"))
-    parser.add_argument("--width", type=int, default=1440)
-    parser.add_argument("--height", type=int, default=900)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
     arguments = parser.parse_args()
 
     snapshots = capture_ui(

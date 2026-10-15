@@ -77,8 +77,14 @@ class VoiceRouter:
         self.natural = prepare_natural
 
     def run(
-        self, text: str, config: ElevenConfig, cancel: Event,
-        play: Callable, publish: Callable, *, test: bool = False,
+        self,
+        text: str,
+        config: ElevenConfig,
+        cancel: Event,
+        play: Callable,
+        publish: Callable,
+        *,
+        test: bool = False,
     ) -> str:
         if cancel.is_set():
             raise SpeechCancelled
@@ -108,22 +114,29 @@ class VoiceRouter:
                     try:
                         updated = self.network.run(
                             lambda stop, end: self.client.subscription(config.key, stop, end),
-                            cancel, ELEVEN_TIMEOUT,
+                            cancel,
+                            ELEVEN_TIMEOUT,
                         )
-                    except VoiceError:
-                        self.gate.failure(config, "quota", balance)
-                        raise VoiceError("quota") from None
-                    if updated.remaining == 0 or (
-                        balance is not None and not updated.improved_from(balance)
-                    ):
+                    except VoiceError as error:
+                        if error.reason != "permission":
+                            self.gate.failure(config, "quota", balance)
+                            raise VoiceError("quota") from None
+                        # Account access is optional. After the cooldown, this
+                        # user-requested synthesis can establish recovery.
+                        updated = None
+                    if updated is not None and updated.remaining == 0:
                         self.gate.failure(config, "quota", updated)
                         raise VoiceError("quota")
+                    # Account balance cannot expose a key's independent quota.
+                    # A positive balance permits one attempt after the cooldown.
                     quota_balance = updated
             remaining = ELEVEN_TIMEOUT - (time.monotonic() - started_at)
             audio = self.network.run(
                 lambda stop, end: self.client.synthesize(
                     config, saved_text(text) if ticket else text, stop, end
-                ), cancel, remaining,
+                ),
+                cancel,
+                remaining,
             )
             result = play(audio, VoiceState())
             if cancel.is_set() or result.outcome == "stopped":

@@ -16,6 +16,7 @@ from .settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
+    ELEVENLABS_PERCENT_RANGE,
     LETTERS_PER_GROUP_RANGE,
     SMOOTHING_RANGE,
     SPEECH_AMPLITUDE_RANGE,
@@ -162,6 +163,8 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
         voice_preset=voice_preset,
         elevenlabs_voice_id=valid_identifier(mapping.get("elevenlabs_voice_id")),
         elevenlabs_model_id=valid_identifier(mapping.get("elevenlabs_model_id")) or DEFAULT_MODEL,
+        elevenlabs_stability=clamp(settings.elevenlabs_stability, ELEVENLABS_PERCENT_RANGE),
+        elevenlabs_similarity=clamp(settings.elevenlabs_similarity, ELEVENLABS_PERCENT_RANGE),
     )
 
 

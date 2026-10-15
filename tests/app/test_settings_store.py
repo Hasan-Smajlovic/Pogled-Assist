@@ -10,6 +10,31 @@ from pogled_assist.speech.speech_service import SpeechSettings
 
 
 @pytest.mark.parametrize(
+    "field,default", [("elevenlabs_stability", 65), ("elevenlabs_similarity", 80)]
+)
+@pytest.mark.parametrize(
+    "value,expected",
+    [(None, None), ("bad", None), ({}, None), ([], None), (-20, 0), (120, 100), ("42", 42)],
+)
+def test_elevenlabs_slider_settings_coerce_and_clamp(
+    tmp_path, monkeypatch, field, default, value, expected
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {field: value}}), encoding="utf-8")
+    assert getattr(load_app_settings()[1], field) == (default if expected is None else expected)
+
+
+def test_elevenlabs_slider_defaults_and_round_trip(tmp_path, monkeypatch):
+    point_settings_at(monkeypatch, tmp_path)
+    speech = load_app_settings()[1]
+    assert (speech.elevenlabs_stability, speech.elevenlabs_similarity) == (65, 80)
+    speech.elevenlabs_stability, speech.elevenlabs_similarity = 30, 95
+    assert save_app_settings(GazeSettings(), speech)
+    assert load_app_settings()[1] == speech
+
+
+@pytest.mark.parametrize(
     ("value", "expected"),
     [
         (True, True),
@@ -246,9 +271,17 @@ def test_failed_replace_preserves_settings_and_retry_saves_latest_values(monkeyp
 def test_invalid_elevenlabs_identifiers_load_safe_defaults(monkeypatch, tmp_path, value):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
-    path.write_text(json.dumps({"speech": {
-        "elevenlabs_voice_id": value, "elevenlabs_model_id": value,
-    }}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "speech": {
+                    "elevenlabs_voice_id": value,
+                    "elevenlabs_model_id": value,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     settings = load_app_settings()[1]
     assert settings.elevenlabs_voice_id == ""
     assert settings.elevenlabs_model_id == "eleven_v3"
@@ -260,7 +293,8 @@ def test_elevenlabs_selection_survives_restart_and_older_release_without_storing
     path = point_settings_at(monkeypatch, tmp_path)
     monkeypatch.setenv("ELEVENLABS_API_KEY", "synthetic-private-key")
     speech = SpeechSettings(
-        voice_preset="efendija", elevenlabs_voice_id="synthetic-voice",
+        voice_preset="efendija",
+        elevenlabs_voice_id="synthetic-voice",
         elevenlabs_model_id="eleven_v3",
     )
     assert save_app_settings(GazeSettings(), speech)

@@ -92,7 +92,9 @@ class HotbarWindow(QWidget):
         self._speech_library_store = speech_library_store(get_project_root())
         library = self._speech_library_store.load()
         self._speech.set_saved_texts(
-            set() if self._speech_library_store.read_error else {
+            set()
+            if self._speech_library_store.read_error
+            else {
                 *(phrase.text for phrase in library.phrases),
                 *(answer for category in library.categories for answer in category.answers),
             }
@@ -847,6 +849,7 @@ class HotbarWindow(QWidget):
         window.gaze_check_requested.connect(self._open_gaze_check)
         window.speech_test_requested.connect(self._test_current_speech_settings)
         window.efendija_test_requested.connect(self._test_efendija)
+        window.speech_stop_requested.connect(self._speech.stop)
         window.update_requested.connect(self._start_release_update)
         window.restart_confirmed.connect(self._restart_for_update)
         window.install_cancelled.connect(self._release_update_manager.finish_cancel)
@@ -858,6 +861,7 @@ class HotbarWindow(QWidget):
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
 
         self._settings_window = window
+        window.set_speech_playback_state(getattr(self._speech, "playback_state", "stopped"))
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
         diagnostics.emit(
@@ -1060,6 +1064,8 @@ class HotbarWindow(QWidget):
         self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
 
     def _test_current_speech_settings(self) -> None:
+        if getattr(self._speech, "playback_state", "stopped") in ("preparing", "speaking"):
+            return
         if (
             self._speech.settings.voice_preset == EFENDIJA
             and self._speech.settings.keyboard_script != "arabic"
@@ -1074,6 +1080,8 @@ class HotbarWindow(QWidget):
             )
             if self._speech.speak(text):
                 self._speech_test_id = self._speech.request_id
+                if self._settings_window is not None:
+                    self._settings_window.set_speech_playback_state("preparing")
                 self._set_speech_test_status("Test govora je pokrenut.")
             else:
                 self._set_speech_test_status(
@@ -1085,7 +1093,12 @@ class HotbarWindow(QWidget):
             self._set_speech_test_status("Govor nije uspio.")
 
     def _speech_playback_changed(self, request_id: int, state: str) -> None:
-        if request_id != self._speech_test_id:
+        if self._settings_window is not None:
+            self._settings_window.set_speech_playback_state(state)
+        if request_id not in (self._speech_test_id, self._efendija_test_id):
+            return
+        if request_id == self._efendija_test_id and state in ("finished", "failed"):
+            # test_finished already carries the provider's actionable result.
             return
         message = {
             "preparing": "Pripremam govor.",
@@ -1097,9 +1110,13 @@ class HotbarWindow(QWidget):
         self._set_speech_test_status(message)
 
     def _test_efendija(self) -> None:
+        if getattr(self._speech, "playback_state", "stopped") in ("preparing", "speaking"):
+            return
         self._speech_test_id = None
         if self._speech.test_efendija():
             self._efendija_test_id = self._speech.request_id
+            if self._settings_window is not None:
+                self._settings_window.set_speech_playback_state("preparing")
             self._set_speech_test_status("Pripremam probu Efendije. Proba troši kredite.")
         else:
             self._set_speech_test_status("Proba Efendije se nije mogla pokrenuti.")

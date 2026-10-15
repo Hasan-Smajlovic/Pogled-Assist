@@ -57,7 +57,7 @@ and shortcuts continue to launch after an update.
 | Gaze interaction | `pogled_assist/interaction/` | Logical/physical coordinate mapping in `screen_mapping.py`, UI target lookup through `GazeTarget`, smoothing, shared selection timing, click and Quick action requests |
 | Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, external foreground/cursor tracking, focus, z-order |
 | User surfaces | `pogled_assist/ui/` | Settings, speech, keyboard, controller, radial menu, precision zoom, gaze feedback |
-| Speech | `pogled_assist/speech/` | eSpeak NG and Edge playback, saved categories, answers and phrases, and the repeating local alarm |
+| Speech | `pogled_assist/speech/` | eSpeak NG, Edge and ElevenLabs playback, saved-entry audio, saved categories, answers and phrases, and the repeating local alarm |
 | Suggestions | `pogled_assist/suggestions/`, `pogled_assist/assets/bosnian-*-model.*` | Offline Bosnian tokenisation, general and reviewed Islamic vocabulary layers, completion and next-word ranking, input-scoped undo, and reversible personal learning |
 | Persistent data | `pogled_assist/settings_store.py`, `pogled_assist/suggestions/learning.py`, `pogled_assist/speech/speech_library.py`, `pogled_assist/logging_setup.py` | Settings, phrase and personal-learning data, logs, safe defaults, and atomic writes |
 | Distribution | `setup_windows.ps1`, `start_gaze_mouse.ps1`, `update_windows.ps1`, `packaging/`, `scripts/` | Source setup, launch, verified release update, package build, install, release |
@@ -278,6 +278,46 @@ a private kill-on-close job before execution. Engine output is discarded because
 it can include typed text; diagnostics record the engine and exit code. No UI
 thread waits for speech completion or stderr EOF.
 
+For Efendija, `speech/eleven_account.py` owns the saved credential and read-only
+catalog checks. Voice choices use `/v2/voices?voice_type=saved` to match My Voices,
+including voices saved from the library, without adding the default catalog.
+It also owns a separate bounded, read-only subscription refresh. Catalog delivery
+does not wait on the optional subscription endpoint. Missing optional
+User: Read access never changes catalog availability. Qt queues discard balance
+responses after key replacement/removal or cancellation. Balance refresh runs on
+opening ElevenLabs settings and after completed or failed Efendija requests.
+Passive balance refresh never resets a provider cooldown; only the explicit
+connection check can permit an early recovery attempt after an improved balance.
+Persisted integer percentages default to Stability 65 and Similarity 80; shared
+0–100 limits apply in storage and controls. Requests convert them to 0–1 in
+`voice_settings`, and both participate in configuration and cache identity.
+`speech/elevenlabs.py` bounds HTTPS response sizes, deadlines and
+network workers; billable POSTs are never automatically replayed. Cancellation
+observes the caller's event directly, including after connection setup and before
+sending the request; worker timeout does not cancel the fallback. A request
+already sent may still consume credits after playback is cancelled.
+`speech/voice_router.py` prepares ElevenLabs audio before playback, then tries
+the existing Prirodni voice and offline Standardni on preparation failure.
+The bounded preparation budget is 30 seconds for full ElevenLabs generation and
+download, then three seconds for Prirodni. Catalog checks retain a separate
+five-second budget. Cancellation does not wait for those budgets to expire.
+Quota cooldown permits later user-requested retries when optional subscription
+access is denied. Account balances do not establish a key's independent quota.
+Only successful Efendija playback announces recovery; a catalog check or cached
+clip cannot. The explicit voice test bypasses cache and fallback.
+
+`speech/audio_playback.py` owns QMediaPlayer, audio output and memory buffers on
+Qt's thread. Workers wait on a result without blocking Qt; request identities
+reject stale audio and notifications. Playback that has started never replays
+through another provider after a failure. Completion settles the worker result
+before native cleanup. The player and its QBuffer source are destroyed together
+with Qt's deferred deletion; clearing the active source synchronously can
+deadlock the Windows FFmpeg backend. Old-player callbacks cannot update a
+replacement's state. `speech/audio_cache.py` stores only
+whole saved phrases/answers after successful playback. Text, voice, model and
+generation parameters determine clip identity. Generation tickets reject late
+writes after clear, entry changes or configuration changes.
+
 `SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
 The hotbar propagates Settings and keyboard switch signals to all three input
 surfaces. `ui/keyboard_grid.py` renders shared group, key, and page cells for
@@ -329,6 +369,17 @@ snapshots; current fields and supported edits from the older version take
 precedence. Settings saves retain unknown fields and reject unreadable or
 unsupported formats. Snapshots contain personal saved data and belong with the
 user's local data, never in source control or diagnostic uploads.
+
+ElevenLabs credentials use the current user's Windows Credential Manager target
+`PogledAssist/ElevenLabs` through `windows/credentials.py`. The API key is absent
+from settings JSON, logs, installer payloads and version-history snapshots.
+Settings persist only the selected voice/model IDs. The optional audio cache is
+`%LOCALAPPDATA%\PogledAssist\speech-audio`; files have hashed names and checksums,
+without a plaintext message index. The clips themselves contain the spoken saved
+text and are private user data. They remain outside installation snapshots.
+Free-form messages are held in memory for playback and are not cached. The
+[user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) owns setup,
+permissions, service text transfer, fallback and deletion controls.
 
 Unreadable speech-library files block all library writes, including rollback
 synchronization and phrase use counts. Only a successful reload clears this

@@ -31,10 +31,12 @@ class ElevenConfig:
     key: str = field(repr=False)
     voice: str = ""
     model: str = DEFAULT_MODEL
+    stability: int = 65
+    similarity: int = 80
 
     @property
     def fingerprint(self) -> str:
-        return hashlib.sha256(f"{self.key}\0{self.voice}\0{self.model}".encode()).hexdigest()
+        return hashlib.sha256(f"{self.key}\0{self.audio_identity}".encode()).hexdigest()
 
     @property
     def parameters(self) -> dict:
@@ -44,11 +46,8 @@ class ElevenConfig:
             "language_code": "bs",
             "apply_text_normalization": "auto",
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
-                "style": 0.0,
-                "speed": 1.0,
-                "use_speaker_boost": True,
+                "stability": self.stability / 100,
+                "similarity_boost": self.similarity / 100,
             },
         }
 
@@ -72,7 +71,20 @@ def configuration(settings, saved_key: str) -> ElevenConfig:
         os.environ.get("ELEVENLABS_API_KEY", "").strip() or saved_key,
         os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or settings.elevenlabs_voice_id,
         os.environ.get("ELEVENLABS_MODEL_ID", "").strip() or settings.elevenlabs_model_id,
+        settings.elevenlabs_stability,
+        settings.elevenlabs_similarity,
     )
+
+
+@dataclass(frozen=True)
+class _CallStop:
+    """Observe caller cancellation immediately without cancelling fallback on timeout."""
+
+    caller: Event
+    abandoned: Event
+
+    def is_set(self) -> bool:
+        return self.caller.is_set() or self.abandoned.is_set()
 
 
 class BoundedCall:
@@ -87,12 +99,13 @@ class BoundedCall:
         if timeout <= 0 or not self._slot.acquire(blocking=False):
             raise VoiceError("timeout")
         finished, abandoned = Event(), Event()
+        stop = _CallStop(cancel, abandoned)
         deadline = time.monotonic() + timeout
         result = []
 
         def work() -> None:
             try:
-                result.append((True, operation(abandoned, deadline)))
+                result.append((True, operation(stop, deadline)))
             except VoiceError as error:
                 result.append((False, error.reason))
             except Exception:
@@ -129,14 +142,18 @@ class BoundedCall:
 class Subscription:
     used: int
     limit: int
-    resets_at: int
+    resets_at: int | None = None
 
     @property
     def remaining(self) -> int:
         return max(0, self.limit - self.used)
 
     def improved_from(self, previous: Subscription) -> bool:
-        return self.remaining > previous.remaining or self.resets_at > previous.resets_at
+        return self.remaining > previous.remaining or (
+            self.resets_at is not None
+            and previous.resets_at is not None
+            and self.resets_at > previous.resets_at
+        )
 
 
 @dataclass(frozen=True)
@@ -151,19 +168,25 @@ class ElevenClient:
         config.validate()
         path = f"/v1/text-to-speech/{quote(config.voice, safe='')}?output_format={OUTPUT_FORMAT}"
         return self._request(
-            config.key, "POST", path, cancel, deadline,
-            payload={"text": text, **config.parameters}, audio=True,
+            config.key,
+            "POST",
+            path,
+            cancel,
+            deadline,
+            payload={"text": text, **config.parameters},
+            audio=True,
         )
 
     def subscription(self, key: str, cancel: Event, deadline: float) -> Subscription:
         payload = self._request(key, "GET", "/v1/user/subscription", cancel, deadline)
         try:
-            values = [payload[name] for name in (
-                "character_count", "character_limit", "next_character_count_reset_unix"
-            )]
+            values = [payload[name] for name in ("character_count", "character_limit")]
             if any(type(value) is not int or value < 0 for value in values):
                 raise ValueError
-            return Subscription(*values)
+            reset = payload.get("next_character_count_reset_unix")
+            if reset is not None and (type(reset) is not int or reset < 0):
+                raise ValueError
+            return Subscription(*values, reset)
         except (KeyError, TypeError, ValueError):
             raise VoiceError("offline") from None
 
@@ -174,10 +197,18 @@ class ElevenClient:
         token = ""
         seen = set()
         for _page in range(20):
-            query = {"page_size": 100}
+            # Match My Voices, including library/default voices explicitly saved there.
+            query = {"page_size": 100, "voice_type": "saved"}
             if token:
                 query["next_page_token"] = token
-            payload = self._request(key, "GET", "/v2/voices?" + urlencode(query), cancel, deadline)
+            try:
+                payload = self._request(
+                    key, "GET", "/v2/voices?" + urlencode(query), cancel, deadline
+                )
+            except VoiceError as error:
+                if error.reason == "permission":
+                    raise VoiceError("voices_permission") from None
+                raise
             voices.extend(_choices(payload.get("voices", []), "voice_id"))
             if not payload.get("has_more"):
                 break
@@ -187,23 +218,35 @@ class ElevenClient:
             seen.add(token)
         else:
             raise VoiceError("offline")
-        models = self._request(key, "GET", "/v1/models", cancel, deadline)
-        supported = [
-            model for model in models if isinstance(model, dict)
-            and model.get("can_do_text_to_speech")
-            and any(isinstance(language, dict) and language.get("language_id") == "bs"
-                    for language in model.get("languages", []))
-        ]
         try:
-            balance = self.subscription(key, cancel, deadline)
-        except VoiceError:
-            # A TTS key can omit account access; paid speech still decides availability.
-            balance = None
-        return AccountOptions(tuple(voices), tuple(_choices(supported, "model_id")), balance)
+            models = self._request(key, "GET", "/v1/models", cancel, deadline)
+        except VoiceError as error:
+            if error.reason == "permission":
+                raise VoiceError("models_permission") from None
+            raise
+        supported = [
+            model
+            for model in models
+            if isinstance(model, dict)
+            and model.get("can_do_text_to_speech")
+            and any(
+                isinstance(language, dict) and language.get("language_id") == "bs"
+                for language in model.get("languages", [])
+            )
+        ]
+        # Optional balance has its own worker/budget; it cannot discard catalogs.
+        return AccountOptions(tuple(voices), tuple(_choices(supported, "model_id")), None)
 
     def _request(
-        self, key: str, method: str, path: str, cancel: Event, deadline: float,
-        *, payload: dict | None = None, audio: bool = False,
+        self,
+        key: str,
+        method: str,
+        path: str,
+        cancel: Event,
+        deadline: float,
+        *,
+        payload: dict | None = None,
+        audio: bool = False,
     ):
         remaining = _remaining(cancel, deadline)
         connection = http.client.HTTPSConnection(API_HOST, timeout=remaining)
@@ -213,6 +256,12 @@ class ElevenClient:
             headers["Content-Type"] = "application/json"
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         try:
+            # DNS/connect can finish after the caller has abandoned this worker.
+            # Recheck before sending any authenticated or billable request.
+            connection.connect()
+            if connection.sock:
+                connection.sock.settimeout(_remaining(cancel, deadline))
+            _remaining(cancel, deadline)
             connection.request(method, path, body=body, headers=headers)
             _remaining(cancel, deadline)
             if connection.sock:
@@ -242,9 +291,9 @@ class ElevenClient:
                     raise VoiceError("audio")
                 return bytes(data)
             return json.loads(data)
-        except (TimeoutError,):
+        except TimeoutError:
             raise VoiceError("timeout") from None
-        except VoiceError:
+        except (VoiceError, SpeechCancelled):
             raise
         except Exception:
             raise VoiceError("offline") from None
@@ -269,10 +318,10 @@ def _error_reason(status: int, body: bytes) -> str:
         code = ""
     if code == "quota_exceeded":
         return "quota"
-    if code in ("invalid_api_key", "unauthorized") or status == 401:
-        return "invalid_key"
     if status == 403 or code in ("insufficient_permissions", "missing_permissions"):
         return "permission"
+    if code in ("invalid_api_key", "unauthorized") or status == 401:
+        return "invalid_key"
     if status == 429:
         return "rate_limit"
     if status in (400, 404, 422):

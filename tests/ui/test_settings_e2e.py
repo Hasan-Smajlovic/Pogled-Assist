@@ -458,7 +458,10 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
                 window._calibration_button,
             ),
         ),
-        (2, (window._test_speech_button, window._learned_words_button)),
+        (
+            2,
+            (window._test_speech_button, window._saved_audio_button, window._learned_words_button),
+        ),
     ):
         window._select_tab(tab)
         qtbot.wait(1)
@@ -527,13 +530,12 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
             SpeechSettings(keyboard_script=script, speed=speed, letters_per_group=letters)
         )
         qtbot.wait(1)
-        values = (window._letters_group_value,) if script == "arabic" else (
-            window._speed_value, window._letters_group_value
+        values = (
+            (window._letters_group_value,)
+            if script == "arabic"
+            else (window._speed_value, window._letters_group_value)
         )
-        columns = [
-            _assert_speech_row(window, value)
-            for value in values
-        ]
+        columns = [_assert_speech_row(window, value) for value in values]
         assert all(column == columns[0] for column in columns)
         assert original_columns is None or columns[0] == original_columns
         original_columns = columns[0]

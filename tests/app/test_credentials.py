@@ -16,17 +16,27 @@ def api(monkeypatch):
 
     def read(target, kind, flags, output):
         calls.append(("read", target, kind, flags))
-        ctypes.cast(output, ctypes.POINTER(ctypes.POINTER(credentials.Credential)))[0] = ctypes.pointer(record)
+        ctypes.cast(output, ctypes.POINTER(ctypes.POINTER(credentials.Credential)))[0] = (
+            ctypes.pointer(record)
+        )
         return True
 
     def write(pointer, flags):
         value = ctypes.cast(pointer, ctypes.POINTER(credentials.Credential)).contents
-        calls.append(("write", value.TargetName, value.Type, value.Persist,
-                      ctypes.string_at(value.CredentialBlob, value.CredentialBlobSize)))
+        calls.append(
+            (
+                "write",
+                value.TargetName,
+                value.Type,
+                value.Persist,
+                ctypes.string_at(value.CredentialBlob, value.CredentialBlobSize),
+            )
+        )
         return True
 
     native = SimpleNamespace(
-        CredReadW=read, CredWriteW=write,
+        CredReadW=read,
+        CredWriteW=write,
         CredFree=lambda pointer: calls.append(("free", bool(pointer))),
         CredDeleteW=lambda *args: calls.append(("delete", *args)) or True,
     )
@@ -42,7 +52,11 @@ def test_read_releases_windows_buffer_and_write_uses_per_user_persistence(api):
     assert calls[-1] == ("free", True)
     store.write("new-synthetic-key")
     assert calls[-1] == (
-        "write", "PogledAssist/ElevenLabs", 1, 2, "new-synthetic-key".encode("utf-16-le")
+        "write",
+        "PogledAssist/ElevenLabs",
+        1,
+        2,
+        "new-synthetic-key".encode("utf-16-le"),
     )
     store.delete()
     assert calls[-1] == ("delete", "PogledAssist/ElevenLabs", 1, 0)

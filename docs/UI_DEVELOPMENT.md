@@ -115,8 +115,8 @@ one PR bot comment with main screenshots, resolution links, the rendered commit,
 and a download link. Status reporting, setup, permissions and cleanup are defined in
 [UI gallery publication](UI_GALLERY.md).
 To review the artifact offline, download and extract it from the workflow run,
-then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 77 surfaces; the artifact is kept for 14 days and
+then open `index.html` inside `1280x720`.
+The single 1280 × 720 gallery contains 104 surfaces; the artifact is kept for 14 days and
 any available screenshots are uploaded even when the test suite fails.
 CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
 variable, rendering tests continue to use pytest's temporary directories.
@@ -132,6 +132,10 @@ The command renders:
 - General, gaze, speech, and learned-word Settings surfaces, including save failure
   and four version states: older selection, package preparation, unsaved-input
   warning, and failed release check
+- Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup
+  (connected, replacing key, empty My Voices, missing key, invalid key, missing
+  permission, credential save failure, quota, low/critical credits and
+  preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device,
   live position, eye positions without valid gaze, too-close/too-far/outside-frame
   guidance without valid gaze, eye loss, fixation target with and without gaze,
@@ -142,6 +146,8 @@ The command renders:
 - Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
 - Speech tracking notifications: eye loss, missing gaze, disconnected device,
   repeated interruptions, recovery, letter selection and deletion confirmation
+- Speech voice states: Efendija, quota/offline/timeout/invalid-key fallback,
+  Standardni fallback, cached audio, partial playback and recovery
 - Speech alarm, sleep, and exit confirmation dialogs
 - Keyboard letters, numpad, and symbols tabs
 - Controller general, keyboard, and settings tabs
@@ -158,7 +164,7 @@ The Latin pagination snapshots use 380 × 640 logical pixels to check the sideba
 below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 77-surface gallery.
+covered by UI interaction tests; it is not part of the 104-surface gallery.
 Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine.
@@ -188,6 +194,30 @@ On a normal development machine, verify:
   gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
 - Settings survive an application restart.
+- ElevenLabs setup fits 1280 × 720: save a key, confirm the saved label and hidden
+  editor, reopen and check it. Replace/cancel must retain the old key; removing
+  it must open an empty editor. Confirm the voice dropdown matches My Voices,
+  includes only Efendija Fikret when that is the only saved voice, and allows
+  selecting a single voice by gaze. A previously selected ID outside the list
+  must require an explicit choice before testing from either Settings page.
+  Adjust Stability (65% by default) and Similarity (80%) with the sliders and gaze
+  −/+ buttons; restart and confirm persistence and regenerated saved clips.
+  Confirm the credit bar, yellow below 20%, red below 10%, and unavailable state
+  without User: Read. A slow balance refresh must leave voice/model choices usable.
+  During preparation/playback, confirm the indicator and Stop action, preserved
+  text, and no second paid test until gaze leaves the completed test button.
+  An empty collection must show
+  Nema glasova u My Voices. Check missing Voices/Models permissions,
+  a failed save retaining masked input, and an unsaved replacement refusing a
+  connection check or paid test. The read-only check must not generate speech. Select the
+  intended ef. Fikret voice and Bosnian model, then separately listen to the
+  billable test. Check offline/quota fallback and later recovery after top-up,
+  saved-entry repetition offline, edit/deletion invalidation and cache clearing.
+  Confirm free-form messages leave no cache. Record actual sound and similarity
+  separately from fake-network or process-startup results.
+  Change the voice/model during preparation and playback; the window must stay
+  responsive and old audio must not start later. The silent native decoder
+  regression covers buffer replacement and completion, not audible MP3 quality.
 - Tracking notifications are initially enabled, can be disabled in Gaze Settings,
   leave targets fixed in Speech and its letter/deletion dialogs, and restore the
   message field after recovery. Check that Rest, Settings and Gaze check suppress

@@ -29,6 +29,23 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
+def test_efendija_failed_test_keeps_classified_reason_after_playback_event(
+    hotbar_gaze, monkeypatch
+):
+    hotbar = hotbar_gaze[0]
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    hotbar._open_settings()
+    hotbar._test_efendija()
+    request = hotbar._efendija_test_id
+    message = "Proba Efendije nije uspjela. ElevenLabs ključ nema potrebne dozvole."
+    hotbar._speech.test_finished.emit(request, message)
+    hotbar._speech.playback_changed.emit(request, "failed")
+    assert hotbar._settings_window._status_label.text() == message
+
+
+@pytest.mark.e2e
 def test_confirmation_edge_hold_keeps_one_diagnostic_attempt(hotbar_gaze, qtbot, monkeypatch):
     events = []
     writer = SimpleNamespace(
@@ -960,6 +977,28 @@ def test_speech_gaze_edge_jitter_cannot_repeat_completed_action(speech_gaze, com
     feed(center, 3960)
     feed(center, 4961)
     assert len(actions) == 2
+
+
+@pytest.mark.e2e
+def test_speech_bottom_edge_gaze_cannot_restart_after_playback_completes(speech_gaze, qtbot):
+    window, _controller, speech, feed, actions, _progress = speech_gaze
+    window._input.setText("ŽELIM VODU")
+    qtbot.wait(1)
+    button = window._play_button
+    point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 2))
+    feed(point, 0)
+    feed(point, 1001)
+    request = speech.request_id
+    assert len(actions) == 1
+    qtbot.wait(1)
+    feed(point, 1100)
+    feed(point, 1250)
+    speech.playback_changed.emit(request, "finished")
+    qtbot.wait(1)
+    feed(point, 1500)
+    feed(point, 2501)
+    assert len(actions) == 1
+    assert len(speech.requests) == 1
 
 
 @pytest.mark.e2e

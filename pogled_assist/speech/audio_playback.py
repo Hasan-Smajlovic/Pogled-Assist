@@ -62,6 +62,8 @@ class AudioPlayback(QObject):
         self._finish("stopped")
 
     def _position(self, position: int) -> None:
+        if self.sender() is not self._player:
+            return
         result = self._result
         if position > 0:
             self._progress_at = time.monotonic()
@@ -74,18 +76,24 @@ class AudioPlayback(QObject):
             self._finish("failed")
 
     def _status(self, status: QMediaPlayer.MediaStatus) -> None:
+        if self.sender() is not self._player:
+            return
         if status == QMediaPlayer.EndOfMedia:
             self._finish("finished" if self._result and self._result.started else "failed")
         elif status == QMediaPlayer.InvalidMedia:
             self._finish("failed")
 
     def _error(self, _error, _message: str) -> None:
-        self._finish("failed")
+        if self.sender() is self._player:
+            self._finish("failed")
 
     def _finish(self, outcome: str) -> None:
         result, player = self._result, self._player
         self._result = self._player = None
         self._timer.stop()
+        if result is not None:
+            result.outcome = outcome
+            result.done.set()
         if player is not None:
             for signal, slot in (
                 (player.positionChanged, self._position),
@@ -96,10 +104,9 @@ class AudioPlayback(QObject):
                     signal.disconnect(slot)
             try:
                 player.stop()
-                player.setSourceDevice(None)
             finally:
+                # FFmpeg can deadlock while synchronously clearing a QBuffer
+                # source. Let Qt destroy the player and its source together
+                # after the current media callback returns.
                 player.deleteLater()
                 self._output = self._buffer = None
-        if result is not None:
-            result.outcome = outcome
-            result.done.set()

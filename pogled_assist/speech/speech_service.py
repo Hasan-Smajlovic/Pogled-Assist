@@ -53,6 +53,8 @@ class SpeechSettings:
     keyboard_script: str = LATIN_SCRIPT
     elevenlabs_voice_id: str = field(default="", repr=False)
     elevenlabs_model_id: str = field(default=DEFAULT_MODEL, repr=False)
+    elevenlabs_stability: int = 65
+    elevenlabs_similarity: int = 80
 
 
 class SpeechService(QObject):
@@ -69,6 +71,7 @@ class SpeechService(QObject):
     def __init__(self, *, credentials=None, client=None, cache: AudioCache | None = None) -> None:
         super().__init__()
         self.request_id = 0
+        self.playback_state = "stopped"
         self._cancel: Event | None = None
         self._efendija_request: int | None = None
         self._process_lock = Lock()
@@ -99,7 +102,8 @@ class SpeechService(QObject):
     @property
     def available(self) -> bool:
         return (
-            self._executable is not None or self._edge_playback_executable is not None
+            self._executable is not None
+            or self._edge_playback_executable is not None
             or self.account.state.has_key
         )
 
@@ -116,6 +120,8 @@ class SpeechService(QObject):
             or previous.keyboard_script != settings.keyboard_script
             or previous.elevenlabs_voice_id != settings.elevenlabs_voice_id
             or previous.elevenlabs_model_id != settings.elevenlabs_model_id
+            or previous.elevenlabs_stability != settings.elevenlabs_stability
+            or previous.elevenlabs_similarity != settings.elevenlabs_similarity
         ):
             self.stop()
             self.voice_state = VoiceState()
@@ -166,6 +172,7 @@ class SpeechService(QObject):
         request_id, cancel = self.request_id, Event()
         self._efendija_request = request_id
         self._cancel = cancel
+        self.playback_state = "preparing"
         config = configuration(settings, self.account.config.key)
         self._configure_audio()
         self._router.gate.configure(config.fingerprint)
@@ -178,6 +185,7 @@ class SpeechService(QObject):
             ).start()
         except RuntimeError:
             self._cancel = None
+            self.playback_state = "failed"
             return False
         return True
 
@@ -221,7 +229,8 @@ class SpeechService(QObject):
                 if test:
                     self._worker_test.emit(
                         request_id,
-                        "Proba Efendije je završena." if state == "finished"
+                        "Proba Efendije je završena."
+                        if state == "finished"
                         else "Izgovor Efendije nije završen. Pokušajte ponovo.",
                     )
         if cancel.is_set():
@@ -314,6 +323,7 @@ class SpeechService(QObject):
         request_id = self.request_id
         cancel = Event()
         self._cancel = cancel
+        self.playback_state = "preparing"
         worker = Thread(
             target=self._run_process,
             args=(request_id, cancel, command, engine_name, environment),
@@ -324,6 +334,7 @@ class SpeechService(QObject):
             worker.start()
         except RuntimeError:
             self._cancel = None
+            self.playback_state = "failed"
             logger.error("Could not start speech worker.")
             return False
         return True
@@ -389,20 +400,27 @@ class SpeechService(QObject):
     @Slot(int, str)
     def _deliver_state(self, request_id: int, state: str) -> None:
         if request_id == self.request_id and self._cancel is not None:
+            self.playback_state = state
             if state == "failed" and request_id == self._efendija_request:
                 self._deliver_voice(request_id, replace(self.voice_state, partial=True))
             if state in ("finished", "failed"):
                 self._cancel = None
+                if request_id == self._efendija_request:
+                    self.account.refresh_subscription()
             self.playback_changed.emit(request_id, state)
 
     def stop(self) -> None:
-        self._audio.stop()
+        request_id = self.request_id
+        cancel = self._cancel
         if self._cancel is not None:
             self._cancel.set()
             self._cancel = None
-            self.playback_changed.emit(self.request_id, "stopped")
         # Invalidate already queued worker notifications without waiting on Qt.
         self.request_id += 1
+        self._audio.stop()
+        if cancel is not None:
+            self.playback_state = "stopped"
+            self.playback_changed.emit(request_id, "stopped")
 
 
 def _environment_with_executable_directory(executable: Path) -> dict[str, str]:

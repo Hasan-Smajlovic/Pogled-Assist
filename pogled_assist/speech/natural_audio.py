@@ -15,9 +15,7 @@ from .voice_state import VoiceError
 def prepare_natural(text: str, cancel: Event, deadline: float) -> bytes:
     async def collect() -> bytes:
         audio = bytearray()
-        stream = edge_tts.Communicate(
-            text, voice="bs-BA-GoranNeural", rate="-10%", pitch="-2Hz"
-        )
+        stream = edge_tts.Communicate(text, voice="bs-BA-GoranNeural", rate="-10%", pitch="-2Hz")
         async for chunk in stream.stream():
             if cancel.is_set():
                 raise VoiceError("timeout")

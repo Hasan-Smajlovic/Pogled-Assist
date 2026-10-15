@@ -224,6 +224,7 @@
         if (message.value) askConfirm('Obrisati sav tekst?', editor ? 'Obrisat će se samo novi unos. Vaša poruka za razgovor ostaje sačuvana.' : 'Cijela poruka bit će obrisana.', 'Obriši tekst', () => { message.value = ''; renderPredictions(); updateSave(); say('Tekst je obrisan.'); });
         break;
       case 'speak': speak(); break;
+      case 'stop-speech': clearTimeout(previewSpeechTimer); window.speechSynthesis?.cancel(); playback(false); say('Govor je zaustavljen.'); break;
       case 'categories': switchView(view === 'categories' ? 'keyboard' : 'categories'); break;
       case 'phrases': switchView(view === 'phrases' ? 'keyboard' : 'phrases'); break;
       case 'keyboard-toggle':
@@ -441,13 +442,20 @@
     $('undo-word').disabled = !undoWord;
   }
 
+  function playback(active) {
+    $('speak-button').dataset.playing = String(active);
+    $('speak-button').textContent = active ? 'Zaustavi' : 'Izgovori';
+    $('speech-progress').hidden = !active;
+  }
   function speak() {
+    if ($('speak-button').dataset.playing === 'true') { clearTimeout(previewSpeechTimer); window.speechSynthesis?.cancel(); playback(false); say('Govor je zaustavljen.'); return; }
     const text = message.value.trim();
     if (!text) { say('Prvo sastavite poruku.'); return; }
     if ($('voice-demo-state').value !== 'none') {
       clearTimeout(previewSpeechTimer);
       say('Pripremam govor…');
-      previewSpeechTimer = setTimeout(() => { say('Čitanje je završeno.'); renderVoiceNotice(); }, 650);
+      playback(true);
+      previewSpeechTimer = setTimeout(() => { say('Poruka se izgovara.'); previewSpeechTimer = setTimeout(() => { playback(false); say('Čitanje je završeno.'); renderVoiceNotice(); }, 2000); }, 650);
       return;
     }
     if (!('speechSynthesis' in window)) { say('Izgovor nije podržan u ovom pregledniku.'); return; }
@@ -456,9 +464,10 @@
     utterance.lang = arabic ? 'ar-SA' : 'bs-BA';
     const voice = window.speechSynthesis.getVoices().find(voice => (arabic ? /^ar(?:-|$)/i : /^bs(?:-|$)/i).test(voice.lang));
     if (voice) utterance.voice = voice;
+    playback(true);
     utterance.onstart = () => say('Poruka se izgovara.');
-    utterance.onend = () => say('Čitanje je završeno.');
-    utterance.onerror = () => say('Govor nije uspio. Pokušajte ponovo.');
+    utterance.onend = () => { playback(false); say('Čitanje je završeno.'); };
+    utterance.onerror = () => { playback(false); say('Govor nije uspio. Pokušajte ponovo.'); };
     say('Pokrećem govor.');
     window.speechSynthesis.speak(utterance);
   }

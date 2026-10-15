@@ -9,7 +9,13 @@ from pogled_assist.speech.audio_cache import AudioCache
 from pogled_assist.speech.audio_playback import PlaybackResult
 from pogled_assist.speech.elevenlabs import ElevenConfig, Subscription
 from pogled_assist.speech.voice_router import VoiceRouter
-from pogled_assist.speech.voice_state import EFENDIJA, NATURAL, STANDARD, SpeechCancelled, VoiceError
+from pogled_assist.speech.voice_state import (
+    EFENDIJA,
+    NATURAL,
+    STANDARD,
+    SpeechCancelled,
+    VoiceError,
+)
 
 
 @pytest.fixture
@@ -34,7 +40,10 @@ def route(tmp_path):
     return router, config, client, natural_calls, played, notices, play
 
 
-@pytest.mark.parametrize("reason", ["quota", "invalid_key", "permission", "configuration", "offline", "timeout", "rate_limit"])
+@pytest.mark.parametrize(
+    "reason",
+    ["quota", "invalid_key", "permission", "configuration", "offline", "timeout", "rate_limit"],
+)
 def test_preparation_error_uses_natural_for_same_text_without_changing_selection(route, reason):
     router, config, client, natural, played, notices, play = route
     client.error = VoiceError(reason)
@@ -61,7 +70,7 @@ def test_natural_failure_reaches_standard_with_truthful_notice(route):
     assert notices[-1].notice[2] == "Koristi se Standardni glas."
 
 
-def test_deadlines_are_five_seconds_then_three_and_are_not_restarted(route):
+def test_preparation_has_thirty_seconds_then_three_for_fallback(route):
     router, config, _client, _natural, _played, notices, play = route
     limits = []
 
@@ -72,13 +81,34 @@ def test_deadlines_are_five_seconds_then_three_and_are_not_restarted(route):
 
     router.network = router.natural_network = TimedOut()
     assert router.run("PORUKA", config, threading.Event(), play, notices.append) == "standard"
-    assert 0 < limits[0] <= 5
+    assert 29 < limits[0] <= 30
     assert limits[1] == 3
+
+
+def test_slow_valid_synthesis_is_not_discarded_after_five_seconds(route, monkeypatch):
+    router, config, client, natural, played, notices, play = route
+    clock = [100.0]
+    monkeypatch.setattr("pogled_assist.speech.voice_router.time.monotonic", lambda: clock[0])
+
+    def synthesize(config, text, cancel, deadline):
+        client.calls.append(("synthesize", config, text))
+        clock[0] += 8
+        if clock[0] >= deadline:
+            raise VoiceError("timeout")
+        return b"slow valid audio"
+
+    client.synthesize = synthesize
+    assert router.run("PORUKA", config, threading.Event(), play, notices.append) == "finished"
+    assert len(client.calls) == 1 and natural == []
+    assert played[0][0] == b"slow valid audio" and played[0][1].voice == EFENDIJA
 
 
 def test_whole_saved_phrase_is_cached_only_after_success_and_repeats_offline(route):
     router, config, client, natural, played, notices, play = route
-    assert router.run("sačuvana  fraza.", config, threading.Event(), play, notices.append) == "finished"
+    assert (
+        router.run("sačuvana  fraza.", config, threading.Event(), play, notices.append)
+        == "finished"
+    )
     assert client.calls[0][2] == "SAČUVANA FRAZA."
     client.error = VoiceError("quota")
     router.run("SAČUVANA FRAZA.", config, threading.Event(), play, notices.append)
@@ -116,8 +146,10 @@ def test_audio_error_before_playback_can_fall_back(route):
 
     def play(_data, voice):
         calls.append(voice.voice)
-        return PlaybackResult(started=voice.voice == NATURAL,
-                              outcome="failed" if voice.voice == EFENDIJA else "finished")
+        return PlaybackResult(
+            started=voice.voice == NATURAL,
+            outcome="failed" if voice.voice == EFENDIJA else "finished",
+        )
 
     assert router.run("PORUKA", config, threading.Event(), play, notices.append) == "finished"
     assert calls == [EFENDIJA, NATURAL]
@@ -207,4 +239,37 @@ def test_confirmed_quota_error_falls_back_without_waiting_for_another_http_call(
 def test_failed_audio_cache_write_does_not_turn_successful_speech_into_failure(route, monkeypatch):
     router, config, _client, _natural, _played, notices, play = route
     monkeypatch.setattr(router.cache, "write", lambda *_: False)
-    assert router.run("SAČUVANA FRAZA.", config, threading.Event(), play, notices.append) == "finished"
+    assert (
+        router.run("SAČUVANA FRAZA.", config, threading.Event(), play, notices.append) == "finished"
+    )
+
+
+def test_quota_recovers_without_optional_subscription_permission(route):
+    router, config, client, natural, played, notices, play = route
+    client.error = VoiceError("quota")
+    router.run("PORUKA", config, threading.Event(), play, notices.append)
+    client.error = None
+
+    def denied(*_args):
+        raise VoiceError("permission")
+
+    client.subscription = denied
+    router.run("DRUGA PORUKA", config, threading.Event(), play, notices.append)
+    assert len(client.calls) == 1
+    router.gate.retry_at = 0
+    router.run("TREĆA PORUKA", config, threading.Event(), play, notices.append)
+    assert len(client.calls) == 2
+    assert natural == ["PORUKA", "DRUGA PORUKA"]
+    assert played[-1][1].voice == EFENDIJA
+    assert notices[-1].recovered
+
+
+def test_key_quota_can_recover_with_unchanged_positive_account_balance(route):
+    router, config, client, _natural, played, notices, play = route
+    client.balance = Subscription(10, 100, None)
+    router.gate.failure(config, "quota", client.balance)
+    router.gate.retry_at = 0
+    router.run("PORUKA", config, threading.Event(), play, notices.append)
+    assert len(client.calls) == 1
+    assert played[-1][1].voice == EFENDIJA
+    assert notices[-1].recovered
