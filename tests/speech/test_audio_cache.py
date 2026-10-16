@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from pogled_assist.speech.audio_cache import AudioCache, cache_root
@@ -110,3 +112,45 @@ def test_deleting_entry_removes_all_tuning_versions(cache):
     cache.write(cache.ticket("Hvala!"), b"second")
     cache.configure(config.audio_identity, set())
     assert list(cache.root.glob("*.audio")) == []
+
+
+def test_size_limit_removes_least_recently_used_audio_even_after_restart(cache, monkeypatch):
+    first, second = (cache.ticket(text) for text in ("Trebam vode.", "Hvala!"))
+    assert cache.write(first, b"first")
+    assert cache.write(second, b"other")
+    first_path = cache.root / (first[1] + ".audio")
+    second_path = cache.root / (second[1] + ".audio")
+    os.utime(first_path, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(second_path, ns=(2_000_000_000, 2_000_000_000))
+    limit = 2 * first_path.stat().st_size
+    monkeypatch.setattr("pogled_assist.speech.audio_cache.MAX_CACHE_BYTES", limit)
+    assert cache.read(first) == b"first"
+    reopened = AudioCache(cache.root)
+    reopened.configure(ElevenConfig("key", "voice").audio_identity, {"Trebam vode.", "Hvala!", "Čaj"})
+    assert reopened.write(reopened.ticket("Čaj"), b"third")
+    assert reopened.read(reopened.ticket("Trebam vode.")) == b"first"
+    assert reopened.read(reopened.ticket("Hvala!")) is None
+    assert reopened.read(reopened.ticket("Čaj")) == b"third"
+    assert sum(path.stat().st_size for path in cache.root.glob("*.audio")) <= limit
+
+
+def test_recency_write_failure_does_not_prevent_cached_playback(cache, monkeypatch):
+    ticket = cache.ticket("Hvala!")
+    cache.write(ticket, b"saved")
+
+    def denied(*_args):
+        raise PermissionError("synthetic filesystem error")
+
+    monkeypatch.setattr("pogled_assist.speech.audio_cache.os.utime", denied)
+    assert cache.read(ticket) == b"saved"
+    assert len(list(cache.root.glob("*.audio"))) == 1
+
+
+def test_cache_write_distinguishes_stale_ticket_from_unavailable_storage(cache):
+    ticket = cache.ticket("Hvala!")
+    cache.clear()
+    assert cache.write(ticket, b"late") is None
+    assert cache.write(None, b"private") is None
+    unavailable = AudioCache(None)
+    unavailable.configure("voice", {"Hvala!"})
+    assert unavailable.write(unavailable.ticket("Hvala!"), b"saved") is False

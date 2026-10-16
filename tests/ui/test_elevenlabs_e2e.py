@@ -352,6 +352,7 @@ def test_all_voice_notices_keep_targets_fixed_and_preserve_message_and_selection
         VoiceState("human_like", "invalid_key"),
         VoiceState("default", "offline"),
         VoiceState(cached=True),
+        VoiceState(cache_failed=True),
         VoiceState(partial=True),
         VoiceState(recovered=True),
     ):
@@ -406,6 +407,20 @@ def test_partial_failure_retains_text_and_requires_explicit_replay(speech):
     assert window._speech_notice.title == "Izgovor nije završen."
     window._play()
     assert len(service.requests) == 2
+
+
+def test_storage_warning_keeps_speech_finished_and_has_no_recovery_timer(speech):
+    window, service, _library = speech
+    service.publish_voice(VoiceState(cache_failed=True))
+    service.playback_changed.emit(service.request_id, "finished")
+    assert window._speech_notice.title == "Zvuk nije sačuvan."
+    assert window._speech_notice.detail == "Ponavljanje može trošiti kredite."
+    assert window._speech_notice.tone == "warning"
+    assert not window._speech_notice_timer.isActive()
+    assert window._input.text() == "SAČUVANA FRAZA."
+    assert len(service.requests) == 1
+    service.publish_voice(VoiceState(cached=True))
+    assert window._speech_notice.title == "Koristi se sačuvani Efendijin glas."
 
 
 def test_arabic_suppresses_bosnian_notice_and_restores_selected_voice(speech):

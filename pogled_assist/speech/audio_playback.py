@@ -16,6 +16,7 @@ class PlaybackResult:
     done: Event = field(default_factory=Event)
     started: bool = False
     outcome: str = "failed"
+    invalid_audio: bool = False
 
 
 class AudioPlayback(QObject):
@@ -83,18 +84,19 @@ class AudioPlayback(QObject):
         if status == QMediaPlayer.EndOfMedia:
             self._finish("finished" if self._result and self._result.started else "failed")
         elif status == QMediaPlayer.InvalidMedia:
-            self._finish("failed")
+            self._finish("failed", invalid_audio=True)
 
-    def _error(self, _error, _message: str) -> None:
+    def _error(self, error, _message: str) -> None:
         if self.sender() is self._player:
-            self._finish("failed")
+            self._finish("failed", invalid_audio=error == QMediaPlayer.FormatError)
 
-    def _finish(self, outcome: str) -> None:
+    def _finish(self, outcome: str, *, invalid_audio: bool = False) -> None:
         result, player = self._result, self._player
         self._result = self._player = None
         self._timer.stop()
         if result is not None:
             result.outcome = outcome
+            result.invalid_audio = invalid_audio
             result.done.set()
         if player is not None:
             for signal, slot in (

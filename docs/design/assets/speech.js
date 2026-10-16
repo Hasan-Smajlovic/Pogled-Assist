@@ -37,6 +37,7 @@
     invalid: ['Provjerite ElevenLabs ključ u Postavkama.', 'Koristi se Prirodni glas.', 'warning'],
     standard: ['Online glasovi trenutno nisu dostupni.', 'Koristi se Standardni glas.', 'warning'],
     cached: ['Koristi se sačuvani Efendijin glas.', 'Ovaj snimak ne troši nove kredite.', 'ready'],
+    'cache-failed': ['Zvuk nije sačuvan.', 'Ponavljanje može trošiti kredite.', 'warning'],
     recovered: ['Efendijin glas je ponovo dostupan.', 'Naredne poruke koriste Efendiju.', 'ready'],
     partial: ['Izgovor nije završen.', 'Za ponavljanje odaberite Izgovori.', 'error'],
   };

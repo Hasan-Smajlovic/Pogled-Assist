@@ -5,6 +5,4 @@ description: Load before changing any text or data under language/ or tests/fixt
 
 # Security review
 
-Read and follow [`.agents/skills/security-review/SKILL.md`](../../../.agents/skills/security-review/SKILL.md).
-That file owns this workflow for every coding agent; this copy only makes it
-discoverable by Claude Code. Edit the source, never this pointer.
+Read and follow [`.agents/skills/security-review/SKILL.md`](../../../.agents/skills/security-review/SKILL.md). That file owns this workflow for every coding agent; this copy only makes it discoverable by Claude Code. Edit the source, never this pointer.

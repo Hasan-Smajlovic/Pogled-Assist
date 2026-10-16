@@ -90,7 +90,7 @@ def test_merged_hotfix_opens_isolated_draft_for_manual_merge(workflow):
     assert payload["head"] == "sync/42" and payload["base"] == "development"
     assert payload["draft"] is True
     assert "#42" in payload["body"] and "manually" in payload["body"]
-    assert "## Review checklist" in payload["body"]
+    assert "## Risks and limits" in payload["body"]
     assert "pull/43" in summary
 
 

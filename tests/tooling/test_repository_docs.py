@@ -75,37 +75,24 @@ ROOT_FILE_NAMES = {".gitattributes", ".gitignore", "VERSION"}
 REQUIRED_TEMPLATE_SECTIONS = {
     ".github/pull_request_template.md": {
         "Outcome",
-        "Linked issue",
-        "Changes",
-        "Compatibility and risk",
         "Verification",
-        "Evidence and limits",
-        "Review checklist",
+        "Risks and limits",
     },
     ".github/ISSUE_TEMPLATE/bug_report.md": {
         "Problem",
         "Reproduction",
-        "Context and evidence",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Context",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/feature_request.md": {
         "Goal",
-        "User flow",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Details",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/maintenance_task.md": {
         "Goal",
         "Context",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Done when",
     },
 }
 

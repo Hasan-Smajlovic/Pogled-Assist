@@ -61,7 +61,7 @@ class AudioCache:
 
     def read(self, ticket: tuple[int, str] | None) -> bytes | None:
         with self._lock:
-            if not self._valid(ticket) or ticket[1] in self._blocked:
+            if self.root is None or not self._valid(ticket) or ticket[1] in self._blocked:
                 return None
             path = self.root / (ticket[1] + ".audio")
             try:
@@ -75,13 +75,16 @@ class AudioCache:
             if not _valid_audio(data, audio, header):
                 self.discard(ticket)
                 return None
+            with suppress(OSError):
+                os.utime(path, None)
             return audio
 
-    def write(self, ticket: tuple[int, str] | None, audio: bytes) -> bool:
+    def write(self, ticket: tuple[int, str] | None, audio: bytes) -> bool | None:
+        """Return None for an ineligible/stale ticket, False when storage fails."""
         with self._lock:
             if not self._valid(ticket):
-                return False
-            if not audio or len(audio) > MAX_AUDIO_BYTES:
+                return None
+            if self.root is None or not audio or len(audio) > MAX_AUDIO_BYTES:
                 return False
             path = self.root / (ticket[1] + ".audio")
             temporary = path.with_suffix(".tmp")
@@ -100,7 +103,7 @@ class AudioCache:
 
     def discard(self, ticket: tuple[int, str] | None) -> None:
         with self._lock:
-            if self._valid(ticket):
+            if self.root is not None and self._valid(ticket):
                 self._blocked.add(ticket[1])
                 with suppress(OSError):
                     (self.root / (ticket[1] + ".audio")).unlink(missing_ok=True)
@@ -117,7 +120,6 @@ class AudioCache:
     def _valid(self, ticket: tuple[int, str] | None) -> bool:
         return (
             self._enabled
-            and self.root is not None
             and ticket is not None
             and ticket[0] == self._generation
             and ticket[1] in self._allowed
@@ -150,7 +152,10 @@ class AudioCache:
         if self.root is None:
             return
         with suppress(OSError):
-            files = sorted(self.root.glob("*.audio"), key=lambda path: path.stat().st_mtime)
+            files = sorted(
+                self.root.glob("*.audio"),
+                key=lambda path: (path.stat().st_mtime_ns, path.name),
+            )
             sizes = [(path, path.stat().st_size) for path in files]
             total = sum(size for _, size in sizes)
             for path, size in sizes:

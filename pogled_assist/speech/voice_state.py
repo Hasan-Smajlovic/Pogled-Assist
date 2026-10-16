@@ -57,6 +57,7 @@ class VoiceState:
     cached: bool = False
     recovered: bool = False
     partial: bool = False
+    cache_failed: bool = False
 
     @property
     def label(self) -> str:
@@ -66,6 +67,8 @@ class VoiceState:
     def notice(self) -> tuple[str, str, str] | None:
         if self.partial:
             return "error", "Izgovor nije završen.", "Za ponavljanje odaberite Izgovori."
+        if self.cache_failed:
+            return "warning", "Zvuk nije sačuvan.", "Ponavljanje može trošiti kredite."
         if self.cached:
             return (
                 "ready",

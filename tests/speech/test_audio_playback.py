@@ -27,6 +27,7 @@ def player(qapp, monkeypatch):
         errorOccurred = Signal(object, str)
         EndOfMedia = media_type.EndOfMedia
         InvalidMedia = media_type.InvalidMedia
+        FormatError = media_type.FormatError
 
         def __init__(self, parent):
             super().__init__(parent)
@@ -86,7 +87,35 @@ def test_media_error_retains_whether_any_audio_was_played(player, started):
     media.errorOccurred.emit(1, "private diagnostic content")
     assert result.done.is_set() and result.outcome == "failed"
     assert result.started is started
+    assert not result.invalid_audio
     assert media.stopped
+
+
+def test_missing_output_is_not_treated_as_corrupt_media(player, monkeypatch):
+    playback, _instances = player
+    monkeypatch.setattr(
+        audio_playback,
+        "QAudioOutput",
+        lambda _parent: SimpleNamespace(device=lambda: SimpleNamespace(isNull=lambda: True)),
+    )
+    result = PlaybackResult()
+    playback.play(1, b"valid audio", result)
+    assert result.done.is_set() and result.outcome == "failed"
+    assert not result.started and not result.invalid_audio
+
+
+@pytest.mark.parametrize("kind", ["status", "format"])
+def test_decoder_rejection_is_distinct_from_output_failure(player, kind):
+    playback, instances = player
+    result = PlaybackResult()
+    playback.play(1, b"unreadable audio", result)
+    media = instances[0]
+    if kind == "status":
+        media.mediaStatusChanged.emit(media.InvalidMedia)
+    else:
+        media.errorOccurred.emit(media.FormatError, "private diagnostic content")
+    assert result.done.is_set() and result.outcome == "failed"
+    assert result.invalid_audio
 
 
 def test_replacement_stops_old_device_before_creating_new_one_and_ignores_old_signals(player):
@@ -111,6 +140,7 @@ def test_stalled_decoder_fails_without_waiting_forever(player, monkeypatch):
     monkeypatch.setattr(audio_playback.time, "monotonic", lambda: playback._progress_at + 6)
     playback._watch_progress()
     assert result.done.is_set() and result.outcome == "failed" and result.started
+    assert not result.invalid_audio
 
 
 def test_stop_settles_worker_before_native_cleanup_and_never_clears_source(player):

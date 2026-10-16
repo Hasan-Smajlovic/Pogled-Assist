@@ -130,22 +130,14 @@ jobs:
               return True
 
           def pr_body(pull):
-              return (f"## Outcome\n\nBackport released hotfix #{pull['number']} to development.\n\n"
-                      f"## Linked issue\n\nRefs #{pull['number']} (original hotfix PR).\n\n"
-                      "## Changes\n\n- Cherry-pick the released hotfix onto a branch from development.\n\n"
-                      "## Compatibility and risk\n\nReview the complete diff, including any release version changes. "
-                      "Protected master and development are unchanged until a human merges this PR.\n\n"
+              return (f"Refs #{pull['number']} (original hotfix PR).\n\n"
+                      "## Outcome\n\nBackport the released hotfix by cherry-picking it onto a branch from development.\n\n"
                       "## Verification\n\n- Automated: Not run here; review required CI checks.\n"
-                      "- Manual Windows: Not run.\n- Manual Tobii hardware: Not run.\n\n"
-                      "## Evidence and limits\n\nThe original hotfix PR owns the release evidence. "
-                      "Review this backport and squash-merge manually after required checks pass.\n\n"
-                      "## Review checklist\n\n"
-                      "- [ ] The diff contains only work needed for the linked issue.\n"
-                      "- [ ] Existing user behavior is unchanged or the intended change is documented.\n"
-                      "- [ ] Every behavior change has a regression test in the existing pytest suite that fails without the change.\n"
-                      "- [ ] Visible UI changes update the HTML design reference first, or this pull request explains why the reference is unaffected.\n"
-                      "- [ ] Every row of the maintenance matrix in `AGENTS.md` that matches a changed path is updated.\n"
-                      "- [ ] Hardware-only claims are separated from software-only verification.\n")
+                      "- Manual Windows: Not run; requires validation on Windows.\n"
+                      "- Manual Tobii hardware: Not run; requires the target device.\n\n"
+                      "The original hotfix PR owns the release evidence.\n\n"
+                      "## Risks and limits\n\nReview the complete backport diff, including any release version changes. "
+                      "Squash-merge manually after required checks and independent review pass.\n")
 
           def main():
               pull = validated_pull()

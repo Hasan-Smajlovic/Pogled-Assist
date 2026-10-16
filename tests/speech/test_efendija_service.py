@@ -41,6 +41,7 @@ def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_v
 
 def test_stop_and_replacement_discard_late_network_audio_and_voice_events(service, qtbot):
     instance, client, played = service
+    instance.set_saved_texts({"FIRST"})
     entered, release = threading.Event(), threading.Event()
 
     def blocked(*_args):
@@ -61,10 +62,93 @@ def test_stop_and_replacement_discard_late_network_audio_and_voice_events(servic
         release.set()
         qtbot.wait(50)
         assert played == voices == []
+        assert list(instance.audio_cache.root.glob("*.audio")) == []
         assert (first, "stopped") in states
         assert (first, "finished") not in states
     finally:
         release.set()
+
+
+@pytest.mark.e2e
+def test_immediate_replay_after_stop_uses_the_download_already_paid_for(service, qtbot, monkeypatch):
+    instance, client, played = service
+    instance.set_saved_texts({"SAČUVANA FRAZA."})
+    original_play = instance._audio.play
+    states = []
+    instance.playback_changed.connect(lambda request, state: states.append((request, state)))
+
+    def pause_first_playback(request, _data, result):
+        monkeypatch.setattr(instance._audio, "play", original_play)
+        result.started = True
+        instance._audio.started.emit(request)
+
+    monkeypatch.setattr(instance._audio, "play", pause_first_playback)
+    assert instance.speak("SAČUVANA FRAZA.")
+    first = instance.request_id
+    qtbot.waitUntil(lambda: (first, "speaking") in states)
+    instance.stop()
+    client.error = VoiceError("quota")
+    assert instance.speak("SAČUVANA FRAZA.")
+    second = instance.request_id
+    qtbot.waitUntil(lambda: (second, "finished") in states)
+    assert len(client.calls) == 1
+    assert played[-1][1] == client.audio
+    assert instance.voice_state.cached
+    assert (first, "finished") not in states
+
+
+@pytest.mark.e2e
+def test_cached_output_failure_does_not_regenerate_and_recovers_when_output_returns(
+    service, qtbot, monkeypatch
+):
+    instance, client, _played = service
+    instance.set_saved_texts({"SAČUVANA FRAZA."})
+    states = []
+    instance.playback_changed.connect(lambda request, state: states.append((request, state)))
+    assert instance.speak("SAČUVANA FRAZA.")
+    first = instance.request_id
+    qtbot.waitUntil(lambda: (first, "finished") in states)
+    original_play = instance._audio.play
+    instance._router.natural = lambda *_: b"natural audio"
+
+    def output_failed(request, data, result):
+        if instance._audio_voice.cached:
+            result.outcome = "failed"
+            result.done.set()
+        else:
+            original_play(request, data, result)
+
+    monkeypatch.setattr(instance._audio, "play", output_failed)
+    assert instance.speak("SAČUVANA FRAZA.")
+    second = instance.request_id
+    qtbot.waitUntil(lambda: (second, "finished") in states)
+    assert len(client.calls) == 1
+    assert instance.voice_state.voice == "human_like"
+    assert instance._router.gate.snapshot()[0] == ""
+    monkeypatch.setattr(instance._audio, "play", original_play)
+    client.error = VoiceError("offline")
+    assert instance.speak("SAČUVANA FRAZA.")
+    third = instance.request_id
+    qtbot.waitUntil(lambda: (third, "finished") in states)
+    assert len(client.calls) == 1
+    assert instance.voice_state.cached
+
+
+@pytest.mark.e2e
+def test_storage_failure_reaches_voice_notice_after_successful_speech(service, qtbot):
+    instance, _client, _played = service
+    instance.set_saved_texts({"SAČUVANA FRAZA."})
+    instance.audio_cache.root.write_bytes(b"not a directory")
+    states = []
+    instance.playback_changed.connect(lambda request, state: states.append((request, state)))
+    assert instance.speak("SAČUVANA FRAZA.")
+    request = instance.request_id
+    qtbot.waitUntil(lambda: (request, "finished") in states)
+    assert instance.voice_state.cache_failed
+    assert instance.voice_state.notice[1:] == (
+        "Zvuk nije sačuvan.",
+        "Ponavljanje može trošiti kredite.",
+    )
 
 
 def test_arabic_keeps_hamed_and_never_contacts_elevenlabs(service, monkeypatch):

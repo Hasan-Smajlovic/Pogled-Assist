@@ -103,7 +103,7 @@ def test_slow_valid_synthesis_is_not_discarded_after_five_seconds(route, monkeyp
     assert played[0][0] == b"slow valid audio" and played[0][1].voice == EFENDIJA
 
 
-def test_whole_saved_phrase_is_cached_only_after_success_and_repeats_offline(route):
+def test_whole_saved_phrase_reuses_downloaded_audio_offline(route):
     router, config, client, natural, played, notices, play = route
     assert (
         router.run('sačuvana  fraza.', config, Playback(threading.Event(), play, notices.append))
@@ -121,6 +121,110 @@ def test_free_form_text_never_creates_cache_file(route):
     router, config, _client, _natural, _played, notices, play = route
     router.run('PRIVATNA PORUKA', config, Playback(threading.Event(), play, notices.append))
     assert not router.cache.root.exists()
+    assert not any(notice.cache_failed for notice in notices)
+
+
+@pytest.mark.parametrize("started", [False, True])
+def test_cached_output_failure_preserves_audio_without_another_paid_request(route, started):
+    router, config, client, natural, _played, notices, play = route
+    playback = Playback(threading.Event(), play, notices.append)
+    router.run('SAČUVANA FRAZA.', config, playback)
+    ticket = router.cache.ticket('SAČUVANA FRAZA.')
+    audio = router.cache.read(ticket)
+
+    def broken(_data, voice):
+        return PlaybackResult(started=started, outcome="failed") if voice.cached else play(_data, voice)
+
+    outcome = router.run(
+        'SAČUVANA FRAZA.', config, Playback(threading.Event(), broken, notices.append)
+    )
+    assert outcome == ("failed" if started else "finished")
+    assert router.cache.read(ticket) == audio
+    assert len(client.calls) == 1
+    assert natural == ([] if started else ['SAČUVANA FRAZA.'])
+    assert router.gate.snapshot()[0] == ""
+    client.error = VoiceError("offline")
+    assert router.run('SAČUVANA FRAZA.', config, playback) == "finished"
+    assert len(client.calls) == 1
+
+
+@pytest.mark.parametrize("started", [False, True])
+def test_unreadable_cached_media_is_discarded_without_repeating_partial_speech(route, started):
+    router, config, client, natural, _played, notices, play = route
+    ticket = router.cache.ticket('SAČUVANA FRAZA.')
+    router.cache.write(ticket, b"unreadable media with valid checksum")
+
+    def unreadable(data, voice):
+        if voice.cached:
+            return PlaybackResult(started=started, outcome="failed", invalid_audio=True)
+        return play(data, voice)
+
+    outcome = router.run(
+        'SAČUVANA FRAZA.', config, Playback(threading.Event(), unreadable, notices.append)
+    )
+    assert outcome == ("failed" if started else "finished")
+    assert len(client.calls) == (0 if started else 1)
+    assert natural == []
+    assert router.cache.read(ticket) == (None if started else client.audio)
+
+
+@pytest.mark.parametrize("started", [False, True])
+def test_stop_after_download_keeps_saved_audio_for_the_next_request(route, started):
+    router, config, client, natural, _played, notices, play = route
+    cancel = threading.Event()
+
+    def stop(_data, _voice):
+        cancel.set()
+        return PlaybackResult(started=started, outcome="stopped")
+
+    with pytest.raises(SpeechCancelled):
+        router.run('SAČUVANA FRAZA.', config, Playback(cancel, stop, notices.append))
+    assert notices == natural == []
+    client.error = VoiceError("quota")
+    assert router.run(
+        'SAČUVANA FRAZA.', config, Playback(threading.Event(), play, notices.append)
+    ) == "finished"
+    assert len(client.calls) == 1
+    assert natural == []
+
+
+def test_unreadable_new_audio_is_not_saved(route):
+    router, config, _client, _natural, _played, notices, play = route
+
+    def unreadable(data, voice):
+        if voice.voice == EFENDIJA:
+            return PlaybackResult(outcome="failed", invalid_audio=True)
+        return play(data, voice)
+
+    assert router.run(
+        'SAČUVANA FRAZA.', config, Playback(threading.Event(), unreadable, notices.append)
+    ) == "finished"
+    assert router.cache.read(router.cache.ticket('SAČUVANA FRAZA.')) is None
+
+
+@pytest.mark.parametrize("change", ["clear", "delete", "disable", "voice"])
+def test_stop_cannot_restore_audio_invalidated_during_playback(route, change):
+    router, config, _client, _natural, _played, notices, _play = route
+    cancel = threading.Event()
+
+    def stop(_data, _voice):
+        if change == "clear":
+            router.cache.clear()
+        else:
+            identity = "another voice" if change == "voice" else config.audio_identity
+            texts = {'SAČUVANA FRAZA.'}
+            if change == "disable":
+                texts = None
+            elif change == "delete":
+                texts = set()
+            router.cache.configure(identity, texts)
+        cancel.set()
+        return PlaybackResult(started=True, outcome="stopped")
+
+    with pytest.raises(SpeechCancelled):
+        router.run('SAČUVANA FRAZA.', config, Playback(cancel, stop, notices.append))
+    assert list(router.cache.root.glob("*.audio")) == []
+    assert notices == []
 
 
 @pytest.mark.parametrize("provider", [EFENDIJA, NATURAL])
@@ -216,8 +320,9 @@ def test_stop_during_generation_drops_audio_and_does_not_start_fallback(route):
 
     client.synthesize = stopped
     with pytest.raises(SpeechCancelled):
-        router.run('PORUKA', config, Playback(cancel, play, notices.append))
+        router.run('SAČUVANA FRAZA.', config, Playback(cancel, play, notices.append))
     assert played == natural == notices == []
+    assert list(router.cache.root.glob("*.audio")) == []
 
 
 def test_confirmed_quota_error_falls_back_without_waiting_for_another_http_call(route):
@@ -232,12 +337,34 @@ def test_confirmed_quota_error_falls_back_without_waiting_for_another_http_call(
     assert natural == ["PORUKA"]
 
 
-def test_failed_audio_cache_write_does_not_turn_successful_speech_into_failure(route, monkeypatch):
+def test_disk_failure_warns_without_turning_successful_speech_into_failure(route):
     router, config, _client, _natural, _played, notices, play = route
-    monkeypatch.setattr(router.cache, "write", lambda *_: False)
+    router.cache.root.write_bytes(b"not a directory")
+    router.gate.failure(config, "offline", None)
+    router.gate.retry_at = 0
     assert (
         router.run('SAČUVANA FRAZA.', config, Playback(threading.Event(), play, notices.append)) == "finished"
     )
+    assert notices[-1].cache_failed
+    assert notices[-1].notice == (
+        "warning", "Zvuk nije sačuvan.", "Ponavljanje može trošiti kredite."
+    )
+    assert not notices[-1].recovered
+    assert router.gate.snapshot()[0] == ""
+
+
+def test_stale_cache_ticket_does_not_report_a_storage_failure(route):
+    router, config, _client, _natural, _played, notices, play = route
+
+    def clear_and_play(data, voice):
+        router.cache.clear()
+        return play(data, voice)
+
+    assert router.run(
+        'SAČUVANA FRAZA.', config, Playback(threading.Event(), clear_and_play, notices.append)
+    ) == "finished"
+    assert not notices[-1].cache_failed
+    assert list(router.cache.root.glob("*.audio")) == []
 
 
 def test_quota_recovers_without_optional_subscription_permission(route):

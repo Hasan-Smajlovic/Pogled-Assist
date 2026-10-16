@@ -28,7 +28,7 @@ class RecoveryGate:
                 self.reason, self.retry_at, self.balance = "", 0.0, None
 
     def failure(self, config: ElevenConfig, reason: str, balance: Subscription | None) -> None:
-        if reason in ("busy", "too_long"):
+        if reason in ("busy", "too_long", "audio"):
             return
         with self._lock:
             if config.fingerprint != self.fingerprint:
@@ -92,10 +92,10 @@ class VoiceRouter:
         if playback.cancel.is_set():
             raise SpeechCancelled
         ticket = None if test else self.cache.ticket(text, config.audio_identity)
-        cached = self._play_cached(ticket, playback)
-        if cached:
-            return cached
         try:
+            cached = self._play_cached(ticket, playback)
+            if cached:
+                return cached
             config.validate()
             self._check_quota_gate(config, test)
             return self._synthesize_and_play(text, config, ticket, playback)
@@ -114,10 +114,13 @@ class VoiceRouter:
         cached = self.cache.read(ticket)
         if cached is None:
             return None
-        result = playback.play(cached, VoiceState(cached=True))
-        outcome = playback.settle(result, VoiceState(cached=True))
-        if outcome != "finished":
+        state = VoiceState(cached=True)
+        result = playback.play(cached, state)
+        if result.invalid_audio:
             self.cache.discard(ticket)
+        outcome = playback.settle(result, state)
+        if outcome is None and not result.invalid_audio:
+            raise VoiceError("audio")
         return outcome
 
     def _check_quota_gate(self, config, test):
@@ -136,13 +139,20 @@ class VoiceRouter:
 
     def _synthesize_and_play(self, text, config, ticket, playback):
         audio = self.network.run(lambda stop, end: self.client.synthesize(config, saved_text(text) if ticket else text, stop, end), playback.cancel, ELEVEN_TIMEOUT)
+        if playback.cancel.is_set():
+            raise SpeechCancelled
         state = VoiceState()
-        outcome = playback.settle(playback.play(audio, state), state)
+        result = playback.play(audio, state)
+        # The full response is already paid for. Stopping playback must not
+        # lose it; ticket validation still prevents restoring cleared entries.
+        if not result.invalid_audio:
+            state = replace(state, cache_failed=self.cache.write(ticket, audio) is False)
+        outcome = playback.settle(result, state)
         if outcome is None:
             raise VoiceError("audio")
         if outcome == "finished":
-            self.cache.write(ticket, audio)
-            playback.publish(VoiceState(recovered=self.gate.success(config)))
+            recovered = self.gate.success(config)
+            playback.publish(replace(state, recovered=recovered and not state.cache_failed))
         return outcome
 
     def _play_fallback(self, text, reason, playback):
