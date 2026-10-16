@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QToolButton,
+    QProgressBar,
     QVBoxLayout,
     QWidget,
 )
@@ -205,3 +206,20 @@ def _value_label(parent: QWidget) -> QLabel:
     label.setAlignment(Qt.AlignCenter)
     label.setFixedSize(VALUE_WIDTH, CONTROL_HEIGHT)
     return label
+
+
+def retain_size_when_hidden(widget: QWidget) -> None:
+    policy = widget.sizePolicy()
+    policy.setRetainSizeWhenHidden(True)
+    widget.setSizePolicy(policy)
+
+
+def busy_indicator(parent: QWidget) -> QProgressBar:
+    indicator = QProgressBar(parent)
+    indicator.setRange(0, 0)
+    indicator.setFixedHeight(5)
+    indicator.setTextVisible(False)
+    indicator.setAccessibleName("Govor je aktivan")
+    retain_size_when_hidden(indicator)
+    indicator.hide()
+    return indicator

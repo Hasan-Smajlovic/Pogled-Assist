@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -26,6 +25,7 @@ from ..keyboard_layouts import switch_label
 from ..speech.voice_state import RECOVERY_NOTICE_MS, VoiceState
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
+from .settings_controls import busy_indicator
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
 from .tracking_feedback import MessageTrackingHeader
@@ -100,14 +100,7 @@ class SpeechSurface(QWidget):
         playback_layout.setContentsMargins(0, 0, 0, 0)
         playback_layout.setVerticalSpacing(3)
         playback_layout.addWidget(self._play_button, 0, 0)
-        self._playback_progress = QProgressBar(playback)
-        self._playback_progress.setRange(0, 0)
-        self._playback_progress.setTextVisible(False)
-        self._playback_progress.setAccessibleName("Govor je aktivan")
-        self._playback_progress.setFixedHeight(5)
-        policy = self._playback_progress.sizePolicy()
-        policy.setRetainSizeWhenHidden(True)
-        self._playback_progress.setSizePolicy(policy)
+        self._playback_progress = busy_indicator(playback)
         self._playback_progress.setStyleSheet(
             "QProgressBar { background: #303747; border: 0; } QProgressBar::chunk { background: #91dec0; }"
         )
@@ -480,6 +473,9 @@ class SpeechSurface(QWidget):
                 notice if active is dialog else None,
                 immediate=immediate or active is not dialog,
             )
+        self._sync_recovery_timer(active)
+
+    def _sync_recovery_timer(self, active):
         recovery_visible = (
             self._speech_recovery
             and self._tracking_notice is None

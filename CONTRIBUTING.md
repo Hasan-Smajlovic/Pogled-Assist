@@ -233,23 +233,25 @@ to run** before CI starts. Keep the independent review and required checks.
 4. Obtain one approval, resolve every review conversation, and let Hasan merge it
    with a merge commit.
 5. **Publish release** publishes the patch release from that exact merge commit.
-6. **Sync hotfix to development** immediately opens a `master` → `development`
-   PR after the repository's `hotfix/` PR merges. It reuses an existing open sync
-   PR and skips creation when development already contains master. This runs
-   independently of release publication; a failed release still needs repair.
-7. Review the sync PR, complete required checks, and squash-merge it manually.
-   Its head follows master, so review any later master changes included before
-   merging. It never auto-merges or pushes to either protected branch. If there
-   are conflicts, resolve them on a separate branch from development and replace
-   the sync PR; never edit master to resolve a development conflict.
+6. **Sync hotfix to development** prepares `sync/<hotfix-PR-number>` from
+   `development`, cherry-picks the released hotfix and opens a draft PR to
+   `development`. It reuses an existing open draft and skips changes already present.
+   This runs independently of release publication; a failed release still needs repair.
+7. Review the backport, including any `VERSION` change, complete required checks,
+   and squash-merge manually. The short-lived head can be updated from development
+   without writing development changes to master. A cherry-pick conflict leaves
+   nothing pushed and reports manual recovery instructions in the workflow summary.
 
 The workflow must first reach master. Enable **Allow GitHub Actions to create
 and approve pull requests**, as for release preparation. A PR created with
 `GITHUB_TOKEN` may require workflow approval before CI runs. The workflow's
-`sync-hotfix-pr` job has only contents read and pull-request write permissions,
-executes inline trusted code without a checkout, and accepts only merged hotfix
-PRs from this repository targeting master. Rerun the failed Actions run after
-correcting repository permissions; it will reuse a PR already created.
+`sync-hotfix-pr` job has contents and pull-request write permissions only for the
+isolated backport. It executes inline trusted code, never checked-out scripts or
+hooks. It accepts only merged `hotfix/` PRs from the same repository targeting
+master. It never pushes master/development, force-pushes, approves or auto-merges.
+Command failures appear in logs and the step summary with credentials redacted.
+If draft creation fails after a push, a rerun reuses an identical backport branch.
+A branch with different content is left unchanged for manual review.
 
 This process prevents unfinished development work from entering an urgent release
 while ensuring the fix remains part of future releases.

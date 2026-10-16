@@ -42,7 +42,6 @@
 .speech-voice-notice p span { display: block; color: #e1dbcd; }
 .speech-voice-notice[data-tone="ready"] { --notice-color: #91dfbc; border-color: #3d6854; border-left-color: var(--notice-color); background: #1b2a23; }
 .speech-voice-notice[data-tone="error"] { --notice-color: #ffb3b8; border-color: #89505b; border-left-color: var(--notice-color); background: #322229; }
-.voice-prototype-note { margin: 12px; color: #bdc9dc; font-size: 12px; line-height: 1.5; }
 .section-label { margin: 0; color: #bac5d4; font-size: 14px; font-weight: 500; }
 .predictions { display: grid; gap: 7px; }
 .prediction-controls { display: flex; gap: var(--gap); }

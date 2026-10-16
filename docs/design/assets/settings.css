@@ -104,10 +104,10 @@
 .learning-actions { display: flex; gap: 12px; align-items: center; }
 .learning-actions button { min-height: 58px; flex: 1; }
 .learning-hint { color: #bac5d4; line-height: 1.5; }
-.voice-choice-row { grid-template-columns: minmax(200px, .7fr) minmax(0, 1.6fr); padding: 8px 14px; }
+.voice-choice-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 0; border: 0; background: transparent; }
+#voice-hint { margin: 0; color: #b9b2a5; font-size: 13px; }
 .voice-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.voice-choices button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; height: 70px; font-size: 18px; }
-.voice-choices button small { font-size: 12px; font-weight: 400; color: #bdcbc5; }
+.voice-choices button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; height: 58px; font-size: 15px; }
 .voice-choices button[aria-pressed="true"] small { color: #d1f4ee; }
 .eleven-summary { display: grid; grid-template-columns: minmax(0, 1fr) 222px; align-items: center; gap: 14px; padding: 10px 14px; border: 1px solid #40574e; border-radius: 10px; background: #1b2924; }
 .eleven-summary p { margin: 0; color: #c3cec8; font-size: 13px; line-height: 1.4; }
@@ -128,11 +128,6 @@
 .secret-input-row[hidden] { display: none; }
 .secret-input-row input, .eleven-selects select { width: 100%; height: 58px; min-width: 0; padding: 10px 14px; border: 1px solid #4c534e; border-radius: 10px; background: #0f1110; color: #fff; font-size: 19px; }
 .secret-input-row input::placeholder { color: #8fa099; font-size: 16px; }
-.connection-check-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 170px; align-items: center; gap: 10px; padding-top: 12px; }
-.connection-check-row #remove-eleven-key { color: #d4beb5; background: transparent; }
-.connection-check-row p { margin: 0; padding-left: 2px; font-size: 14px; color: #a8dfc6; line-height: 1.5; }
-.connection-check-row p[data-tone="error"] { color: #ffc4b3; }
-.eleven-key-card .key-help { margin: 8px 0 0; color: #b9c5be; font-size: 13px; line-height: 1.4; }
 .eleven-selects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 4px 0; }
 .eleven-selects label { display: grid; gap: 8px; }
 .voice-tuning { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -169,7 +164,6 @@
 .eleven-test-card .speech-test-status { grid-column: 1 / -1; }
 .eleven-privacy-note { padding: 0 2px; }
 .eleven-privacy-note p { margin: 4px 0; color: #aebcb3; font-size: 13px; line-height: 1.5; }
-.prototype-note { margin: 12px; color: #bdc9dc; font-size: 12px; line-height: 1.5; }
 .saved-audio-card { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px 18px; padding: 22px; margin-top: 8px; border: 1px solid #3d5b50; border-radius: 12px; background: #1b2924; }
 .saved-audio-card h3 { margin: 0; align-self: end; font-size: 20px; font-weight: 600; }
 .saved-audio-card p { grid-column: 2; max-width: 680px; margin: 0; color: #c1d0c7; font-size: 15px; line-height: 1.6; }
@@ -218,10 +212,15 @@
   .setting-choice { grid-template-columns: 1fr; }
   .secret-input-row { grid-template-columns: minmax(0, 1fr) 100px; }
   .secret-input-row > .settings-primary { grid-column: 1 / -1; }
-  .eleven-summary, .connection-check-row, .eleven-test-card, .audio-clear-row, .eleven-selects { grid-template-columns: 1fr; }
+  .eleven-summary, .eleven-test-card, .audio-clear-row, .eleven-selects { grid-template-columns: 1fr; }
   .saved-audio-card { grid-template-columns: 1fr; }
   .saved-audio-card p { grid-column: 1; }
   .audio-illustration { display: none; }
   .audio-rules > div { grid-template-columns: 1fr; gap: 6px; }
   .field-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
+
+.stability-control { display: grid; gap: 8px; }
+.stability-choices { display: flex; gap: 6px; }
+.stability-choices button { flex: 1; min-height: 58px; padding: 8px; }
+.stability-choices button[aria-pressed="true"] { background: #1d6f68; border-color: #74d3c6; }

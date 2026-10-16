@@ -85,21 +85,21 @@
         </header>
         <div class="setting-row setting-choice"><div class="setting-copy"><h3>Pismo tastature</h3></div><button id="settings-script-preview" type="button" data-script-toggle>Latinica</button></div>
         <div class="setting-row voice-choice-row">
-          <div class="setting-copy"><h3>Glas</h3><p id="voice-hint">Izbor glasa ostaje sačuvan i kada se koristi zamjenski.</p></div>
           <div id="voice-choices" class="voice-choices" role="group" aria-label="Glas">
-            <button type="button" data-voice="standard" aria-pressed="true">Standardni<small>Bez interneta</small></button>
-            <button type="button" data-voice="natural" aria-pressed="false">Prirodni<small>Potreban internet</small></button>
-            <button type="button" data-voice="efendija" aria-pressed="false">Efendija<small>ElevenLabs</small></button>
+            <button type="button" data-voice="standard" aria-pressed="true">Standardni</button>
+            <button type="button" data-voice="natural" aria-pressed="false">Prirodni</button>
+            <button type="button" data-voice="efendija" aria-pressed="false">Efendija</button>
           </div>
+          <p id="voice-hint">Standardni radi bez interneta. Prirodni i Efendija trebaju internet.</p>
           <button id="arabic-voice-preview" type="button" disabled hidden>Prirodni · Hamed</button>
         </div>
         <div id="eleven-summary" class="eleven-summary">
-          <div><p class="connection-label"><span id="eleven-connection-dot" class="connection-dot" aria-hidden="true"></span><strong id="eleven-summary-title">ElevenLabs je povezan</strong></p><p id="eleven-summary-copy">Efendija Fikret · Eleven v3</p><p class="fallback-note">Zamjenski glasovi: Prirodni → Standardni.</p></div>
+          <div><p class="connection-label"><span id="eleven-connection-dot" class="connection-dot" aria-hidden="true"></span><strong id="eleven-summary-title">Efendija · ElevenLabs</strong></p><p id="eleven-summary-copy">ElevenLabs je povezan.</p><p class="fallback-note">Zamjenski glasovi: Prirodni → Standardni.</p></div>
           <button type="button" data-settings-action="eleven-settings">Podesi ElevenLabs</button>
         </div>
         <div id="standard-speed" class="setting-row"><div class="setting-copy"><h3>Brzina govora</h3><p>Podešava samo Standardni glas.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">155 riječi/min</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Broj slova u grupi</h3><p>Broj slova u svakoj grupi na ekranima za govor i tastaturu.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">5</strong><button>+&nbsp; Više</button></div>
-        <div class="settings-action-grid"><button id="test-selected-voice" class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj odabrani glas</button><button type="button" data-settings-action="audio-settings">Sačuvani zvuk</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
+        <div class="settings-action-grid"><button id="test-selected-voice" class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="audio-settings">Sačuvani zvuk</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
         <button id="stop-selected-voice" type="button" hidden>■ Zaustavi</button>
         <p id="selected-voice-test-status" class="speech-test-status" role="status" aria-live="polite"></p>
         <progress id="selected-voice-progress" aria-label="Govor je aktivan" hidden></progress>
@@ -111,7 +111,7 @@
           <button id="check-eleven-connection" type="button">Provjeri vezu</button>
         </header>
         <section class="eleven-key-card" aria-labelledby="eleven-key-label">
-          <div class="field-heading"><label id="eleven-key-label" for="eleven-api-key">API ključ</label><span>Čuva se na ovom Windows računu.</span></div>
+          <div class="field-heading"><label id="eleven-key-label" for="eleven-api-key">API ključ</label></div>
           <div id="saved-eleven-key" class="secret-input-row">
             <strong>Ključ je sačuvan</strong>
             <button id="replace-eleven-key" type="button">Zamijeni ključ</button>
@@ -127,21 +127,21 @@
         <p id="eleven-connection-status" role="status" aria-live="polite">ElevenLabs je povezan.</p>
         <div class="eleven-selects">
           <label for="eleven-voice">Moji glasovi<select id="eleven-voice"><option value="preview-voice">Efendija Fikret</option></select></label>
-          <label for="eleven-model">Model<select id="eleven-model"><option value="eleven_v3">Eleven v3</option><option value="eleven_v4">Eleven v4</option></select></label>
+          <label for="eleven-model">Model<select id="eleven-model"><option value="eleven_v4">Eleven v4</option><option value="eleven_v3">Eleven v3</option></select></label>
         </div>
         <div class="voice-tuning">
-          <label>Stabilnost <output id="stability-value">65%</output><span>Niže: izražajnije · Više: ujednačenije</span><div><button type="button" data-tune="stability" data-step="-5">−</button><input id="stability" type="range" min="0" max="100" value="65" aria-label="Stabilnost"><button type="button" data-tune="stability" data-step="5">+</button></div></label>
+          <div class="stability-control"><strong>Stabilnost</strong><div class="stability-choices" role="group" aria-label="Stabilnost"><button type="button" data-stability="0" aria-pressed="false">Kreativno</button><button type="button" data-stability="50" aria-pressed="true">Prirodno</button><button type="button" data-stability="100" aria-pressed="false">Stabilno</button></div></div>
           <label>Sličnost glasa <output id="similarity-value">80%</output><span>Sličnost odabranom glasu</span><div><button type="button" data-tune="similarity" data-step="-5">−</button><input id="similarity" type="range" min="0" max="100" value="80" aria-label="Sličnost glasa"><button type="button" data-tune="similarity" data-step="5">+</button></div></label>
         </div>
         <section class="credit-balance" aria-label="ElevenLabs krediti"><strong id="credit-label">Preostalo 24.000 / 30.000 kredita (80%)</strong><progress id="credit-progress" max="100" value="80" aria-label="Preostali krediti"></progress><span id="credit-note">Posljednje provjereno stanje računa. Osvježava se pri otvaranju i nakon govora.</span></section>
         <section class="eleven-test-card" aria-labelledby="eleven-test-title">
-          <div><h3 id="eleven-test-title">Isprobajte Efendijin glas</h3><p>„SELAM. DOBRO MI DOŠLI.”</p><p class="credit-note">Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.</p></div>
+          <div><h3 id="eleven-test-title">SELAM. DOBRO MI DOŠLI.</h3><p class="credit-note">Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.</p></div>
           <button id="test-eleven-voice" type="button" class="settings-primary">▶&nbsp; Isprobaj Efendiju</button>
           <button id="stop-test-voice" type="button" hidden>■ Zaustavi</button>
           <progress id="test-voice-progress" aria-label="Govor je aktivan" hidden></progress>
           <p id="eleven-test-status" class="speech-test-status" role="status" aria-live="polite"></p>
         </section>
-        <div class="eleven-privacy-note"><p>Dozvole: izgovor, čitanje glasova i modela; podaci o računu za kredite.<br>Izgovor šalje tekst ElevenLabsu. Starter ne garantuje obradu bez čuvanja podataka. Zamjenski glasovi: Prirodni → Standardni.</p></div>
+        <div class="eleven-privacy-note"><p>Dozvole: izgovor, čitanje glasova i modela; podaci o računu za kredite.<br>Izgovor šalje tekst ElevenLabsu. ElevenLabs može sačuvati poslani tekst; rad bez čuvanja postoji samo za Enterprise. Zamjenski glasovi: Prirodni → Standardni.</p></div>
       </section>
       <section id="audio-settings" class="settings-page settings-panel" hidden aria-labelledby="audio-settings-title">
         <header class="settings-page-header"><h2 id="audio-settings-title">Sačuvani zvuk</h2><p>Ranije izgovorene spremljene fraze i odgovori.</p><button type="button" data-settings-action="speech-settings">←&nbsp; Nazad</button></header>
@@ -150,7 +150,7 @@
           <h3>Efendijin glas, dostupan i bez interneta</h3>
           <p>Kada prvi put izgovorite cijelu spremljenu frazu ili odgovor, zvuk se sačuva na ovom računaru. Ponovno slušanje istog snimka ne troši ElevenLabs kredite.</p>
         </section>
-        <dl class="audio-rules"><div><dt>Čuva se</dt><dd>Zvuk jedne cijele spremljene fraze ili odgovora.</dd></div><div><dt>Ne čuva se</dt><dd>Zvuk ostalih poruka i kombinacija više stavki.</dd></div><div><dt>Nakon izmjene</dt><dd>Za novi tekst, glas ili model potreban je novi snimak.</dd></div></dl>
+        <dl class="audio-rules"><div><dt>Čuva se</dt><dd>Zvuk jedne cijele spremljene fraze ili odgovora.</dd></div><div><dt>Ne čuva se</dt><dd>Zvuk ostalih poruka i kombinacija više stavki.</dd></div><div><dt>Nakon izmjene</dt><dd>Brisanje ili izmjena teksta uklanja njegove snimke. Promjena glasa, modela ili postavki čuva prethodne snimke za povratak na isti izbor, do ograničenja prostora.</dd></div></dl>
         <div class="audio-clear-row"><div><h3>Uklonite snimke s ovog računara</h3><p>Fraze i odgovori ostaju sačuvani. Sljedeće generisanje ponovo troši kredite.</p></div><button id="clear-saved-audio" type="button">Obriši sačuvani zvuk</button></div>
         <p id="saved-audio-status" class="speech-test-status" role="status" aria-live="polite"></p>
       </section>
@@ -177,10 +177,10 @@
     <a id="tracking-setting-preview" href="tracking.html">Pregled obavijesti o praćenju</a>
   </details>
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
-    <p>ElevenLabs je nacrt za ticket #3; nije povezan s računom. Model Eleven v3 služi kao primjer izbora, a konačni model i kvalitet se potvrđuju probom glasa. Glas Efendija je treći izbor uz Standardni i Prirodni. Izbor se čuva odvojeno od glasa koji se privremeno koristi.</p>
+    <p>Referenca koristi probne podatke; kvalitet glasa potvrđuje se slušanjem u aplikaciji. Glas Efendija je treći izbor uz Standardni i Prirodni. Izbor se čuva odvojeno od glasa koji se privremeno koristi.</p>
     <p>API ključ se čuva tek odabirom Sačuvaj ključ, u Windows Credential Manageru trenutnog korisnika. Ne ulazi u JSON postavke, instalater niti zapisnike. Sačuvani ključ prikazuje potvrdu i dugmad Zamijeni ključ i Ukloni ključ; polje je skriveno. Zamjena otvara prazan, maskiran unos; Odustani zadržava stari ključ. Uspješno čuvanje zatvara unos; neuspješno čuvanje zadržava unos skriven za ponovni pokušaj. Provjeri vezu i Isprobaj Efendiju zahtijevaju čuvanje zamjene ili Odustani. Uklanjanje otvara prazan unos. Ovaj HTML ne čuva uneseni ključ. Postavke glasa i modela u aplikaciji se čuvaju automatski; promjena modela prekida prethodni izgovor i zahtijeva novu probu. Neuspjela provjera ne briše prethodno sačuvan ključ ili glas.</p>
     <p>Lista glasova sadrži samo sačuvane glasove s ElevenLabs računa, preko filtera voice_type=saved; ne dodaje podrazumijevane glasove ili ranije sačuvani ID izvan kolekcije. Ako prethodni glas nije u listi, odaberite sačuvani glas prije probe. Prazna kolekcija prikazuje Nema glasova. Za izbor glasa i modela potrebne su dozvole Čitanje glasova i Čitanje modela uz Pretvaranje teksta u govor za izgovor. Nedostajuća dozvola ima zasebnu poruku i ne znači da je ključ neispravan. Čitanje podataka o računu je neobavezan za stanje kredita; nakon isteka pauze novi Izgovori može ponovo pokušati Efendiju i bez te dozvole. Pritisak na već odabrani glas zadržava njegovu oznaku.</p>
-    <p>Stabilnost je podrazumijevano 65%, Sličnost glasa 80%. Klizači koriste 0–100%; dugmad −/+ omogućavaju pogledom korake od 5%. Promjena prekida stari izgovor i snimke s ranijim postavkama. Stanje kredita prikazuje preostali iznos i postotak, žuto ispod 20%, crveno ispod 10%. Osvježava se pri otvaranju ElevenLabs postavki i nakon završetka govora, bez generisanja. Bez Čitanje podataka o računu ili veze prikazuje da stanje nije dostupno i govor ostaje dostupan.</p>
+    <p>Stabilnost koristi tri dugmeta: Kreativno, Prirodno i Stabilno. Sličnost glasa koristi klizač i dugmad −/+. <a href="../USER_GUIDE.md#efendija-voice-and-elevenlabs-setup">Korisnički vodič</a> definiše zadane vrijednosti, kredite i čuvanje zvuka.</p>
     <p>Provjeri vezu čita dostupnost računa, glasa i modela bez generisanja. Isprobaj Efendiju troši kredite i mora potvrditi rezultat baš tog glasa; uspješan zamjenski glas ne predstavlja uspješnu probu Efendije. Dok priprema ili izgovor traju, test je onemogućen, indikator je animiran i dostupno je Zaustavi. Završetak, prekid i greška vraćaju test. Obavijest o nedostupnosti upućuje na Prirodni, pa Standardni, bez promjene odabranog glasa. Arapski i dalje koristi Hamed i čuva izbor bosanskog glasa za povratak.</p>
     <p>Sačuvani zvuk se generiše tek pri stvarnom izgovoru i samo kada cijela poruka odgovara jednoj spremljenoj frazi ili odgovoru. Kombinacija više stavki se ne čuva dok nije posebno spremljena. Snimak zavisi od teksta, glasa, modela i postavki generisanja. Čuva se u korisnikovom LocalAppData direktoriju izvan instalacijskih snimaka verzija. Brisanje, izmjena stavke i Obriši sačuvani zvuk uklanjaju odgovarajući zvuk i sprečavaju naknadni upis iz ranije pokrenutog zahtjeva. Greška čuvanja zvuka ne sprečava izgovor.</p>
     <ul>

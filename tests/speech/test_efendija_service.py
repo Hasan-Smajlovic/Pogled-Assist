@@ -2,14 +2,10 @@ from __future__ import annotations
 
 import threading
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
-from _speech_fakes import FakeCredentials, FakeElevenClient
-from PySide6.QtCore import QThread
+from _speech_service_fakes import service as service
 
-from pogled_assist.speech import speech_service
-from pogled_assist.speech.audio_cache import AudioCache
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.speech.voice_state import VoiceError, VoiceState
 
@@ -22,33 +18,6 @@ def test_passive_credit_refresh_never_resets_speech_cooldown(service, reason):
     deadline = gate.retry_at
     instance.account._finish_subscription(instance.account._revision, client.balance, "")
     assert gate.retry_at == deadline
-
-
-@pytest.fixture
-def service(monkeypatch, tmp_path):
-    for name in ("ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL_ID"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(speech_service, "find_espeak_ng", lambda: Path("fake-espeak.exe"))
-    monkeypatch.setattr(speech_service, "find_edge_playback", lambda: Path("fake-edge.exe"))
-    client = FakeElevenClient()
-    instance = speech_service.SpeechService(
-        credentials=FakeCredentials("synthetic-secret"),
-        client=client,
-        cache=AudioCache(tmp_path / "cache"),
-    )
-    instance.update_settings(SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="voice"))
-    played = []
-
-    def play(request, data, result):
-        played.append((request, data, QThread.currentThread()))
-        result.started = True
-        instance._audio.started.emit(request)
-        result.outcome = "finished"
-        result.done.set()
-
-    monkeypatch.setattr(instance._audio, "play", play)
-    yield instance, client, played
-    instance.stop()
 
 
 def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_voice(
@@ -120,19 +89,21 @@ def test_paid_voice_test_emits_failure_instead_of_fallback_success(service, qtbo
     assert "nije uspjela" in results[0]
     assert "kredita" in results[0]
     assert played == []
+    assert not instance.voice_state.partial
 
 
 @pytest.mark.parametrize(
-    "setting,value",
+    "change",
     [
-        ("elevenlabs_model_id", "eleven_v4"),
+        ("elevenlabs_model_id", "eleven_v3"),
         ("elevenlabs_stability", 30),
         ("elevenlabs_similarity", 95),
     ],
 )
 def test_model_or_tuning_change_cancels_request_before_native_stop_and_rejects_late_audio(
-    service, qtbot, monkeypatch, setting, value
+    service, qtbot, monkeypatch, change
 ):
+    setting, value = change
     instance, client, played = service
     entered, release = threading.Event(), threading.Event()
 
@@ -176,3 +147,37 @@ def test_settings_and_http_failures_do_not_log_text_or_key(service, qtbot, caplo
     qtbot.waitUntil(lambda: "finished" in states)
     assert "SYNTHETIC PRIVATE TEXT" not in caplog.text
     assert "synthetic-secret" not in caplog.text
+
+
+def test_standard_speech_survives_changes_to_unused_elevenlabs_tuning(service):
+    instance, _client, _played = service
+    instance.update_settings(SpeechSettings())
+    instance._cancel = threading.Event()
+    instance.playback_state = "speaking"
+    cancel = instance._cancel
+    instance.update_settings(replace(instance.settings, elevenlabs_stability=100))
+    assert not cancel.is_set()
+    assert instance.playback_state == "speaking"
+
+
+def test_explicit_credit_refresh_can_release_quota_gate(service, qtbot):
+    instance, client, _played = service
+    gate = instance._router.gate
+    gate.failure(instance.account.config, "quota", None)
+    instance.account.refresh_subscription(allow_recovery=True)
+    qtbot.waitUntil(lambda: not instance.account.state.credits_busy)
+    assert instance.account.state.subscription == client.balance
+    assert gate.snapshot()[0] == "quota"
+    assert gate.retry_at == 0
+
+
+def test_zero_balance_check_does_not_release_quota_cooldown(service):
+    from pogled_assist.speech.elevenlabs import Subscription
+
+    instance, _client, _played = service
+    gate = instance._router.gate
+    config = instance.account.config
+    gate.failure(config, "quota", None)
+    deadline = gate.retry_at
+    gate.checked(config, Subscription(100, 100))
+    assert gate.retry_at == deadline

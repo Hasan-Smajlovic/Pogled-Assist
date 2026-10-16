@@ -53,13 +53,13 @@
   });
   function renderScript() {
     $('settings-script-preview').textContent = arabic ? 'Arapski' : 'Latinica';
-    $('voice-hint').textContent = arabic ? 'Arapski koristi Hamed uz internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Izbor glasa ostaje sačuvan i kada se koristi zamjenski.';
+    $('voice-hint').textContent = arabic ? 'Arapski koristi Hamed uz internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Standardni radi bez interneta. Prirodni i Efendija trebaju internet.';
     $('voice-choices').hidden = arabic;
     $('arabic-voice-preview').hidden = !arabic;
     $('eleven-summary').hidden = arabic || selectedVoice !== 'efendija';
     $('standard-speed').hidden = arabic || selectedVoice !== 'standard';
     for (const button of document.querySelectorAll('[data-voice]')) button.setAttribute('aria-pressed', String(button.dataset.voice === selectedVoice));
-    $('test-selected-voice').textContent = '▶  Isprobaj ' + (arabic ? 'Hameda' : { standard: 'Standardni glas', natural: 'Prirodni glas', efendija: 'Efendiju' }[selectedVoice]);
+    $('test-selected-voice').textContent = !arabic && selectedVoice === 'efendija' ? 'Isprobaj Efendiju' : 'Isprobaj govor';
   }
   $('settings-script-preview').addEventListener('click', () => {
     arabic = !arabic;
@@ -135,24 +135,39 @@
     $('eleven-test-status').dataset.tone = '';
   });
   $('test-eleven-voice').addEventListener('click', () => previewVoiceTest('eleven-test-status', 'efendija'));
-  for (const id of ['stability', 'similarity']) $(id).addEventListener('input', () => { $(`${id}-value`).textContent = `${$(id).value}%`; });
+  for (const id of ['similarity']) $(id).addEventListener('input', () => { $(`${id}-value`).textContent = `${$(id).value}%`; });
   document.querySelectorAll('[data-tune]').forEach(button => button.addEventListener('click', () => {
     const slider = $(button.dataset.tune);
     slider.value = Math.max(0, Math.min(100, Number(slider.value) + Number(button.dataset.step)));
     slider.dispatchEvent(new Event('input'));
   }));
-  $('stop-test-voice').addEventListener('click', () => {
+  document.querySelectorAll('[data-stability]').forEach(button => button.addEventListener('click', () => {
+    document.querySelectorAll('[data-stability]').forEach(choice => choice.setAttribute('aria-pressed', String(choice === button)));
+  }));
+  $('stop-test-voice').addEventListener('click', () => stopVoiceTest('eleven-test-status'));
+  $('stop-selected-voice').addEventListener('click', () => stopVoiceTest('selected-voice-test-status'));
+
+  function stopVoiceTest(targetId) {
     clearTimeout(voiceTestTimer);
-    $('eleven-test-status').textContent = 'Govor je zaustavljen.';
-    $('stop-test-voice').hidden = $('test-voice-progress').hidden = true;
-    $('test-eleven-voice').disabled = false;
-  });
-  $('stop-selected-voice').addEventListener('click', () => {
-    clearTimeout(voiceTestTimer);
-    $('selected-voice-test-status').textContent = 'Govor je zaustavljen.';
-    $('stop-selected-voice').hidden = $('selected-voice-progress').hidden = true;
-    $('test-selected-voice').disabled = false;
-  });
+    $(targetId).textContent = 'Govor je zaustavljen.';
+    renderTestPlayback(false);
+  }
+
+  function renderTestPlayback(active) {
+    for (const [test, stop, progress] of [
+      ['test-selected-voice', 'stop-selected-voice', 'selected-voice-progress'],
+      ['test-eleven-voice', 'stop-test-voice', 'test-voice-progress'],
+    ]) {
+      $(test).disabled = active;
+      $(stop).hidden = $(progress).hidden = !active;
+      if (active) $(test).textContent = 'Pripremam…';
+    }
+    if (!active) {
+      $('test-eleven-voice').textContent = 'Isprobaj Efendiju';
+      renderScript();
+      renderConnection();
+    }
+  }
   $('test-selected-voice').addEventListener('click', () => previewVoiceTest('selected-voice-test-status', arabic ? 'hamed' : selectedVoice));
   $('clear-saved-audio').addEventListener('click', () => {
     $('saved-audio-status').textContent = 'Sačuvani zvuk je obrisan. Fraze i odgovori ostaju sačuvani.';
@@ -238,36 +253,42 @@
   function renderConnection() {
     const state = $('eleven-demo-state').value;
     const states = {
-      connected: ['ElevenLabs je povezan', 'Ključ je prihvaćen. Glas i model su dostupni.'],
-      empty: ['ElevenLabs je povezan', 'Dodajte glas u svoju kolekciju na ElevenLabs računu, zatim ponovo provjerite vezu.'],
-      missing: ['ElevenLabs nije povezan', 'Unesite i sačuvajte API ključ, zatim provjerite vezu.'],
-      unverified: ['Provjerite vezu s ElevenLabsom', 'Ključ je sačuvan. Odaberite Provjeri vezu.'],
-      permission: ['Nedostaju dozvole ključa', 'Za provjeru veze dozvolite čitanje glasova i modela.'],
+      connected: ['ElevenLabs je povezan', 'ElevenLabs je povezan. Provjera veze ne troši kredite.'],
+      empty: ['ElevenLabs je povezan', 'ElevenLabs je povezan. Provjera veze ne troši kredite.'],
+      missing: ['ElevenLabs nije povezan', 'Dodajte ElevenLabs ključ.'],
+      unverified: ['Provjerite vezu s ElevenLabsom', 'Ključ je sačuvan. Provjerite vezu.'],
+      permission: ['Nedostaju dozvole ključa', 'Za listu glasova dozvolite čitanje glasova na ElevenLabs ključu.'],
       'save-failed': ['Ključ nije sačuvan', 'Ključ nije sačuvan. Pokušajte ponovo.'],
-      quota: ['Nema dovoljno ElevenLabs kredita', 'Ključ je prihvaćen. Za posljednji izgovor nije bilo dovoljno kredita.'],
-      invalid: ['Provjerite API ključ', 'Ključ nije prihvaćen. Provjerite unos i dozvole ključa.'],
-      offline: ['ElevenLabs trenutno nije dostupan', 'Vezu nije moguće provjeriti. Pokušajte kada internet bude dostupan.'],
+      quota: ['Nema dovoljno ElevenLabs kredita', 'ElevenLabs je povezan. Provjera veze ne troši kredite.'],
+      invalid: ['Provjerite API ključ', 'Provjerite ElevenLabs ključ u Postavkama.'],
+      offline: ['ElevenLabs trenutno nije dostupan', 'ElevenLabs trenutno nije dostupan.'],
     };
-    const [title, status] = states[state];
+    const [, status] = states[state];
     $('eleven-summary').dataset.tone = state === 'connected' ? '' : 'warning';
-    $('eleven-summary-title').textContent = title;
-    const model = $('eleven-model').selectedOptions[0].textContent;
-    $('eleven-summary-copy').textContent = state === 'missing' ? 'Unesite ključ i odaberite glas.' : `Efendija Fikret · ${model}`;
+    $('eleven-summary-title').textContent = 'Efendija · ElevenLabs';
+    $('eleven-summary-copy').textContent = status;
     $('eleven-connection-status').textContent = status;
     $('eleven-api-key').placeholder = hasSavedKey ? 'Unesite novi API ključ' : 'Unesite API ključ';
     $('saved-eleven-key').hidden = !hasSavedKey || editingKey;
     $('edit-eleven-key').hidden = hasSavedKey && !editingKey;
     $('cancel-eleven-key').hidden = !hasSavedKey;
     $('eleven-connection-status').dataset.tone = ['missing', 'invalid', 'permission', 'save-failed', 'offline'].includes(state) ? 'error' : '';
+    renderCatalogs(state);
+    renderCredits(state);
+  }
+
+  function renderCatalogs(state) {
     for (const id of ['eleven-voice', 'eleven-model', 'test-eleven-voice']) $(id).disabled = ['missing', 'unverified', 'invalid', 'permission', 'save-failed'].includes(state);
     $('eleven-voice').replaceChildren(new Option(state === 'empty' ? 'Nema glasova' : 'Efendija Fikret', state === 'empty' ? '' : 'preview-voice'));
     if (state === 'empty') {
       $('eleven-voice').disabled = true;
       $('test-eleven-voice').disabled = true;
-      $('eleven-summary-copy').textContent = 'Odaberite sačuvani glas.';
     }
     $('remove-eleven-key').disabled = !hasSavedKey;
     $('check-eleven-connection').disabled = !hasSavedKey;
+  }
+
+  function renderCredits(state) {
     const credit = state === 'quota' ? 0 : state === 'connected' ? 80 : null;
     $('credit-label').textContent = credit === null ? 'Stanje kredita nije dostupno.' : `Preostalo ${credit === 0 ? '0' : '24.000'} / 30.000 kredita (${credit}%)`;
     $('credit-progress').hidden = credit === null;
@@ -276,8 +297,13 @@
     $('credit-note').textContent = credit === null ? 'Potrebni su veza s ElevenLabsom i dozvola za čitanje podataka o računu.' : 'Posljednje provjereno stanje računa. Osvježava se pri otvaranju i nakon govora.';
   }
 
+  function unsavedTestKey(voice) {
+    if (voice !== 'efendija') return false;
+    return Boolean(editingKey || $('eleven-api-key').value);
+  }
+
   function previewVoiceTest(targetId, voice) {
-    if (voice === 'efendija' && (editingKey || $('eleven-api-key').value)) {
+    if (unsavedTestKey(voice)) {
       $('eleven-connection-status').textContent = 'Sačuvajte novi ključ ili odaberite Odustani prije probe glasa.';
       $('eleven-connection-status').dataset.tone = 'error';
       return;
@@ -287,26 +313,18 @@
     const name = voiceNames[voice] || 'Hamed';
     target.dataset.tone = '';
     target.textContent = `Pripremam probu: ${name}…`;
-    if (targetId === 'selected-voice-test-status') {
-      $('test-selected-voice').disabled = true;
-      $('stop-selected-voice').hidden = $('selected-voice-progress').hidden = false;
-    }
-    if (voice === 'efendija') {
-      $('test-eleven-voice').disabled = true;
-      $('stop-test-voice').hidden = $('test-voice-progress').hidden = false;
-    }
-    voiceTestTimer = setTimeout(() => {
+    renderTestPlayback(true);
+    voiceTestTimer = setTimeout(() => finishVoiceTest(target, name, voice), 650);
+  }
+
+  function finishVoiceTest(target, name, voice) {
       const state = $('eleven-demo-state').value;
       const errors = { empty: 'dodajte glas u svoju kolekciju.', quota: 'nema dovoljno ElevenLabs kredita.', invalid: 'API ključ nije prihvaćen.', permission: 'ključ nema potrebne dozvole.', 'save-failed': 'ključ nije sačuvan.', offline: 'servis trenutno nije dostupan.', missing: 'prvo unesite API ključ.', unverified: 'prvo provjerite vezu.' };
       if (voice === 'efendija' && state !== 'connected') {
         target.dataset.tone = 'error';
         target.textContent = 'Proba Efendije nije uspjela: ' + errors[state];
       } else target.textContent = `Proba glasa ${name} je završena.`;
-      $('stop-test-voice').hidden = $('test-voice-progress').hidden = true;
-      $('stop-selected-voice').hidden = $('selected-voice-progress').hidden = true;
-      $('test-selected-voice').disabled = false;
-      renderConnection();
-    }, 650);
+      renderTestPlayback(false);
   }
 
   function forgetSelectedWord() {

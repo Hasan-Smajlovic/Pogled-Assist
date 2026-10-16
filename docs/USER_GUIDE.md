@@ -212,6 +212,13 @@ point. Gaze does not move the real pointer while the zoom or menu is open.
 
 ## Speech
 
+For **Standardni**, **Prirodni**, and **Efendija**, **Izgovori** becomes **Zaustavi**
+in the same position while preparing or speaking. Select it again, or press Enter,
+to stop without submitting a second request. The message remains available.
+The stop action stays available while adding a phrase or answer; it does not
+speak the unfinished saved entry. Completion, failure and stopping restore **Izgovori**.
+
+
 **Izgovori** reports when speech is starting, running, finished, or failed.
 A failure leaves the message available for another attempt. Process completion
 does not verify audible playback. Starting a new message stops the previous
@@ -318,7 +325,7 @@ model supporting Bosnian. The app does not create or clone the voice.
    a replacement before checking it or testing speech; both actions use the
    saved key.
 3. Select **Provjeri vezu**, then choose the intended voice from **Moji glasovi**
-   and a Bosnian model. The list includes only voices saved in the ElevenLabs
+   and a Bosnian model. New settings start with `eleven_v4`; existing saved model choices are retained. The list includes only voices saved in the ElevenLabs
    account, including saved library voices, rather than the default catalog.
    If a previously selected voice is absent, select a voice from this list before
    testing; the app does not replace it automatically. An empty collection shows
@@ -326,12 +333,12 @@ model supporting Bosnian. The app does not create or clone the voice.
    Voice/model selections save automatically. The connection check only reads
    catalogs and optional account information; it neither generates speech nor
    proves that Text to Speech is permitted or that audio will play.
-4. Adjust **Stabilnost** (default **65%**) and **Sličnost glasa** (default **80%**).
-   Drag the sliders, use the keyboard arrows, or select the large **− / +**
-   buttons with gaze to change by five percentage points. Lower Stabilnost adds
-   variation; higher values make delivery more uniform. Sličnost glasa controls how
-   closely the result follows the selected voice. Changes save automatically,
-   stop current speech and invalidate saved clips generated with other settings.
+4. Choose **Kreativno**, **Prirodno**, or **Stabilno** for **Stabilnost**
+   (0%, 50%, or 100%; default **Prirodno**). Existing percentages load as the nearest
+   choice. **Sličnost glasa** defaults to **80%**; use its slider or large **− / +**
+   buttons to change it by five percentage points. Changes save automatically.
+   Efendija preparation/playback stops when its voice, model or tuning changes;
+   these unused settings do not interrupt Standardni or Prirodni speech.
 5. Select **Isprobaj Efendiju** to hear **SELAM. DOBRO MI DOŠLI.** This spends
    ElevenLabs credits. The test succeeds only with Efendija, without cached audio
    or a fallback. Confirm similarity, pronunciation and clarity by listening.
@@ -343,40 +350,47 @@ speech when ElevenLabs settings open and after Efendija speech finishes. Enable
 **Stanje kredita nije dostupno** and does not disable speech. Account credits do
 not establish an API key's separate quota or the final cost of the next message.
 
-During preparation and playback, an animated indicator and status show that speech
-is active. **Izgovori** is replaced by **Zaustavi** in the same position; settings
-disable the test button and provide **Zaustavi**. Repeated activation cannot start
-another paid request. Completion, failure and stopping restore the action; the
-composed message remains available.
+Settings disable the test button during preparation/playback and provide **Zaustavi**.
+For the shared Speech button and Enter behavior, see [Speech](#speech).
 
 An explicit permission error identifies missing catalog access separately from
 an invalid key. A failed check retains the saved key and voice choice. Development
 overrides `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, and `ELEVENLABS_MODEL_ID`
 take precedence over saved values; overridden controls are disabled.
 
-Efendija sends the message text to ElevenLabs. The Starter plan does not guarantee
-zero retention; the request uses the service's default retention. If preparation
+Efendija sends sentence-case text to ElevenLabs; square brackets become parentheses
+to prevent audio-tag interpretation. The displayed message stays unchanged.
+ElevenLabs may retain the submitted text; zero-retention requests are available
+only to Enterprise customers. If preparation
 fails, the same message tries Prirodni (Microsoft's online service), then Standardni
 (offline), while the selected voice remains Efendija. The display names the voice
 actually used. Preparation waits at most 30 seconds for ElevenLabs generation
 and the full audio download, and three seconds
 for Prirodni before falling back. An interrupted playback preserves the message
 and requires another **Izgovori**; it does not repeat automatically in another voice.
-Changing the voice, model or sliders cancels current preparation/playback. The five-second
+Changing the active Efendija voice, model or tuning cancels its preparation/playback. The five-second
 connection check only reads catalogs; its success does not measure synthesis time.
 
 After a quota failure, ordinary speech waits at least 60 seconds before another
 ElevenLabs attempt. Later **Izgovori** requests can recover after a manual top-up
-or reset, including without User: Read. A zero account balance continues to use
-fallback. Key-specific quotas may differ from the account balance. Automatic
+or reset, including without User: Read. The optional balance endpoint cannot block this user-requested attempt.
+The green **Efendijin glas je ponovo dostupan** notice disappears after five
+visible seconds. Tracking warnings take priority; the recovery notice receives
+a fresh five seconds when it becomes visible again.
+Key-specific quotas may differ from the account balance. Automatic
 top-ups are controlled on the ElevenLabs account; disable them there if unwanted.
 
 **Sačuvani zvuk** explains the local cache. A clip is stored only after successful
 Efendija playback when the entire message matches one saved phrase or answer
 (ignoring case and repeated whitespace). Repetition can use it offline without
 new credits. Other messages and combinations are not cached. Editing/deleting
-an entry or changing the voice/model/sliders invalidates its clip. **Obriši sačuvani zvuk**
-removes clips without deleting phrases or answers. Clips live in the current
+an entry removes all of its clips. Changing voice, model or tuning selects another
+clip identity and retains earlier versions for switching back. The cache keeps at
+most 256 MiB, removing oldest clips first. A library read failure disables cache
+access until a successful retry without deleting existing clips. **Obriši sačuvani zvuk**
+removes clips without deleting phrases or answers. Incompatible cache formats or
+text-preparation versions are not reused; regenerating those clips can spend credits.
+Clips live in the current
 user's LocalAppData, outside installation data and version-history snapshots;
 the [architecture](ARCHITECTURE.md#persistent-data-and-logs) owns the paths.
 
@@ -476,7 +490,7 @@ action controls keep the same height for selection by gaze.
 Speech settings controls eSpeak speed (155 words per minute by default, 80 to
 320), letters per group (5 by default, 1 to 12), and the voice preset.
 `Pismo tastature` accepts `Latinica` (the default for existing installations)
-or `Arapski`. `Glas` appears directly below it. Speed and letters-per-group rows
+or `Arapski`. The voice choices appear directly below it. Speed and letters-per-group rows
 align their `Manje`, value, and `Više` controls in the same columns.
 The selected voice button stays selected when pressed again. Arabic replaces
 the Bosnian choices with Hamed while retaining the Bosnian preference.

@@ -31,7 +31,6 @@ from .release_update import ReleaseUpdateError, ReleaseUpdateManager, StableVers
 from .settings_store import load_app_settings, save_app_settings
 from .speech.speech_library import speech_library_store
 from .speech.speech_service import SpeechService
-from .speech.voice_state import EFENDIJA
 from .suggestions.service import SuggestionService
 from .tracking.feedback import TrackingNotice
 from .tracking.gaze_provider import TobiiGazeProvider
@@ -47,20 +46,19 @@ from .ui.interaction_overlay import InteractionOverlayWindow
 from .ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
 from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
-from .ui.settings_window import SettingsWindow
+from .ui.settings_window import SettingsServices, SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .ui.tracking_feedback import TrackingFeedback
 from .windows.appbar import WindowsAppBar
 from .windows.foreground_tracker import ForegroundTracker
 from .windows.windows_input import WindowsInputController
 
+from .hotbar_speech import HotbarSpeech
+
 logger = logging.getLogger(__name__)
 
-SPEECH_TEST_TEXT = "Zdravo. Ovo je test govora na bosanskom jeziku."
-ARABIC_SPEECH_TEST_TEXT = "مَرْحَبًا. هٰذَا اخْتِبَارٌ لِلصَّوْتِ بِاللُّغَةِ الْعَرَبِيَّةِ."
 
-
-class HotbarWindow(QWidget):
+class HotbarWindow(HotbarSpeech, QWidget):
     """Frameless top toolbar that reserves desktop work area on Windows."""
 
     BAR_HEIGHT = 76
@@ -82,23 +80,7 @@ class HotbarWindow(QWidget):
         self._appbar = WindowsAppBar()
         self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
-        self._speech = SpeechService()
-        self._speech_test_id: int | None = None
-        self._efendija_test_id: int | None = None
-        self._speech.playback_changed.connect(self._speech_playback_changed)
-        self._speech.test_finished.connect(self._efendija_test_finished)
-        self._settings_save_failed = False
-        self._speech.update_settings(self._initial_speech_settings)
-        self._speech_library_store = speech_library_store(get_project_root())
-        library = self._speech_library_store.load()
-        self._speech.set_saved_texts(
-            set()
-            if self._speech_library_store.read_error
-            else {
-                *(phrase.text for phrase in library.phrases),
-                *(answer for category in library.categories for answer in category.answers),
-            }
-        )
+        self._setup_speech(SpeechService(), speech_library_store(get_project_root()))
         self._suggestions = SuggestionService(
             self, path=get_project_root() / "data" / "speech_learning.json"
         )
@@ -828,15 +810,7 @@ class HotbarWindow(QWidget):
 
         requested_at = time.monotonic()
         diagnostics.emit("settings_open_started", priority=True)
-        window = SettingsWindow(
-            self._mouse.settings,
-            self._speech.settings,
-            self,
-            update_manager=self._release_update_manager,
-            suggestions=self._suggestions,
-            eleven_account=self._speech.account,
-            clear_audio=self._speech.audio_cache.clear,
-        )
+        window = SettingsWindow(self._mouse.settings, self._speech.settings, self, services=SettingsServices(update_manager=self._release_update_manager, suggestions=self._suggestions, account=self._speech.account, clear_audio=self._speech.audio_cache.clear))
         diagnostics.emit(
             "settings_constructed",
             priority=True,
@@ -861,7 +835,7 @@ class HotbarWindow(QWidget):
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
 
         self._settings_window = window
-        window.set_speech_playback_state(getattr(self._speech, "playback_state", "stopped"))
+        window.set_speech_playback_state(self._speech.playback_state)
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
         diagnostics.emit(
@@ -1062,73 +1036,6 @@ class HotbarWindow(QWidget):
 
     def _change_keyboard_script(self, script: str) -> None:
         self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
-
-    def _test_current_speech_settings(self) -> None:
-        if getattr(self._speech, "playback_state", "stopped") in ("preparing", "speaking"):
-            return
-        if (
-            self._speech.settings.voice_preset == EFENDIJA
-            and self._speech.settings.keyboard_script != "arabic"
-        ):
-            self._test_efendija()
-            return
-        try:
-            text = (
-                ARABIC_SPEECH_TEST_TEXT
-                if self._speech.settings.keyboard_script == "arabic"
-                else SPEECH_TEST_TEXT
-            )
-            if self._speech.speak(text):
-                self._speech_test_id = self._speech.request_id
-                if self._settings_window is not None:
-                    self._settings_window.set_speech_playback_state("preparing")
-                self._set_speech_test_status("Test govora je pokrenut.")
-            else:
-                self._set_speech_test_status(
-                    "Govor nije uspio: odabrani glas nije pronađen ili se nije mogao pokrenuti.",
-                    "Govor nije uspio.",
-                )
-        except Exception:
-            logger.exception("Speech settings test failed.")
-            self._set_speech_test_status("Govor nije uspio.")
-
-    def _speech_playback_changed(self, request_id: int, state: str) -> None:
-        if self._settings_window is not None:
-            self._settings_window.set_speech_playback_state(state)
-        if request_id not in (self._speech_test_id, self._efendija_test_id):
-            return
-        if request_id == self._efendija_test_id and state in ("finished", "failed"):
-            # test_finished already carries the provider's actionable result.
-            return
-        message = {
-            "preparing": "Pripremam govor.",
-            "speaking": "Test govora je pokrenut.",
-            "finished": "Test govora je završen.",
-            "failed": "Govor nije uspio. Pokušajte ponovo.",
-            "stopped": "Govor je zaustavljen.",
-        }[state]
-        self._set_speech_test_status(message)
-
-    def _test_efendija(self) -> None:
-        if getattr(self._speech, "playback_state", "stopped") in ("preparing", "speaking"):
-            return
-        self._speech_test_id = None
-        if self._speech.test_efendija():
-            self._efendija_test_id = self._speech.request_id
-            if self._settings_window is not None:
-                self._settings_window.set_speech_playback_state("preparing")
-            self._set_speech_test_status("Pripremam probu Efendije. Proba troši kredite.")
-        else:
-            self._set_speech_test_status("Proba Efendije se nije mogla pokrenuti.")
-
-    def _efendija_test_finished(self, request_id: int, message: str) -> None:
-        if request_id == self._efendija_test_id:
-            self._set_speech_test_status(message)
-
-    def _set_speech_test_status(self, text: str, settings_text: str | None = None) -> None:
-        self._set_status(text)
-        if self._settings_window is not None:
-            self._settings_window.set_status(text if settings_text is None else settings_text)
 
     def _launch_tobii_calibration(self) -> None:
         if self._settings_window is not None:

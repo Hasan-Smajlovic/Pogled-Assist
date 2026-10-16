@@ -146,6 +146,11 @@ separate document for each screen or feature. The application does not load or
 package these files. The [UI development guide](docs/UI_DEVELOPMENT.md#application-design-reference-workflow)
 maps the pages and shared assets.
 
+ElevenLabs uses `%LOCALAPPDATA%\PogledAssist\speech-audio` for private saved audio
+and Windows Credential Manager target `PogledAssist/ElevenLabs` for the key.
+Neither is under `data/`; [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs)
+owns their lifecycle.
+
 ## Runtime requirements
 
 | Component | Why it is needed |
@@ -167,6 +172,11 @@ discovery when needed:
 | `TOBII_CALIBRATION_COMMAND` | Custom Tobii calibration command |
 | `ESPEAK_NG_EXE` | Full path to `espeak-ng.exe` |
 | `EDGE_PLAYBACK_EXE` | Full path to `edge-playback.exe` |
+| `ELEVENLABS_API_KEY` | Development override for the saved credential |
+| `ELEVENLABS_VOICE_ID` | Development override for the selected saved voice |
+| `ELEVENLABS_MODEL_ID` | Development override for the selected model |
+
+See [ElevenLabs setup](docs/USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) for local settings and permissions.
 
 An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the older app is also
 checked as a fallback when it points to a valid 32-bit Python 3.10. The new

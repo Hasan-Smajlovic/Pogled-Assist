@@ -7,6 +7,14 @@ from dataclasses import dataclass
 EFENDIJA = "efendija"
 NATURAL = "human_like"
 STANDARD = "default"
+NATURAL_VOICE = "bs-BA-GoranNeural"
+NATURAL_RATE = "-10%"
+NATURAL_PITCH = "-2Hz"
+ACTIVE_PLAYBACK_STATES = frozenset({"preparing", "speaking"})
+PLAYBACK_LABELS = {"preparing": "Pripremam…", "speaking": "Izgovaram…"}
+FALLBACK_NOTE = "Zamjenski glasovi: Prirodni → Standardni."
+CREDITS_UNAVAILABLE = "Stanje kredita nije dostupno."
+CREDITS_UNAVAILABLE_NOTE = CREDITS_UNAVAILABLE + " Provjerite vezu i dozvolu za čitanje podataka o računu."
 VOICE_TEST_TEXT = "SELAM. DOBRO MI DOŠLI."
 RECOVERY_NOTICE_MS = 5000
 # Non-streaming synthesis includes generation and the full audio download.
@@ -14,6 +22,8 @@ ELEVEN_TIMEOUT = 30.0
 NATURAL_TIMEOUT = 3.0
 
 REASONS = {
+    "busy": "Prethodni ElevenLabs zahtjev se još zaustavlja.",
+    "too_long": "Poruka je preduga za Efendijin glas.",
     "quota": "Nema dovoljno ElevenLabs kredita.",
     "offline": "ElevenLabs trenutno nije dostupan.",
     "timeout": "Efendijin glas se predugo priprema.",

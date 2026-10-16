@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, replace
 from threading import Event, Thread
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from ..windows.credentials import CredentialError, WindowsCredentialStore
-from .elevenlabs import AccountOptions, BoundedCall, ElevenClient, Subscription, configuration
-from .voice_state import REASONS, SpeechCancelled, VoiceError
+from .elevenlabs import AccountOptions, BoundedCall, ElevenClient, Subscription, configuration, env_override
+from .voice_state import CREDITS_UNAVAILABLE_NOTE, REASONS, SpeechCancelled, VoiceError
 
 
 @dataclass(frozen=True)
@@ -22,9 +21,7 @@ class AccountState:
     options: AccountOptions | None = None
     subscription: Subscription | None = None
     credits_busy: bool = False
-    credits_message: str = (
-        "Stanje kredita nije dostupno. Potrebna je dozvola za čitanje podataka o računu."
-    )
+    credits_message: str = CREDITS_UNAVAILABLE_NOTE
 
 
 class ElevenAccount(QObject):
@@ -63,43 +60,42 @@ class ElevenAccount(QObject):
     @property
     def can_test_voice(self) -> bool:
         state = self.state
-        if not state.has_key or state.busy or state.options is None:
+        if not state.has_key:
+            return False
+        if state.busy or state.options is None:
             return False
         config = self.config
-        return bool(
-            config.voice
-            and config.model
-            and (
-                config.voice in dict(state.options.voices)
-                or os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
-            )
-        )
+        return _valid_choice(config.voice, state.options.voices, "ELEVENLABS_VOICE_ID") and _valid_choice(config.model, state.options.models, "ELEVENLABS_MODEL_ID")
 
     def save_key(self, value: str) -> bool:
+        return self._change_credential(value.strip())
+
+    def remove_key(self) -> bool:
+        return self._change_credential(None)
+
+    def _change_credential(self, value: str | None) -> bool:
+        removing = value is None
         try:
-            self.store.write(value)
+            if removing:
+                self.store.delete()
+            else:
+                self.store.write(value)
         except (CredentialError, OSError):
-            self._publish("Ključ nije sačuvan. Pokušajte ponovo.")
+            self._publish("Ključ nije uklonjen. Pokušajte ponovo." if removing else "Ključ nije sačuvan. Pokušajte ponovo.")
             return False
         self.cancel_check()
-        self._key = value.strip()
+        self._key = value or ""
         self.state = AccountState()
-        self._publish("Ključ je sačuvan. Provjerite vezu.")
+        self._publish("Ključ je uklonjen." if removing else "Ključ je sačuvan. Provjerite vezu.")
         self.credentials_changed.emit()
         return True
 
-    def remove_key(self) -> bool:
+    @staticmethod
+    def _start_worker(name, work, failed) -> None:
         try:
-            self.store.delete()
-        except (CredentialError, OSError):
-            self._publish("Ključ nije uklonjen. Pokušajte ponovo.")
-            return False
-        self.cancel_check()
-        self._key = ""
-        self.state = AccountState()
-        self._publish("Ključ je uklonjen.")
-        self.credentials_changed.emit()
-        return True
+            Thread(target=work, daemon=True, name=name).start()
+        except RuntimeError:
+            failed()
 
     def check(self) -> None:
         self.cancel_check()
@@ -119,10 +115,7 @@ class ElevenAccount(QObject):
             if not cancel.is_set():
                 self._completed.emit(revision, options, reason)
 
-        try:
-            Thread(target=work, daemon=True, name="elevenlabs-account").start()
-        except RuntimeError:
-            self._publish("Provjera veze se nije mogla pokrenuti.")
+        self._start_worker("elevenlabs-account", work, lambda: self._publish("Provjera veze se nije mogla pokrenuti."))
 
     def cancel_check(self) -> None:
         self._cancel.set()
@@ -138,34 +131,18 @@ class ElevenAccount(QObject):
         if revision != self._revision:
             return
         if reason:
-            self.state = replace(
-                self.state,
-                subscription=None,
-                credits_message="Stanje kredita nije dostupno. Provjerite vezu i dozvolu za čitanje podataka o računu.",
-            )
+            self.state = replace(self.state, subscription=None, credits_message=CREDITS_UNAVAILABLE_NOTE)
             self._publish(REASONS.get(reason, REASONS["offline"]))
             return
-        message = "ElevenLabs je povezan. Provjera veze ne troši kredite."
-        if options.subscription is not None and options.subscription.remaining == 0:
-            message = REASONS["quota"] + " Koristi se Prirodni glas."
-        self._publish(message, options=options)
-        self.state = replace(
-            self.state,
-            subscription=options.subscription,
-            credits_message=(
-                "Posljednje provjereno stanje računa."
-                if options.subscription is not None
-                else "Stanje kredita nije dostupno. Potrebna je dozvola za čitanje podataka o računu."
-            ),
-        )
-        self.changed.emit(self.state)
-        self.checked.emit(self.config, options.subscription)
-        if options.subscription is None:
-            self.refresh_subscription(allow_recovery=True)
+        self._publish("ElevenLabs je povezan. Provjera veze ne troši kredite.", options=options)
+        self.checked.emit(self.config, None)
+        self.refresh_subscription(allow_recovery=True)
 
     def refresh_subscription(self, *, allow_recovery: bool = False) -> None:
         """Refresh the free account balance without changing voice availability."""
-        if not self.state.has_key or self.state.credits_busy or self.state.busy:
+        if not self.state.has_key:
+            return
+        if self.state.credits_busy or self.state.busy:
             return
         revision, cancel, key = self._revision, self._cancel, self.config.key
         self.state = replace(self.state, credits_busy=True, credits_message="Osvježavam kredite…")
@@ -184,10 +161,7 @@ class ElevenAccount(QObject):
             if not cancel.is_set():
                 self._subscription_completed.emit(revision, subscription, reason, allow_recovery)
 
-        try:
-            Thread(target=work, daemon=True, name="elevenlabs-credits").start()
-        except RuntimeError:
-            self._finish_subscription(revision, None, "offline", allow_recovery)
+        self._start_worker("elevenlabs-credits", work, lambda: self._finish_subscription(revision, None, "offline", allow_recovery))
 
     @Slot(int, object, str, bool)
     def _finish_subscription(self, revision, subscription, reason, allow_recovery=False) -> None:
@@ -198,7 +172,7 @@ class ElevenAccount(QObject):
             subscription=subscription,
             credits_busy=False,
             credits_message=(
-                "Stanje kredita nije dostupno. Potrebni su veza s ElevenLabsom i dozvola za čitanje podataka o računu."
+                CREDITS_UNAVAILABLE_NOTE
                 if reason
                 else "Posljednje provjereno stanje računa."
             ),
@@ -208,7 +182,7 @@ class ElevenAccount(QObject):
             self.checked.emit(self.config, subscription)
 
     def _publish(self, message: str, *, busy=False, options=None) -> None:
-        environment_key = bool(os.environ.get("ELEVENLABS_API_KEY", "").strip())
+        environment_key = bool(env_override("ELEVENLABS_API_KEY"))
         has_key = bool(self._key) or environment_key
         if not has_key and message == "Ključ je sačuvan. Provjerite vezu.":
             message = "Dodajte ElevenLabs ključ."
@@ -223,3 +197,7 @@ class ElevenAccount(QObject):
             options=options,
         )
         self.changed.emit(self.state)
+
+
+def _valid_choice(value, choices, variable):
+    return bool(value) and (value in dict(choices) or bool(env_override(variable)))

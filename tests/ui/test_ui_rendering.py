@@ -16,8 +16,9 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     capture_widget = preview._capture_widget
 
-    def capture_with_script_control_check(app, widget, output_dir, name, width, height):
-        snapshot = capture_widget(app, widget, output_dir, name, width, height)
+    def capture_with_script_control_check(app, widget, output_dir, name, size):
+        width, height = size
+        snapshot = capture_widget(app, widget, output_dir, name, size)
         if name in (
             "controller-keyboard",
             "controller-latin-paged",

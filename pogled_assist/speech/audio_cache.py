@@ -11,6 +11,7 @@ from threading import RLock
 from .elevenlabs import MAX_AUDIO_BYTES
 
 MAGIC = b"PogledAudio1\0"
+MAX_CACHE_BYTES = 256 * 1024 * 1024
 
 
 def saved_text(text: str) -> str:
@@ -31,19 +32,28 @@ class AudioCache:
         self._allowed: set[str] = set()
         self._generation = 0
         self._blocked: set[str] = set()
+        self._enabled = True
 
-    def configure(self, identity: str, texts: set[str]) -> None:
+    def configure(self, identity: str, texts: set[str] | None) -> None:
         with self._lock:
+            if texts is None:
+                self._generation += 1
+                self._enabled = False
+                return
+            self._enabled = True
             cleaned = {saved_text(text) for text in texts if text.strip()}
             if identity == self._identity and cleaned == self._texts:
                 return
             self._generation += 1
             self._identity, self._texts = identity, cleaned
             self._allowed = {self._key(text) for text in cleaned}
-            self._remove_except(self._allowed)
+            self._prune_texts({_text_key(text) for text in cleaned})
+            self._trim_size()
 
     def ticket(self, text: str, identity: str | None = None) -> tuple[int, str] | None:
         with self._lock:
+            if not self._enabled:
+                return None
             if identity is not None and identity != self._identity:
                 return None
             key = self._key(saved_text(text))
@@ -62,18 +72,16 @@ class AudioCache:
                 return None
             header = len(MAGIC) + 32
             audio = data[header:]
-            if (
-                not audio
-                or not data.startswith(MAGIC)
-                or data[len(MAGIC) : header] != hashlib.sha256(audio).digest()
-            ):
+            if not _valid_audio(data, audio, header):
                 self.discard(ticket)
                 return None
             return audio
 
     def write(self, ticket: tuple[int, str] | None, audio: bytes) -> bool:
         with self._lock:
-            if not self._valid(ticket) or not audio or len(audio) > MAX_AUDIO_BYTES:
+            if not self._valid(ticket):
+                return False
+            if not audio or len(audio) > MAX_AUDIO_BYTES:
                 return False
             path = self.root / (ticket[1] + ".audio")
             temporary = path.with_suffix(".tmp")
@@ -82,6 +90,7 @@ class AudioCache:
                 temporary.write_bytes(MAGIC + hashlib.sha256(audio).digest() + audio)
                 temporary.replace(path)
                 self._blocked.discard(ticket[1])
+                self._trim_size()
                 return True
             except OSError:
                 return False
@@ -103,11 +112,12 @@ class AudioCache:
             return self._remove_except(set())
 
     def _key(self, text: str) -> str:
-        return hashlib.sha256((self._identity + "\0" + text).encode()).hexdigest()
+        return _text_key(text) + "." + hashlib.sha256(self._identity.encode()).hexdigest()
 
     def _valid(self, ticket: tuple[int, str] | None) -> bool:
         return (
-            self.root is not None
+            self._enabled
+            and self.root is not None
             and ticket is not None
             and ticket[0] == self._generation
             and ticket[1] in self._allowed
@@ -126,3 +136,35 @@ class AudioCache:
             return True
         except OSError:
             return False
+
+    def _prune_texts(self, allowed_texts: set[str]) -> None:
+        if self.root is None:
+            return
+        with suppress(OSError):
+            for path in self.root.iterdir():
+                if path.suffix in (".audio", ".tmp") and path.stem.split(".")[0] not in allowed_texts:
+                    self._blocked.add(path.stem)
+                    path.unlink(missing_ok=True)
+
+    def _trim_size(self) -> None:
+        if self.root is None:
+            return
+        with suppress(OSError):
+            files = sorted(self.root.glob("*.audio"), key=lambda path: path.stat().st_mtime)
+            sizes = [(path, path.stat().st_size) for path in files]
+            total = sum(size for _, size in sizes)
+            for path, size in sizes:
+                if total <= MAX_CACHE_BYTES:
+                    break
+                path.unlink(missing_ok=True)
+                total -= size
+
+
+def _text_key(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _valid_audio(data, audio, header):
+    if not audio or not data.startswith(MAGIC):
+        return False
+    return data[len(MAGIC):header] == hashlib.sha256(audio).digest()

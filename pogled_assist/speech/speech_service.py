@@ -15,20 +15,21 @@ from threading import Event, Lock, Thread
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from ..keyboard_layouts import ARABIC_SCRIPT, LATIN_SCRIPT
+from ..settings_limits import ELEVENLABS_SIMILARITY_DEFAULT, ELEVENLABS_STABILITY_DEFAULT
 from ..tracking.tobii_stream_engine import APP_ROOT_ENV
 from ..windows.speech_process import start_speech_process
 from .audio_cache import AudioCache, cache_root
 from .audio_playback import AudioPlayback, PlaybackResult
 from .eleven_account import ElevenAccount
-from .elevenlabs import DEFAULT_MODEL, configuration
-from .voice_router import VoiceRouter
-from .voice_state import EFENDIJA, REASONS, VOICE_TEST_TEXT, SpeechCancelled, VoiceError, VoiceState
+from .elevenlabs import DEFAULT_MODEL, ElevenConfig, configuration
+from .voice_router import Playback, VoiceRouter
+from .voice_state import (ACTIVE_PLAYBACK_STATES, EFENDIJA, NATURAL, STANDARD, NATURAL_VOICE, NATURAL_RATE, NATURAL_PITCH, REASONS, VOICE_TEST_TEXT, SpeechCancelled, VoiceError, VoiceState)
 
 logger = logging.getLogger(__name__)
 
 BOSNIAN_LANGUAGE = "bs"
-VOICE_PRESET_DEFAULT = "default"
-VOICE_PRESET_HUMAN_LIKE = "human_like"
+VOICE_PRESET_DEFAULT = STANDARD
+VOICE_PRESET_HUMAN_LIKE = NATURAL
 VOICE_PRESET_EFENDIJA = EFENDIJA
 VOICE_PRESETS: tuple[tuple[str, str], ...] = (
     (VOICE_PRESET_DEFAULT, "Standardni"),
@@ -36,10 +37,10 @@ VOICE_PRESETS: tuple[tuple[str, str], ...] = (
     (VOICE_PRESET_EFENDIJA, "Efendija"),
 )
 VOICE_PRESET_LABELS = dict(VOICE_PRESETS)
-EDGE_PLAYBACK_VOICE = "bs-BA-GoranNeural"
+EDGE_PLAYBACK_VOICE = NATURAL_VOICE
 ARABIC_EDGE_PLAYBACK_VOICE = "ar-SA-HamedNeural"
-EDGE_PLAYBACK_RATE = "-10%"
-EDGE_PLAYBACK_PITCH = "-2Hz"
+EDGE_PLAYBACK_RATE = NATURAL_RATE
+EDGE_PLAYBACK_PITCH = NATURAL_PITCH
 
 
 @dataclass
@@ -53,8 +54,35 @@ class SpeechSettings:
     keyboard_script: str = LATIN_SCRIPT
     elevenlabs_voice_id: str = field(default="", repr=False)
     elevenlabs_model_id: str = field(default=DEFAULT_MODEL, repr=False)
-    elevenlabs_stability: int = 65
-    elevenlabs_similarity: int = 80
+    elevenlabs_stability: int = ELEVENLABS_STABILITY_DEFAULT
+    elevenlabs_similarity: int = ELEVENLABS_SIMILARITY_DEFAULT
+
+    @property
+    def uses_efendija(self) -> bool:
+        return self.voice_preset == EFENDIJA and self.keyboard_script != ARABIC_SCRIPT
+
+
+@dataclass(frozen=True)
+class EfendijaRequest:
+    request_id: int
+    cancel: Event
+    text: str = field(repr=False)
+    settings: SpeechSettings
+    config: ElevenConfig
+    test: bool = False
+
+
+def _voice_identity(settings: SpeechSettings) -> tuple:
+    identity = (settings.voice_preset, settings.keyboard_script)
+    if settings.uses_efendija:
+        identity += (settings.elevenlabs_voice_id, settings.elevenlabs_model_id, settings.elevenlabs_stability, settings.elevenlabs_similarity)
+    return identity
+
+
+def _test_message(state, reason="") -> str:
+    if reason:
+        return "Proba Efendije nije uspjela. " + REASONS[reason]
+    return "Proba Efendije je završena." if state == "finished" else "Izgovor Efendije nije završen. Pokušajte ponovo."
 
 
 class SpeechService(QObject):
@@ -74,6 +102,7 @@ class SpeechService(QObject):
         self.playback_state = "stopped"
         self._cancel: Event | None = None
         self._efendija_request: int | None = None
+        self._efendija_started = False
         self._process_lock = Lock()
         self._worker_state.connect(self._deliver_state, Qt.QueuedConnection)
         self._executable = find_espeak_ng()
@@ -101,11 +130,11 @@ class SpeechService(QObject):
 
     @property
     def available(self) -> bool:
-        return (
-            self._executable is not None
-            or self._edge_playback_executable is not None
-            or self.account.state.has_key
-        )
+        return self._executable is not None or self._edge_playback_executable is not None
+
+    @property
+    def is_busy(self) -> bool:
+        return self.playback_state in ACTIVE_PLAYBACK_STATES
 
     @property
     def settings(self) -> SpeechSettings:
@@ -115,29 +144,21 @@ class SpeechService(QObject):
         previous = self._settings
         self._settings = replace(settings)
         self.account.configure(self.settings)
-        if (
-            previous.voice_preset != settings.voice_preset
-            or previous.keyboard_script != settings.keyboard_script
-            or previous.elevenlabs_voice_id != settings.elevenlabs_voice_id
-            or previous.elevenlabs_model_id != settings.elevenlabs_model_id
-            or previous.elevenlabs_stability != settings.elevenlabs_stability
-            or previous.elevenlabs_similarity != settings.elevenlabs_similarity
-        ):
+        if _voice_identity(previous) != _voice_identity(settings):
             self.stop()
             self.voice_state = VoiceState()
             self.voice_changed.emit(self.request_id, self.voice_state)
         self._configure_audio()
         logger.info("Speech settings updated: %s", self._settings)
 
-    def set_saved_texts(self, texts: set[str]) -> None:
-        self._saved_texts = set(texts)
+    def set_saved_texts(self, texts: set[str] | None) -> None:
+        self._saved_texts = set(texts) if texts is not None else None
         self._configure_audio()
 
     def _configure_audio(self) -> None:
         config = self.account.config
         self._router.gate.configure(config.fingerprint)
-        if self._saved_texts is not None:
-            self.audio_cache.configure(config.audio_identity, self._saved_texts)
+        self.audio_cache.configure(config.audio_identity, self._saved_texts)
 
     def _credentials_changed(self) -> None:
         self.stop()
@@ -171,15 +192,16 @@ class SpeechService(QObject):
         self.request_id += 1
         request_id, cancel = self.request_id, Event()
         self._efendija_request = request_id
+        self._efendija_started = False
         self._cancel = cancel
         self.playback_state = "preparing"
         config = configuration(settings, self.account.config.key)
         self._configure_audio()
-        self._router.gate.configure(config.fingerprint)
+        request = EfendijaRequest(request_id, cancel, text, settings, config, test)
         try:
             Thread(
                 target=self._run_efendija,
-                args=(request_id, cancel, text, settings, config, test),
+                args=(request,),
                 daemon=True,
                 name="efendija-speech",
             ).start()
@@ -189,61 +211,57 @@ class SpeechService(QObject):
             return False
         return True
 
-    def _run_efendija(self, request_id, cancel, text, settings, config, test) -> None:
-        def publish(state):
-            if not cancel.is_set():
-                self._worker_voice.emit(request_id, state)
-
-        def play(data, voice):
-            result = PlaybackResult()
-            if cancel.is_set():
+    def _request_audio(self, request, data, voice):
+        result = PlaybackResult()
+        if request.cancel.is_set():
+            result.outcome = "stopped"
+            return result
+        self._audio_requested.emit(request.request_id, data, result, voice)
+        while not result.done.wait(0.02):
+            if request.cancel.is_set():
                 result.outcome = "stopped"
                 return result
-            self._audio_requested.emit(request_id, data, result, voice)
-            while not result.done.wait(0.02):
-                if cancel.is_set():
-                    result.outcome = "stopped"
-                    return result
-            return result
+        return result
 
+    def _run_efendija(self, request: EfendijaRequest) -> None:
         with self._process_lock:
-            if cancel.is_set():
+            if request.cancel.is_set():
                 return
-            self._worker_state.emit(request_id, "preparing")
-            try:
-                state = self._router.run(text, config, cancel, play, publish, test=test)
-            except SpeechCancelled:
-                return
-            except VoiceError as error:
-                state = "failed"
-                if test:
-                    self._worker_test.emit(
-                        request_id, "Proba Efendije nije uspjela. " + REASONS[error.reason]
-                    )
-            except Exception as error:
-                logger.error("Speech preparation failed: %s.", type(error).__name__)
-                state = "failed"
-                if test:
-                    self._worker_test.emit(request_id, "Proba Efendije nije uspjela.")
-            else:
-                if test:
-                    self._worker_test.emit(
-                        request_id,
-                        "Proba Efendije je završena."
-                        if state == "finished"
-                        else "Izgovor Efendije nije završen. Pokušajte ponovo.",
-                    )
-        if cancel.is_set():
+            self._worker_state.emit(request.request_id, "preparing")
+            state = self._route_efendija(request)
+        if request.cancel.is_set():
             return
         if state == "standard":
-            command, environment = self._espeak_command(text, settings)
-            self._run_process(request_id, cancel, command, "espeak-ng", environment)
+            command, environment = self._espeak_command(request.text, request.settings)
+            self._run_process(request.request_id, request.cancel, command, "espeak-ng", environment)
         else:
-            self._worker_state.emit(request_id, state)
+            self._worker_state.emit(request.request_id, state)
+
+    def _route_efendija(self, request):
+        def publish(state):
+            if not request.cancel.is_set():
+                self._worker_voice.emit(request.request_id, state)
+
+        reason = ""
+        try:
+            state = self._router.run(request.text, request.config, Playback(request.cancel, lambda data, voice: self._request_audio(request, data, voice), publish), test=request.test)
+        except SpeechCancelled:
+            return "stopped"
+        except VoiceError as error:
+            state, reason = "failed", error.reason
+        except Exception as error:
+            logger.error("Speech preparation failed: %s.", type(error).__name__)
+            state, reason = "failed", "offline"
+        if request.test:
+            self._worker_test.emit(request.request_id, _test_message(state, reason))
+        return state
+
+    def _is_current(self, request_id) -> bool:
+        return request_id == self.request_id and self._cancel is not None and not self._cancel.is_set()
 
     @Slot(int, object, object, object)
     def _play_audio(self, request_id, data, result, voice) -> None:
-        if request_id != self.request_id or self._cancel is None or self._cancel.is_set():
+        if not self._is_current(request_id):
             result.outcome = "stopped"
             result.done.set()
             return
@@ -252,6 +270,9 @@ class SpeechService(QObject):
 
     @Slot(int)
     def _audio_started(self, request_id: int) -> None:
+        if not self._is_current(request_id):
+            return
+        self._efendija_started = True
         self._deliver_voice(request_id, self._audio_voice)
         self._deliver_state(request_id, "speaking")
 
@@ -355,24 +376,12 @@ class SpeechService(QObject):
             process = None
             state = "failed"
             try:
+                environment = self._resolve_command(command, engine_name, environment)
+                if cancel.is_set():
+                    return
                 if not command[0]:
-                    if engine_name == "espeak-ng":
-                        self._executable = executable = find_espeak_ng()
-                        environment = _espeak_environment(executable) if executable else None
-                    else:
-                        self._edge_playback_executable = executable = find_edge_playback()
-                        environment = (
-                            _environment_with_executable_directory(executable)
-                            if executable
-                            else None
-                        )
-                    if cancel.is_set():
-                        return
-                    if executable is None:
-                        logger.error("Speech engine was not found: %s.", engine_name)
-                        self._worker_state.emit(request_id, "failed")
-                        return
-                    command[0] = str(executable)
+                    self._worker_state.emit(request_id, "failed")
+                    return
                 process = start_speech_process(command, environment)
                 if not cancel.is_set():
                     self._worker_state.emit(request_id, "speaking")
@@ -397,16 +406,37 @@ class SpeechService(QObject):
             if not cancel.is_set():
                 self._worker_state.emit(request_id, state)
 
+    def _resolve_command(self, command, engine_name, environment):
+        if command[0]:
+            return environment
+        attribute, find, environment_for = {
+            "espeak-ng": ("_executable", find_espeak_ng, _espeak_environment),
+            "edge-playback": ("_edge_playback_executable", find_edge_playback, _environment_with_executable_directory),
+        }[engine_name]
+        executable = find()
+        setattr(self, attribute, executable)
+        environment = environment_for(executable) if executable else None
+        if executable is not None:
+            command[0] = str(executable)
+        else:
+            logger.error("Speech engine was not found: %s.", engine_name)
+        return environment
+
+    def _finish_efendija(self, request_id, state):
+        if request_id != self._efendija_request:
+            return
+        if state == "failed" and self._efendija_started:
+            self._deliver_voice(request_id, replace(self.voice_state, partial=True))
+        if state in ("finished", "failed"):
+            self.account.refresh_subscription()
+
     @Slot(int, str)
     def _deliver_state(self, request_id: int, state: str) -> None:
         if request_id == self.request_id and self._cancel is not None:
             self.playback_state = state
-            if state == "failed" and request_id == self._efendija_request:
-                self._deliver_voice(request_id, replace(self.voice_state, partial=True))
+            self._finish_efendija(request_id, state)
             if state in ("finished", "failed"):
                 self._cancel = None
-                if request_id == self._efendija_request:
-                    self.account.refresh_subscription()
             self.playback_changed.emit(request_id, state)
 
     def stop(self) -> None:

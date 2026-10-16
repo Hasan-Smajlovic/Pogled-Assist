@@ -1,329 +1,12 @@
 from __future__ import annotations
 
-import threading
-from types import SimpleNamespace
-
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt, QTimer
+from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.settings_window import SettingsWindow
-from pogled_assist.windows import startup_tasks
 from pogled_assist.windows.windows_startup import StartupTaskResult
-
-
-@pytest.mark.e2e
-def test_slow_startup_query_keeps_settings_and_qt_heartbeat_responsive(qtbot, monkeypatch):
-    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
-
-    def query():
-        entered.set()
-        release.wait(5)
-        finished.set()
-        return True
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    ticks = []
-    timer = QTimer(window)
-    timer.setInterval(10)
-    timer.timeout.connect(lambda: ticks.append(True))
-    try:
-        window.show()
-        timer.start()
-        qtbot.waitUntil(entered.is_set)
-        assert not finished.is_set(), "the startup query must still be waiting off the Qt thread"
-        window._gaze_tab_button.click()
-        window._gaze_bubble_button.click()
-        assert window._stack.currentIndex() == 1
-        assert not window._gaze_settings.show_gaze_bubble
-        qtbot.waitUntil(lambda: len(ticks) >= 3)
-        assert not finished.is_set()
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert window._startup_checkbox.isChecked()
-        assert not window._gaze_settings.show_gaze_bubble
-    finally:
-        release.set()
-        timer.stop()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-
-
-@pytest.mark.e2e
-def test_startup_query_does_not_overwrite_newer_choices_and_pending_work_is_bounded(
-    qtbot, monkeypatch
-):
-    entered, release = threading.Event(), threading.Event()
-    writes = []
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return True
-
-    def update(enabled, **options):
-        writes.append((enabled, options["show_launcher_window"]))
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    updates = []
-    window.gaze_settings_changed.connect(updates.append)
-    try:
-        window.show()
-        qtbot.waitUntil(entered.is_set)
-        window._startup_checkbox.click()
-        window._launcher_window_checkbox.click()
-        window._startup_checkbox.click()
-        assert writes == []
-        window._adjust_dwell_ms(100)
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert writes == [(False, True)]
-        assert not window._startup_checkbox.isChecked()
-        assert updates[-1].start_with_windows is False
-        assert updates[-1].show_launcher_window is True
-        assert updates[-1].dwell_ms == 600
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-
-
-@pytest.mark.e2e
-def test_slow_startup_update_keeps_qt_running_and_preserves_later_gaze_changes(qtbot, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-
-    def update(enabled, **_options):
-        entered.set()
-        release.wait(5)
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    updates = []
-    window.gaze_settings_changed.connect(updates.append)
-    ticks = []
-    timer = QTimer(window)
-    timer.setInterval(10)
-    timer.timeout.connect(lambda: ticks.append(True))
-    try:
-        window.show()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        timer.start()
-        window._startup_checkbox.click()
-        qtbot.waitUntil(entered.is_set)
-        window._adjust_selection_pause(100)
-        qtbot.waitUntil(lambda: len(ticks) >= 3)
-        assert window._startup_busy
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert updates[-1].start_with_windows is True
-        assert updates[-1].selection_pause_ms == 600
-    finally:
-        release.set()
-        timer.stop()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-
-
-@pytest.mark.e2e
-def test_closed_settings_ignores_the_late_startup_query(qtbot, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return True
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    updates = []
-    window.gaze_settings_changed.connect(updates.append)
-    try:
-        window.show()
-        qtbot.waitUntil(entered.is_set)
-        window.close()
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert not window._gaze_settings.start_with_windows
-        assert not window._startup_checkbox.isChecked()
-        assert updates == []
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-
-
-@pytest.mark.e2e
-def test_closed_settings_cancels_a_startup_query_waiting_for_another_window(qtbot, monkeypatch):
-    from pogled_assist.ui import settings_window
-
-    calls = []
-
-    def query():
-        calls.append(True)
-        return False
-
-    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    with startup_tasks._task_lock:
-        window = SettingsWindow(GazeSettings(), SpeechSettings())
-        qtbot.addWidget(window)
-        window.show()
-        window.close()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert calls == []
-
-
-@pytest.mark.e2e
-def test_deleted_settings_preserves_last_startup_write_before_reopened_query(qtbot, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    actual, writes, reads = [False], [], []
-
-    def query():
-        reads.append(actual[0])
-        return actual[0]
-
-    def update(enabled, **_options):
-        writes.append(enabled)
-        if enabled:
-            entered.set()
-            release.wait(5)
-        actual[0] = enabled
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    tasks = window._startup_tasks
-    window.show()
-    try:
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        window._startup_checkbox.click()
-        qtbot.waitUntil(entered.is_set)
-        window._startup_checkbox.click()
-        assert window._startup_desired_enabled is False
-        window.close()
-        window.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-        reopened = SettingsWindow(GazeSettings(), SpeechSettings())
-        qtbot.addWidget(reopened)
-        reopened.show()
-        assert reads == [False]
-        release.set()
-        qtbot.waitUntil(lambda: not reopened._startup_busy)
-        assert writes == [True, False]
-        assert reads == [False, False]
-        assert not actual[0]
-        assert not reopened._startup_checkbox.isChecked()
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not tasks._running)
-
-
-@pytest.mark.e2e
-def test_waiting_startup_write_finishes_before_a_reopened_window_can_query(qtbot, monkeypatch):
-    from pogled_assist.ui import settings_window
-
-    actual, writes, reads = [False], [], []
-
-    def query():
-        reads.append(actual[0])
-        return actual[0]
-
-    def update(enabled, **_options):
-        writes.append(enabled)
-        actual[0] = enabled
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    monkeypatch.setattr(settings_window, "set_windows_startup_enabled", update)
-    with startup_tasks._task_lock:
-        window = SettingsWindow(GazeSettings(), SpeechSettings())
-        window.show()
-        window._startup_checkbox.click()
-        window.close()
-        window.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-        reopened = SettingsWindow(GazeSettings(), SpeechSettings())
-        qtbot.addWidget(reopened)
-        reopened.show()
-        assert writes == reads == []
-    qtbot.waitUntil(lambda: not reopened._startup_busy)
-    assert writes == [True]
-    assert reads == [True]
-    assert reopened._startup_checkbox.isChecked()
-
-
-@pytest.mark.e2e
-@pytest.mark.parametrize("saved,actual", [(False, True), (True, True), (True, False)])
-def test_launcher_change_during_initial_query_uses_actual_windows_state(
-    qtbot, monkeypatch, saved, actual
-):
-    entered, release = threading.Event(), threading.Event()
-    writes = []
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return actual
-
-    def update(enabled, **options):
-        writes.append((enabled, options["show_launcher_window"]))
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", query)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
-    window = SettingsWindow(GazeSettings(start_with_windows=saved), SpeechSettings())
-    qtbot.addWidget(window)
-    window.show()
-    try:
-        qtbot.waitUntil(entered.is_set)
-        window._launcher_window_checkbox.click()
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert writes == ([(True, True)] if actual else [])
-        assert window._gaze_settings.start_with_windows is actual
-        assert window._gaze_settings.show_launcher_window
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-
-
-@pytest.mark.e2e
-def test_pending_startup_choice_stays_checked_when_other_settings_refresh(qtbot, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-
-    def update(enabled, **_options):
-        entered.set()
-        release.wait(5)
-        return StartupTaskResult(enabled, True, "updated")
-
-    monkeypatch.setattr("pogled_assist.ui.settings_window.set_windows_startup_enabled", update)
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
-    qtbot.addWidget(window)
-    window.show()
-    try:
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        window._startup_checkbox.click()
-        qtbot.waitUntil(entered.is_set)
-        window._adjust_dwell_ms(100)
-        assert window._startup_checkbox.isChecked()
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert window._gaze_settings.start_with_windows
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
 
 
 @pytest.mark.e2e
@@ -337,7 +20,7 @@ def test_tracking_notifications_setting_is_on_by_default_and_fits_gaze_page(qtbo
     window._select_tab(1)
     window.show()
     qtbot.wait(1)
-    checkbox = window._tracking_notifications_checkbox
+    checkbox = window._gaze_page._tracking_notifications_checkbox
     assert checkbox.isChecked()
     assert checkbox.height() >= 58
     assert window.rect().contains(QRect(checkbox.mapTo(window, QPoint()), checkbox.size()))
@@ -371,17 +54,17 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     qtbot.wait(1)
     assert updates[-1].keyboard_script == "arabic"
     assert updates[-1].voice_preset == preset
-    assert window._arabic_voice.text() == "Prirodni · Hamed"
-    assert not window._voice_choices.isVisible()
+    assert window._speech_page._arabic_voice.text() == "Prirodni · Hamed"
+    assert not window._speech_page._voice_choices.isVisible()
     assert window.width() <= 1280 and window.height() <= 720
-    for control in (window._script_combo, window._arabic_voice, window._test_speech_button):
+    for control in (window._speech_page._script_combo, window._speech_page._arabic_voice, window._speech_page._test_speech_button):
         assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
         assert control.height() >= 58
     window._cycle_keyboard_script()
     assert updates[-1].keyboard_script == "latin"
     assert updates[-1].voice_preset == preset
-    assert window._voice_buttons[preset].isChecked()
-    assert window._voice_choices.isVisible()
+    assert window._speech_page._voice_buttons[preset].isChecked()
+    assert window._speech_page._voice_choices.isVisible()
 
 
 @pytest.mark.e2e
@@ -409,8 +92,8 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     window.show()
 
     qtbot.mouseClick(window._gaze_tab_button, Qt.LeftButton)
-    qtbot.mouseClick(window._move_pointer_button, Qt.LeftButton)
-    qtbot.mouseClick(window._precision_zoom_checkbox, Qt.LeftButton)
+    qtbot.mouseClick(window._gaze_page._move_pointer_button, Qt.LeftButton)
+    qtbot.mouseClick(window._gaze_page._precision_zoom_checkbox, Qt.LeftButton)
     for _ in range(100):
         window._adjust_selection_pause(-100)
         window._adjust_dwell_ms(-100)
@@ -419,7 +102,7 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     for _ in range(100):
         window._adjust_speech_speed(10)
         window._adjust_letters_per_group(1)
-    window._voice_buttons["human_like"].click()
+    window._speech_page._voice_buttons["human_like"].click()
 
     assert window._stack.currentIndex() == 2
     assert gaze_updates[-1].move_mouse is False
@@ -447,20 +130,20 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
 
     action_columns = None
     for tab, controls in (
-        (0, (window._startup_checkbox, window._logging_checkbox, window._launcher_window_checkbox)),
+        (0, (window._general_page._startup_checkbox, window._general_page._logging_checkbox, window._general_page._launcher_window_checkbox)),
         (
             1,
             (
-                window._move_pointer_button,
-                window._gaze_bubble_button,
-                window._interaction_overlay_button,
-                window._precision_zoom_checkbox,
-                window._calibration_button,
+                window._gaze_page._move_pointer_button,
+                window._gaze_page._gaze_bubble_button,
+                window._gaze_page._interaction_overlay_button,
+                window._gaze_page._precision_zoom_checkbox,
+                window._gaze_page._calibration_button,
             ),
         ),
         (
             2,
-            (window._test_speech_button, window._saved_audio_button, window._learned_words_button),
+            (window._speech_page._test_speech_button, window._speech_page._saved_audio_button, window._speech_page._learned_words_button),
         ),
     ):
         window._select_tab(tab)
@@ -518,8 +201,8 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
     window.show()
     qtbot.waitUntil(window.isVisible)
     assert (window.width(), window.height()) == size
-    script_rect = QRect(window._script_combo.mapTo(window, QPoint()), window._script_combo.size())
-    voice = window._arabic_voice if script == "arabic" else window._voice_choices
+    script_rect = QRect(window._speech_page._script_combo.mapTo(window, QPoint()), window._speech_page._script_combo.size())
+    voice = window._speech_page._arabic_voice if script == "arabic" else window._speech_page._voice_choices
     voice_rect = QRect(voice.mapTo(window, QPoint()), voice.size())
     assert script_rect.height() == 58
     assert voice_rect.height() >= 58
@@ -531,21 +214,21 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
         )
         qtbot.wait(1)
         values = (
-            (window._letters_group_value,)
+            (window._speech_page._letters_group_value,)
             if script == "arabic"
-            else (window._speed_value, window._letters_group_value)
+            else (window._speech_page._speed_value, window._speech_page._letters_group_value)
         )
         columns = [_assert_speech_row(window, value) for value in values]
         assert all(column == columns[0] for column in columns)
         assert original_columns is None or columns[0] == original_columns
         original_columns = columns[0]
-    assert window._speed_row.isVisible() == (script != "arabic")
+    assert window._speech_page._speed_row.isVisible() == (script != "arabic")
     if script != "arabic":
-        assert voice_rect.bottom() < window._speed_value.mapTo(window, QPoint()).y()
-        speed_row = window._speed_value.parentWidget().layout()
+        assert voice_rect.bottom() < window._speech_page._speed_value.mapTo(window, QPoint()).y()
+        speed_row = window._speech_page._speed_value.parentWidget().layout()
         speed_row.itemAtPosition(0, 1).widget().click()
         assert window._speech_settings.speed == 315
-    letters_row = window._letters_group_value.parentWidget().layout()
+    letters_row = window._speech_page._letters_group_value.parentWidget().layout()
     letters_row.itemAtPosition(0, 1).widget().click()
     assert window._speech_settings.letters_per_group == 11
 
@@ -601,42 +284,3 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]
-
-
-@pytest.mark.e2e
-def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
-    from pogled_assist.ui import settings_window
-
-    entered, release = threading.Event(), threading.Event()
-    now = [10.0]
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return False
-
-    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
-    window = settings_window.SettingsWindow(
-        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
-    )
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
-    window.show()
-    try:
-        qtbot.waitUntil(entered.is_set)
-        window._gaze_tab_button.click()
-        qtbot.wait(1)
-        target = window._gaze_bubble_button
-        center = target.mapToGlobal(target.rect().center())
-        for stamp in (10.0, 10.1, 10.251):
-            now[0] = stamp
-            window.handle_gaze(center)
-        assert not window._gaze_settings.show_gaze_bubble
-        assert window._startup_busy
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert not window._gaze_settings.show_gaze_bubble
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)

@@ -21,6 +21,7 @@ sys.dont_write_bytecode = True
 @pytest.fixture(autouse=True)
 def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
     from _speech_fakes import FakeCredentials
+    from pogled_assist.speech.elevenlabs import ENV_OVERRIDES
 
     monkeypatch.setattr(
         "pogled_assist.speech.eleven_account.WindowsCredentialStore", FakeCredentials
@@ -28,7 +29,7 @@ def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "pogled_assist.speech.speech_service.cache_root", lambda: tmp_path / "speech-audio"
     )
-    for name in ("ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL_ID"):
+    for name in ENV_OVERRIDES:
         monkeypatch.delenv(name, raising=False)
 
 

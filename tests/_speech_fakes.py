@@ -10,7 +10,7 @@ from pogled_assist.speech.eleven_account import ElevenAccount
 from pogled_assist.speech.elevenlabs import AccountOptions, Subscription
 from pogled_assist.speech.speech_library import SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
-from pogled_assist.speech.voice_state import VOICE_TEST_TEXT, VoiceState
+from pogled_assist.speech.voice_state import ACTIVE_PLAYBACK_STATES, VOICE_TEST_TEXT, VoiceState
 
 
 class FakeCredentials:
@@ -46,8 +46,8 @@ class FakeElevenClient:
     def options(self, *_args):
         return AccountOptions(
             (("synthetic-voice", "Probni glas"),),
-            (("eleven_v3", "Eleven v3"),),
-            self.balance,
+            (("eleven_v4", "Eleven v4"),),
+            None,
         )
 
 
@@ -59,6 +59,7 @@ class FakeSpeech(QObject):
     def __init__(self, *, successful=True):
         super().__init__()
         self.request_id = 0
+        self.playback_state = "stopped"
         self._settings = SpeechSettings()
         self.successful = successful
         self.requests = []
@@ -68,9 +69,13 @@ class FakeSpeech(QObject):
         self.audio_cache = AudioCache(None)
         self.account = ElevenAccount(self, store=FakeCredentials(), client=FakeElevenClient())
         self.account.configure(self.settings)
+        self.playback_changed.connect(self._set_playback_state)
+
+    def _set_playback_state(self, _request_id, state):
+        self.playback_state = state
 
     def set_saved_texts(self, texts):
-        self.saved_texts = set(texts)
+        self.saved_texts = set(texts) if texts is not None else None
 
     def test_efendija(self):
         return self.speak(VOICE_TEST_TEXT)
@@ -80,16 +85,23 @@ class FakeSpeech(QObject):
         self.voice_changed.emit(self.request_id, state)
 
     @property
+    def is_busy(self):
+        return self.playback_state in ACTIVE_PLAYBACK_STATES
+
+    @property
     def settings(self):
         return replace(self._settings)
 
     def speak(self, text, settings=None):
         self.request_id += 1
         self.requests.append((text, replace(settings) if settings is not None else self.settings))
+        self.playback_state = "preparing" if self.successful else "failed"
         return self.successful
 
     def stop(self):
         self.stop_calls += 1
+        self.playback_state = "stopped"
+        self.playback_changed.emit(self.request_id, "stopped")
 
 
 class FakeLibraryStore:

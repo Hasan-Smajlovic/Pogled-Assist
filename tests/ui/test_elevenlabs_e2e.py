@@ -15,7 +15,7 @@ from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.speech.voice_state import VoiceError, VoiceState
 from pogled_assist.tracking.feedback import TrackingNotice
-from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
 from pogled_assist.windows.credentials import CredentialError
 
@@ -38,7 +38,7 @@ def test_stationary_gaze_cannot_repeat_paid_test_after_busy_completion(
         qtbot.waitUntil(lambda: not account.state.credits_busy)
     else:
         window._select_tab(2)
-    button = window._eleven_page.test_button if dedicated else window._test_speech_button
+    button = window._eleven_page.test_button if dedicated else window._speech_page._test_speech_button
     window._gaze_settings = replace(
         window._gaze_settings, selection_pause_ms=0, dwell_ms=200, click_cooldown_ms=100
     )
@@ -89,39 +89,31 @@ def test_main_settings_cannot_test_saved_voice_absent_from_my_voices(settings, q
         SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="absent-voice")
     )
     window._select_tab(2)
-    assert not window._test_speech_button.isEnabled()
+    assert not window._speech_page._test_speech_button.isEnabled()
 
 
-def test_tuning_sliders_update_settings_and_gaze_buttons(settings, qtbot):
+def test_stability_choices_and_similarity_slider_update_settings(settings):
     window, _store, _client, account, _ = settings
     window._open_eleven()
     page = window._eleven_page
     changes = []
     window.speech_settings_changed.connect(changes.append)
-    assert page.stability.accessibleName() == "ElevenLabs Stabilnost"
-    assert page.similarity.accessibleName() == "ElevenLabs Sličnost glasa"
-    assert page.stability.toolTip() == "Niže: izražajnije · Više: ujednačenije"
-    assert page.similarity.toolTip() == "Sličnost odabranom glasu"
-    assert (page.stability.value(), page.similarity.value()) == (65, 80)
-    page.stability.setValue(35)
+    assert page.stability_buttons[50].isChecked()
+    for value, label in ((0, "Kreativno"), (50, "Prirodno"), (100, "Stabilno")):
+        button = page.stability_buttons[value]
+        assert button.height() >= 58
+        assert button.accessibleName() == f"ElevenLabs Stabilnost: {label}"
+        assert window._controls._actions[button] is not None
+        button.click()
+        assert changes[-1].elevenlabs_stability == value
+        assert sum(control.isChecked() for control in page.stability_buttons.values()) == 1
     page.similarity.setValue(90)
-    assert changes[-1].elevenlabs_stability == 35
-    assert changes[-1].elevenlabs_similarity == 90
-    assert account.config.parameters["voice_settings"] == {
-        "stability": 0.35,
-        "similarity_boost": 0.9,
-    }
-    button = next(
-        widget
-        for widget in window._controls._actions
-        if window._controls.name(widget) == "Sličnost glasa: više"
-    )
-    assert button.height() >= 58
+    assert account.config.parameters["voice_settings"] == {"stability": 1.0, "similarity_boost": 0.9}
+    button = next(widget for widget in window._controls._actions if window._controls.name(widget) == "Sličnost glasa: više")
     window._controls._actions[button]()
     assert page.similarity.value() == 95
-    assert page.similarity_value.text() == "95%"
-    window.update_speech_settings(SpeechSettings(elevenlabs_stability=55, elevenlabs_similarity=70))
-    assert (page.stability.value(), page.similarity.value()) == (55, 70)
+    window.update_speech_settings(SpeechSettings(elevenlabs_stability=50, elevenlabs_similarity=70))
+    assert page.stability_buttons[50].isChecked() and page.similarity.value() == 70
 
 
 @pytest.mark.parametrize(
@@ -172,7 +164,7 @@ def test_playback_progress_prevents_duplicate_paid_tests_and_allows_stop(setting
         window.set_speech_playback_state(state)
         assert window._eleven_page.playback_progress.isVisible()
         assert not window._eleven_page.test_button.isEnabled()
-        assert not window._test_speech_button.isEnabled()
+        assert not window._speech_page._test_speech_button.isEnabled()
         window._eleven_page.stop_button.click()
     assert len(stopped) == 2
     window.set_speech_playback_state("failed")
@@ -217,17 +209,10 @@ def settings(qtbot, qapp, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
     )
-    for name in ("ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL_ID"):
-        monkeypatch.delenv(name, raising=False)
     store, client = FakeCredentials(), FakeElevenClient()
     account = ElevenAccount(qapp, store=store, client=client)
     cleared = []
-    window = SettingsWindow(
-        GazeSettings(),
-        SpeechSettings(),
-        eleven_account=account,
-        clear_audio=lambda: cleared.append(True) or True,
-    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings(), services=SettingsServices(account=account, clear_audio=lambda: cleared.append(True) or True))
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window._select_tab(2)
@@ -240,10 +225,10 @@ def test_caregiver_sets_key_checks_connection_and_selects_voice_and_model(settin
     window, store, client, account, _cleared = settings
     changes = []
     window.speech_settings_changed.connect(changes.append)
-    window._voice_buttons["efendija"].click()
+    window._speech_page._voice_buttons["efendija"].click()
     assert changes[-1].voice_preset == "efendija"
-    assert window._test_speech_button.text() == "Isprobaj Efendiju"
-    window._eleven_button.click()
+    assert window._speech_page._test_speech_button.text() == "Isprobaj Efendiju"
+    window._speech_page._eleven_button.click()
     page = window._eleven_page
     assert page.key_input.echoMode() == QLineEdit.Password
     page.key_input.setText("synthetic-private-key")
@@ -256,7 +241,7 @@ def test_caregiver_sets_key_checks_connection_and_selects_voice_and_model(settin
     assert client.calls == []
     page.voice.setCurrentIndex(page.voice.findData("synthetic-voice"))
     assert changes[-1].elevenlabs_voice_id == "synthetic-voice"
-    assert changes[-1].elevenlabs_model_id == "eleven_v3"
+    assert changes[-1].elevenlabs_model_id == "eleven_v4"
     tests = []
     window.efendija_test_requested.connect(lambda: tests.append(True))
     page.test_button.click()
@@ -265,14 +250,14 @@ def test_caregiver_sets_key_checks_connection_and_selects_voice_and_model(settin
     page.key_input.setText("unsaved-private-key")
     window._select_tab(2)
     assert page.key_input.text() == ""
-    assert window._voice_buttons["efendija"].isChecked()
+    assert window._speech_page._voice_buttons["efendija"].isChecked()
 
 
 def test_setup_pages_fit_display_and_controls_keep_gaze_size(settings, qtbot):
     window, _store, _client, _account, _cleared = settings
-    window._voice_buttons["efendija"].click()
+    window._speech_page._voice_buttons["efendija"].click()
     for open_page, controls in (
-        (lambda: window._select_tab(2), tuple(window._voice_buttons.values())),
+        (lambda: window._select_tab(2), tuple(window._speech_page._voice_buttons.values())),
         (
             window._open_eleven,
             (
@@ -332,7 +317,7 @@ def test_empty_my_voices_disables_selection_and_test_without_inserting_saved_id(
 
 def test_audio_clear_preserves_voice_and_settings_choice(settings):
     window, _store, _client, _account, cleared = settings
-    window._voice_buttons["efendija"].click()
+    window._speech_page._voice_buttons["efendija"].click()
     before = replace(window._speech_settings)
     window._open_audio()
     window._audio_page.clear_button.click()
@@ -371,7 +356,6 @@ def test_all_voice_notices_keep_targets_fixed_and_preserve_message_and_selection
         VoiceState(recovered=True),
     ):
         service.publish_voice(state)
-        window.set_speech_notice(state, immediate=True)
         qtbot.wait(1)
         assert window._input.text() == "SAČUVANA FRAZA."
         assert service.settings.voice_preset == "efendija"
@@ -441,7 +425,7 @@ def test_library_reload_updates_cache_eligibility_and_unreadable_library_disable
     assert service.saved_texts == {"DRUGA FRAZA."}
     library.read_error = True
     window._retry_library()
-    assert service.saved_texts == set()
+    assert service.saved_texts is None
 
 
 def test_failed_key_save_retains_masked_input_and_previous_credential(settings):
@@ -584,13 +568,74 @@ def test_clicking_current_voice_keeps_exactly_one_voice_selected(settings, prese
     window, _store, _client, _account, _cleared = settings
     changes = []
     window.speech_settings_changed.connect(changes.append)
-    button = window._voice_buttons[preset]
+    button = window._speech_page._voice_buttons[preset]
     if not button.isChecked():
         button.click()
     before = len(changes)
     for _ in range(2):
         button.click()
         assert button.isChecked()
-        assert sum(control.isChecked() for control in window._voice_buttons.values()) == 1
+        assert sum(control.isChecked() for control in window._speech_page._voice_buttons.values()) == 1
     assert window._speech_settings.voice_preset == preset
     assert len(changes) == before
+
+
+def test_account_refresh_does_not_interrupt_dwell_on_unrelated_control(settings, monkeypatch):
+    window, _store, _client, account, _ = settings
+    window._select_tab(2)
+    window._gaze_settings = replace(window._gaze_settings, selection_pause_ms=0, dwell_ms=200, click_cooldown_ms=100)
+    button = window._speech_page._saved_audio_button
+    point = button.mapToGlobal(button.rect().center())
+    now = [10.0]
+    monkeypatch.setattr("pogled_assist.ui.settings_window.time.monotonic", lambda: now[0])
+    window.handle_gaze(point)
+    account.changed.emit(replace(account.state, credits_message="Osvježavam kredite…"))
+    assert window._gaze_selection.target is button
+    now[0] = 10.3
+    window.handle_gaze(point)
+    assert window._stack.currentWidget() is window._audio_page
+
+
+def test_standard_speech_second_press_stops_without_another_request(qtbot):
+    service = FakeSpeech()
+    window = SpeechWindow(service, library_store=FakeLibraryStore(), alarm_sound=FakeAlarmSound())
+    qtbot.addWidget(window)
+    window.show()
+    window._input.setText("SELAM")
+    window._play_button.click()
+    service.playback_changed.emit(service.request_id, "speaking")
+    assert window._play_button.text() == "Zaustavi"
+    window._play_button.click()
+    assert len(service.requests) == 1 and service.stop_calls == 1
+    assert window._input.text() == "SELAM"
+
+
+@pytest.mark.parametrize("mode", ["phrases", "answers"])
+def test_stop_remains_available_while_editing_saved_entry(speech, mode):
+    window, service, _ = speech
+    window._view_mode = mode
+    if mode == "answers":
+        window._category_index = 0
+    window._show_list_level()
+    window._start_editor()
+    window._input.setText("NACRT")
+    assert window._play_button.isEnabled()
+    assert window._play_button.text() == "Zaustavi"
+    previous = len(service.requests)
+    window._play_button.click()
+    assert service.stop_calls == 1 and len(service.requests) == previous
+    assert window._input.text() == "NACRT"
+    assert not window._play_button.isEnabled()
+
+
+def test_missing_selected_model_cannot_start_paid_test(settings, qtbot):
+    window, _store, client, account, _ = settings
+    account.save_key("key")
+    client.options = lambda *_: AccountOptions((("synthetic-voice", "Probni glas"),), (("other-model", "Drugi model"),))
+    account.check()
+    qtbot.waitUntil(lambda: account.state.options is not None)
+    window.update_speech_settings(SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="synthetic-voice"))
+    window._select_tab(2)
+    assert not window._speech_page._test_speech_button.isEnabled()
+    window._open_eleven()
+    assert not window._eleven_page.test_button.isEnabled()

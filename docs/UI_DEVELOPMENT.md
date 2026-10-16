@@ -111,7 +111,7 @@ Generate the gallery:
 The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
 already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
 the separate **UI gallery** workflow publishes a browser gallery and updates
-one PR bot comment with main screenshots, resolution links, the rendered commit,
+one PR bot comment with main screenshots, resolution link, the rendered commit,
 and a download link. Status reporting, setup, permissions and cleanup are defined in
 [UI gallery publication](UI_GALLERY.md).
 To review the artifact offline, download and extract it from the workflow run,
@@ -133,7 +133,7 @@ The command renders:
   and four version states: older selection, package preparation, unsaved-input
   warning, and failed release check
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup
-  (connected, replacing key, empty My Voices, missing key, invalid key, missing
+  (connected, replacing key, Nema glasova, missing key, invalid key, missing
   permission, credential save failure, quota, low/critical credits and
   preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device,
@@ -143,7 +143,7 @@ The command renders:
   three local dwell trial sizes, cancelled selection and wrong-neighbor feedback,
   trial results needing adjustment, a trial without gaze data, completed check,
   and free check with and without live gaze
-- Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
+- Speech keyboard, `speech-preparing`, `speech-speaking`, categories, answers, saved phrases, shared editor, and library read failure
 - Speech tracking notifications: eye loss, missing gaze, disconnected device,
   repeated interruptions, recovery, letter selection and deletion confirmation
 - Speech voice states: Efendija, quota/offline/timeout/invalid-key fallback,
@@ -155,11 +155,9 @@ The command renders:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
-Hotbar snapshots use at most 1280 logical pixels of width. Settings and Gaze check
-snapshots use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
-scaling. Other surfaces use the requested gallery size. In Settings, check equal
-action cells, the single-cell calibration control, the voice below keyboard
-script, and aligned decrease/value/increase columns.
+The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at
+150% scaling. In Settings, check equal action cells, the single-cell calibration
+control, voice choices below keyboard script, and aligned adjustment columns.
 The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar
 below the 76-pixel hotbar at 150% scaling.
 
@@ -194,30 +192,27 @@ On a normal development machine, verify:
   gaze feedback remain usable.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard.
 - Settings survive an application restart.
-- ElevenLabs setup fits 1280 × 720: save a key, confirm the saved label and hidden
-  editor, reopen and check it. Replace/cancel must retain the old key; removing
-  it must open an empty editor. Confirm the voice dropdown matches My Voices,
-  includes only Efendija Fikret when that is the only saved voice, and allows
-  selecting a single voice by gaze. A previously selected ID outside the list
-  must require an explicit choice before testing from either Settings page.
-  Adjust Stability (65% by default) and Similarity (80%) with the sliders and gaze
-  −/+ buttons; restart and confirm persistence and regenerated saved clips.
-  Confirm the credit bar, yellow below 20%, red below 10%, and unavailable state
-  without User: Read. A slow balance refresh must leave voice/model choices usable.
-  During preparation/playback, confirm the indicator and Stop action, preserved
-  text, and no second paid test until gaze leaves the completed test button.
-  An empty collection must show
-  Nema glasova u My Voices. Check missing Voices/Models permissions,
-  a failed save retaining masked input, and an unsaved replacement refusing a
-  connection check or paid test. The read-only check must not generate speech. Select the
-  intended ef. Fikret voice and Bosnian model, then separately listen to the
-  billable test. Check offline/quota fallback and later recovery after top-up,
-  saved-entry repetition offline, edit/deletion invalidation and cache clearing.
-  Confirm free-form messages leave no cache. Record actual sound and similarity
-  separately from fake-network or process-startup results.
-  Change the voice/model during preparation and playback; the window must stay
-  responsive and old audio must not start later. The silent native decoder
-  regression covers buffer replacement and completion, not audible MP3 quality.
+- ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed
+  credentials, masked input after a failed save, and refusal to use an unsaved key.
+- The voice list matches My Voices. A missing selected ID requires explicit
+  reselection before either Settings page can test it. An empty list says **Nema glasova**.
+- Check all three Stability buttons and the Similarity slider/−/+ controls.
+  Restart and confirm persistence. The [user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup)
+  owns defaults, cache behavior and timing.
+- Check credit warnings and unavailable balance without User: Read. A slow balance
+  refresh leaves voice/model choices and an unrelated dwell usable.
+- During preparation/playback, check the indicator, Stop, preserved text and no
+  repeated paid test until gaze leaves its completed button. Stop and immediately
+  speak again; the new request must reach ElevenLabs without a false timeout.
+- Check missing catalog permissions. The read-only check must not generate speech.
+  Separately listen to the intended Fikret clone, Eleven v4 and sentence-case text.
+- Check quota/offline fallback, recovery after a top-up, saved-entry repetition
+  offline, edit/deletion, tuning round trips and cache clearing. Free-form messages
+  leave no cache. Record audible quality separately from process/network fakes.
+- Change the active Efendija voice/model/tuning while preparing and playing.
+  Old audio must not start later. `test_stalled_decoder_fails_without_waiting_forever`
+  covers the silent decoder watchdog; playback replacement tests cover stale native
+  callbacks. Neither proves audible MP3 quality on the Windows machine.
 - Tracking notifications are initially enabled, can be disabled in Gaze Settings,
   leave targets fixed in Speech and its letter/deletion dialogs, and restore the
   message field after recovery. Check that Rest, Settings and Gaze check suppress

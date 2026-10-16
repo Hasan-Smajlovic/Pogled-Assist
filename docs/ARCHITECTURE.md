@@ -288,23 +288,26 @@ responses after key replacement/removal or cancellation. Balance refresh runs on
 opening ElevenLabs settings and after completed or failed Efendija requests.
 Passive balance refresh never resets a provider cooldown; only the explicit
 connection check can permit an early recovery attempt after an improved balance.
-Persisted integer percentages default to Stability 65 and Similarity 80; shared
-0–100 limits apply in storage and controls. Requests convert them to 0–1 in
-`voice_settings`, and both participate in configuration and cache identity.
-`speech/elevenlabs.py` bounds HTTPS response sizes, deadlines and
-network workers; billable POSTs are never automatically replayed. Cancellation
-observes the caller's event directly, including after connection setup and before
-sending the request; worker timeout does not cancel the fallback. A request
-already sent may still consume credits after playback is cancelled.
-`speech/voice_router.py` prepares ElevenLabs audio before playback, then tries
-the existing Prirodni voice and offline Standardni on preparation failure.
-The bounded preparation budget is 30 seconds for full ElevenLabs generation and
-download, then three seconds for Prirodni. Catalog checks retain a separate
-five-second budget. Cancellation does not wait for those budgets to expire.
-Quota cooldown permits later user-requested retries when optional subscription
-access is denied. Account balances do not establish a key's independent quota.
-Only successful Efendija playback announces recovery; a catalog check or cached
-clip cannot. The explicit voice test bypasses cache and fallback.
+Settings pages own their controls and value rendering; `ui/settings_window.py`
+owns shared settings, signals, gaze selection and page navigation. Speech library
+actions and playback controls are separate responsibilities of the Speech window.
+
+Persisted integer tuning values are coerced through `settings_limits.py`.
+The [user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) owns the defaults,
+preparation limits, fallback order and recovery behavior.
+`speech/elevenlabs.py` builds authenticated requests and catalog choices.
+`speech/eleven_transport.py` bounds HTTPS response sizes, deadlines and network
+workers. It closes active sockets on cancellation or abandonment and checks
+cancellation after connection setup, before sending authenticated requests.
+An occupied worker slot is distinct from a provider timeout and never starts a
+cooldown. Billable POSTs are never automatically replayed; an already sent request
+may still consume credits after cancellation.
+`speech/voice_router.py` prepares whole audio before playback. Its Prirodni fallback
+uses in-process `edge_tts` and the same Qt playback boundary; `EDGE_PLAYBACK_EXE`
+affects explicitly selected Prirodni/Arabic process playback, not this fallback.
+Subscription metadata is optional and cannot block a later user-requested recovery
+attempt. Only successful Efendija playback announces recovery; neither a catalog
+check nor a cached clip can. The explicit voice test bypasses cache and fallback.
 
 `speech/audio_playback.py` owns QMediaPlayer, audio output and memory buffers on
 Qt's thread. Workers wait on a result without blocking Qt; request identities
@@ -315,8 +318,8 @@ with Qt's deferred deletion; clearing the active source synchronously can
 deadlock the Windows FFmpeg backend. Old-player callbacks cannot update a
 replacement's state. `speech/audio_cache.py` stores only
 whole saved phrases/answers after successful playback. Text, voice, model and
-generation parameters determine clip identity. Generation tickets reject late
-writes after clear, entry changes or configuration changes.
+generation parameters and the text-preparation version determine clip identity. Generation tickets reject late
+writes after clear, entry changes, disabled library access or configuration changes.
 
 `SpeechSettings.keyboard_script` is a shared, persisted Latin/Arabic selection.
 The hotbar propagates Settings and keyboard switch signals to all three input
@@ -373,9 +376,9 @@ user's local data, never in source control or diagnostic uploads.
 ElevenLabs credentials use the current user's Windows Credential Manager target
 `PogledAssist/ElevenLabs` through `windows/credentials.py`. The API key is absent
 from settings JSON, logs, installer payloads and version-history snapshots.
-Settings persist only the selected voice/model IDs. The optional audio cache is
+Settings persist voice/model IDs and Stability/Similarity, never the API key. The optional audio cache is
 `%LOCALAPPDATA%\PogledAssist\speech-audio`; files have hashed names and checksums,
-without a plaintext message index. The clips themselves contain the spoken saved
+without a plaintext message index. Each filename combines separate text and audio-identity hashes so entry deletion removes all configuration variants. The clips themselves contain the spoken saved
 text and are private user data. They remain outside installation snapshots.
 Free-form messages are held in memory for playback and are not cached. The
 [user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) owns setup,

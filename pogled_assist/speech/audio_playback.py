@@ -67,7 +67,9 @@ class AudioPlayback(QObject):
         result = self._result
         if position > 0:
             self._progress_at = time.monotonic()
-        if result is not None and position > 0 and not result.started:
+        if result is None or position <= 0:
+            return
+        if not result.started:
             result.started = True
             self.started.emit(self._request)
 

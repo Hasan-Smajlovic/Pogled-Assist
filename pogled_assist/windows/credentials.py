@@ -54,12 +54,7 @@ class WindowsCredentialStore:
             api.CredFree(pointer)
 
     def write(self, key: str) -> None:
-        key = key.strip()
-        if not key or not key.isascii() or any(char.isspace() for char in key):
-            raise CredentialError("Invalid key")
-        data = key.encode("utf-16-le")
-        if len(data) > 2560:
-            raise CredentialError("Invalid key")
+        data = _key_bytes(key)
         blob = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
         credential = Credential(
             Type=CRED_TYPE_GENERIC,
@@ -101,3 +96,21 @@ def _credential_api():
     api.CredFree.argtypes = [ctypes.c_void_p]
     api.CredFree.restype = None
     return api
+
+
+def _key_bytes(key):
+    key = key.strip()
+    if not key:
+        raise CredentialError("Invalid key")
+    if not _plain_key(key):
+        raise CredentialError("Invalid key")
+    data = key.encode("utf-16-le")
+    if len(data) > 2560:
+        raise CredentialError("Invalid key")
+    return data
+
+
+def _plain_key(key):
+    if not key.isascii():
+        return False
+    return not any(char.isspace() for char in key)

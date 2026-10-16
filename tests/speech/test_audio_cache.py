@@ -44,12 +44,15 @@ def test_inflight_audio_cannot_restore_cleared_or_invalidated_files(cache, chang
         config = ElevenConfig(
             "key",
             "different" if change == "voice" else "voice",
-            "eleven_v4" if change == "model" else "eleven_v3",
+            "eleven_v3" if change == "model" else "eleven_v4",
         )
         cache.configure(config.audio_identity, set() if change == "delete" else {"Hvala!"})
     assert not cache.write(ticket, b"late audio")
     assert cache.read(cache.ticket("Hvala!")) is None
-    assert list(cache.root.glob("*.audio")) == []
+    if change in ("clear", "delete"):
+        assert list(cache.root.glob("*.audio")) == []
+    else:
+        assert len(list(cache.root.glob("*.audio"))) == 1
 
 
 def test_corrupt_audio_is_a_cache_miss(cache):
@@ -73,3 +76,37 @@ def test_disk_failure_does_not_escape_or_create_plaintext_fallback(tmp_path):
 def test_cache_is_outside_installation_data_and_version_history(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "profile"))
     assert cache_root() == tmp_path / "profile" / "PogledAssist" / "speech-audio"
+
+
+def test_tuning_round_trip_reuses_previous_audio(cache):
+    from dataclasses import replace
+
+    config = ElevenConfig("key", "voice")
+    cache.write(cache.ticket("Hvala!"), b"natural stability")
+    cache.configure(replace(config, stability=100).audio_identity, {"Hvala!"})
+    assert cache.read(cache.ticket("Hvala!")) is None
+    cache.configure(config.audio_identity, {"Hvala!"})
+    assert cache.read(cache.ticket("Hvala!")) == b"natural stability"
+
+
+def test_library_read_error_disables_tickets_without_removing_audio(cache):
+    config = ElevenConfig("key", "voice")
+    old = cache.ticket("Hvala!")
+    cache.write(old, b"saved")
+    cache.configure(config.audio_identity, None)
+    assert cache.ticket("Hvala!") is None
+    assert not cache.write(old, b"late")
+    assert len(list(cache.root.glob("*.audio"))) == 1
+    cache.configure(config.audio_identity, {"Hvala!"})
+    assert cache.read(cache.ticket("Hvala!")) == b"saved"
+
+
+def test_deleting_entry_removes_all_tuning_versions(cache):
+    from dataclasses import replace
+
+    config = ElevenConfig("key", "voice")
+    cache.write(cache.ticket("Hvala!"), b"first")
+    cache.configure(replace(config, stability=100).audio_identity, {"Hvala!"})
+    cache.write(cache.ticket("Hvala!"), b"second")
+    cache.configure(config.audio_identity, set())
+    assert list(cache.root.glob("*.audio")) == []

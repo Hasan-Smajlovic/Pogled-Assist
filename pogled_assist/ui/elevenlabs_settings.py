@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import os
-
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLineEdit, QProgressBar, QSlider
 
-from ..settings_limits import ELEVENLABS_PERCENT_RANGE
+from ..settings_limits import ELEVENLABS_PERCENT_RANGE, ELEVENLABS_STABILITY_STEPS, ELEVENLABS_STABILITY_DEFAULT, ELEVENLABS_SIMILARITY_DEFAULT
 from ..speech.eleven_account import AccountState, ElevenAccount
-from ..speech.voice_state import VOICE_TEST_TEXT
-from .settings_controls import SettingsControls, content_layout, setting_row, styled_label
+from ..speech.elevenlabs import env_override
+from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, PLAYBACK_LABELS, FALLBACK_NOTE, CREDITS_UNAVAILABLE, VOICE_TEST_TEXT
+from .settings_controls import SettingsControls, busy_indicator, retain_size_when_hidden, content_layout, setting_row, styled_label
 
 
 class ElevenLabsPage(QFrame):
@@ -29,12 +28,25 @@ class ElevenLabsPage(QFrame):
         layout = content_layout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(6)
+        self._layout = layout
+        self._build_header()
+        self._build_key_row()
+        self._build_choices()
+        self._build_stability()
+        self._build_credits()
+        self._build_test_row()
+        self._build_privacy()
+        self.refresh(account.state)
+
+    def _build_header(self):
         header = QHBoxLayout()
-        header.addWidget(controls.button("Nazad", self._back, QSize(120, 58)))
+        header.addWidget(self._controls.button("Nazad", self._back, QSize(120, 58)))
         header.addWidget(styled_label("ElevenLabs · Efendija", "sectionTitle", self), 1)
-        self.check_button = controls.button("Provjeri vezu", self._check_connection, QSize(150, 58))
+        self.check_button = self._controls.button("Provjeri vezu", self._check_connection, QSize(150, 58))
         header.addWidget(self.check_button)
-        layout.addLayout(header)
+        self._layout.addLayout(header)
+
+    def _build_key_row(self):
         row, grid, _hint = setting_row(self, "API ključ")
         self.key_input = QLineEdit(row)
         self.key_input.setAccessibleName("ElevenLabs API ključ")
@@ -43,12 +55,12 @@ class ElevenLabsPage(QFrame):
         self.key_input.setMinimumWidth(100)
         self.key_input.setFixedHeight(58)
         self.key_input.setPlaceholderText("Unesite ključ")
-        self.show_key = controls.toggle_button("Prikaži", self._toggle_key, QSize(100, 58))
-        self.save_key = controls.button("Sačuvaj ključ", self._save_key, QSize(150, 58))
+        self.show_key = self._controls.toggle_button("Prikaži", self._toggle_key, QSize(100, 58))
+        self.save_key = self._controls.button("Sačuvaj ključ", self._save_key, QSize(150, 58))
         self.saved_key = styled_label("Ključ je sačuvan", "settingHint", row)
-        self.replace_key = controls.button("Zamijeni ključ", self._replace_key, QSize(150, 58))
-        self.remove_key = controls.button("Ukloni ključ", self._remove_key, QSize(150, 58))
-        self.cancel_key = controls.button("Odustani", self.clear_input, QSize(120, 58))
+        self.replace_key = self._controls.button("Zamijeni ključ", self._replace_key, QSize(150, 58))
+        self.remove_key = self._controls.button("Ukloni ključ", self._remove_key, QSize(150, 58))
+        self.cancel_key = self._controls.button("Odustani", self.clear_input, QSize(120, 58))
         grid.addWidget(self.saved_key, 0, 1, 2, 1)
         grid.addWidget(self.key_input, 0, 1, 2, 1)
         grid.setColumnStretch(1, 2)
@@ -57,15 +69,17 @@ class ElevenLabsPage(QFrame):
         grid.addWidget(self.save_key, 0, 3, 2, 1)
         grid.addWidget(self.remove_key, 0, 3, 2, 1)
         grid.addWidget(self.cancel_key, 0, 4, 2, 1)
-        layout.addWidget(row)
+        self._layout.addWidget(row)
         self.connection = styled_label("", "settingHint", self)
         self.connection.setTextFormat(Qt.PlainText)
         self.connection.setWordWrap(True)
-        layout.addWidget(self.connection)
-        self.voice = controls.choice(
+        self._layout.addWidget(self.connection)
+
+    def _build_choices(self):
+        self.voice = self._controls.choice(
             (), self._selection, lambda: self._cycle(self.voice), "ElevenLabs glas"
         )
-        self.model = controls.choice(
+        self.model = self._controls.choice(
             (), self._selection, lambda: self._cycle(self.model), "ElevenLabs model"
         )
         choices_layout = QHBoxLayout()
@@ -74,71 +88,76 @@ class ElevenLabsPage(QFrame):
             grid.setHorizontalSpacing(6)
             grid.addWidget(combo, 0, 1, 2, 1)
             choices_layout.addWidget(row, 1)
-        layout.addLayout(choices_layout)
+        self._layout.addLayout(choices_layout)
+
+    def _build_stability(self):
         tuning = QGridLayout()
-        self.stability, self.stability_value = self._tuning_control(tuning, 0, "Stabilnost", 65)
-        self.similarity, self.similarity_value = self._tuning_control(
-            tuning, 1, "Sličnost glasa", 80
-        )
-        layout.addLayout(tuning)
-        self.credits_label = styled_label("Stanje kredita nije dostupno.", "settingTitle", self)
-        layout.addWidget(self.credits_label)
+        self._stability_value = ELEVENLABS_STABILITY_DEFAULT
+        self.stability_buttons = {}
+        tuning.addWidget(styled_label("Stabilnost", "settingTitle", self), 0, 0)
+        choices = QHBoxLayout()
+        for value, label in zip(ELEVENLABS_STABILITY_STEPS, ("Kreativno", "Prirodno", "Stabilno")):
+            button = self._controls.toggle_button(label, lambda step=value: self._set_stability(step), QSize(100, 58))
+            button.setAccessibleName(f"ElevenLabs Stabilnost: {label}")
+            choices.addWidget(button)
+            self.stability_buttons[value] = button
+        tuning.addLayout(choices, 1, 0)
+        self.similarity, self.similarity_value = self._tuning_control(tuning, 1, "Sličnost glasa", ELEVENLABS_SIMILARITY_DEFAULT)
+        self._layout.addLayout(tuning)
+
+    def _build_credits(self):
+        self.credits_label = styled_label(CREDITS_UNAVAILABLE, "settingTitle", self)
+        self._layout.addWidget(self.credits_label)
         self.credits = QProgressBar(self)
         self.credits.setAccessibleName("Preostali ElevenLabs krediti")
         self.credits.setRange(0, 100)
         self.credits.setTextVisible(False)
         self.credits.setFixedHeight(8)
-        layout.addWidget(self.credits)
+        self._layout.addWidget(self.credits)
         self.credits_note = styled_label("", "settingHint", self)
         self.credits_note.setWordWrap(True)
-        layout.addWidget(self.credits_note)
+        self._layout.addWidget(self.credits_note)
+
+    def _build_test_row(self):
         row, grid, _hint = setting_row(
             self,
             VOICE_TEST_TEXT,
             "Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.",
         )
-        self.test_button = controls.button(
+        self.test_button = self._controls.button(
             "Isprobaj Efendiju", self._test_voice, QSize(200, 58), "fa5s.play"
         )
         self.test_button.setObjectName("primaryButton")
         grid.addWidget(self.test_button, 0, 1, 2, 1)
-        self.stop_button = controls.button(
+        self.stop_button = self._controls.button(
             "Zaustavi", self.stop_requested.emit, QSize(120, 58), "fa5s.stop"
         )
         grid.addWidget(self.stop_button, 0, 2, 2, 1)
-        layout.addWidget(row)
-        self.playback_progress = QProgressBar(self)
-        self.playback_progress.setRange(0, 0)
-        self.playback_progress.setFixedHeight(5)
-        self.playback_progress.setTextVisible(False)
-        self.playback_progress.setAccessibleName("Govor je aktivan")
-        layout.addWidget(self.playback_progress)
-        for control in (self.stop_button, self.playback_progress):
-            policy = control.sizePolicy()
-            policy.setRetainSizeWhenHidden(True)
-            control.setSizePolicy(policy)
+        self._layout.addWidget(row)
+        self.playback_progress = busy_indicator(self)
+        self._layout.addWidget(self.playback_progress)
+        retain_size_when_hidden(self.stop_button)
+
+    def _build_privacy(self):
         note = styled_label(
             "Dozvole: izgovor, čitanje glasova i modela; podaci o računu za kredite.\n"
-            "Izgovor šalje tekst ElevenLabsu. Starter ne garantuje obradu bez čuvanja podataka. "
-            "Zamjenski glasovi: Prirodni → Standardni.",
+            "Izgovor šalje tekst ElevenLabsu. ElevenLabs može sačuvati poslani tekst; rad bez čuvanja postoji samo za Enterprise. "
+            + FALLBACK_NOTE,
             "settingHint",
             self,
         )
         note.setWordWrap(True)
-        layout.addWidget(note)
-        layout.addStretch(1)
-        account.changed.connect(self.refresh)
-        self.refresh(account.state)
+        self._layout.addWidget(note)
+        self._layout.addStretch(1)
 
     def configure(self, settings) -> None:
         self._settings = settings
-        for slider, label, value in (
-            (self.stability, self.stability_value, settings.elevenlabs_stability),
-            (self.similarity, self.similarity_value, settings.elevenlabs_similarity),
-        ):
-            with QSignalBlocker(slider):
-                slider.setValue(value)
-            label.setText(f"{value}%")
+        self._stability_value = settings.elevenlabs_stability
+        for value, button in self.stability_buttons.items():
+            button.setChecked(value == self._stability_value)
+        with QSignalBlocker(self.similarity):
+            self.similarity.setValue(settings.elevenlabs_similarity)
+        self.similarity_value.setText(f"{settings.elevenlabs_similarity}%")
         self.refresh(self.account.state)
 
     def _tuning_control(self, grid, column, title, value):
@@ -155,9 +174,7 @@ class ElevenLabsPage(QFrame):
         slider.setTracking(False)
         slider.setFixedHeight(58)
         slider.setToolTip(
-            "Niže: izražajnije · Više: ujednačenije"
-            if title == "Stabilnost"
-            else "Sličnost odabranom glasu"
+            "Sličnost odabranom glasu"
         )
         row = QHBoxLayout()
         for text, delta in (("-", -5), ("+", 5)):
@@ -176,21 +193,31 @@ class ElevenLabsPage(QFrame):
 
     def _tuning_changed(self, _value) -> None:
         self._controls.interrupt_gaze()
-        self.tuning_changed.emit(self.stability.value(), self.similarity.value())
+        self.tuning_changed.emit(self._stability_value, self.similarity.value())
+
+    def _set_stability(self, value) -> None:
+        self._stability_value = value
+        for step, button in self.stability_buttons.items():
+            button.setChecked(step == value)
+        self._tuning_changed(value)
 
     def set_playback_state(self, state: str) -> None:
         self._playback_state = state
         self.refresh(self.account.state)
 
     def refresh(self, state: AccountState) -> None:
-        self._controls.interrupt_gaze()
         self.connection.setText(state.message)
         self._refresh_key(state)
+        self._render_credits(state)
+        self._render_playback(state)
+        self._render_choices(state)
+
+    def _render_credits(self, state):
         subscription = state.subscription
         self.credits_note.setText(state.credits_message)
         self.credits.setVisible(subscription is not None)
         if subscription is None:
-            self.credits_label.setText("Stanje kredita nije dostupno.")
+            self.credits_label.setText(CREDITS_UNAVAILABLE)
         else:
             percent = (
                 min(100, 100 * subscription.remaining // subscription.limit)
@@ -209,15 +236,19 @@ class ElevenLabsPage(QFrame):
             self.credits.setStyleSheet(
                 f"QProgressBar {{ background: #343a36; border: 0; border-radius: 4px; }} QProgressBar::chunk {{ background: {color}; border-radius: 4px; }}"
             )
-        active = self._playback_state in ("preparing", "speaking")
+    def _render_playback(self, state):
+        active = self._playback_state in ACTIVE_PLAYBACK_STATES
         self.stop_button.setVisible(active)
         self.playback_progress.setVisible(active)
-        label = {"preparing": "Pripremam…", "speaking": "Izgovaram…"}.get(
+        label = PLAYBACK_LABELS.get(
             self._playback_state, "Isprobaj Efendiju"
         )
         self.test_button.setText(label)
         self._controls.rename(self.test_button, label)
         self.check_button.setEnabled(state.has_key and not state.busy)
+        self.test_button.setEnabled(not active and self.account.can_test_voice)
+
+    def _render_choices(self, state):
         config = self.account.config if self._settings is not None else None
         for combo, choices, current, variable in (
             (
@@ -233,34 +264,35 @@ class ElevenLabsPage(QFrame):
                 "ELEVENLABS_MODEL_ID",
             ),
         ):
-            with QSignalBlocker(combo):
-                combo.clear()
-                if combo is self.voice:
-                    combo.setPlaceholderText(
-                        "Odaberite sačuvani glas"
-                        if choices
-                        else "Nema glasova"
-                        if state.options is not None
-                        else "Odaberite nakon provjere veze"
-                    )
-                else:
-                    combo.addItem("Odaberite nakon provjere veze", "")
-                for identifier, name in choices:
-                    combo.addItem(name, identifier)
-                if combo is not self.voice and current and combo.findData(current) < 0:
-                    combo.addItem(current, current)
-                index = combo.findData(current)
-                combo.setCurrentIndex(index if combo is self.voice else max(0, index))
-            combo.setEnabled(
-                bool(choices) and not state.busy and not os.environ.get(variable, "").strip()
-            )
-        self.test_button.setEnabled(not active and self.account.can_test_voice)
+            self._populate_choice(combo, choices, current, state.options is not None)
+            combo.setEnabled(_choice_enabled(choices, state.busy, variable))
+
+    def _populate_choice(self, combo, choices, current, checked):
+        with QSignalBlocker(combo):
+            combo.clear()
+            if combo is self.voice:
+                combo.setPlaceholderText(
+                    "Odaberite sačuvani glas"
+                    if choices
+                    else "Nema glasova"
+                    if checked
+                    else "Odaberite nakon provjere veze"
+                )
+            else:
+                combo.addItem("Odaberite nakon provjere veze", "")
+            for identifier, name in choices:
+                combo.addItem(name, identifier)
+            if _missing_model_choice(combo is self.voice, combo.findData(current), current):
+                combo.addItem(current, current)
+            index = combo.findData(current)
+            combo.setCurrentIndex(index if combo is self.voice else max(0, index))
 
     def clear_input(self) -> None:
         self._editing_key = False
         self.key_input.clear()
         self.key_input.setEchoMode(QLineEdit.Password)
         self.show_key.setChecked(False)
+        self.show_key.setText("Prikaži")
         self._refresh_key(self.account.state)
         self.connection.setText(self.account.state.message)
 
@@ -296,11 +328,16 @@ class ElevenLabsPage(QFrame):
         visible = self.key_input.echoMode() == QLineEdit.Password
         self.key_input.setEchoMode(QLineEdit.Normal if visible else QLineEdit.Password)
         self.show_key.setChecked(visible)
+        self.show_key.setText("Sakrij" if visible else "Prikaži")
 
     def _save_key(self) -> None:
         value = self.key_input.text()
+        if not value.strip():
+            self.connection.setText("Unesite API ključ prije čuvanja.")
+            return
         self.key_input.setEchoMode(QLineEdit.Password)
         self.show_key.setChecked(False)
+        self.show_key.setText("Prikaži")
         if self.account.save_key(value):
             self.clear_input()
 
@@ -331,7 +368,7 @@ class ElevenLabsPage(QFrame):
 
     @staticmethod
     def _cycle(combo) -> None:
-        if combo.count() > 1 or (combo.count() == 1 and combo.currentIndex() < 0):
+        if _can_cycle(combo):
             combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
 
 
@@ -364,7 +401,7 @@ class SavedAudioPage(QFrame):
             ),
             (
                 "Nakon izmjene",
-                "Brisanje ili izmjena stavke, glasa ili modela uklanja pripadajući snimak.",
+                "Brisanje ili izmjena teksta uklanja njegove snimke. Promjena glasa, modela ili postavki čuva prethodne snimke za povratak na isti izbor, do ograničenja prostora.",
             ),
         ):
             row, _grid, hint = setting_row(self, title, text)
@@ -389,3 +426,21 @@ class SavedAudioPage(QFrame):
             if self._clear_audio()
             else "Dio zvuka nije obrisan. Pokušajte ponovo."
         )
+
+
+def _can_cycle(combo):
+    if combo.count() > 1:
+        return True
+    return combo.count() == 1 and combo.currentIndex() < 0
+
+
+def _choice_enabled(choices, busy, variable):
+    if busy or not choices:
+        return False
+    return not env_override(variable)
+
+
+def _missing_model_choice(is_voice, index, current):
+    if is_voice:
+        return False
+    return bool(current) and index < 0

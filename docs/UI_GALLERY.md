@@ -12,7 +12,7 @@ When CI is requested or starts, it refreshes an existing gallery comment to show
 that new previews are being prepared, keeping the previous images available.
 The `in_progress` event also covers CI reruns, which do not emit `requested`.
 After CI completes, including failed runs that produced screenshots, the workflow
-publishes a GitHub Pages site with both available resolutions and refreshes the
+publishes a GitHub Pages site with the 1280 × 720 resolution and refreshes the
 same comment. It includes up to six main screenshots in a collapsible section,
 links to the full gallery and ZIP artifact, and the rendered commit and CI result.
 The status header shows the last update time in UTC, the latest PR commit, the

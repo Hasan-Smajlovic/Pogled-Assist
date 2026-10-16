@@ -20,11 +20,14 @@ review criteria for those boundaries. Linked guides own detailed protocols.
   [release guide](../../../docs/WINDOWS_RELEASE.md#update-an-installed-release)
   owns the selection, verification, cancellation, and installation protocol.
 - **Typed messages to speech engines.** `pogled_assist/speech/speech_service.py` passes
-  the message to eSpeak NG or `edge-playback`. eSpeak NG stays offline. The
-  human-like voice sends the message to Microsoft's online service.
+  the message to eSpeak NG, `edge-playback`, in-process `edge_tts`, or ElevenLabs HTTPS.
+  eSpeak NG stays offline. Prirodni sends text to Microsoft; Efendija sends it to
+  ElevenLabs. Credentials and private saved clips follow the
+  [storage contract](../../../docs/ARCHITECTURE.md#persistent-data-and-logs).
 - **Machine environment to executables.** `TOBII_STREAM_ENGINE_DLL`,
   `POGLED_ASSIST_X86_PYTHON`, `ESPEAK_NG_EXE`, `EDGE_PLAYBACK_EXE`, and
-  `TOBII_CALIBRATION_COMMAND` choose what the app loads or runs.
+  `TOBII_CALIBRATION_COMMAND` choose what the app loads or runs. `ELEVENLABS_API_KEY`,
+  `ELEVENLABS_VOICE_ID`, and `ELEVENLABS_MODEL_ID` override local speech configuration.
 - **The x86 bridge process.** `pogled_assist/tracking/tobii_stream_engine_bridge_backend.py`
   parses JSON lines from the 32-bit bridge and discards invalid payloads.
 - **The public repository.** Everything under `language/` and
@@ -68,6 +71,11 @@ review criteria for those boundaries. Linked guides own detailed protocols.
 - Commit only synthetic or project-authored text under `language/` and
   `tests/fixtures/`, following the source and evaluation rules in the
   [Bosnian language guide](../../../language/bs/README.md).
+- `.github/workflows/sync-hotfix.yml` may write only a separate backport branch and
+  draft PR after a trusted repository hotfix merges into master. Validate repository,
+  merge state, base, source repository/ref and merge SHA before mutation. Never run
+  checked-out code or hooks with that token, push protected branches, or auto-merge.
+  [Hotfix process](../../../CONTRIBUTING.md#hotfix-process) owns recovery and review.
 
 ## Before merging
 
@@ -81,7 +89,9 @@ review criteria for those boundaries. Linked guides own detailed protocols.
 - Speech or logging change: no new `logger` call formats message text, phrase
   text, or suggestion input.
 - Workflow change: write permissions remain limited to release preparation,
-  release publication, and the separate gallery deployment and comment jobs.
+  release publication, isolated hotfix backports, and the separate gallery deployment
+  and comment jobs.
   The gallery build and PR CI jobs stay read-only, no `pull_request_target` trigger
   is added, and `scripts/checks/check_github_actions.ps1` passes through the
-  repository verification entry point.
+  repository verification entry point. Hotfix backports also require
+  `tests/release/test_sync_hotfix.py` and human review of the final workflow diff.

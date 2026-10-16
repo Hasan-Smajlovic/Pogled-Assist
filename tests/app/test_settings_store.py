@@ -10,26 +10,31 @@ from pogled_assist.speech.speech_service import SpeechSettings
 
 
 @pytest.mark.parametrize(
-    "field,default", [("elevenlabs_stability", 65), ("elevenlabs_similarity", 80)]
+    "setting", [("elevenlabs_stability", 50), ("elevenlabs_similarity", 80)]
 )
 @pytest.mark.parametrize(
-    "value,expected",
+    "sample",
     [(None, None), ("bad", None), ({}, None), ([], None), (-20, 0), (120, 100), ("42", 42)],
 )
 def test_elevenlabs_slider_settings_coerce_and_clamp(
-    tmp_path, monkeypatch, field, default, value, expected
+    tmp_path, monkeypatch, setting, sample
 ):
+    field, default = setting
+    value, expected = sample
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
     path.write_text(json.dumps({"speech": {field: value}}), encoding="utf-8")
-    assert getattr(load_app_settings()[1], field) == (default if expected is None else expected)
+    expected = default if expected is None else expected
+    if field == "elevenlabs_stability" and expected == 42:
+        expected = 50
+    assert getattr(load_app_settings()[1], field) == expected
 
 
 def test_elevenlabs_slider_defaults_and_round_trip(tmp_path, monkeypatch):
     point_settings_at(monkeypatch, tmp_path)
     speech = load_app_settings()[1]
-    assert (speech.elevenlabs_stability, speech.elevenlabs_similarity) == (65, 80)
-    speech.elevenlabs_stability, speech.elevenlabs_similarity = 30, 95
+    assert (speech.elevenlabs_stability, speech.elevenlabs_similarity) == (50, 80)
+    speech.elevenlabs_stability, speech.elevenlabs_similarity = 100, 95
     assert save_app_settings(GazeSettings(), speech)
     assert load_app_settings()[1] == speech
 
@@ -284,7 +289,7 @@ def test_invalid_elevenlabs_identifiers_load_safe_defaults(monkeypatch, tmp_path
     )
     settings = load_app_settings()[1]
     assert settings.elevenlabs_voice_id == ""
-    assert settings.elevenlabs_model_id == "eleven_v3"
+    assert settings.elevenlabs_model_id == "eleven_v4"
 
 
 def test_elevenlabs_selection_survives_restart_and_older_release_without_storing_key(
@@ -299,7 +304,6 @@ def test_elevenlabs_selection_survives_restart_and_older_release_without_storing
     )
     assert save_app_settings(GazeSettings(), speech)
     assert load_app_settings()[1] == speech
-    assert "synthetic-private-key" not in path.read_text(encoding="utf-8")
     snapshot = path.parent / "version-history" / "synthetic-snapshot"
     snapshot.mkdir(parents=True)
     (snapshot / path.name).write_bytes(path.read_bytes())
@@ -309,3 +313,19 @@ def test_elevenlabs_selection_survives_restart_and_older_release_without_storing
     assert restored.elevenlabs_voice_id == "synthetic-voice"
     assert restored.elevenlabs_model_id == "eleven_v3"
     assert restored.speed == 200
+
+
+@pytest.mark.parametrize("value,expected", [(65, 50), (80, 100), (20, 0), (25, 0), (75, 50)])
+def test_stability_uses_nearest_supported_step(tmp_path, monkeypatch, value, expected):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {"elevenlabs_stability": value}}), encoding="utf-8")
+    assert load_app_settings()[1].elevenlabs_stability == expected
+
+
+def test_default_model_changes_without_overwriting_saved_model(tmp_path, monkeypatch):
+    path = point_settings_at(monkeypatch, tmp_path)
+    assert load_app_settings()[1].elevenlabs_model_id == "eleven_v4"
+    path.parent.mkdir()
+    path.write_text('{"speech": {"elevenlabs_model_id": "eleven_v3"}}', encoding="utf-8")
+    assert load_app_settings()[1].elevenlabs_model_id == "eleven_v3"

@@ -1,23 +1,16 @@
-"""Efendija preparation, recovery and fallback without changing the selected voice."""
+"""Efendija preparation and fallback without changing the selected voice."""
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 from threading import Event, Lock
 
 from .audio_cache import AudioCache, saved_text
 from .elevenlabs import BoundedCall, ElevenClient, ElevenConfig, Subscription
 from .natural_audio import prepare_natural
-from .voice_state import (
-    ELEVEN_TIMEOUT,
-    NATURAL,
-    NATURAL_TIMEOUT,
-    STANDARD,
-    SpeechCancelled,
-    VoiceError,
-    VoiceState,
-)
+from .voice_state import ELEVEN_TIMEOUT, NATURAL, NATURAL_TIMEOUT, STANDARD, SpeechCancelled, VoiceError, VoiceState
 
 
 class RecoveryGate:
@@ -35,13 +28,13 @@ class RecoveryGate:
                 self.reason, self.retry_at, self.balance = "", 0.0, None
 
     def failure(self, config: ElevenConfig, reason: str, balance: Subscription | None) -> None:
+        if reason in ("busy", "too_long"):
+            return
         with self._lock:
             if config.fingerprint != self.fingerprint:
                 return
             self.reason, self.balance = reason, balance
-            delay = 60 if reason == "quota" else 30
-            if reason in ("missing_key", "invalid_key", "configuration", "permission"):
-                delay = 300
+            delay = {"quota": 60, "missing_key": 300, "invalid_key": 300, "configuration": 300, "permission": 300}.get(reason, 30)
             self.retry_at = time.monotonic() + delay
 
     def success(self, config: ElevenConfig) -> bool:
@@ -58,13 +51,32 @@ class RecoveryGate:
 
     def checked(self, config: ElevenConfig, balance: Subscription | None) -> None:
         with self._lock:
-            if config.fingerprint != self.fingerprint:
-                return
-            if self.reason != "quota" or (
-                balance is not None
-                and (self.balance is None or balance.improved_from(self.balance))
-            ):
+            if config.fingerprint == self.fingerprint and self._balance_permits_retry(balance):
                 self.retry_at = 0.0
+
+    def _balance_permits_retry(self, balance) -> bool:
+        if self.reason != "quota":
+            return True
+        if balance is None or balance.remaining <= 0:
+            return False
+        return self.balance is None or balance.improved_from(self.balance)
+
+
+@dataclass(frozen=True)
+class Playback:
+    cancel: Event
+    play: Callable
+    publish: Callable
+
+    def settle(self, result, state) -> str | None:
+        if self.cancel.is_set() or result.outcome == "stopped":
+            raise SpeechCancelled
+        if result.outcome == "finished":
+            return "finished"
+        if result.started:
+            self.publish(replace(state, partial=True))
+            return "failed"
+        return None
 
 
 class VoiceRouter:
@@ -76,106 +88,73 @@ class VoiceRouter:
         self.natural_network = BoundedCall()
         self.natural = prepare_natural
 
-    def run(
-        self,
-        text: str,
-        config: ElevenConfig,
-        cancel: Event,
-        play: Callable,
-        publish: Callable,
-        *,
-        test: bool = False,
-    ) -> str:
-        if cancel.is_set():
+    def run(self, text, config, playback: Playback, *, test=False) -> str:
+        if playback.cancel.is_set():
             raise SpeechCancelled
         ticket = None if test else self.cache.ticket(text, config.audio_identity)
-        cached = self.cache.read(ticket)
-        if cached is not None:
-            result = play(cached, VoiceState(cached=True))
-            if cancel.is_set() or result.outcome == "stopped":
-                raise SpeechCancelled
-            if result.outcome == "finished":
-                return "finished"
-            self.cache.discard(ticket)
-            if result.started:
-                publish(VoiceState(cached=True, partial=True))
-                return "failed"
-
-        started_at = time.monotonic()
-        reason = "offline"
-        quota_balance = None
+        cached = self._play_cached(ticket, playback)
+        if cached:
+            return cached
         try:
             config.validate()
-            previous_reason, retry_at, balance = self.gate.snapshot()
-            if not test and previous_reason:
-                if time.monotonic() < retry_at:
-                    raise VoiceError(previous_reason)
-                if previous_reason == "quota":
-                    try:
-                        updated = self.network.run(
-                            lambda stop, end: self.client.subscription(config.key, stop, end),
-                            cancel,
-                            ELEVEN_TIMEOUT,
-                        )
-                    except VoiceError as error:
-                        if error.reason != "permission":
-                            self.gate.failure(config, "quota", balance)
-                            raise VoiceError("quota") from None
-                        # Account access is optional. After the cooldown, this
-                        # user-requested synthesis can establish recovery.
-                        updated = None
-                    if updated is not None and updated.remaining == 0:
-                        self.gate.failure(config, "quota", updated)
-                        raise VoiceError("quota")
-                    # Account balance cannot expose a key's independent quota.
-                    # A positive balance permits one attempt after the cooldown.
-                    quota_balance = updated
-            remaining = ELEVEN_TIMEOUT - (time.monotonic() - started_at)
-            audio = self.network.run(
-                lambda stop, end: self.client.synthesize(
-                    config, saved_text(text) if ticket else text, stop, end
-                ),
-                cancel,
-                remaining,
-            )
-            result = play(audio, VoiceState())
-            if cancel.is_set() or result.outcome == "stopped":
-                raise SpeechCancelled
-            if result.outcome == "finished":
-                self.cache.write(ticket, audio)
-                recovered = self.gate.success(config)
-                publish(VoiceState(recovered=recovered))
-                return "finished"
-            if result.started:
-                publish(VoiceState(partial=True))
-                return "failed"
-            raise VoiceError("audio")
+            self._check_quota_gate(config, test)
+            return self._synthesize_and_play(text, config, ticket, playback)
         except VoiceError as error:
-            reason = error.reason
-            if cancel.is_set():
+            if playback.cancel.is_set():
                 raise SpeechCancelled from None
-            previous_reason, retry_at, balance = self.gate.snapshot()
-            # Skipping a cooling-down provider must not postpone its next probe.
-            if previous_reason != reason or time.monotonic() >= retry_at:
-                self.gate.failure(config, reason, quota_balance or balance)
-            if test:
-                raise VoiceError(reason) from None
+            self._record_failure(config, error.reason)
+            return self._failed_request(text, error.reason, playback, test)
 
+    def _failed_request(self, text, reason, playback, test):
+        if test:
+            raise VoiceError(reason)
+        return self._play_fallback(text, reason, playback)
+
+    def _play_cached(self, ticket, playback):
+        cached = self.cache.read(ticket)
+        if cached is None:
+            return None
+        result = playback.play(cached, VoiceState(cached=True))
+        outcome = playback.settle(result, VoiceState(cached=True))
+        if outcome != "finished":
+            self.cache.discard(ticket)
+        return outcome
+
+    def _check_quota_gate(self, config, test):
+        reason, retry_at, _balance = self.gate.snapshot()
+        if test:
+            return
+        if reason and time.monotonic() < retry_at:
+            raise VoiceError(reason)
+        # Subscription is optional metadata, not a prerequisite for TTS. After
+        # cooldown, the next user-requested synthesis establishes recovery.
+
+    def _record_failure(self, config, reason):
+        previous, retry_at, balance = self.gate.snapshot()
+        if previous != reason or time.monotonic() >= retry_at:
+            self.gate.failure(config, reason, balance)
+
+    def _synthesize_and_play(self, text, config, ticket, playback):
+        audio = self.network.run(lambda stop, end: self.client.synthesize(config, saved_text(text) if ticket else text, stop, end), playback.cancel, ELEVEN_TIMEOUT)
+        state = VoiceState()
+        outcome = playback.settle(playback.play(audio, state), state)
+        if outcome is None:
+            raise VoiceError("audio")
+        if outcome == "finished":
+            self.cache.write(ticket, audio)
+            playback.publish(VoiceState(recovered=self.gate.success(config)))
+        return outcome
+
+    def _play_fallback(self, text, reason, playback):
         try:
-            audio = self.natural_network.run(
-                lambda stop, end: self.natural(text, stop, end), cancel, NATURAL_TIMEOUT
-            )
-            result = play(audio, VoiceState(NATURAL, reason))
-            if cancel.is_set() or result.outcome == "stopped":
-                raise SpeechCancelled
-            if result.outcome == "finished":
-                return "finished"
-            if result.started:
-                publish(VoiceState(NATURAL, reason, partial=True))
-                return "failed"
+            audio = self.natural_network.run(lambda stop, end: self.natural(text, stop, end), playback.cancel, NATURAL_TIMEOUT)
+            state = VoiceState(NATURAL, reason)
+            outcome = playback.settle(playback.play(audio, state), state)
+            if outcome:
+                return outcome
         except VoiceError:
             pass
-        if cancel.is_set():
+        if playback.cancel.is_set():
             raise SpeechCancelled
-        publish(VoiceState(STANDARD, reason))
+        playback.publish(VoiceState(STANDARD, reason))
         return "standard"

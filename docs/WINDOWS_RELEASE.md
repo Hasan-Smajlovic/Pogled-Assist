@@ -266,16 +266,18 @@ new `VERSION`. It never moves or overwrites an existing version tag.
 
 ## Manual release validation
 
-After a repository hotfix PR merges into master, **Sync hotfix to development**
-opens or reuses a master → development PR immediately, independently of package
-publication. Its `sync-hotfix-pr` job is not a required PR check. Human review,
-required checks and manual squash merge remain mandatory; see the
-[hotfix process](../CONTRIBUTING.md#hotfix-process) for permissions and recovery.
+See the [hotfix process](../CONTRIBUTING.md#hotfix-process) for backport drafts and workflow permissions.
 
 Report software-only and Tobii hardware checks separately.
 
 Software-only checks on a clean Windows x64 environment:
 
+- Play Efendija MP3 audio through packaged Qt Multimedia, including decoder failure and stop/restart.
+- Exercise Prirodni fallback through packaged in-process `edge_tts`, then Standardni offline.
+- Confirm the Credential Manager key and saved settings survive update and rollback.
+- Listen to the Fikret clone with Eleven v4, sentence-case text and all three stability choices.
+- Check quota fallback/recovery and whole saved-entry playback while offline. Service availability,
+  remaining credits and network delay remain external limits; see [ElevenLabs setup](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup).
 - Verify the SHA-256 file before extraction.
 - Run `install_windows.ps1` and confirm installation under `C:\PogledAssist`.
 - Put a sentinel file under a test `C:\TobiiExec` installation and confirm the

@@ -11,7 +11,7 @@ from pogled_assist.suggestions.learning import WRITE_ERROR, LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.service import SuggestionService
 from pogled_assist.suggestions.text import START
-from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 
 
@@ -303,7 +303,7 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
     try:
         service.store.learn_text("Želim vodu i čaj")
         assert service.store.save()
-        window = SettingsWindow(GazeSettings(), SpeechSettings(), suggestions=service)
+        window = SettingsWindow(GazeSettings(), SpeechSettings(), services=SettingsServices(suggestions=service))
         qtbot.addWidget(window)
         window.show()
         window._speech_tab_button.click()

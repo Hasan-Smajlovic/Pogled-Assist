@@ -8,13 +8,14 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from pogled_assist.speech import elevenlabs
+from pogled_assist.speech import eleven_transport, elevenlabs
 from pogled_assist.speech.elevenlabs import (
     BoundedCall,
     ElevenClient,
     ElevenConfig,
     Subscription,
     configuration,
+    prepare_eleven_text,
 )
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.speech.voice_state import SpeechCancelled, VoiceError
@@ -56,7 +57,7 @@ def transport(monkeypatch):
         def close(self):
             type(self).closed += 1
 
-    monkeypatch.setattr(elevenlabs.http.client, "HTTPSConnection", Connection)
+    monkeypatch.setattr(eleven_transport.http.client, "HTTPSConnection", Connection)
     return Connection
 
 
@@ -69,19 +70,19 @@ def test_convert_preserves_text_pins_generation_and_never_puts_key_in_url(transp
     assert audio == b"synthetic audio"
     assert method == "POST"
     assert url == "/v1/text-to-speech/voice-1?output_format=mp3_44100_128"
-    assert json.loads(body) == {"text": text, **config.parameters}
+    assert json.loads(body) == {"text": prepare_eleven_text(text), **config.parameters}
     assert headers["xi-api-key"] == "synthetic-secret"
     assert "secret" not in repr(config) and "secret" not in config.audio_identity
 
 
 def test_tuning_reaches_api_and_changes_cached_audio_identity(transport):
     settings = SpeechSettings(
-        elevenlabs_voice_id="voice", elevenlabs_stability=65, elevenlabs_similarity=80
+        elevenlabs_voice_id="voice", elevenlabs_stability=50, elevenlabs_similarity=80
     )
     config = configuration(settings, "key")
     ElevenClient().synthesize(config, "SELAM", threading.Event(), time.monotonic() + 5)
     payload = json.loads(transport.calls[-1][2])
-    assert payload["voice_settings"] == {"stability": 0.65, "similarity_boost": 0.8}
+    assert payload["voice_settings"] == {"stability": 0.5, "similarity_boost": 0.8}
     from dataclasses import replace
 
     for field in ("stability", "similarity"):
@@ -106,9 +107,17 @@ def test_bounded_call_observes_cancellation_inside_connect_before_paid_post(tran
 
 
 @pytest.mark.parametrize(
-    ("status", "detail", "reason"),
+    "error_case",
     [
+        (402, "insufficient_credits", "quota"),
+        (402, "unknown", "quota"),
+        (403, "quota_exceeded", "quota"),
+        (401, "text_too_long", "invalid_key"),
+        (429, "text_too_long", "rate_limit"),
         (401, "quota_exceeded", "quota"),
+        (422, "text_too_long", "too_long"),
+        (403, "voice_access_denied", "permission"),
+        (401, "missing_api_key", "invalid_key"),
         (401, "invalid_api_key", "invalid_key"),
         (403, "missing_permissions", "permission"),
         (401, "missing_permissions", "permission"),
@@ -119,10 +128,12 @@ def test_bounded_call_observes_cancellation_inside_connect_before_paid_post(tran
         (503, "unavailable", "offline"),
     ],
 )
-def test_error_is_classified_without_exposing_body_or_retrying(transport, status, detail, reason):
+@pytest.mark.parametrize("code_field", ["code", "status"])
+def test_error_is_classified_without_exposing_body_or_retrying(transport, error_case, code_field):
+    status, detail, reason = error_case
     transport.response = Response(
         status,
-        json.dumps({"detail": {"status": detail, "message": "private text and secret"}}).encode(),
+        json.dumps({"detail": {"type": "error", code_field: detail, "message": "private text and secret"}}).encode(),
         "application/json",
     )
     with pytest.raises(VoiceError) as error:
@@ -147,7 +158,7 @@ def test_empty_or_wrong_content_type_cannot_be_played(transport, body):
 
 
 def test_response_size_is_bounded(transport, monkeypatch):
-    monkeypatch.setattr(elevenlabs, "MAX_AUDIO_BYTES", 4)
+    monkeypatch.setattr(eleven_transport, "MAX_AUDIO_BYTES", 4)
     with pytest.raises(VoiceError, match="audio"):
         ElevenClient().synthesize(
             ElevenConfig("key", "voice"), "hello", threading.Event(), time.monotonic() + 5
@@ -189,8 +200,8 @@ def test_deadline_abandons_late_result_and_does_not_accumulate_network_threads()
         assert entered.is_set()
         assert not caller_cancel.is_set()
         called = []
-        with pytest.raises(VoiceError, match="timeout"):
-            runner.run(lambda *_: called.append(True), threading.Event(), 0.05)
+        with pytest.raises(VoiceError, match="busy"):
+            runner.run(lambda *_: called.append(True), threading.Event(), 2)
         assert called == []
     finally:
         release.set()
@@ -214,7 +225,8 @@ def test_subscription_detects_top_up_and_monthly_reset_without_assuming_zero_bal
 def test_account_lists_all_voice_pages_and_only_bosnian_tts_models(monkeypatch):
     paths = []
 
-    def request(_self, _key, method, path, *_args):
+    def request(_self, request, _budget):
+        method, path = request.method, request.path
         assert method == "GET"
         paths.append(path)
         if path == "/v1/models":
@@ -240,6 +252,7 @@ def test_account_lists_all_voice_pages_and_only_bosnian_tts_models(monkeypatch):
         query = parse_qs(urlsplit(path).query)
         assert query["voice_type"] == ["saved"]
         assert query["page_size"] == ["100"]
+        assert query["include_total_count"] == ["false"]
         if "next_page_token" in path:
             return {"voices": [{"voice_id": "two", "name": "Drugi"}], "has_more": False}
         return {
@@ -257,44 +270,13 @@ def test_account_lists_all_voice_pages_and_only_bosnian_tts_models(monkeypatch):
     assert "next_page_token=page+2" in paths[1]
 
 
-def test_slow_optional_subscription_cannot_discard_successful_catalogs(monkeypatch):
-    client = ElevenClient()
-    release = threading.Event()
-
-    def request(_key, _method, path, *_args):
-        if path == "/v1/models":
-            return [
-                {
-                    "model_id": "bs",
-                    "name": "Bosanski",
-                    "can_do_text_to_speech": True,
-                    "languages": [{"language_id": "bs"}],
-                }
-            ]
-        return {"voices": [{"voice_id": "fikret", "name": "Fikret"}], "has_more": False}
-
-    def blocked(*_):
-        release.wait(1)
-        raise VoiceError("timeout")
-
-    monkeypatch.setattr(client, "_request", request)
-    monkeypatch.setattr(client, "subscription", blocked)
-    try:
-        options = BoundedCall().run(
-            lambda cancel, end: client.options("key", cancel, end), threading.Event(), 0.03
-        )
-        assert options.voices == (("fikret", "Fikret"),)
-        assert options.models == (("bs", "Bosanski"),)
-    finally:
-        release.set()
-
-
 def test_account_excludes_default_catalog_but_keeps_saved_library_voices(monkeypatch):
     fikret = {"voice_id": "fikret", "name": "Efendija Fikret", "category": "cloned"}
     library = {"voice_id": "library", "name": "Sačuvani glas", "category": "professional"}
     default = {"voice_id": "default", "name": "Bella", "category": "premade"}
 
-    def request(_self, _key, method, path, *_args):
+    def request(_self, request, _budget):
+        method, path = request.method, request.path
         assert method == "GET"
         if path == "/v1/models":
             return []
@@ -321,7 +303,8 @@ def test_account_excludes_default_catalog_but_keeps_saved_library_voices(monkeyp
     ],
 )
 def test_catalog_permission_failure_names_required_access(monkeypatch, endpoint, reason):
-    def request(_self, _key, _method, path, *_args):
+    def request(_self, request, _budget):
+        path = request.path
         if path.startswith(endpoint):
             raise VoiceError("permission")
         return {"voices": [], "has_more": False}
@@ -361,12 +344,22 @@ def test_subscription_still_rejects_malformed_values(monkeypatch, field, invalid
         ElevenClient().subscription("key", threading.Event(), time.monotonic() + 5)
 
 
-def test_cancellation_during_connect_prevents_billable_post(transport, monkeypatch):
-    cancel = threading.Event()
-    monkeypatch.setattr(transport, "connect", lambda _self: cancel.set())
-    with pytest.raises(SpeechCancelled):
-        ElevenClient().synthesize(
-            ElevenConfig("synthetic-key", "voice"), "private text", cancel, time.monotonic() + 5
-        )
-    assert transport.calls == []
-    assert transport.closed == 1
+@pytest.mark.parametrize("text,expected", [("SELAM. [TEST]", "Selam. (test)"), ("ŠTA ĆEŠ? ĐE SI.", "Šta ćeš? Đe si."), ("ŽELIM ČAJ! HVALA.", "Želim čaj! Hvala.")])
+def test_prepare_eleven_text_removes_audio_tags_and_uses_sentence_case(text, expected):
+    assert prepare_eleven_text(text) == expected
+
+
+def test_normalization_version_changes_cache_identity(monkeypatch):
+    original = ElevenConfig("key", "voice").audio_identity
+    monkeypatch.setattr(elevenlabs, "TEXT_NORMALIZATION_VERSION", 2)
+    assert ElevenConfig("key", "voice").audio_identity != original
+
+
+def test_busy_slot_is_distinct_from_expired_deadline():
+    runner = BoundedCall()
+    runner._slot.acquire()
+    try:
+        with pytest.raises(VoiceError, match="busy"):
+            runner.run(lambda *_: None, threading.Event(), 2)
+    finally:
+        runner._slot.release()

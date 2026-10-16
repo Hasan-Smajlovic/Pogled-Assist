@@ -15,6 +15,10 @@ import pytest
 from scripts.ui import prepare_ui_gallery_site as site
 
 
+BASE_URL = "https://example.github.io/Pogled-Assist"
+FIRST_SHA = "a" * 40
+SECOND_SHA = "b" * 40
+
 def test_legacy_dual_resolution_archive_publishes_only_720p(tmp_path):
     api = FakeGitHub()
     for artifact_id in api.archives:
@@ -24,11 +28,6 @@ def test_legacy_dual_resolution_archive_publishes_only_720p(tmp_path):
     site.prepare_site(api, tmp_path / "site", BASE_URL)
     assert list((tmp_path / "site").rglob("1280x720/speech.png"))
     assert not list((tmp_path / "site").rglob("1440x900"))
-
-
-BASE_URL = "https://example.github.io/Pogled-Assist"
-FIRST_SHA = "a" * 40
-SECOND_SHA = "b" * 40
 
 
 def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):

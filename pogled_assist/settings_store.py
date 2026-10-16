@@ -17,6 +17,7 @@ from .settings_limits import (
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
     ELEVENLABS_PERCENT_RANGE,
+    ELEVENLABS_STABILITY_STEPS,
     LETTERS_PER_GROUP_RANGE,
     SMOOTHING_RANGE,
     SPEECH_AMPLITUDE_RANGE,
@@ -148,6 +149,7 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
     voice_preset = str(settings.voice_preset).strip() or VOICE_PRESET_DEFAULT
     if voice_preset not in VOICE_PRESET_LABELS:
         voice_preset = VOICE_PRESET_DEFAULT
+    settings = _coerce_elevenlabs(mapping, settings)
     return replace(
         settings,
         language=language,
@@ -161,9 +163,15 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
         amplitude=clamp(settings.amplitude, SPEECH_AMPLITUDE_RANGE),
         letters_per_group=clamp(settings.letters_per_group, LETTERS_PER_GROUP_RANGE),
         voice_preset=voice_preset,
+    )
+
+
+def _coerce_elevenlabs(mapping, settings):
+    return replace(
+        settings,
         elevenlabs_voice_id=valid_identifier(mapping.get("elevenlabs_voice_id")),
         elevenlabs_model_id=valid_identifier(mapping.get("elevenlabs_model_id")) or DEFAULT_MODEL,
-        elevenlabs_stability=clamp(settings.elevenlabs_stability, ELEVENLABS_PERCENT_RANGE),
+        elevenlabs_stability=min(ELEVENLABS_STABILITY_STEPS, key=lambda step: abs(step - settings.elevenlabs_stability)),
         elevenlabs_similarity=clamp(settings.elevenlabs_similarity, ELEVENLABS_PERCENT_RANGE),
     )
 
