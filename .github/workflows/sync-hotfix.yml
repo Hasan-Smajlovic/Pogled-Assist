@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: sync-hotfix-development
+  # Each hotfix owns a sync/<PR-number> branch; distinct hotfixes must not cancel pending runs.
+  group: sync-hotfix-development-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
@@ -105,16 +106,21 @@ jobs:
               parents = git("rev-list", "--parents", "-n", "1", pull["merge_commit_sha"]).stdout.split()
               mainline = ["-m", "1"] if len(parents) > 2 else []
               try:
-                  git("cherry-pick", *mainline, pull["merge_commit_sha"])
+                  git("cherry-pick", "--no-commit", *mainline, pull["merge_commit_sha"])
               except subprocess.CalledProcessError as error:
                   unchanged = not git("diff", "--name-only", "HEAD").stdout.strip()
-                  conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.strip()
-                  git("cherry-pick", "--abort")
-                  if unchanged and not conflicts:
-                      summary("No PR needed: the hotfix changes are already present.")
-                  else:
+                  conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
+                  if conflicts != ["VERSION"] and not (unchanged and not conflicts):
+                      git("reset", "--hard", "HEAD")
                       summary("Hotfix cherry-pick failed; nothing was pushed. Resolve it on a branch from development.\n" + safe_error(error))
+                      return False
+              # Release versions belong to master; preserve development's version even on conflict.
+              git("restore", "--source=HEAD", "--staged", "--worktree", "--", "VERSION")
+              if not git("diff", "--cached", "--name-only").stdout.strip():
+                  git("reset", "--hard", "HEAD")
+                  summary("No PR needed: no hotfix changes remain after excluding VERSION.")
                   return False
+              git("-c", "commit.gpgsign=false", "commit", "-C", pull["merge_commit_sha"])
               return push_or_reuse(git, branch)
 
           def push_or_reuse(git, branch):
@@ -131,12 +137,13 @@ jobs:
 
           def pr_body(pull):
               return (f"Refs #{pull['number']} (original hotfix PR).\n\n"
-                      "## Outcome\n\nBackport the released hotfix by cherry-picking it onto a branch from development.\n\n"
+                      "## Outcome\n\nBackport the released hotfix onto a branch from development, excluding the root VERSION file. "
+                      "Development keeps its existing version; master owns release versions.\n\n"
                       "## Verification\n\n- Automated: Not run here; review required CI checks.\n"
                       "- Manual Windows: Not run; requires validation on Windows.\n"
                       "- Manual Tobii hardware: Not run; requires the target device.\n\n"
                       "The original hotfix PR owns the release evidence.\n\n"
-                      "## Risks and limits\n\nReview the complete backport diff, including any release version changes. "
+                      "## Risks and limits\n\nReview the complete backport diff. "
                       "Squash-merge manually after required checks and independent review pass.\n")
 
           def main():

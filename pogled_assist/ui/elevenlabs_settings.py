@@ -5,11 +5,29 @@ from __future__ import annotations
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLineEdit, QProgressBar, QSlider
 
-from ..settings_limits import ELEVENLABS_PERCENT_RANGE, ELEVENLABS_STABILITY_STEPS, ELEVENLABS_STABILITY_DEFAULT, ELEVENLABS_SIMILARITY_DEFAULT
+from ..settings_limits import (
+    ELEVENLABS_PERCENT_RANGE,
+    ELEVENLABS_SIMILARITY_DEFAULT,
+    ELEVENLABS_STABILITY_DEFAULT,
+    ELEVENLABS_STABILITY_STEPS,
+)
 from ..speech.eleven_account import AccountState, ElevenAccount
 from ..speech.elevenlabs import env_override
-from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, PLAYBACK_LABELS, FALLBACK_NOTE, CREDITS_UNAVAILABLE, VOICE_TEST_TEXT
-from .settings_controls import SettingsControls, busy_indicator, retain_size_when_hidden, content_layout, setting_row, styled_label
+from ..speech.voice_state import (
+    ACTIVE_PLAYBACK_STATES,
+    CREDITS_UNAVAILABLE,
+    FALLBACK_NOTE,
+    PLAYBACK_LABELS,
+    VOICE_TEST_TEXT,
+)
+from .settings_controls import (
+    SettingsControls,
+    busy_indicator,
+    content_layout,
+    retain_size_when_hidden,
+    setting_row,
+    styled_label,
+)
 
 
 class ElevenLabsPage(QFrame):
@@ -42,7 +60,9 @@ class ElevenLabsPage(QFrame):
         header = QHBoxLayout()
         header.addWidget(self._controls.button("Nazad", self._back, QSize(120, 58)))
         header.addWidget(styled_label("ElevenLabs · Efendija", "sectionTitle", self), 1)
-        self.check_button = self._controls.button("Provjeri vezu", self._check_connection, QSize(150, 58))
+        self.check_button = self._controls.button(
+            "Provjeri vezu", self._check_connection, QSize(150, 58)
+        )
         header.addWidget(self.check_button)
         self._layout.addLayout(header)
 
@@ -58,7 +78,9 @@ class ElevenLabsPage(QFrame):
         self.show_key = self._controls.toggle_button("Prikaži", self._toggle_key, QSize(100, 58))
         self.save_key = self._controls.button("Sačuvaj ključ", self._save_key, QSize(150, 58))
         self.saved_key = styled_label("Ključ je sačuvan", "settingHint", row)
-        self.replace_key = self._controls.button("Zamijeni ključ", self._replace_key, QSize(150, 58))
+        self.replace_key = self._controls.button(
+            "Zamijeni ključ", self._replace_key, QSize(150, 58)
+        )
         self.remove_key = self._controls.button("Ukloni ključ", self._remove_key, QSize(150, 58))
         self.cancel_key = self._controls.button("Odustani", self.clear_input, QSize(120, 58))
         grid.addWidget(self.saved_key, 0, 1, 2, 1)
@@ -96,13 +118,19 @@ class ElevenLabsPage(QFrame):
         self.stability_buttons = {}
         tuning.addWidget(styled_label("Stabilnost", "settingTitle", self), 0, 0)
         choices = QHBoxLayout()
-        for value, label in zip(ELEVENLABS_STABILITY_STEPS, ("Kreativno", "Prirodno", "Stabilno")):
-            button = self._controls.toggle_button(label, lambda step=value: self._set_stability(step), QSize(100, 58))
+        for value, label in zip(
+            ELEVENLABS_STABILITY_STEPS, ("Kreativno", "Prirodno", "Stabilno"), strict=True
+        ):
+            button = self._controls.toggle_button(
+                label, lambda step=value: self._set_stability(step), QSize(100, 58)
+            )
             button.setAccessibleName(f"ElevenLabs Stabilnost: {label}")
             choices.addWidget(button)
             self.stability_buttons[value] = button
         tuning.addLayout(choices, 1, 0)
-        self.similarity, self.similarity_value = self._tuning_control(tuning, 1, "Sličnost glasa", ELEVENLABS_SIMILARITY_DEFAULT)
+        self.similarity, self.similarity_value = self._tuning_control(
+            tuning, 1, "Sličnost glasa", ELEVENLABS_SIMILARITY_DEFAULT
+        )
         self._layout.addLayout(tuning)
 
     def _build_credits(self):
@@ -173,9 +201,7 @@ class ElevenLabsPage(QFrame):
         slider.setValue(value)
         slider.setTracking(False)
         slider.setFixedHeight(58)
-        slider.setToolTip(
-            "Sličnost odabranom glasu"
-        )
+        slider.setToolTip("Sličnost odabranom glasu")
         row = QHBoxLayout()
         for text, delta in (("-", -5), ("+", 5)):
             button = self._controls.button(
@@ -236,13 +262,12 @@ class ElevenLabsPage(QFrame):
             self.credits.setStyleSheet(
                 f"QProgressBar {{ background: #343a36; border: 0; border-radius: 4px; }} QProgressBar::chunk {{ background: {color}; border-radius: 4px; }}"
             )
+
     def _render_playback(self, state):
         active = self._playback_state in ACTIVE_PLAYBACK_STATES
         self.stop_button.setVisible(active)
         self.playback_progress.setVisible(active)
-        label = PLAYBACK_LABELS.get(
-            self._playback_state, "Isprobaj Efendiju"
-        )
+        label = PLAYBACK_LABELS.get(self._playback_state, "Isprobaj Efendiju")
         self.test_button.setText(label)
         self._controls.rename(self.test_button, label)
         self.check_button.setEnabled(state.has_key and not state.busy)

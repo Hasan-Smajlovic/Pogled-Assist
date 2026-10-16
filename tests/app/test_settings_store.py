@@ -9,16 +9,12 @@ from pogled_assist.settings_store import load_app_settings, save_app_settings
 from pogled_assist.speech.speech_service import SpeechSettings
 
 
-@pytest.mark.parametrize(
-    "setting", [("elevenlabs_stability", 50), ("elevenlabs_similarity", 80)]
-)
+@pytest.mark.parametrize("setting", [("elevenlabs_stability", 50), ("elevenlabs_similarity", 80)])
 @pytest.mark.parametrize(
     "sample",
     [(None, None), ("bad", None), ({}, None), ([], None), (-20, 0), (120, 100), ("42", 42)],
 )
-def test_elevenlabs_slider_settings_coerce_and_clamp(
-    tmp_path, monkeypatch, setting, sample
-):
+def test_elevenlabs_slider_settings_coerce_and_clamp(tmp_path, monkeypatch, setting, sample):
     field, default = setting
     value, expected = sample
     path = point_settings_at(monkeypatch, tmp_path)

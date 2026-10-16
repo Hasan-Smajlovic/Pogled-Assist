@@ -18,9 +18,6 @@ if os.name == "nt":
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
-from scripts.ui.capture_gaze_check import CaptureGazeCheck
-from scripts.ui.capture_speech_voices import CaptureSpeechVoices
-
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
@@ -42,6 +39,8 @@ from pogled_assist.ui.controller_window import ControllerWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
+from scripts.ui.capture_gaze_check import CaptureGazeCheck
+from scripts.ui.capture_speech_voices import CaptureSpeechVoices
 
 
 class PreviewAppBar:
@@ -390,7 +389,16 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
         releases = PreviewReleaseManager()
-        self.settings = SettingsWindow(self.gaze_settings, self.speech_settings, services=SettingsServices(suggestions=suggestions, update_manager=releases, account=ElevenAccount(suggestions, store=PreviewCredentials()), clear_audio=lambda: True))
+        self.settings = SettingsWindow(
+            self.gaze_settings,
+            self.speech_settings,
+            services=SettingsServices(
+                suggestions=suggestions,
+                update_manager=releases,
+                account=ElevenAccount(suggestions, store=PreviewCredentials()),
+                clear_audio=lambda: True,
+            ),
+        )
         self.widgets.append(self.settings)
         size = min(self.size[0], 1280), min(self.size[1], 720)
         for index, name, title in (

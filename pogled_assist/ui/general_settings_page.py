@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QGridLayout, QFrame
+from PySide6.QtWidgets import QFrame, QGridLayout
+
 from .release_update_row import ReleaseUpdateRow
 from .settings_controls import action_grid, content_layout, styled_label
 
@@ -64,9 +65,7 @@ class GeneralSettingsPage(QFrame):
 
     def refresh(self, settings, startup_desired):
         self._startup_checkbox.setChecked(
-            settings.start_with_windows
-            if startup_desired is None
-            else startup_desired
+            settings.start_with_windows if startup_desired is None else startup_desired
         )
         self._logging_checkbox.setChecked(settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(settings.show_launcher_window)

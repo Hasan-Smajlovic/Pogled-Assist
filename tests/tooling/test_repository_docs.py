@@ -144,7 +144,11 @@ def _design_page_errors(document, page):
         errors.append(f"{document.name}: expected one standalone main view")
     if len(page.ids) != len(set(page.ids)):
         errors.append(f"{document.name}: duplicate element IDs")
-    errors.extend(f"{document.name}: missing labelled element {identifier}" for identifier in page.id_references if identifier not in page.ids)
+    errors.extend(
+        f"{document.name}: missing labelled element {identifier}"
+        for identifier in page.id_references
+        if identifier not in page.ids
+    )
     for target in page.links:
         errors.extend(_design_link_errors(document, target))
     return errors
@@ -173,7 +177,11 @@ def test_design_scripts_only_require_elements_on_their_own_page() -> None:
 
 def _script_element_errors(document, page, script):
     content = (document.parent / script).read_text(encoding="utf-8")
-    return [f"{document.name}: {script} requires absent #{identifier}" for identifier in SCRIPT_ELEMENT_ID.findall(content) if identifier not in page.ids]
+    return [
+        f"{document.name}: {script} requires absent #{identifier}"
+        for identifier in SCRIPT_ELEMENT_ID.findall(content)
+        if identifier not in page.ids
+    ]
 
 
 def test_required_guides_and_templates_exist() -> None:
@@ -437,7 +445,11 @@ def _skill_metadata_errors(document: Path) -> list[str]:
     if not isinstance(metadata, dict):
         return ["metadata must be a YAML mapping"]
 
-    return [error for field in ("name", "description") if (error := _metadata_field_error(document, metadata, field))]
+    return [
+        error
+        for field in ("name", "description")
+        if (error := _metadata_field_error(document, metadata, field))
+    ]
 
 
 def _metadata_field_error(document, metadata, field):
@@ -493,7 +505,11 @@ def _maintained_markdown() -> list[Path]:
 
 
 def _broken_local_links(document: Path) -> list[str]:
-    return [target for target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8")) if _local_link_broken(document, target)]
+    return [
+        target
+        for target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8"))
+        if _local_link_broken(document, target)
+    ]
 
 
 def _local_link_broken(document, raw_target):

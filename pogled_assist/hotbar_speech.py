@@ -1,12 +1,14 @@
 """Settings speech tests and their status on the hotbar."""
 
 import logging
+
 from .keyboard_layouts import ARABIC_SCRIPT
 from .speech.speech_library import saved_entry_texts
 
 logger = logging.getLogger(__name__)
 SPEECH_TEST_TEXT = "Zdravo. Ovo je test govora na bosanskom jeziku."
 ARABIC_SPEECH_TEST_TEXT = "مَرْحَبًا. هٰذَا اخْتِبَارٌ لِلصَّوْتِ بِاللُّغَةِ الْعَرَبِيَّةِ."
+
 
 class HotbarSpeech:
     def _setup_speech(self, speech, library_store):
@@ -84,4 +86,3 @@ class HotbarSpeech:
         self._set_status(text)
         if self._settings_window is not None:
             self._settings_window.set_status(text if settings_text is None else settings_text)
-

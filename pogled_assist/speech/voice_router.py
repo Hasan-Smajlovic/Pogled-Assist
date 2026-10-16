@@ -10,7 +10,15 @@ from threading import Event, Lock
 from .audio_cache import AudioCache, saved_text
 from .elevenlabs import BoundedCall, ElevenClient, ElevenConfig, Subscription
 from .natural_audio import prepare_natural
-from .voice_state import ELEVEN_TIMEOUT, NATURAL, NATURAL_TIMEOUT, STANDARD, SpeechCancelled, VoiceError, VoiceState
+from .voice_state import (
+    ELEVEN_TIMEOUT,
+    NATURAL,
+    NATURAL_TIMEOUT,
+    STANDARD,
+    SpeechCancelled,
+    VoiceError,
+    VoiceState,
+)
 
 
 class RecoveryGate:
@@ -34,7 +42,13 @@ class RecoveryGate:
             if config.fingerprint != self.fingerprint:
                 return
             self.reason, self.balance = reason, balance
-            delay = {"quota": 60, "missing_key": 300, "invalid_key": 300, "configuration": 300, "permission": 300}.get(reason, 30)
+            delay = {
+                "quota": 60,
+                "missing_key": 300,
+                "invalid_key": 300,
+                "configuration": 300,
+                "permission": 300,
+            }.get(reason, 30)
             self.retry_at = time.monotonic() + delay
 
     def success(self, config: ElevenConfig) -> bool:
@@ -138,7 +152,13 @@ class VoiceRouter:
             self.gate.failure(config, reason, balance)
 
     def _synthesize_and_play(self, text, config, ticket, playback):
-        audio = self.network.run(lambda stop, end: self.client.synthesize(config, saved_text(text) if ticket else text, stop, end), playback.cancel, ELEVEN_TIMEOUT)
+        audio = self.network.run(
+            lambda stop, end: self.client.synthesize(
+                config, saved_text(text) if ticket else text, stop, end
+            ),
+            playback.cancel,
+            ELEVEN_TIMEOUT,
+        )
         if playback.cancel.is_set():
             raise SpeechCancelled
         state = VoiceState()
@@ -157,7 +177,9 @@ class VoiceRouter:
 
     def _play_fallback(self, text, reason, playback):
         try:
-            audio = self.natural_network.run(lambda stop, end: self.natural(text, stop, end), playback.cancel, NATURAL_TIMEOUT)
+            audio = self.natural_network.run(
+                lambda stop, end: self.natural(text, stop, end), playback.cancel, NATURAL_TIMEOUT
+            )
             state = VoiceState(NATURAL, reason)
             outcome = playback.settle(playback.play(audio, state), state)
             if outcome:

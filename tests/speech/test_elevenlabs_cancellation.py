@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 
 import pytest
-
 from _speech_service_fakes import service as service
 
 from pogled_assist.speech import eleven_transport

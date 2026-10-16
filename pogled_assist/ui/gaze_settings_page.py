@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QGridLayout, QFrame
+from PySide6.QtWidgets import QFrame, QGridLayout
+
 from .settings_controls import action_grid, content_layout, styled_label
 
 
@@ -32,7 +33,9 @@ class GazeSettingsPage(QFrame):
             0,
         )
         self._tracking_notifications_checkbox = self._controls.checkbox(
-            "Obavijesti o praćenju pogleda", self._owner._toggle_tracking_notifications, QSize(300, 58)
+            "Obavijesti o praćenju pogleda",
+            self._owner._toggle_tracking_notifications,
+            QSize(300, 58),
         )
         header.addWidget(self._tracking_notifications_checkbox, 0, 1, 2, 1)
         layout.addLayout(header)
@@ -85,7 +88,10 @@ class GazeSettingsPage(QFrame):
             "fa5s.mouse-pointer",
         )
         self._gaze_bubble_button = self._controls.toggle_button(
-            "Prikaži oznaku pogleda", self._owner._toggle_gaze_bubble, QSize(210, 58), "fa5s.bullseye"
+            "Prikaži oznaku pogleda",
+            self._owner._toggle_gaze_bubble,
+            QSize(210, 58),
+            "fa5s.bullseye",
         )
         self._interaction_overlay_button = self._controls.toggle_button(
             "Prikaži napredak radnje",
@@ -125,7 +131,5 @@ class GazeSettingsPage(QFrame):
         self._move_pointer_button.setChecked(settings.move_mouse)
         self._gaze_bubble_button.setChecked(settings.show_gaze_bubble)
         self._interaction_overlay_button.setChecked(settings.show_interaction_overlay)
-        self._tracking_notifications_checkbox.setChecked(
-            settings.show_tracking_notifications
-        )
+        self._tracking_notifications_checkbox.setChecked(settings.show_tracking_notifications)
         self._precision_zoom_checkbox.setChecked(settings.use_precision_zoom)

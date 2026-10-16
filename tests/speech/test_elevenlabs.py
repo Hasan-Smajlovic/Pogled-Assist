@@ -133,7 +133,9 @@ def test_error_is_classified_without_exposing_body_or_retrying(transport, error_
     status, detail, reason = error_case
     transport.response = Response(
         status,
-        json.dumps({"detail": {"type": "error", code_field: detail, "message": "private text and secret"}}).encode(),
+        json.dumps(
+            {"detail": {"type": "error", code_field: detail, "message": "private text and secret"}}
+        ).encode(),
         "application/json",
     )
     with pytest.raises(VoiceError) as error:
@@ -344,7 +346,14 @@ def test_subscription_still_rejects_malformed_values(monkeypatch, field, invalid
         ElevenClient().subscription("key", threading.Event(), time.monotonic() + 5)
 
 
-@pytest.mark.parametrize("text,expected", [("SELAM. [TEST]", "Selam. (test)"), ("ŠTA ĆEŠ? ĐE SI.", "Šta ćeš? Đe si."), ("ŽELIM ČAJ! HVALA.", "Želim čaj! Hvala.")])
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("SELAM. [TEST]", "Selam. (test)"),
+        ("ŠTA ĆEŠ? ĐE SI.", "Šta ćeš? Đe si."),
+        ("ŽELIM ČAJ! HVALA.", "Želim čaj! Hvala."),
+    ],
+)
 def test_prepare_eleven_text_removes_audio_tags_and_uses_sentence_case(text, expected):
     assert prepare_eleven_text(text) == expected
 

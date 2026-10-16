@@ -1,6 +1,7 @@
 """Deterministic ElevenLabs and speech provider gallery scenarios."""
 
 from dataclasses import replace
+
 from pogled_assist.speech.eleven_account import AccountState
 from pogled_assist.speech.elevenlabs import AccountOptions, Subscription
 from pogled_assist.speech.voice_state import VoiceState
@@ -98,36 +99,35 @@ class CaptureSpeechVoices:
         self.speech._input.clear()
 
 
-
 def _account_scenarios(options, connected):
     return (
-            ("connected", connected),
-            ("replacing", connected),
-            (
-                "empty-voices",
-                AccountState(
-                    True,
-                    message="ElevenLabs je povezan.",
-                    options=replace(options, voices=()),
-                ),
+        ("connected", connected),
+        ("replacing", connected),
+        (
+            "empty-voices",
+            AccountState(
+                True,
+                message="ElevenLabs je povezan.",
+                options=replace(options, voices=()),
             ),
-            ("missing", AccountState()),
-            ("invalid", AccountState(True, message="Provjerite ElevenLabs ključ u Postavkama.")),
-            (
-                "permission",
-                AccountState(
-                    True, message="Za listu glasova dozvolite čitanje glasova na ElevenLabs ključu."
-                ),
+        ),
+        ("missing", AccountState()),
+        ("invalid", AccountState(True, message="Provjerite ElevenLabs ključ u Postavkama.")),
+        (
+            "permission",
+            AccountState(
+                True, message="Za listu glasova dozvolite čitanje glasova na ElevenLabs ključu."
             ),
-            ("save-failed", AccountState(True, message="Ključ nije sačuvan. Pokušajte ponovo.")),
-            (
-                "quota",
-                AccountState(
-                    True,
-                    message="Nema dovoljno ElevenLabs kredita. Koristi se Prirodni glas.",
-                    options=options,
-                    subscription=Subscription(30000, 30000),
-                    credits_message="Posljednje provjereno stanje računa.",
-                ),
+        ),
+        ("save-failed", AccountState(True, message="Ključ nije sačuvan. Pokušajte ponovo.")),
+        (
+            "quota",
+            AccountState(
+                True,
+                message="Nema dovoljno ElevenLabs kredita. Koristi se Prirodni glas.",
+                options=options,
+                subscription=Subscription(30000, 30000),
+                credits_message="Posljednje provjereno stanje računa.",
             ),
-        )
+        ),
+    )

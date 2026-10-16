@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from _speech_fakes import FakeCredentials, FakeElevenClient
 from PySide6.QtCore import QThread
+
 from pogled_assist.speech import speech_service
 from pogled_assist.speech.audio_cache import AudioCache
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -33,4 +34,3 @@ def service(monkeypatch, tmp_path):
     monkeypatch.setattr(instance._audio, "play", play)
     yield instance, client, played
     instance.stop()
-

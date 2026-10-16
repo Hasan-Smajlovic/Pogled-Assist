@@ -7,9 +7,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/sync-hotfix.yml"
 REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
+
+
+def test_distinct_hotfix_events_do_not_replace_each_other_in_concurrency_queue():
+    concurrency = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["concurrency"]
+    pull_number = "${{ github.event.pull_request.number }}"
+    group = concurrency["group"]
+    assert pull_number in group
+    groups = {group.replace(pull_number, str(number)).casefold() for number in (42, 43, 44)}
+    assert len(groups) == 3
+    assert all("${{" not in name for name in groups)
+    assert concurrency["cancel-in-progress"] is False
 
 
 @pytest.fixture
@@ -23,19 +35,32 @@ class HotfixRun:
         self.calls = []
 
     def execute(self):
-        pull = {"number": 42, "merged": True, "merge_commit_sha": "a" * 40,
-                "base": {"ref": "master"}, "head": {"ref": "hotfix/42-speech", "repo": {"full_name": REPOSITORY}}}
+        pull = {
+            "number": 42,
+            "merged": True,
+            "merge_commit_sha": "a" * 40,
+            "base": {"ref": "master"},
+            "head": {"ref": "hotfix/42-speech", "repo": {"full_name": REPOSITORY}},
+        }
         if changes := self.options.get("changes"):
             changes(pull)
         event = self.tmp_path / "event.json"
         event.write_text(json.dumps({"pull_request": pull}), encoding="utf-8")
         summary = self.tmp_path / "summary.md"
-        environment = {"GITHUB_EVENT_PATH": str(event), "GITHUB_REPOSITORY": REPOSITORY,
-                       "GITHUB_STEP_SUMMARY": str(summary), "GH_TOKEN": "synthetic-token"}
+        environment = {
+            "GITHUB_EVENT_PATH": str(event),
+            "GITHUB_REPOSITORY": REPOSITORY,
+            "GITHUB_STEP_SUMMARY": str(summary),
+            "GH_TOKEN": "synthetic-token",
+        }
         for name, value in environment.items():
             self.monkeypatch.setenv(name, value)
         self.monkeypatch.setattr(subprocess, "run", self.command)
-        source = WORKFLOW.read_text(encoding="utf-8").split("python3 - <<'PY'\n", 1)[1].rsplit("          PY", 1)[0]
+        source = (
+            WORKFLOW.read_text(encoding="utf-8")
+            .split("python3 - <<'PY'\n", 1)[1]
+            .rsplit("          PY", 1)[0]
+        )
         exec(compile(textwrap.dedent(source), str(WORKFLOW), "exec"), {})
         return self.calls, summary.read_text(encoding="utf-8")
 
@@ -70,7 +95,7 @@ def git_result(args, options):
     if "rev-list" in args:
         return SimpleNamespace(stdout="a " + "b " * 2)
     if "diff" in args:
-        return SimpleNamespace(stdout="conflicted.py" if conflict else "")
+        return SimpleNamespace(stdout="conflicted.py" if conflict else "speech.py")
     return SimpleNamespace(stdout="")
 
 
@@ -79,6 +104,8 @@ def branch_result(args, options):
         return SimpleNamespace(stdout="b" * 40 + " refs/heads/sync/42")
     if "FETCH_HEAD" in args and options.get("diverged_branch"):
         return SimpleNamespace(stdout="different.py")
+    if "FETCH_HEAD" in args:
+        return SimpleNamespace(stdout="")
     return None
 
 
@@ -121,7 +148,16 @@ def test_conflict_never_pushes_or_opens_pr(workflow):
     assert "synthetic conflict" in summary
 
 
-@pytest.mark.parametrize("changes", [lambda p: p.update(merged=False), lambda p: p["head"].update(ref="feat/42-speech"), lambda p: p["base"].update(ref="development"), lambda p: p["head"]["repo"].update(full_name="fork/repo"), lambda p: p.update(merge_commit_sha="--bad")])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        lambda p: p.update(merged=False),
+        lambda p: p["head"].update(ref="feat/42-speech"),
+        lambda p: p["base"].update(ref="development"),
+        lambda p: p["head"]["repo"].update(full_name="fork/repo"),
+        lambda p: p.update(merge_commit_sha="--bad"),
+    ],
+)
 def test_untrusted_events_cannot_mutate_branches(workflow, changes):
     with pytest.raises(SystemExit):
         workflow(changes=changes)
@@ -154,3 +190,83 @@ def test_existing_diverged_branch_is_never_overwritten(workflow):
     assert not any("push" in args for args, _ in calls)
     assert not any("--method" in args for args, _ in calls)
     assert "different content" in summary
+
+
+@pytest.mark.parametrize("merge_commit", [False, True])
+@pytest.mark.parametrize("case", ["code", "version-only", "already-present", "conflict"])
+def test_real_git_backport_preserves_development_version(tmp_path, monkeypatch, case, merge_commit):
+    remote = tmp_path / "remote"
+    remote.mkdir()
+
+    def git(*args, cwd=remote):
+        return subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null", *args],
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+
+    git("init", "-b", "master")
+    git("config", "user.name", "Synthetic tester")
+    git("config", "user.email", "tester@example.invalid")
+    git("config", "commit.gpgsign", "false")
+    (remote / "VERSION").write_text("0.1.0\n")
+    (remote / "speech.py").write_text("original\n")
+    git("add", ".")
+    git("commit", "-m", "Initial")
+    git("checkout", "-b", "development")
+    (remote / "feature.py").write_text("unreleased feature\n")
+    if case in ("already-present", "conflict"):
+        (remote / "speech.py").write_text("fixed\n" if case == "already-present" else "different\n")
+    git("add", ".")
+    git("commit", "-m", "Development feature")
+    git("checkout", "master")
+    (remote / "VERSION").write_text("0.4.1\n")
+    git("add", ".")
+    git("commit", "-m", "Release")
+    git("checkout", "-b", "hotfix/42-speech")
+    (remote / "VERSION").write_text("0.4.2\n")
+    if case != "version-only":
+        (remote / "speech.py").write_text("fixed\n")
+    git("add", ".")
+    git("commit", "-m", "Hotfix")
+    git("checkout", "master")
+    git("merge", "--no-ff" if merge_commit else "--ff-only", "hotfix/42-speech")
+    hotfix = git("rev-parse", "HEAD")
+
+    source = WORKFLOW.read_text(encoding="utf-8").split("python3 - <<'PY'\n", 1)[1]
+    source = textwrap.dedent(source.rsplit("          PY", 1)[0]).split("\ntry:\n    main()", 1)[0]
+    namespace = {}
+    exec(compile(source, str(WORKFLOW), "exec"), namespace)
+    original_run = namespace["run"]
+
+    def local_run(command, **kwargs):
+        if "remote" in command and "add" in command:
+            command = [*command[:-1], str(remote)]
+        return original_run(command, **kwargs)
+
+    namespace["run"] = local_run
+    monkeypatch.setenv("GH_TOKEN", "synthetic-token")
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    pushed = namespace["prepare_branch"](checkout, {"merge_commit_sha": hotfix}, "sync/42")
+    assert (checkout / "VERSION").read_text() == "0.1.0\n"
+    assert (checkout / "feature.py").read_text() == "unreleased feature\n"
+    assert (remote / "VERSION").read_text() == "0.4.2\n"
+    assert not git("status", "--porcelain", cwd=checkout)
+    if case == "code":
+        assert pushed
+        assert git("diff", "--name-only", "development", "sync/42") == "speech.py"
+        assert git("show", "sync/42:speech.py") == "fixed"
+        # A rerun reuses the same branch without overwriting it.
+        rerun = tmp_path / "rerun"
+        rerun.mkdir()
+        assert namespace["prepare_branch"](rerun, {"merge_commit_sha": hotfix}, "sync/42")
+    else:
+        assert not pushed
+        assert "sync/42" not in git("branch", "--list")
+        message = summary.read_text(encoding="utf-8")
+        assert ("nothing was pushed" if case == "conflict" else "No PR needed") in message

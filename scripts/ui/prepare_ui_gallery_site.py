@@ -119,6 +119,7 @@ def _publication_already_finished(publication, run, body):
         return False
     return any(_publication_marker(run, phase) in body for phase in ("published", "failed"))
 
+
 def _latest_ci(api, pull: dict, workflow_id: int) -> dict | None:
     runs = api.items(
         f"actions/workflows/{workflow_id}/runs?event=pull_request&head_sha={pull['head']['sha']}"
@@ -191,27 +192,24 @@ def _status_header(
 
 def _publication_status(publication, run, rendered):
     if publication == "failed":
-        return ("**Gallery publication failed.** Existing previews have not been refreshed.")
+        return "**Gallery publication failed.** Existing previews have not been refreshed."
     elif run is None:
-        return ("**Waiting for CI for the latest commit.** Existing previews may be older.")
+        return "**Waiting for CI for the latest commit.** Existing previews may be older."
     elif run["status"] != "completed":
-        return (
-            "**New gallery is being prepared.** Existing previews are from an earlier CI run."
-        )
+        return "**New gallery is being prepared.** Existing previews are from an earlier CI run."
     elif publication == "preparing":
-        return (
-            "**Waiting for gallery publication.** Existing previews have not been refreshed."
-        )
+        return "**Waiting for gallery publication.** Existing previews have not been refreshed."
     elif _same_rendered_run(rendered, run):
-        return ("**Gallery matches the latest PR commit and CI run.**")
+        return "**Gallery matches the latest PR commit and CI run.**"
     else:
-        return ("**No gallery for the latest CI run.** Existing previews may be older.")
+        return "**No gallery for the latest CI run.** Existing previews may be older."
 
 
 def _same_rendered_run(rendered, run):
     if not rendered:
         return False
     return all(rendered[key] == run[key] for key in ("head_sha", "id", "run_attempt"))
+
 
 def _with_status(body: str, header: str) -> str:
     body = re.sub(f"{STATUS_START}.*?{STATUS_END}\\n*", "", body, flags=re.DOTALL)

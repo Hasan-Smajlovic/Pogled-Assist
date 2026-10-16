@@ -126,7 +126,9 @@ def test_size_limit_removes_least_recently_used_audio_even_after_restart(cache, 
     monkeypatch.setattr("pogled_assist.speech.audio_cache.MAX_CACHE_BYTES", limit)
     assert cache.read(first) == b"first"
     reopened = AudioCache(cache.root)
-    reopened.configure(ElevenConfig("key", "voice").audio_identity, {"Trebam vode.", "Hvala!", "Čaj"})
+    reopened.configure(
+        ElevenConfig("key", "voice").audio_identity, {"Trebam vode.", "Hvala!", "Čaj"}
+    )
     assert reopened.write(reopened.ticket("Čaj"), b"third")
     assert reopened.read(reopened.ticket("Trebam vode.")) == b"first"
     assert reopened.read(reopened.ticket("Hvala!")) is None

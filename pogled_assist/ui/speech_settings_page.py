@@ -6,7 +6,14 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
 from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS
 from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, FALLBACK_NOTE, PLAYBACK_LABELS
-from .settings_controls import action_grid, busy_indicator, retain_size_when_hidden, content_layout, setting_row, styled_label
+from .settings_controls import (
+    action_grid,
+    busy_indicator,
+    content_layout,
+    retain_size_when_hidden,
+    setting_row,
+    styled_label,
+)
 
 BOSNIAN_VOICE_HINT = "Standardni radi bez interneta. Prirodni i Efendija trebaju internet."
 ARABIC_VOICE_HINT = "Arapski koristi prirodni muški glas Hamed. Potreban je internet. Izbor bosanskog glasa ostaje sačuvan."
@@ -131,12 +138,8 @@ class SpeechSettingsPage(QFrame):
             button.setChecked(preset == settings.voice_preset)
         efendija = settings.uses_efendija
         self._eleven_summary.setVisible(efendija)
-        self._eleven_summary_hint.setText(
-            account.state.message + "\n" + FALLBACK_NOTE
-        )
-        self._speed_row.setVisible(
-            not arabic and settings.voice_preset == VOICE_PRESET_DEFAULT
-        )
+        self._eleven_summary_hint.setText(account.state.message + "\n" + FALLBACK_NOTE)
+        self._speed_row.setVisible(not arabic and settings.voice_preset == VOICE_PRESET_DEFAULT)
         self._saved_audio_button.setVisible(not arabic)
         active = playback_state in ACTIVE_PLAYBACK_STATES
         test_label = PLAYBACK_LABELS.get(
@@ -146,7 +149,5 @@ class SpeechSettingsPage(QFrame):
         self._speech_test_progress.setVisible(active)
         self._test_speech_button.setText(test_label)
         self._controls.rename(self._test_speech_button, test_label)
-        self._test_speech_button.setEnabled(
-            not active and (not efendija or account.can_test_voice)
-        )
+        self._test_speech_button.setEnabled(not active and (not efendija or account.can_test_voice))
         self._voice_hint.setText(ARABIC_VOICE_HINT if arabic else BOSNIAN_VOICE_HINT)

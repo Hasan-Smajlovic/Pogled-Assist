@@ -144,7 +144,10 @@ class AudioCache:
             return
         with suppress(OSError):
             for path in self.root.iterdir():
-                if path.suffix in (".audio", ".tmp") and path.stem.split(".")[0] not in allowed_texts:
+                if (
+                    path.suffix in (".audio", ".tmp")
+                    and path.stem.split(".")[0] not in allowed_texts
+                ):
                     self._blocked.add(path.stem)
                     path.unlink(missing_ok=True)
 
@@ -172,4 +175,4 @@ def _text_key(text: str) -> str:
 def _valid_audio(data, audio, header):
     if not audio or not data.startswith(MAGIC):
         return False
-    return data[len(MAGIC):header] == hashlib.sha256(audio).digest()
+    return data[len(MAGIC) : header] == hashlib.sha256(audio).digest()

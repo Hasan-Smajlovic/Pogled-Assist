@@ -2,8 +2,10 @@
 
 import time
 from dataclasses import replace
+
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
+
 from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui.gaze_check_views import TARGETS
@@ -191,4 +193,3 @@ class CaptureGazeCheck:
         self.capture(
             window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size
         )
-

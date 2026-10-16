@@ -12,6 +12,7 @@ from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 from . import diagnostics
+from .hotbar_speech import HotbarSpeech
 from .interaction.mouse_controller import (
     CLICK_ACTIONS,
     CONTROLLER,
@@ -52,8 +53,6 @@ from .ui.tracking_feedback import TrackingFeedback
 from .windows.appbar import WindowsAppBar
 from .windows.foreground_tracker import ForegroundTracker
 from .windows.windows_input import WindowsInputController
-
-from .hotbar_speech import HotbarSpeech
 
 logger = logging.getLogger(__name__)
 
@@ -810,7 +809,17 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
         requested_at = time.monotonic()
         diagnostics.emit("settings_open_started", priority=True)
-        window = SettingsWindow(self._mouse.settings, self._speech.settings, self, services=SettingsServices(update_manager=self._release_update_manager, suggestions=self._suggestions, account=self._speech.account, clear_audio=self._speech.audio_cache.clear))
+        window = SettingsWindow(
+            self._mouse.settings,
+            self._speech.settings,
+            self,
+            services=SettingsServices(
+                update_manager=self._release_update_manager,
+                suggestions=self._suggestions,
+                account=self._speech.account,
+                clear_audio=self._speech.audio_cache.clear,
+            ),
+        )
         diagnostics.emit(
             "settings_constructed",
             priority=True,

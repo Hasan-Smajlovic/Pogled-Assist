@@ -168,7 +168,6 @@ def request_data(request: Request, budget: Budget):
         connection.close()
 
 
-
 def _receive(connection, request, budget):
     response = _send(connection, request, budget)
     successful = 200 <= response.status < 300
@@ -178,6 +177,7 @@ def _receive(connection, request, budget):
         raise VoiceError(error_reason(response.status, data))
     return _validate_response(response, data, request.audio)
 
+
 def _socket_budget(connection, budget) -> None:
     remaining = budget.remaining()
     if connection.sock is not None:
@@ -185,7 +185,10 @@ def _socket_budget(connection, budget) -> None:
 
 
 def _send(connection, request, budget):
-    headers = {"xi-api-key": request.key, "Accept": "audio/mpeg" if request.audio else "application/json"}
+    headers = {
+        "xi-api-key": request.key,
+        "Accept": "audio/mpeg" if request.audio else "application/json",
+    }
     body = None
     if request.payload is not None:
         headers["Content-Type"] = "application/json"
@@ -234,11 +237,28 @@ def _validate_length(declared, actual, reason):
 
 CODE_REASONS = {
     **dict.fromkeys(("insufficient_credits", "quota_exceeded"), "quota"),
-    **dict.fromkeys(("insufficient_permissions", "missing_permissions", "forbidden", "voice_access_denied", "model_access_denied"), "permission"),
+    **dict.fromkeys(
+        (
+            "insufficient_permissions",
+            "missing_permissions",
+            "forbidden",
+            "voice_access_denied",
+            "model_access_denied",
+        ),
+        "permission",
+    ),
     **dict.fromkeys(("invalid_api_key", "missing_api_key", "unauthorized"), "invalid_key"),
     "text_too_long": "too_long",
 }
-STATUS_REASONS = {402: "quota", 403: "permission", 401: "invalid_key", 429: "rate_limit", 400: "configuration", 404: "configuration", 422: "configuration"}
+STATUS_REASONS = {
+    402: "quota",
+    403: "permission",
+    401: "invalid_key",
+    429: "rate_limit",
+    400: "configuration",
+    404: "configuration",
+    422: "configuration",
+}
 
 
 def error_reason(status: int, body: bytes) -> str:
@@ -249,6 +269,14 @@ def error_reason(status: int, body: bytes) -> str:
         code = ""
     if not isinstance(code, str):
         code = ""
-    priority = ("quota", "permission", "invalid_key", "rate_limit", "too_long", "configuration", "offline")
+    priority = (
+        "quota",
+        "permission",
+        "invalid_key",
+        "rate_limit",
+        "too_long",
+        "configuration",
+        "offline",
+    )
     reasons = (CODE_REASONS.get(code, "offline"), STATUS_REASONS.get(status, "offline"))
     return min(reasons, key=priority.index)

@@ -303,11 +303,13 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
     try:
         service.store.learn_text("Želim vodu i čaj")
         assert service.store.save()
-        window = SettingsWindow(GazeSettings(), SpeechSettings(), services=SettingsServices(suggestions=service))
+        window = SettingsWindow(
+            GazeSettings(), SpeechSettings(), services=SettingsServices(suggestions=service)
+        )
         qtbot.addWidget(window)
         window.show()
         window._speech_tab_button.click()
-        window._learned_words_button.click()
+        window._speech_page._learned_words_button.click()
         assert window._stack.currentIndex() == 3
 
         index = window._learning_page._visible_words.index("čaj")

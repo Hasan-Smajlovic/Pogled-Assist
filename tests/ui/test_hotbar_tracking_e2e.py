@@ -12,7 +12,6 @@ from PySide6.QtCore import QPoint, QRect
 def test_tracking_notice_uses_provider_signals_without_changing_eye_safety(
     hotbar_gaze, qtbot, monkeypatch
 ):
-    from types import SimpleNamespace
 
     from pogled_assist.tracking.status import TrackingState, TrackingStatus
     from pogled_assist.ui import tracking_feedback
@@ -81,7 +80,6 @@ def test_tracking_notice_uses_provider_signals_without_changing_eye_safety(
 @pytest.mark.e2e
 @pytest.mark.parametrize("context", ["sleep", "hidden", "minimized", "settings", "check"])
 def test_intentional_contexts_suppress_tracking_notices(hotbar_gaze, qtbot, monkeypatch, context):
-    from types import SimpleNamespace
 
     from pogled_assist.tracking.status import TrackingState, TrackingStatus
     from pogled_assist.ui import settings_window, tracking_feedback
@@ -330,4 +328,3 @@ def test_hotbar_status_and_all_actions_fit_target_display(hotbar_gaze, state):
             label.geometry(),
             label.fontMetrics().horizontalAdvance(label.text()),
         )
-

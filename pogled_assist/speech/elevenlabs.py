@@ -11,8 +11,9 @@ from threading import Event
 from urllib.parse import quote, urlencode
 
 from ..settings_limits import ELEVENLABS_SIMILARITY_DEFAULT, ELEVENLABS_STABILITY_DEFAULT
-
-from .eleven_transport import MAX_AUDIO_BYTES as MAX_AUDIO_BYTES, BoundedCall as BoundedCall, Budget, Request, request_data
+from .eleven_transport import MAX_AUDIO_BYTES as MAX_AUDIO_BYTES
+from .eleven_transport import BoundedCall as BoundedCall
+from .eleven_transport import Budget, Request, request_data
 from .voice_state import VoiceError
 
 DEFAULT_MODEL = "eleven_v4"
@@ -52,12 +53,19 @@ class ElevenConfig:
             "model_id": self.model,
             "language_code": "bs",
             "apply_text_normalization": "auto",
-            "voice_settings": {"stability": self.stability / 100, "similarity_boost": self.similarity / 100},
+            "voice_settings": {
+                "stability": self.stability / 100,
+                "similarity_boost": self.similarity / 100,
+            },
         }
 
     @property
     def audio_identity(self) -> str:
-        return json.dumps([TEXT_NORMALIZATION_VERSION, self.voice, OUTPUT_FORMAT, self.parameters], sort_keys=True, separators=(",", ":"))
+        return json.dumps(
+            [TEXT_NORMALIZATION_VERSION, self.voice, OUTPUT_FORMAT, self.parameters],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
     def validate(self) -> None:
         _validate_key(self.key)
@@ -94,7 +102,8 @@ class Subscription:
 
     def improved_from(self, previous: Subscription) -> bool:
         return self.remaining > previous.remaining or (
-            self.resets_at is not None and previous.resets_at is not None
+            self.resets_at is not None
+            and previous.resets_at is not None
             and self.resets_at > previous.resets_at
         )
 
@@ -110,10 +119,21 @@ class ElevenClient:
     def synthesize(self, config: ElevenConfig, text: str, cancel: Event, deadline: float) -> bytes:
         config.validate()
         path = f"/v1/text-to-speech/{quote(config.voice, safe='')}?output_format={OUTPUT_FORMAT}"
-        return self._request(Request(config.key, "POST", path, {"text": prepare_eleven_text(text), **config.parameters}, True), Budget(cancel, deadline))
+        return self._request(
+            Request(
+                config.key,
+                "POST",
+                path,
+                {"text": prepare_eleven_text(text), **config.parameters},
+                True,
+            ),
+            Budget(cancel, deadline),
+        )
 
     def subscription(self, key: str, cancel: Event, deadline: float) -> Subscription:
-        return _parse_subscription(self._request(Request(key, "GET", "/v1/user/subscription"), Budget(cancel, deadline)))
+        return _parse_subscription(
+            self._request(Request(key, "GET", "/v1/user/subscription"), Budget(cancel, deadline))
+        )
 
     def options(self, key: str, cancel: Event, deadline: float) -> AccountOptions:
         _validate_key(key)
@@ -134,7 +154,9 @@ class ElevenClient:
             query = {"page_size": 100, "voice_type": "saved", "include_total_count": "false"}
             if token:
                 query["next_page_token"] = token
-            payload = self._catalog(key, "/v2/voices?" + urlencode(query), budget, "voices_permission")
+            payload = self._catalog(
+                key, "/v2/voices?" + urlencode(query), budget, "voices_permission"
+            )
             voices.extend(_choices(payload.get("voices", []), "voice_id"))
             if not payload.get("has_more"):
                 return tuple(voices)
@@ -162,7 +184,10 @@ def _next_token(payload, seen):
 def _supports_bosnian(model) -> bool:
     if not isinstance(model, dict) or not model.get("can_do_text_to_speech"):
         return False
-    return any(isinstance(language, dict) and language.get("language_id") == "bs" for language in model.get("languages", []))
+    return any(
+        isinstance(language, dict) and language.get("language_id") == "bs"
+        for language in model.get("languages", [])
+    )
 
 
 def _non_negative_int(value):
@@ -173,7 +198,9 @@ def _non_negative_int(value):
 
 def _parse_subscription(payload):
     try:
-        used, limit = (_non_negative_int(payload[name]) for name in ("character_count", "character_limit"))
+        used, limit = (
+            _non_negative_int(payload[name]) for name in ("character_count", "character_limit")
+        )
         reset = payload.get("next_character_count_reset_unix")
         return Subscription(used, limit, None if reset is None else _non_negative_int(reset))
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -181,7 +208,11 @@ def _parse_subscription(payload):
 
 
 def _choices(items: list, field_name: str) -> list[tuple[str, str]]:
-    return [(item[field_name], _choice_name(item, field_name)) for item in items if isinstance(item, dict) and valid_identifier(item.get(field_name))]
+    return [
+        (item[field_name], _choice_name(item, field_name))
+        for item in items
+        if isinstance(item, dict) and valid_identifier(item.get(field_name))
+    ]
 
 
 def _choice_name(item, field_name):

@@ -8,7 +8,14 @@ from threading import Event, Thread
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from ..windows.credentials import CredentialError, WindowsCredentialStore
-from .elevenlabs import AccountOptions, BoundedCall, ElevenClient, Subscription, configuration, env_override
+from .elevenlabs import (
+    AccountOptions,
+    BoundedCall,
+    ElevenClient,
+    Subscription,
+    configuration,
+    env_override,
+)
 from .voice_state import CREDITS_UNAVAILABLE_NOTE, REASONS, SpeechCancelled, VoiceError
 
 
@@ -65,7 +72,9 @@ class ElevenAccount(QObject):
         if state.busy or state.options is None:
             return False
         config = self.config
-        return _valid_choice(config.voice, state.options.voices, "ELEVENLABS_VOICE_ID") and _valid_choice(config.model, state.options.models, "ELEVENLABS_MODEL_ID")
+        return _valid_choice(
+            config.voice, state.options.voices, "ELEVENLABS_VOICE_ID"
+        ) and _valid_choice(config.model, state.options.models, "ELEVENLABS_MODEL_ID")
 
     def save_key(self, value: str) -> bool:
         return self._change_credential(value.strip())
@@ -81,7 +90,11 @@ class ElevenAccount(QObject):
             else:
                 self.store.write(value)
         except (CredentialError, OSError):
-            self._publish("Ključ nije uklonjen. Pokušajte ponovo." if removing else "Ključ nije sačuvan. Pokušajte ponovo.")
+            self._publish(
+                "Ključ nije uklonjen. Pokušajte ponovo."
+                if removing
+                else "Ključ nije sačuvan. Pokušajte ponovo."
+            )
             return False
         self.cancel_check()
         self._key = value or ""
@@ -115,7 +128,11 @@ class ElevenAccount(QObject):
             if not cancel.is_set():
                 self._completed.emit(revision, options, reason)
 
-        self._start_worker("elevenlabs-account", work, lambda: self._publish("Provjera veze se nije mogla pokrenuti."))
+        self._start_worker(
+            "elevenlabs-account",
+            work,
+            lambda: self._publish("Provjera veze se nije mogla pokrenuti."),
+        )
 
     def cancel_check(self) -> None:
         self._cancel.set()
@@ -131,7 +148,9 @@ class ElevenAccount(QObject):
         if revision != self._revision:
             return
         if reason:
-            self.state = replace(self.state, subscription=None, credits_message=CREDITS_UNAVAILABLE_NOTE)
+            self.state = replace(
+                self.state, subscription=None, credits_message=CREDITS_UNAVAILABLE_NOTE
+            )
             self._publish(REASONS.get(reason, REASONS["offline"]))
             return
         self._publish("ElevenLabs je povezan. Provjera veze ne troši kredite.", options=options)
@@ -161,7 +180,11 @@ class ElevenAccount(QObject):
             if not cancel.is_set():
                 self._subscription_completed.emit(revision, subscription, reason, allow_recovery)
 
-        self._start_worker("elevenlabs-credits", work, lambda: self._finish_subscription(revision, None, "offline", allow_recovery))
+        self._start_worker(
+            "elevenlabs-credits",
+            work,
+            lambda: self._finish_subscription(revision, None, "offline", allow_recovery),
+        )
 
     @Slot(int, object, str, bool)
     def _finish_subscription(self, revision, subscription, reason, allow_recovery=False) -> None:
@@ -172,9 +195,7 @@ class ElevenAccount(QObject):
             subscription=subscription,
             credits_busy=False,
             credits_message=(
-                CREDITS_UNAVAILABLE_NOTE
-                if reason
-                else "Posljednje provjereno stanje računa."
+                CREDITS_UNAVAILABLE_NOTE if reason else "Posljednje provjereno stanje računa."
             ),
         )
         self.changed.emit(self.state)

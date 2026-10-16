@@ -14,10 +14,10 @@ import pytest
 
 from scripts.ui import prepare_ui_gallery_site as site
 
-
 BASE_URL = "https://example.github.io/Pogled-Assist"
 FIRST_SHA = "a" * 40
 SECOND_SHA = "b" * 40
+
 
 def test_legacy_dual_resolution_archive_publishes_only_720p(tmp_path):
     api = FakeGitHub()

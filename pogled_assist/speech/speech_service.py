@@ -23,7 +23,20 @@ from .audio_playback import AudioPlayback, PlaybackResult
 from .eleven_account import ElevenAccount
 from .elevenlabs import DEFAULT_MODEL, ElevenConfig, configuration
 from .voice_router import Playback, VoiceRouter
-from .voice_state import (ACTIVE_PLAYBACK_STATES, EFENDIJA, NATURAL, STANDARD, NATURAL_VOICE, NATURAL_RATE, NATURAL_PITCH, REASONS, VOICE_TEST_TEXT, SpeechCancelled, VoiceError, VoiceState)
+from .voice_state import (
+    ACTIVE_PLAYBACK_STATES,
+    EFENDIJA,
+    NATURAL,
+    NATURAL_PITCH,
+    NATURAL_RATE,
+    NATURAL_VOICE,
+    REASONS,
+    STANDARD,
+    VOICE_TEST_TEXT,
+    SpeechCancelled,
+    VoiceError,
+    VoiceState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +88,23 @@ class EfendijaRequest:
 def _voice_identity(settings: SpeechSettings) -> tuple:
     identity = (settings.voice_preset, settings.keyboard_script)
     if settings.uses_efendija:
-        identity += (settings.elevenlabs_voice_id, settings.elevenlabs_model_id, settings.elevenlabs_stability, settings.elevenlabs_similarity)
+        identity += (
+            settings.elevenlabs_voice_id,
+            settings.elevenlabs_model_id,
+            settings.elevenlabs_stability,
+            settings.elevenlabs_similarity,
+        )
     return identity
 
 
 def _test_message(state, reason="") -> str:
     if reason:
         return "Proba Efendije nije uspjela. " + REASONS[reason]
-    return "Proba Efendije je završena." if state == "finished" else "Izgovor Efendije nije završen. Pokušajte ponovo."
+    return (
+        "Proba Efendije je završena."
+        if state == "finished"
+        else "Izgovor Efendije nije završen. Pokušajte ponovo."
+    )
 
 
 class SpeechService(QObject):
@@ -244,7 +266,16 @@ class SpeechService(QObject):
 
         reason = ""
         try:
-            state = self._router.run(request.text, request.config, Playback(request.cancel, lambda data, voice: self._request_audio(request, data, voice), publish), test=request.test)
+            state = self._router.run(
+                request.text,
+                request.config,
+                Playback(
+                    request.cancel,
+                    lambda data, voice: self._request_audio(request, data, voice),
+                    publish,
+                ),
+                test=request.test,
+            )
         except SpeechCancelled:
             return "stopped"
         except VoiceError as error:
@@ -257,7 +288,9 @@ class SpeechService(QObject):
         return state
 
     def _is_current(self, request_id) -> bool:
-        return request_id == self.request_id and self._cancel is not None and not self._cancel.is_set()
+        return (
+            request_id == self.request_id and self._cancel is not None and not self._cancel.is_set()
+        )
 
     @Slot(int, object, object, object)
     def _play_audio(self, request_id, data, result, voice) -> None:
@@ -411,7 +444,11 @@ class SpeechService(QObject):
             return environment
         attribute, find, environment_for = {
             "espeak-ng": ("_executable", find_espeak_ng, _espeak_environment),
-            "edge-playback": ("_edge_playback_executable", find_edge_playback, _environment_with_executable_directory),
+            "edge-playback": (
+                "_edge_playback_executable",
+                find_edge_playback,
+                _environment_with_executable_directory,
+            ),
         }[engine_name]
         executable = find()
         setattr(self, attribute, executable)

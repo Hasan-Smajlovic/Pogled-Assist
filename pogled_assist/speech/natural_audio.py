@@ -14,7 +14,9 @@ from .voice_state import NATURAL_PITCH, NATURAL_RATE, NATURAL_VOICE, VoiceError
 
 def prepare_natural(text: str, cancel: Event, deadline: float) -> bytes:
     async def bounded() -> bytes:
-        return await asyncio.wait_for(_collect_audio(text, cancel), max(0.001, deadline - time.monotonic()))
+        return await asyncio.wait_for(
+            _collect_audio(text, cancel), max(0.001, deadline - time.monotonic())
+        )
 
     return asyncio.run(bounded())
 
@@ -29,7 +31,6 @@ async def _collect_audio(text, cancel) -> bytes:
     if not audio:
         raise VoiceError("audio")
     return bytes(audio)
-
 
 
 def _append_audio(audio, chunk):

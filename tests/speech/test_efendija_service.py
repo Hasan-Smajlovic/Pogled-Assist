@@ -70,7 +70,9 @@ def test_stop_and_replacement_discard_late_network_audio_and_voice_events(servic
 
 
 @pytest.mark.e2e
-def test_immediate_replay_after_stop_uses_the_download_already_paid_for(service, qtbot, monkeypatch):
+def test_immediate_replay_after_stop_uses_the_download_already_paid_for(
+    service, qtbot, monkeypatch
+):
     instance, client, played = service
     instance.set_saved_texts({"SAČUVANA FRAZA."})
     original_play = instance._audio.play

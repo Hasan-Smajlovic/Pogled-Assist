@@ -135,4 +135,3 @@ def test_keyboard_letter_entry_survives_brief_edge_jitter(hotbar_gaze, qtbot):
     assert actions == [action]
     assert window._input.typed == ["A"]
     assert window._active_group_index is None
-

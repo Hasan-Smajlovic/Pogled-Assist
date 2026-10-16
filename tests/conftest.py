@@ -21,6 +21,7 @@ sys.dont_write_bytecode = True
 @pytest.fixture(autouse=True)
 def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
     from _speech_fakes import FakeCredentials
+
     from pogled_assist.speech.elevenlabs import ENV_OVERRIDES
 
     monkeypatch.setattr(

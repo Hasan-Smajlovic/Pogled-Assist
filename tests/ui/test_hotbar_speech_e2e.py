@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
+from _hotbar_fixtures import speech_gaze as speech_gaze
 from _ui_fakes import click_speech_action
 from PySide6.QtCore import QPoint
 
@@ -23,18 +24,6 @@ def test_efendija_failed_test_keeps_classified_reason_after_playback_event(
     hotbar._speech.test_finished.emit(request, message)
     hotbar._speech.playback_changed.emit(request, "failed")
     assert hotbar._settings_window._status_label.text() == message
-
-
-@pytest.fixture
-def speech_gaze(hotbar_gaze, qtbot):
-    hotbar, controller, feed, actions, progress = hotbar_gaze
-    hotbar._open_speech()
-    window = hotbar._speech_window
-    window.showNormal()
-    window.setGeometry(*controller._logical_screen_rect)
-    qtbot.waitUntil(window.isVisible)
-    qtbot.wait(1)
-    return window, controller, hotbar._speech, feed, actions, progress
 
 
 @pytest.mark.e2e
@@ -274,4 +263,3 @@ def test_speech_gaze_can_repeat_after_departure_with_no_expiry_sample(
     assert len(actions) == 1
     feed(center, start + 1001)
     assert len(actions) == 2
-

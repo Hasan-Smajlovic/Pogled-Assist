@@ -1,12 +1,14 @@
 """Editing and deleting saved phrases, categories and answers."""
 
 import copy
+
 from ..keyboard_layouts import ARABIC_SCRIPT
 from ..speech.speech_library import CategoryRecord, PhraseRecord, clean_text, saved_entry_texts
 from ..suggestions.composition import Composition
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
 
 ITEMS_PER_PAGE = 6
+
 
 class SpeechLibraryActions:
     def _sync_saved_audio(self) -> None:
@@ -147,7 +149,6 @@ class SpeechLibraryActions:
         self._clamp_list_page()
         self._show_list_level()
         self._set_status("Stavka je obrisana.")
-
 
 
 def _deletion_items(candidate, view_mode, category_index):

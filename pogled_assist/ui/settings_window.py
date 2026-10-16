@@ -39,14 +39,13 @@ from ..windows.windows_startup import (
     is_windows_startup_enabled,
     set_windows_startup_enabled,
 )
-from .general_settings_page import GeneralSettingsPage
-from .gaze_settings_page import GazeSettingsPage
-from .speech_settings_page import SpeechSettingsPage
 from .elevenlabs_settings import ElevenLabsPage, SavedAudioPage
 from .gaze_feedback import set_gaze_feedback
+from .gaze_settings_page import GazeSettingsPage
+from .general_settings_page import GeneralSettingsPage
 from .learned_words_page import LearnedWordsPage
 from .settings_controls import GazeCallback, SettingsControls, global_rect, styled_label
-
+from .speech_settings_page import SpeechSettingsPage
 
 logger = logging.getLogger(__name__)
 
@@ -525,7 +524,9 @@ class SettingsWindow(QWidget):
 
     def _account_changed(self, state) -> None:
         before = self._dynamic_control_state()
-        self._speech_page.refresh(self._speech_settings, self._speech_playback_state, self._eleven_account)
+        self._speech_page.refresh(
+            self._speech_settings, self._speech_playback_state, self._eleven_account
+        )
         self._eleven_page.refresh(state)
         self._cancel_changed_target(before)
 
@@ -680,7 +681,8 @@ class SettingsWindow(QWidget):
 
     def _cycle_keyboard_script(self) -> None:
         self._speech_page._script_combo.setCurrentIndex(
-            (self._speech_page._script_combo.currentIndex() + 1) % self._speech_page._script_combo.count()
+            (self._speech_page._script_combo.currentIndex() + 1)
+            % self._speech_page._script_combo.count()
         )
 
     def _emit_gaze_settings(self, status: str) -> None:
@@ -708,7 +710,9 @@ class SettingsWindow(QWidget):
     def _refresh_values(self) -> None:
         self._gaze_page.refresh(self._gaze_settings)
         self._general_page.refresh(self._gaze_settings, self._startup_desired_enabled)
-        self._speech_page.refresh(self._speech_settings, self._speech_playback_state, self._eleven_account)
+        self._speech_page.refresh(
+            self._speech_settings, self._speech_playback_state, self._eleven_account
+        )
         self._eleven_page.configure(self._speech_settings)
 
     def _set_status(self, text: str) -> None:
@@ -809,7 +813,12 @@ class SettingsWindow(QWidget):
 
     def _gaze_still_on_blocked_target(self, point) -> bool:
         blocked = self._gaze_selection.target
-        return self._gaze_selection.is_blocked and isinstance(blocked, QWidget) and blocked.isVisible() and global_rect(blocked).contains(point)
+        return (
+            self._gaze_selection.is_blocked
+            and isinstance(blocked, QWidget)
+            and blocked.isVisible()
+            and global_rect(blocked).contains(point)
+        )
 
     def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
         self._gaze_selection.cancel(require_leave=require_leave)
@@ -822,8 +831,16 @@ class SettingsWindow(QWidget):
         self._cancel_interaction()
 
     def _dynamic_control_state(self):
-        controls = (self._speech_page._test_speech_button, self._speech_page._stop_speech_button, self._eleven_page.test_button, self._eleven_page.stop_button, self._eleven_page.check_button)
-        return {button: (button.text(), button.isVisible(), button.isEnabled()) for button in controls}
+        controls = (
+            self._speech_page._test_speech_button,
+            self._speech_page._stop_speech_button,
+            self._eleven_page.test_button,
+            self._eleven_page.stop_button,
+            self._eleven_page.check_button,
+        )
+        return {
+            button: (button.text(), button.isVisible(), button.isEnabled()) for button in controls
+        }
 
     def _cancel_changed_target(self, before):
         target = self._gaze_selection.target

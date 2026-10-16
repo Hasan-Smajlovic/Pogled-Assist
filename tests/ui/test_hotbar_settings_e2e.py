@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
+from _hotbar_fixtures import speech_gaze as speech_gaze
 from PySide6.QtCore import QPoint, QRect
 
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
@@ -134,4 +135,3 @@ def test_settings_voice_test_reports_late_failure(hotbar_gaze, monkeypatch):
     hotbar._test_current_speech_settings()
     hotbar._speech.playback_changed.emit(hotbar._speech.request_id, "failed")
     assert hotbar._settings_window._status_label.text() == "Govor nije uspio. Pokušajte ponovo."
-

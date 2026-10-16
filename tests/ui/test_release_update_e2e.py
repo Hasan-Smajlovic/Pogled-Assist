@@ -18,7 +18,9 @@ def test_version_dropdown_keeps_installed_label_and_requires_install_action(qtbo
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
     )
     manager = PreviewReleaseManager()
-    window = SettingsWindow(GazeSettings(), SpeechSettings(), services=SettingsServices(update_manager=manager))
+    window = SettingsWindow(
+        GazeSettings(), SpeechSettings(), services=SettingsServices(update_manager=manager)
+    )
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window.show()

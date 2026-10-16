@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
+    QProgressBar,
     QSizePolicy,
     QToolButton,
-    QProgressBar,
     QVBoxLayout,
     QWidget,
 )

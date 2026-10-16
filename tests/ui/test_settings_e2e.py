@@ -57,7 +57,11 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     assert window._speech_page._arabic_voice.text() == "Prirodni · Hamed"
     assert not window._speech_page._voice_choices.isVisible()
     assert window.width() <= 1280 and window.height() <= 720
-    for control in (window._speech_page._script_combo, window._speech_page._arabic_voice, window._speech_page._test_speech_button):
+    for control in (
+        window._speech_page._script_combo,
+        window._speech_page._arabic_voice,
+        window._speech_page._test_speech_button,
+    ):
         assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
         assert control.height() >= 58
     window._cycle_keyboard_script()
@@ -130,7 +134,14 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
 
     action_columns = None
     for tab, controls in (
-        (0, (window._general_page._startup_checkbox, window._general_page._logging_checkbox, window._general_page._launcher_window_checkbox)),
+        (
+            0,
+            (
+                window._general_page._startup_checkbox,
+                window._general_page._logging_checkbox,
+                window._general_page._launcher_window_checkbox,
+            ),
+        ),
         (
             1,
             (
@@ -143,7 +154,11 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
         ),
         (
             2,
-            (window._speech_page._test_speech_button, window._speech_page._saved_audio_button, window._speech_page._learned_words_button),
+            (
+                window._speech_page._test_speech_button,
+                window._speech_page._saved_audio_button,
+                window._speech_page._learned_words_button,
+            ),
         ),
     ):
         window._select_tab(tab)
@@ -201,8 +216,15 @@ def test_settings_speech_rows_keep_order_and_alignment_at_value_limits(
     window.show()
     qtbot.waitUntil(window.isVisible)
     assert (window.width(), window.height()) == size
-    script_rect = QRect(window._speech_page._script_combo.mapTo(window, QPoint()), window._speech_page._script_combo.size())
-    voice = window._speech_page._arabic_voice if script == "arabic" else window._speech_page._voice_choices
+    script_rect = QRect(
+        window._speech_page._script_combo.mapTo(window, QPoint()),
+        window._speech_page._script_combo.size(),
+    )
+    voice = (
+        window._speech_page._arabic_voice
+        if script == "arabic"
+        else window._speech_page._voice_choices
+    )
     voice_rect = QRect(voice.mapTo(window, QPoint()), voice.size())
     assert script_rect.height() == 58
     assert voice_rect.height() >= 58

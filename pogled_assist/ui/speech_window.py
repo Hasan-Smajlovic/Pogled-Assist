@@ -25,17 +25,22 @@ from ..keyboard_layouts import BOSNIAN_LETTERS as BOSNIAN_LETTERS
 from ..keyboard_layouts import group_keys as _group_letters
 from ..logging_setup import get_project_root
 from ..speech.alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
-from ..speech.speech_library import CategoryRecord, PhraseRecord, SpeechLibraryStore, sorted_phrases, speech_library_store
+from ..speech.speech_library import (
+    CategoryRecord,
+    PhraseRecord,
+    SpeechLibraryStore,
+    sorted_phrases,
+    speech_library_store,
+)
 from ..speech.speech_service import SpeechService, SpeechSettings
 from ..suggestions.composition import Composition
 from ..suggestions.service import SuggestionService
 from .speech_editor import EditorContext
+from .speech_library_actions import ITEMS_PER_PAGE, SpeechLibraryActions
+from .speech_playback_controls import SpeechPlaybackControls
 from .speech_predictions import PredictionControls, SpeechPredictions
 from .speech_surface import SPEECH_WINDOW_ACTION_PREFIX as SPEECH_WINDOW_ACTION_PREFIX
 from .speech_surface import SpeechSurface
-
-from .speech_library_actions import ITEMS_PER_PAGE, SpeechLibraryActions
-from .speech_playback_controls import SpeechPlaybackControls
 
 logger = logging.getLogger(__name__)
 

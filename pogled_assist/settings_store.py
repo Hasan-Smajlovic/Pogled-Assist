@@ -171,7 +171,9 @@ def _coerce_elevenlabs(mapping, settings):
         settings,
         elevenlabs_voice_id=valid_identifier(mapping.get("elevenlabs_voice_id")),
         elevenlabs_model_id=valid_identifier(mapping.get("elevenlabs_model_id")) or DEFAULT_MODEL,
-        elevenlabs_stability=min(ELEVENLABS_STABILITY_STEPS, key=lambda step: abs(step - settings.elevenlabs_stability)),
+        elevenlabs_stability=min(
+            ELEVENLABS_STABILITY_STEPS, key=lambda step: abs(step - settings.elevenlabs_stability)
+        ),
         elevenlabs_similarity=clamp(settings.elevenlabs_similarity, ELEVENLABS_PERCENT_RANGE),
     )
 

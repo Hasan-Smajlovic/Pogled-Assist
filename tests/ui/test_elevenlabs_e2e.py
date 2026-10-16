@@ -38,7 +38,9 @@ def test_stationary_gaze_cannot_repeat_paid_test_after_busy_completion(
         qtbot.waitUntil(lambda: not account.state.credits_busy)
     else:
         window._select_tab(2)
-    button = window._eleven_page.test_button if dedicated else window._speech_page._test_speech_button
+    button = (
+        window._eleven_page.test_button if dedicated else window._speech_page._test_speech_button
+    )
     window._gaze_settings = replace(
         window._gaze_settings, selection_pause_ms=0, dwell_ms=200, click_cooldown_ms=100
     )
@@ -108,8 +110,15 @@ def test_stability_choices_and_similarity_slider_update_settings(settings):
         assert changes[-1].elevenlabs_stability == value
         assert sum(control.isChecked() for control in page.stability_buttons.values()) == 1
     page.similarity.setValue(90)
-    assert account.config.parameters["voice_settings"] == {"stability": 1.0, "similarity_boost": 0.9}
-    button = next(widget for widget in window._controls._actions if window._controls.name(widget) == "Sličnost glasa: više")
+    assert account.config.parameters["voice_settings"] == {
+        "stability": 1.0,
+        "similarity_boost": 0.9,
+    }
+    button = next(
+        widget
+        for widget in window._controls._actions
+        if window._controls.name(widget) == "Sličnost glasa: više"
+    )
     window._controls._actions[button]()
     assert page.similarity.value() == 95
     window.update_speech_settings(SpeechSettings(elevenlabs_stability=50, elevenlabs_similarity=70))
@@ -135,7 +144,7 @@ def test_free_credit_refresh_and_missing_permission_leave_voice_options_availabl
     window, _store, client, account, _ = settings
     account.save_key("key")
     account.check()
-    qtbot.waitUntil(lambda: account.state.options is not None)
+    qtbot.waitUntil(lambda: account.state.options is not None and not account.state.credits_busy)
     options = account.state.options
     client.balance = Subscription(85, 100)
     window._open_eleven()
@@ -212,7 +221,13 @@ def settings(qtbot, qapp, monkeypatch):
     store, client = FakeCredentials(), FakeElevenClient()
     account = ElevenAccount(qapp, store=store, client=client)
     cleared = []
-    window = SettingsWindow(GazeSettings(), SpeechSettings(), services=SettingsServices(account=account, clear_audio=lambda: cleared.append(True) or True))
+    window = SettingsWindow(
+        GazeSettings(),
+        SpeechSettings(),
+        services=SettingsServices(
+            account=account, clear_audio=lambda: cleared.append(True) or True
+        ),
+    )
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window._select_tab(2)
@@ -590,7 +605,9 @@ def test_clicking_current_voice_keeps_exactly_one_voice_selected(settings, prese
     for _ in range(2):
         button.click()
         assert button.isChecked()
-        assert sum(control.isChecked() for control in window._speech_page._voice_buttons.values()) == 1
+        assert (
+            sum(control.isChecked() for control in window._speech_page._voice_buttons.values()) == 1
+        )
     assert window._speech_settings.voice_preset == preset
     assert len(changes) == before
 
@@ -598,7 +615,9 @@ def test_clicking_current_voice_keeps_exactly_one_voice_selected(settings, prese
 def test_account_refresh_does_not_interrupt_dwell_on_unrelated_control(settings, monkeypatch):
     window, _store, _client, account, _ = settings
     window._select_tab(2)
-    window._gaze_settings = replace(window._gaze_settings, selection_pause_ms=0, dwell_ms=200, click_cooldown_ms=100)
+    window._gaze_settings = replace(
+        window._gaze_settings, selection_pause_ms=0, dwell_ms=200, click_cooldown_ms=100
+    )
     button = window._speech_page._saved_audio_button
     point = button.mapToGlobal(button.rect().center())
     now = [10.0]
@@ -646,10 +665,14 @@ def test_stop_remains_available_while_editing_saved_entry(speech, mode):
 def test_missing_selected_model_cannot_start_paid_test(settings, qtbot):
     window, _store, client, account, _ = settings
     account.save_key("key")
-    client.options = lambda *_: AccountOptions((("synthetic-voice", "Probni glas"),), (("other-model", "Drugi model"),))
+    client.options = lambda *_: AccountOptions(
+        (("synthetic-voice", "Probni glas"),), (("other-model", "Drugi model"),)
+    )
     account.check()
     qtbot.waitUntil(lambda: account.state.options is not None)
-    window.update_speech_settings(SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="synthetic-voice"))
+    window.update_speech_settings(
+        SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="synthetic-voice")
+    )
     window._select_tab(2)
     assert not window._speech_page._test_speech_button.isEnabled()
     window._open_eleven()

@@ -20,7 +20,8 @@ def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot,
     settings = hotbar._settings_window
     settings._select_tab(1)
     qtbot.wait(1)
-    point = settings._gaze_check_button.mapToGlobal(settings._gaze_check_button.rect().center())
+    button = settings._gaze_page._gaze_check_button
+    point = button.mapToGlobal(button.rect().center())
     feed(point, 100)
     feed(point, 600)
     assert hotbar._gaze_check_window is None
@@ -45,7 +46,7 @@ def test_gaze_check_suspends_all_input_and_preserves_speech_and_settings(
     original_message = hotbar._speech_window._input.text()
     hotbar._open_settings()
     settings = hotbar._settings_window
-    settings._gaze_check_button.click()
+    settings._gaze_page._gaze_check_button.click()
     check = hotbar._gaze_check_window
     qtbot.wait(1)
     assert check.isVisible()
@@ -84,7 +85,7 @@ def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
     hotbar, controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._open_settings()
     settings = hotbar._settings_window
-    settings._gaze_check_button.click()
+    settings._gaze_page._gaze_check_button.click()
     check = hotbar._gaze_check_window
     check._calibration_button.click()
     qtbot.wait(1)
@@ -128,4 +129,3 @@ def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
         assert "pored sata" in check._notice.text()
     else:
         assert check.isMinimized()
-

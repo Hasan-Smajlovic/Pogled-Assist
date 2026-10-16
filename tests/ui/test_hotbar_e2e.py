@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from _hotbar_fixtures import edge_surface as edge_surface
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeSpeechService
 

@@ -14,7 +14,9 @@ ACTIVE_PLAYBACK_STATES = frozenset({"preparing", "speaking"})
 PLAYBACK_LABELS = {"preparing": "Pripremam…", "speaking": "Izgovaram…"}
 FALLBACK_NOTE = "Zamjenski glasovi: Prirodni → Standardni."
 CREDITS_UNAVAILABLE = "Stanje kredita nije dostupno."
-CREDITS_UNAVAILABLE_NOTE = CREDITS_UNAVAILABLE + " Provjerite vezu i dozvolu za čitanje podataka o računu."
+CREDITS_UNAVAILABLE_NOTE = (
+    CREDITS_UNAVAILABLE + " Provjerite vezu i dozvolu za čitanje podataka o računu."
+)
 VOICE_TEST_TEXT = "SELAM. DOBRO MI DOŠLI."
 RECOVERY_NOTICE_MS = 5000
 # Non-streaming synthesis includes generation and the full audio download.

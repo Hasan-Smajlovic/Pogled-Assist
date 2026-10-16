@@ -221,7 +221,7 @@ def test_deleted_settings_preserves_last_startup_write_before_reopened_query(qtb
         assert writes == [True, False]
         assert reads == [False, False]
         assert not actual[0]
-        assert not reopened._startup_checkbox.isChecked()
+        assert not reopened._general_page._startup_checkbox.isChecked()
     finally:
         release.set()
         qtbot.waitUntil(lambda: not tasks._running)
@@ -258,7 +258,7 @@ def test_waiting_startup_write_finishes_before_a_reopened_window_can_query(qtbot
     qtbot.waitUntil(lambda: not reopened._startup_busy)
     assert writes == [True]
     assert reads == [True]
-    assert reopened._startup_checkbox.isChecked()
+    assert reopened._general_page._startup_checkbox.isChecked()
 
 
 @pytest.mark.e2e
@@ -363,4 +363,3 @@ def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkey
     finally:
         release.set()
         qtbot.waitUntil(lambda: not window._startup_busy)
-

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from ..keyboard_layouts import ARABIC_SCRIPT
 from ..speech.voice_state import VoiceState
 
@@ -35,10 +36,7 @@ class SpeechPlaybackControls:
             "failed": "Govor nije uspio. Pokušajte ponovo.",
             "stopped": "Govor je zaustavljen.",
         }[state]
-        if (
-            state == "finished"
-            and self._speech_settings.uses_efendija
-        ):
+        if state == "finished" and self._speech_settings.uses_efendija:
             message = f"Glas: {self._speech.voice_state.label}"
         self._set_status(message)
 
@@ -69,4 +67,3 @@ class SpeechPlaybackControls:
             self._playback_id = None
             self.set_playback_state("failed")
             self._set_status("Odabrani glas nije dostupan.")
-

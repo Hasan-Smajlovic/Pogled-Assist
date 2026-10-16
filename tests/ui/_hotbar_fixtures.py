@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import pytest
 from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeLibraryStore, FakeSpeechService
+from PySide6.QtCore import QPoint
 
-from pogled_assist.interaction.mouse_controller import GazeSettings
+from pogled_assist.interaction.mouse_controller import QUICK_ACTIONS, GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
+from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
 
 @pytest.fixture(params=[(1920, 1080), (1280, 720)])
@@ -47,3 +49,35 @@ def hotbar_gaze(qtbot, monkeypatch, request):
         controller.handle_gaze(point.x() / (width - 1), point.y() / (height - 1), milliseconds)
 
     return hotbar, controller, feed, actions, progress
+
+
+@pytest.fixture(params=["hotbar", "keyboard"])
+def edge_surface(hotbar_gaze, qtbot, request):
+    hotbar, controller, feed, actions, progress = hotbar_gaze
+    if request.param == "hotbar":
+        window = hotbar
+        action = QUICK_ACTIONS
+        button = hotbar._buttons[action]
+    else:
+        hotbar._show_keyboard_sidebar()
+        window = hotbar._keyboard_window
+        _, _, width, height = controller._logical_screen_rect
+        window.setGeometry(width - 380, hotbar.BAR_HEIGHT, 380, height - hotbar.BAR_HEIGHT)
+        qtbot.wait(1)
+        action = f"{KEYBOARD_WINDOW_ACTION_PREFIX}space"
+        button = window._space_button
+    center = button.mapToGlobal(button.rect().center())
+    outside = button.mapToGlobal(QPoint(button.width() + 2, button.height() // 2))
+    return window, controller, feed, actions, progress, action, center, outside
+
+
+@pytest.fixture
+def speech_gaze(hotbar_gaze, qtbot):
+    hotbar, controller, feed, actions, progress = hotbar_gaze
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(*controller._logical_screen_rect)
+    qtbot.waitUntil(window.isVisible)
+    qtbot.wait(1)
+    return window, controller, hotbar._speech, feed, actions, progress
