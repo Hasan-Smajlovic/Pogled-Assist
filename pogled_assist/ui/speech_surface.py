@@ -458,7 +458,7 @@ class SpeechSurface(QWidget):
             self._key_grid.setRowStretch(row, 0)
         rows = max(1, math.ceil(max(1, item_count) / max(1, columns)))
         # Tighten gaps for five-row grids without shrinking gaze targets.
-        self._key_grid.setVerticalSpacing(6 if rows >= 5 else 10)
+        self._key_grid.setVerticalSpacing(5 if rows >= 5 else 10)
         for column in range(columns):
             self._key_grid.setColumnStretch(column, 1)
         for row in range(rows):
