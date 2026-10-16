@@ -65,7 +65,7 @@ class SpeechSurface(QWidget):
     def _build_ui(self, keyboard_script: str) -> None:
         self.setStyleSheet(SPEECH_STYLE)
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 10, 12, 10)
+        root.setContentsMargins(12, 7, 12, 7)
         root.setSpacing(9)
         root.addLayout(self._build_topbar())
         root.addLayout(self._build_predictions())
@@ -139,7 +139,7 @@ class SpeechSurface(QWidget):
         self._prediction_buttons = []
         for index in range(5):
             button = self._make_button(
-                "·", f"suggestion:{index}", "predictionButton", minimum_height=66
+                "·", f"suggestion:{index}", "predictionButton", minimum_height=71
             )
             button.setEnabled(False)
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -680,7 +680,8 @@ SPEECH_STYLE = """
                 background: #173447;
                 border-color: #366c8d;
                 color: #eef2f8;
-                font-size: 22px;
+                font-size: 27px;
+                padding: 2px 8px;
             }
             QPushButton#predictionButton:disabled { color: #667184; background: #171a22; }
             QPushButton#groupButton {
