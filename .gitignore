@@ -73,3 +73,7 @@ Desktop.ini
 
 # Codex/agent runtime metadata mounted into the workspace
 .codex/
+
+# Claude Code personal settings and notes
+.claude/settings.local.json
+CLAUDE.local.md
