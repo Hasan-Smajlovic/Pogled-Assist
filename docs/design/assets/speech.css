@@ -47,7 +47,7 @@
 .view-header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 500; }
 .view-header button { min-width: 160px; min-height: 80px; font-size: 18px; flex: 0 1 165px; }
 .key-grid, .item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); flex: 1; gap: var(--gap); min-height: 0; }
-.key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(72px, 1fr)); row-gap: 6px; }
+.key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(72px, 1fr)); row-gap: 5px; }
 .key-grid.dense button { min-height: 72px; }
 .group { font-size: clamp(22px, 2vw, 34px); letter-spacing: .05em; }
 .symbols { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); }
