@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 from _speech_fakes import FakeLibraryStore, FakeSpeech
-from PySide6.QtCore import QObject, QPoint, Signal
+from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
+from PySide6.QtWidgets import QStyle, QStyleOptionButton
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_library import PhraseRecord
@@ -79,6 +80,63 @@ def conversation_model() -> dict[tuple[str, ...], int]:
         ("želim", "vodu"): 1200,
         (START, "želim", "vodu"): 1400,
     }
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+@pytest.mark.parametrize("use_gaze", [False, True])
+def test_larger_suggestions_fit_wrap_and_preserve_selection_and_undo(
+    qtbot, size, letters_per_group, use_gaze
+):
+    speech = FakeSpeech()
+    service = ManualSuggestionService()
+    window = SpeechWindow(
+        speech,
+        library_store=FakeLibraryStore(),
+        suggestions=service,
+        letters_per_group=letters_per_group,
+    )
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    window._input.setText("R")
+    words = ["RAZUMIJEVANJE", "RAZGOVARATI", "REHABILITACIJA", "RAZMIŠLJANJE", "RJEŠENJE"]
+    owner, revision, _text = service.requests[-1]
+    service.predictions_ready.emit(owner, revision, words)
+
+    assert (window.width(), window.height()) == size
+    assert [button.text() for button in window._prediction_buttons] == words
+    previous = None
+    for index, button in enumerate(window._prediction_buttons):
+        assert button.isVisible() and button.isEnabled()
+        assert button.height() == 71
+        assert button.font().pixelSize() == 27
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert window.rect().contains(rect)
+        if previous is not None:
+            assert previous.right() < rect.left()
+        previous = rect
+        option = QStyleOptionButton()
+        button.initStyleOption(option)
+        contents = button.style().subElementRect(QStyle.SE_PushButtonContents, option, button)
+        text_bounds = button.fontMetrics().boundingRect(
+            contents, int(Qt.AlignCenter | Qt.TextWrapAnywhere), button.text()
+        )
+        assert contents.contains(text_bounds), button.text()
+        point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 1))
+        action = f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:{index}"
+        assert window.action_at_global_point(point) == action
+
+    if use_gaze:
+        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:0")
+    else:
+        window._prediction_buttons[0].click()
+    assert window._input.text() == "RAZUMIJEVANJE "
+    assert speech.requests == []
+    window._undo_word_button.click()
+    assert window._input.text() == "R"
 
 
 @pytest.mark.e2e
