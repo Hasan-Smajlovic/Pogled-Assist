@@ -305,13 +305,13 @@ class SpeechSurface(QWidget):
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(10)
         self._space_button = self._make_button(
-            "Razmak", "space", "utilityButton", minimum_height=76
+            "Razmak", "space", "utilityButton", minimum_height=81
         )
         self._backspace_button = self._make_button(
-            "Obriši slovo", "backspace", "utilityButton", minimum_height=76
+            "Obriši slovo", "backspace", "utilityButton", minimum_height=81
         )
         self._keyboard_toggle_button = self._make_button(
-            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=76
+            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=81
         )
         utility_row.addWidget(self._space_button, 14)
         utility_row.addWidget(self._backspace_button, 10)
