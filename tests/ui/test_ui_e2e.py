@@ -13,6 +13,58 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
+    qtbot, make_speech_window, size, script
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    controls = (
+        (window._space_button, "space"),
+        (window._backspace_button, "backspace"),
+        (window._keyboard_toggle_button, "keyboard-toggle"),
+    )
+    assert window.width() == size[0]
+    assert window.height() == size[1]
+    previous = None
+    for button, command in controls:
+        assert button.minimumHeight() == 81
+        assert button.height() == 81
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert window.rect().contains(rect)
+        if previous is not None:
+            assert previous.right() < rect.left()
+        previous = rect
+        # The extra bottom five pixels must be selectable by gaze too.
+        point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 1))
+        assert window.action_at_global_point(point) == f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
+
+    assert window._script_button.minimumHeight() == 76
+    for use_gaze in (False, True):
+        window._input.setText("ABC")
+        for button, command in controls[:2]:
+            if use_gaze:
+                window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
+            else:
+                button.click()
+            assert window._input.text() == ("ABC " if command == "space" else "ABC")
+
+        original = window._symbols_mode
+        if use_gaze:
+            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle")
+        else:
+            window._keyboard_toggle_button.click()
+        assert window._symbols_mode != original
+        assert window._input.text() == "ABC"
+
+
+@pytest.mark.e2e
 def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze, monkeypatch):
     hotbar, controller, _feed, actions, _progress = hotbar_gaze
     point = QPoint(300, 250)
