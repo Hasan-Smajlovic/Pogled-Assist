@@ -15,12 +15,15 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 @pytest.mark.e2e
 @pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
 @pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
 def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
-    qtbot, make_speech_window, size, script
+    qtbot, make_speech_window, size, script, letters_per_group
 ):
     speech = FakeSpeech()
     speech._settings = SpeechSettings(keyboard_script=script)
-    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window = make_speech_window(
+        speech, letters_per_group=letters_per_group, library_store=FakeLibraryStore()
+    )
     window.resize(*size)
     window.show()
     qtbot.waitUntil(window.isVisible)
