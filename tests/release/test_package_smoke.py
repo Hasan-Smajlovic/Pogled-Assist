@@ -82,3 +82,27 @@ def test_windows_package_declares_the_bundled_suggestion_files():
     ):
         assert name in spec
         assert name in build
+
+
+@pytest.mark.parametrize("supported", [False, True])
+def test_audio_decoder_check_requires_mp3_without_opening_a_device(monkeypatch, supported):
+    from types import SimpleNamespace
+
+    from PySide6 import QtMultimedia
+
+    from pogled_assist.speech.bundle_check import verify_audio_decoder
+
+    class Formats:
+        Decode = "decode"
+        AudioCodec = SimpleNamespace(MP3="mp3")
+
+        def supportedAudioCodecs(self, mode):
+            assert mode == "decode"
+            return ["mp3"] if supported else []
+
+    monkeypatch.setattr(QtMultimedia, "QMediaFormat", Formats)
+    if supported:
+        verify_audio_decoder()
+    else:
+        with pytest.raises(RuntimeError, match="MP3 decoder"):
+            verify_audio_decoder()

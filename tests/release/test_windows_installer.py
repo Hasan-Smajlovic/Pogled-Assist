@@ -11,6 +11,7 @@ from ctypes import wintypes
 from pathlib import Path
 
 import pytest
+from _powershell import function_definitions, run_powershell_cases
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "win32",
@@ -49,11 +50,45 @@ SMOKE_APP_SOURCE = r"""
 using System;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
 
 public static class Program
 {
     public static int Main(string[] args)
     {
+        string records = Environment.GetEnvironmentVariable("FAKE_PROCESS_RECORD_DIR");
+        if (!String.IsNullOrEmpty(records))
+        {
+            string[] values = new string[args.Length + 2];
+            values[0] = Environment.CurrentDirectory;
+            values[1] = Environment.GetEnvironmentVariable("FAKE_INHERITED_VALUE") ?? "";
+            Array.Copy(args, 0, values, 2, args.Length);
+            File.WriteAllLines(Path.Combine(records, Process.GetCurrentProcess().Id + ".txt"), values);
+        }
+        if ((args.Length > 0 && args[0] == "--child") ||
+            (Environment.GetEnvironmentVariable("FAKE_BOOTSTRAP_CHILD") == "1" &&
+             (args.Length == 0 || (args[0] != "--delayed" && args[0] != "--hold"))))
+        {
+            ProcessStartInfo info = new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName);
+            info.UseShellExecute = false;
+            info.CreateNoWindow = true;
+            info.Arguments = Environment.GetEnvironmentVariable("FAKE_CHILD_HOLD") == "1"
+                ? "--hold" : "--delayed";
+            using (Process child = Process.Start(info)) { }
+            return 3010;
+        }
+        if (args.Length > 0 && args[0] == "--delayed")
+        {
+            Thread.Sleep(1500);
+            File.WriteAllText(Environment.GetEnvironmentVariable("FAKE_CHILD_DONE"), "done");
+            return 0;
+        }
+        if (Environment.GetEnvironmentVariable("FAKE_SMOKE_HOLD") == "1")
+        {
+            Thread.Sleep(60000);
+        }
+        string exitCode = Environment.GetEnvironmentVariable("FAKE_EXIT_CODE");
+        if (!String.IsNullOrEmpty(exitCode)) return Int32.Parse(exitCode);
         if (args.Length > 0 && args[0] == "--hold")
         {
             Thread.Sleep(60000);
@@ -120,6 +155,7 @@ def smoke_app(tmp_path_factory) -> Path:
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert executable_path.is_file()
@@ -175,7 +211,7 @@ def _run_installer(
 ) -> subprocess.CompletedProcess[str]:
     runner = package.parent.parent / "run-installer.ps1"
     runner.write_text(INSTALLER_RUNNER, encoding="utf-8")
-    return subprocess.run(
+    return _run_powershell(
         [
             "powershell.exe",
             "-NoProfile",
@@ -192,12 +228,212 @@ def _run_installer(
         ],
         cwd=package,
         env=environment or _installer_environment(),
-        check=False,
-        capture_output=True,
+    )
+
+
+def _run_powershell(command, *, cwd=None, env=None, timeout=30):
+    # Bound the harness too: a shell warning must fail the test and close its tree.
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        subprocess.run(
+            ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        process.communicate(timeout=5)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _mark_downloaded(path):
+    Path(str(path) + ":Zone.Identifier").write_text("[ZoneTransfer]\nZoneId=3\n", encoding="ascii")
+
+
+def test_downloaded_executable_installs_without_shell_warning(tmp_path, smoke_app):
+    package = _release_package(tmp_path, smoke_app)
+    _mark_downloaded(package / "PogledAssist.exe")
+    records = tmp_path / "records"
+    records.mkdir()
+    install_root = tmp_path / "installed with spaces"
+    result = _run_installer(
+        package,
+        install_root,
+        environment=_installer_environment(FAKE_PROCESS_RECORD_DIR=str(records)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    launches = [p.read_text().splitlines() for p in records.glob("*.txt")]
+    assert len(launches) == 2
+    assert all(record[2:] == ["--package-smoke-test"] for record in launches)
+    assert any(record[0] == str(install_root) for record in launches)
+    assert (
+        "ZoneId=3" in Path(str(install_root / "PogledAssist.exe") + ":Zone.Identifier").read_text()
+    )
+    _assert_no_transaction_files(install_root)
+
+
+@pytest.mark.parametrize("build_script", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "failure", "invalid", "timeout"])
+def test_package_process_outcomes_restore_environment_and_cleanup(
+    package_process_results, build_script, outcome
+):
+    case = package_process_results[build_script][f"smoke-{outcome}"]
+    result = case["result"]
+    records = case["records"]
+    report = case["report"]
+    assert result.returncode == (0 if outcome == "success" else 1), result.stdout + result.stderr
+    if outcome != "success":
+        assert result.stderr == "Smoke failed", result.stdout + result.stderr
+    if outcome == "failure":
+        assert "exit code 7" in result.stdout
+    if outcome == "timeout":
+        assert "timed out" in result.stdout
+    if outcome == "invalid":
+        assert "not a valid" in result.stdout
+    assert not report.exists()
+    for record in records.glob("*.txt"):
+        assert not _process_running(int(record.stem)), record
+
+
+def _process_running(pid):
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        assert ctypes.get_last_error() == 87  # ERROR_INVALID_PARAMETER: exited PID
+        return False
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 258  # WAIT_TIMEOUT
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+@pytest.mark.parametrize("timeout", [False, True])
+def test_setup_installer_waits_for_descendants_and_closes_tree(setup_process_results, timeout):
+    case = setup_process_results[f"descendants-{timeout}"]
+    result = case["result"]
+    tmp_path = case["cwd"]
+    records = case["records"]
+    child_done = case["child_done"]
+    launches = [record.read_text().splitlines() for record in records.glob("*.txt")]
+    parent = next(record for record in launches if record[2] == "--child")
+    assert parent[:2] == [str(tmp_path), "value with spaces"]
+    assert parent[2:] == ["--child", "one argument", 'a"b', "C:\\trailing space\\", ""]
+    assert len(launches) == 2
+    if timeout:
+        assert result.returncode != 0
+        assert "process tree timed out" in result.stderr
+        assert not child_done.exists()
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "3010" in result.stdout
+        assert child_done.read_text() == "done"
+    for record in records.glob("*.txt"):
+        assert not _process_running(int(record.stem)), record
+
+
+@pytest.mark.parametrize("exit_code", [0, 3010, 7])
+def test_official_python_installer_preserves_arguments_and_exit_codes(
+    setup_process_results, exit_code
+):
+    case = setup_process_results[f"python-{exit_code}"]
+    result = case["result"]
+    records = case["records"]
+    assert (result.returncode == 0) is (exit_code in (0, 3010)), result.stdout + result.stderr
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert "TargetDir=C:\\Python with spaces\\" in record[2:]
+    assert "Include_pip=0" in record[2:]
+    if exit_code == 3010:
+        assert "requested a reboot" in result.stdout
+    elif exit_code == 7:
+        assert "exit code 7" in result.stderr
+
+
+def test_setup_native_probe_drains_both_output_streams_without_deadlock(setup_process_results):
+    case = setup_process_results["native-probe"]
+    result = case["result"]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "o" * 1000 in result.stdout and "e" * 1000 in result.stdout
+
+
+def test_package_launcher_starts_downloaded_executable_in_app_directory(tmp_path, smoke_app):
+    root = tmp_path / "portable with spaces"
+    root.mkdir()
+    launcher = root / "start_gaze_mouse.ps1"
+    shutil.copy2(REPO_ROOT / "packaging/windows/start_gaze_mouse.ps1", launcher)
+    shutil.copy2(smoke_app, root / "PogledAssist.exe")
+    _mark_downloaded(root / "PogledAssist.exe")
+    records = tmp_path / "records"
+    records.mkdir()
+    result = _run_powershell(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(launcher),
+            "-NoElevation",
+            "-NoPause",
+        ],
+        env=_installer_environment(FAKE_PROCESS_RECORD_DIR=str(records)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert record == [str(root), ""]
+
+
+def test_installation_check_keeps_normal_window_configuration(package_process_results):
+    case = package_process_results[False]["installation-check"]
+    result = case["result"]
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_post_install_launch_passes_launcher_path_with_spaces(package_process_results):
+    case = package_process_results[False]["post-install"]
+    result = case["result"]
+    root = case["root"]
+    records = case["records"]
+    assert result.returncode == 0, result.stdout + result.stderr
+    deadline = time.monotonic() + 5
+    while not list(records.glob("*.txt")) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert record == [str(root), "", "--post-install"]
+
+
+def test_setup_installer_rejects_invalid_executable_without_shell(setup_process_results):
+    case = setup_process_results["invalid"]
+    result = case["result"]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() in ("NativeErrorCode=193", "NativeErrorCode=216")
+
+
+@pytest.mark.parametrize("exit_code", [0, 3010, 7])
+def test_msi_setup_preserves_exit_codes_and_raw_path_argument(msi_process_results, exit_code):
+    case = msi_process_results[str(exit_code)]
+    result = case["result"]
+    assert (result.returncode == 0) is (exit_code in (0, 3010)), result.stdout + result.stderr
+    if exit_code == 3010:
+        assert "requested a reboot" in result.stdout
+    elif exit_code == 7:
+        assert "exit code 7" in result.stderr
 
 
 def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(
@@ -371,7 +607,7 @@ def test_upgrade_replaces_bundled_files_and_preserves_user_files(tmp_path, smoke
     _assert_no_transaction_files(install_root)
 
 
-def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path, smoke_app):
+def test_open_install_directory_fails_cleanly_without_transaction_leftovers(tmp_path, smoke_app):
     package = _release_package(tmp_path, smoke_app)
     install_root = _existing_installation(tmp_path)
     persistent_before = _persistent_snapshot(install_root)
@@ -386,12 +622,6 @@ def test_open_install_directory_fails_cleanly_then_retry_succeeds(tmp_path, smok
     assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == "0.1.0"
     assert (install_root / "old-app-file.txt").is_file()
     assert not (install_root / "new-app-file.txt").exists()
-    assert _persistent_snapshot(install_root) == persistent_before
-    _assert_no_transaction_files(install_root)
-
-    retry = _run_installer(package, install_root)
-    assert retry.returncode == 0, retry.stdout + retry.stderr
-    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == PACKAGE_VERSION
     assert _persistent_snapshot(install_root) == persistent_before
     _assert_no_transaction_files(install_root)
 
@@ -524,7 +754,6 @@ def test_running_application_blocks_install_before_files_change(tmp_path, smoke_
     install_root = _existing_installation(tmp_path)
     running_app = subprocess.Popen([str(smoke_app), "--hold"])
     try:
-        time.sleep(0.3)
         completed = _run_installer(package, install_root)
     finally:
         running_app.terminate()
@@ -589,3 +818,253 @@ def test_legacy_install_root_is_never_modified(tmp_path, smoke_app):
         completed,
         "belongs to the previous application and will not be changed",
     )
+
+
+def _package_process_case(tmp_path, smoke_app, build_script, outcome):
+    app_root = tmp_path / "package with spaces"
+    app_root.mkdir()
+    executable = app_root / "PogledAssist.exe"
+    if outcome == "invalid":
+        executable.write_bytes(b"invalid executable")
+    else:
+        shutil.copy2(smoke_app, executable)
+    _mark_downloaded(executable)
+    records = tmp_path / "records"
+    records.mkdir()
+    report = tmp_path / "report.txt"
+    environment = {
+        "FAKE_PROCESS_RECORD_DIR": str(records),
+        "FAKE_APP_ROOT": str(app_root),
+        "FAKE_REPORT_PATH": str(report),
+        "POGLED_ASSIST_PACKAGE_SMOKE_REPORT": "original report",
+        "QT_QPA_PLATFORM": "original platform",
+        "FAKE_SMOKE_HOLD": "1" if outcome == "timeout" else "0",
+        "FAKE_EXIT_CODE": "" if outcome == "failure" else "0",
+        "FAKE_SMOKE_FAIL_ROOT": "all" if outcome == "failure" else "",
+    }
+    if build_script:
+        call = "Invoke-BuiltPackageSmokeTest -PackageRoot $env:FAKE_APP_ROOT -SmokeReportPath $env:FAKE_REPORT_PATH"
+    else:
+        call = 'Invoke-PackageSmokeTest -Root $env:FAKE_APP_ROOT -Label "probe"'
+    return {
+        "body": r"""
+$beforePath = $env:PATH
+$failed = $false
+try {
+    CALL -TimeoutMilliseconds TIMEOUT
+} catch {
+    $failed = $true
+    Write-Output $_.Exception.Message
+}
+if ($env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT -ne "original report" -or
+    $env:QT_QPA_PLATFORM -ne "original platform" -or $env:PATH -ne $beforePath) {
+    throw "Environment was not restored"
+}
+if ($failed) { throw "Smoke failed" }
+""".replace("CALL", call).replace("TIMEOUT", "300" if outcome == "timeout" else "5000"),
+        "env": environment,
+        "cwd": tmp_path,
+        "records": records,
+        "report": report,
+    }
+
+
+def _descendant_case(tmp_path, smoke_app, timeout):
+    executable = tmp_path / "bootstrap with spaces.exe"
+    shutil.copy2(smoke_app, executable)
+    _mark_downloaded(executable)
+    records = tmp_path / "records"
+    records.mkdir()
+    child_done = tmp_path / "child done.txt"
+    environment = {
+        "FAKE_BOOTSTRAP_CHILD": "1",
+        "FAKE_CHILD_HOLD": "1" if timeout else "0",
+        "FAKE_PROCESS_RECORD_DIR": str(records),
+        "FAKE_EXE": str(executable),
+        "FAKE_CHILD_DONE": str(child_done),
+        "FAKE_INHERITED_VALUE": "value with spaces",
+    }
+    return {
+        "body": "Write-Output (Invoke-InstallerProcess -FilePath $env:FAKE_EXE "
+        '-Arguments @("--child", "one argument", \'a"b\', "C:\\trailing space\\", "") '
+        f"-TimeoutSeconds {1 if timeout else 10})",
+        "env": environment,
+        "cwd": tmp_path,
+        "records": records,
+        "child_done": child_done,
+    }
+
+
+def _python_installer_case(tmp_path, smoke_app, exit_code):
+    records = tmp_path / "records"
+    records.mkdir()
+    return {
+        "body": r"""
+function Write-Info { param([string]$Message) }
+function Write-Success { param([string]$Message) Write-Output $Message }
+function Write-WarningLog { param([string]$Message) Write-Output $Message }
+Invoke-OfficialPythonInstaller -InstallerPath $env:FAKE_EXE -TargetDir "C:\Python with spaces\" -X86
+""",
+        "env": {
+            "FAKE_EXE": str(smoke_app),
+            "FAKE_EXIT_CODE": str(exit_code),
+            "FAKE_PROCESS_RECORD_DIR": str(records),
+        },
+        "cwd": tmp_path,
+        "records": records,
+    }
+
+
+def _native_probe_case(tmp_path, smoke_app):
+    return {
+        "body": r"""
+function Write-Info { param([string]$Message) }
+Invoke-NativeCommandWithTimeout -Label "flood probe" -FilePath $env:FAKE_EXE -Arguments @(
+    "-c", "import sys; sys.stdout.write('o'*200000); sys.stderr.write('e'*200000)"
+) -TimeoutSeconds 10
+""",
+        "env": {"FAKE_EXE": sys.executable},
+        "cwd": tmp_path,
+    }
+
+
+def _invalid_executable_case(tmp_path, smoke_app):
+    executable = tmp_path / "invalid with spaces.exe"
+    executable.write_bytes(b"invalid executable")
+    _mark_downloaded(executable)
+    return {
+        "body": r"""
+try {
+    Invoke-InstallerProcess -FilePath $env:FAKE_EXE -Arguments @() -TimeoutSeconds 1
+} catch {
+    $cause = $_.Exception
+    while ($null -ne $cause.InnerException) { $cause = $cause.InnerException }
+    if ($cause -isnot [ComponentModel.Win32Exception]) { throw }
+    Write-Output "NativeErrorCode=$($cause.NativeErrorCode)"
+    return
+}
+throw "Invalid executable unexpectedly started"
+""",
+        "env": {"FAKE_EXE": str(executable)},
+        "cwd": tmp_path,
+    }
+
+
+def _msi_case(tmp_path, exit_code):
+    return {
+        "body": r"""
+function Write-Step { param([string]$Message) }
+function Write-Info { param([string]$Message) }
+function Write-Success { param([string]$Message) Write-Output $Message }
+function Write-WarningLog { param([string]$Message) Write-Output $Message }
+function Download-FileWithPowerShell { param($Url, $DestinationPath, $Label) }
+function Unblock-File { param($Path, $ErrorAction) }
+function Invoke-InstallerProcess {
+    param($FilePath, $Arguments)
+    if ($FilePath -ne (Join-Path $env:SystemRoot "System32\msiexec.exe") -or
+        $Arguments.Count -ne 4 -or $Arguments[0] -ne "/i" -or
+        $Arguments[1] -notlike "*PogledAssistSetup\installer with spaces.msi" -or
+        $Arguments[1].Contains('"') -or $Arguments[2] -ne "/quiet" -or $Arguments[3] -ne "/norestart") {
+        throw "Invalid installer invocation"
+    }
+    return [int]$env:FAKE_EXIT_CODE
+}
+$EspeakNgVersion = "1.52.0"
+$EspeakNgInstallerFileName = "installer with spaces.msi"
+$EspeakNgInstallerUrl = "https://example.invalid/installer"
+Install-EspeakNgFromMsi
+""",
+        "env": {"FAKE_EXIT_CODE": str(exit_code)},
+        "cwd": tmp_path,
+    }
+
+
+def _installation_check_case(tmp_path, smoke_app):
+    return {
+        "body": r"""
+$process = Start-ApplicationProcess -FilePath $env:FAKE_EXE -Arguments "--installation-check" -WorkingDirectory $env:FAKE_ROOT
+try {
+    if ($process.StartInfo.UseShellExecute -or $process.StartInfo.CreateNoWindow -or
+        $process.StartInfo.WindowStyle -ne "Normal") { throw "Wrong window configuration" }
+    if (-not $process.WaitForExit(5000) -or $process.ExitCode -ne 0) { throw "Launch failed" }
+} finally { $process.Dispose() }
+""",
+        "env": {"FAKE_EXE": str(smoke_app), "FAKE_ROOT": str(tmp_path)},
+        "cwd": tmp_path,
+    }
+
+
+def _post_install_case(tmp_path, smoke_app):
+    root = tmp_path / "installed with spaces"
+    root.mkdir()
+    records = tmp_path / "records"
+    records.mkdir()
+    launcher = root / "start_gaze_mouse.ps1"
+    launcher.write_text(
+        "param([switch]$NoPause)\nif (-not $NoPause) { exit 4 }\n"
+        '& $env:FAKE_EXE "--post-install"\n',
+        encoding="utf-8",
+    )
+    return {
+        "body": "Start-InstalledApplication -InstalledRoot $env:FAKE_ROOT",
+        "env": {
+            "FAKE_EXE": str(smoke_app),
+            "FAKE_ROOT": str(root),
+            "FAKE_PROCESS_RECORD_DIR": str(records),
+        },
+        "cwd": tmp_path,
+        "root": root,
+        "records": records,
+    }
+
+
+def _run_process_batch(root, script, cases):
+    # Environment restoration is asserted in each smoke body before driver cleanup.
+    results = run_powershell_cases(root, cases, prelude=function_definitions(script))
+    return {name: {**case, "result": results[name]} for name, case in cases.items()}
+
+
+@pytest.fixture(scope="module")
+def package_process_results(tmp_path_factory, smoke_app):
+    batches = {}
+    for build in (False, True):
+        root = tmp_path_factory.mktemp(f"package-process-{build}")
+        cases = {}
+        for outcome in ("success", "failure", "invalid", "timeout"):
+            directory = root / f"smoke-{outcome}"
+            directory.mkdir()
+            cases[directory.name] = _package_process_case(directory, smoke_app, build, outcome)
+        if not build:
+            for name, prepare in [
+                ("installation-check", _installation_check_case),
+                ("post-install", _post_install_case),
+            ]:
+                directory = root / name
+                directory.mkdir()
+                cases[name] = prepare(directory, smoke_app)
+        script = (
+            REPO_ROOT / "scripts/release/build_windows_package.ps1" if build else INSTALLER_SCRIPT
+        )
+        batches[build] = _run_process_batch(root, script, cases)
+    return batches
+
+
+@pytest.fixture(scope="module")
+def setup_process_results(tmp_path_factory, smoke_app):
+    root = tmp_path_factory.mktemp("setup-processes")
+    specs = [(f"descendants-{timeout}", _descendant_case, (timeout,)) for timeout in (False, True)]
+    specs += [(f"python-{code}", _python_installer_case, (code,)) for code in (0, 3010, 7)]
+    specs += [("native-probe", _native_probe_case, ()), ("invalid", _invalid_executable_case, ())]
+    cases = {}
+    for name, prepare, args in specs:
+        directory = root / name
+        directory.mkdir()
+        cases[name] = prepare(directory, smoke_app, *args)
+    return _run_process_batch(root, REPO_ROOT / "setup_windows.ps1", cases)
+
+
+@pytest.fixture(scope="module")
+def msi_process_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("msi-rules")
+    cases = {str(code): _msi_case(root / str(code), code) for code in (0, 3010, 7)}
+    return _run_process_batch(root, REPO_ROOT / "setup_windows.ps1", cases)

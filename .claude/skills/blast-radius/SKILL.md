@@ -5,6 +5,4 @@ description: Assess what a Pogled Assist change could break outside the diff. Us
 
 # Blast radius
 
-Read and follow [`.agents/skills/blast-radius/SKILL.md`](../../../.agents/skills/blast-radius/SKILL.md).
-That file owns this workflow for every coding agent; this copy only makes it
-discoverable by Claude Code. Edit the source, never this pointer.
+Read and follow [`.agents/skills/blast-radius/SKILL.md`](../../../.agents/skills/blast-radius/SKILL.md). That file owns this workflow for every coding agent; this copy only makes it discoverable by Claude Code. Edit the source, never this pointer.

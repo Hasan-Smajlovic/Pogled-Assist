@@ -7,8 +7,20 @@ import sys
 from pathlib import Path
 
 import pytest
+from _powershell import run_powershell_cases
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="dev.ps1 uses Windows PowerShell")
+
+FAST_CASES = [
+    (1, False, 0, 1),
+    (4, False, 0, 2),
+    (1, True, 0, 2),
+    (0, False, 0, 0),
+    (0, True, 0, 2),
+    (1, False, 2, 2),
+    (4, False, 1, 1),
+    (1, True, 1, 1),
+]
 
 DEV_SCRIPT = Path(__file__).resolve().parents[2] / "dev.ps1"
 PACKAGE_SCRIPT = DEV_SCRIPT.parent / "scripts" / "release" / "build_windows_package.ps1"
@@ -67,49 +79,15 @@ def test_setup_rejects_missing_base_without_moving_existing_environment(
     assert not (tmp_path / ".dev-tools").exists()
 
 
-def test_python_probe_works_with_legacy_powershell_argument_passing(tmp_path: Path) -> None:
-    shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
-    script_path = str(tmp_path / "dev.ps1").replace("'", "''")
-    python_path = sys.executable.replace("'", "''")
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            f". '{script_path}' help | Out-Null; Get-PythonVersion -Executable '{python_path}'",
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0
+def test_python_probe_works_with_legacy_powershell_argument_passing(python_probe_results):
+    result = python_probe_results["version"]
+    assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == f"{sys.version_info.major}.{sys.version_info.minor}"
 
 
-def test_base_python_probe_resolves_the_interpreter_behind_a_venv(tmp_path: Path) -> None:
-    shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
-    script_path = str(tmp_path / "dev.ps1").replace("'", "''")
-    python_path = sys.executable.replace("'", "''")
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            f". '{script_path}' help | Out-Null; Get-PythonBaseExecutable -Executable '{python_path}'",
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0
+def test_base_python_probe_resolves_the_interpreter_behind_a_venv(python_probe_results):
+    result = python_probe_results["base"]
+    assert result.returncode == 0, result.stdout + result.stderr
     assert Path(result.stdout.strip()).resolve() == Path(sys._base_executable).resolve()
 
 
@@ -274,24 +252,10 @@ def _run_dev_driver(tmp_path: Path, body: str) -> subprocess.CompletedProcess[st
 
 
 @pytest.mark.parametrize(
-    ("code", "expected"),
-    [
-        ("print(\"quoted value\"); print('second line')", "quoted value"),
-        ("import sys; sys.stderr.write('error' * 20000); print('ok')", "ok"),
-        ("import sys; print('3.10'); sys.exit(1)", "<missing>"),
-    ],
+    "case,expected", [("probe0", "quoted value"), ("probe1", "ok"), ("probe2", "<missing>")]
 )
-def test_python_probe_handles_output_and_exit_status(tmp_path: Path, code: str, expected: str):
-    result = _run_dev_driver(
-        tmp_path,
-        """
-$probe = Invoke-PythonProbe -Executable 'PYTHON_PATH' -Code @'
-PROBE_CODE
-'@
-if ($null -eq $probe) { Write-Output "<missing>" } else { Write-Output $probe }
-""".replace("PYTHON_PATH", sys.executable.replace("'", "''")).replace("PROBE_CODE", code),
-    )
-
+def test_python_probe_handles_output_and_exit_status(python_probe_results, case, expected):
+    result = python_probe_results[case]
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == expected
     assert result.stderr == ""
@@ -380,49 +344,11 @@ catch {
     )
 
 
-@pytest.mark.parametrize(
-    ("count", "full_suite", "workers", "expected_workers"),
-    [
-        (1, False, 0, 1),
-        (4, False, 0, 2),
-        (1, True, 0, 2),
-        (0, False, 0, 0),
-        (0, True, 0, 2),
-        (1, False, 2, 2),
-        (4, False, 1, 1),
-        (1, True, 1, 1),
-    ],
-)
+@pytest.mark.parametrize("count,full_suite,workers,expected_workers", FAST_CASES)
 def test_fast_check_honors_selection_without_coverage_or_package(
-    tmp_path,
-    count,
-    full_suite,
-    workers,
-    expected_workers,
+    fast_check_results, count, full_suite, workers, expected_workers
 ):
-    result = _run_dev_driver(
-        tmp_path,
-        """
-$script:IsFullSuite = $FULL
-$script:SelectedCount = COUNT
-$Workers = REQUESTED_WORKERS
-function Get-FastCheckPlan {
-    $paths = @(for ($i = 0; $i -lt $script:SelectedCount; $i++) { "tests/test_$i.py" })
-    return [PSCustomObject]@{ full_suite = $script:IsFullSuite; test_paths = $paths }
-}
-function Invoke-LintChecks { param($Plan); Write-Host "FAST-LINT" }
-function Invoke-TestSuite {
-    param([string[]]$Paths, [int]$WorkerCount, [switch]$WithCoverage)
-    if ($WithCoverage) { throw "Unexpected coverage" }
-    Write-Host "TEST-WORKERS:$WorkerCount PATH-COUNT:$($Paths.Count)"
-}
-function Invoke-PackageBuild { throw "Unexpected package" }
-Invoke-FastCheck
-""".replace("$FULL", "$true" if full_suite else "$false")
-        .replace("COUNT", str(count), 1)
-        .replace("REQUESTED_WORKERS", str(workers)),
-    )
-
+    result = fast_check_results[f"{count}-{full_suite}-{workers}"]
     assert result.returncode == 0, result.stdout + result.stderr
     assert "FAST-LINT" in result.stdout
     if expected_workers:
@@ -441,39 +367,149 @@ def test_full_check_rejects_manual_partial_test_selection(tmp_path):
 
 
 @pytest.mark.parametrize("selected", ["valid.ps1", "broken.ps1", "../outside.ps1"])
-def test_powershell_focused_check_parses_only_selected_paths_and_rejects_escape(tmp_path, selected):
-    checks = tmp_path / "repo" / "scripts" / "checks"
-    checks.mkdir(parents=True)
-    checker = checks / "check_powershell.ps1"
-    shutil.copy2(DEV_SCRIPT.parent / "scripts" / "checks" / checker.name, checker)
-    (tmp_path / "repo" / "valid.ps1").write_text('Write-Output "valid"\n', encoding="utf-8")
-    (tmp_path / "repo" / "broken.ps1").write_text("function Broken {", encoding="utf-8")
-    (tmp_path / "outside.ps1").write_text('Write-Output "outside"\n', encoding="utf-8")
-    shutil.copy2(DEV_SCRIPT.parent / "PSScriptAnalyzerSettings.psd1", tmp_path / "repo")
-
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(checker),
-            "-Paths",
-            selected,
-        ],
-        cwd=tmp_path / "repo",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
+def test_powershell_focused_check_parses_only_selected_paths_and_rejects_escape(
+    launch_check_results, selected
+):
+    result = launch_check_results[selected]
     if selected == "valid.ps1":
         assert result.returncode == 0, result.stdout + result.stderr
         assert "passed for 1 script(s)" in result.stdout
     else:
         assert result.returncode != 0
-        if selected.startswith(".."):
-            assert "must be a script inside the repository" in result.stderr
-        else:
-            assert "Missing closing" in result.stderr
+        assert (
+            "must be a script inside the repository"
+            if selected.startswith("..")
+            else "Missing closing"
+        ) in result.stderr
+
+
+LAUNCH_CASES = [
+    ("ordinary.ps1", 'Start-Process -FilePath "test.exe" -Wait', False),
+    ("ordinary.ps1", 'saps -FilePath "test.exe"', False),
+    ("ordinary.ps1", 'Microsoft.PowerShell.Management\\Start-Process "test.exe"', False),
+    ("ordinary.ps1", '$p = @{FilePath="test.exe"}; Start-Process @p', False),
+    ("ordinary.ps1", 'Start-Process "test.exe" -Verb Open', False),
+    ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb RunAs', True),
+    ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb:RunAs', True),
+    ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', True),
+    ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "test.exe")', False),
+    ("ordinary.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', False),
+    (
+        "ordinary.ps1",
+        "$p = New-Object Diagnostics.ProcessStartInfo; $p.UseShellExecute = $false",
+        True,
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def launch_check_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("launch-check")
+    (root / "outside.ps1").write_text('Write-Output "outside"', encoding="utf-8")
+    cases = {}
+    entries = [
+        (f"case{i:02}", filename, source, filename)
+        for i, (filename, source, _) in enumerate(LAUNCH_CASES)
+    ]
+    entries += [
+        (f"focused{i}", "valid.ps1", 'Write-Output "valid"', selected)
+        for i, selected in enumerate(["valid.ps1", "broken.ps1", "../outside.ps1"])
+    ]
+    for name, filename, source, selected in entries:
+        case = root / name
+        checks = case / "scripts" / "checks"
+        checks.mkdir(parents=True)
+        shutil.copy2(DEV_SCRIPT.parent / "scripts/checks/check_powershell.ps1", checks)
+        shutil.copy2(DEV_SCRIPT.parent / "PSScriptAnalyzerSettings.psd1", case)
+        (case / filename).write_text(source, encoding="utf-8")
+        if name.startswith("focused"):
+            (case / "broken.ps1").write_text("function Broken {", encoding="utf-8")
+        cases[name] = {"body": f"& './scripts/checks/check_powershell.ps1' -Paths '{selected}'"}
+    results = run_powershell_cases(root, cases)
+    return {
+        **{
+            (filename, source): results[f"case{i:02}"]
+            for i, (filename, source, _) in enumerate(LAUNCH_CASES)
+        },
+        **{
+            selected: results[f"focused{i}"]
+            for i, selected in enumerate(["valid.ps1", "broken.ps1", "../outside.ps1"])
+        },
+    }
+
+
+@pytest.mark.parametrize(("filename", "source", "allowed"), LAUNCH_CASES)
+def test_powershell_check_enforces_direct_executable_launches(
+    launch_check_results, filename, source, allowed
+):
+    result = launch_check_results[(filename, source)]
+    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+    if not allowed:
+        assert "UseShellExecute=false" in result.stdout + result.stderr
+
+
+PYTHON_PROBE_TEMPLATE = """
+$probe = Invoke-PythonProbe -Executable 'PYTHON_PATH' -Code @'
+PROBE_CODE
+'@
+if ($null -eq $probe) { Write-Output "<missing>" } else { Write-Output $probe }
+"""
+
+
+@pytest.fixture(scope="module")
+def python_probe_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("python-probes")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    python = sys.executable.replace("'", "''")
+    cases = {
+        "version": {"body": f"Get-PythonVersion -Executable '{python}'"},
+        "base": {"body": f"Get-PythonBaseExecutable -Executable '{python}'"},
+    }
+    for index, code in enumerate(
+        [
+            "print(\"quoted value\"); print('second line')",
+            "import sys; sys.stderr.write('error' * 20000); print('ok')",
+            "import sys; print('3.10'); sys.exit(1)",
+        ]
+    ):
+        cases[f"probe{index}"] = {
+            "body": PYTHON_PROBE_TEMPLATE.replace("PYTHON_PATH", python).replace("PROBE_CODE", code)
+        }
+    return run_powershell_cases(root, cases, prelude=DEV_PRELUDE)
+
+
+FAST_CHECK_TEMPLATE = r"""
+$script:IsFullSuite = $FULL
+$script:SelectedCount = COUNT
+$Workers = REQUESTED_WORKERS
+function Get-FastCheckPlan {
+    $paths = @(for ($i = 0; $i -lt $script:SelectedCount; $i++) { "tests/test_$i.py" })
+    return [PSCustomObject]@{ full_suite = $script:IsFullSuite; test_paths = $paths }
+}
+function Invoke-LintChecks { param($Plan); Write-Host "FAST-LINT" }
+function Invoke-TestSuite {
+    param([string[]]$Paths, [int]$WorkerCount, [switch]$WithCoverage)
+    if ($WithCoverage) { throw "Unexpected coverage" }
+    Write-Host "TEST-WORKERS:$WorkerCount PATH-COUNT:$($Paths.Count)"
+}
+function Invoke-PackageBuild { throw "Unexpected package" }
+Invoke-FastCheck
+"""
+
+
+DEV_PRELUDE = '. (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null\n'
+
+
+@pytest.fixture(scope="module")
+def fast_check_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("fast-check")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    cases = {}
+    for count, full, workers, _expected in FAST_CASES:
+        body = (
+            FAST_CHECK_TEMPLATE.replace("$FULL", "$true" if full else "$false")
+            .replace("COUNT", str(count), 1)
+            .replace("REQUESTED_WORKERS", str(workers))
+        )
+        cases[f"{count}-{full}-{workers}"] = {"body": body}
+    return run_powershell_cases(root, cases, prelude=DEV_PRELUDE)

@@ -19,12 +19,23 @@ FIRST_SHA = "a" * 40
 SECOND_SHA = "b" * 40
 
 
+def test_legacy_dual_resolution_archive_publishes_only_720p(tmp_path):
+    api = FakeGitHub()
+    for artifact_id in api.archives:
+        api.archives[artifact_id] = _archive(
+            {"1280x720/speech.png": _png(), "1440x900/speech.png": _png()}
+        )
+    site.prepare_site(api, tmp_path / "site", BASE_URL)
+    assert list((tmp_path / "site").rglob("1280x720/speech.png"))
+    assert not list((tmp_path / "site").rglob("1440x900"))
+
+
 def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     api = FakeGitHub()
     api.pulls.append(_pull(2, SECOND_SHA))
     api.runs[102] = _run(2, 102, SECOND_SHA)
     api.artifacts.append(_artifact(102, SECOND_SHA, 2))
-    api.archives[102] = _archive({"1440x900/speech.png": _png()})
+    api.archives[102] = _archive({"1280x720/speech.png": _png()})
     api.pulls[0]["title"] = '<script>alert("PR title")</script>'
 
     comments = site.prepare_site(api, tmp_path / "site", BASE_URL)
@@ -32,8 +43,8 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     assert {comment["number"] for comment in comments} == {1, 2}
     for number, artifact_id in ((1, 101), (2, 102)):
         directory = tmp_path / "site" / f"pr-{number}" / f"artifact-{artifact_id}"
-        assert (directory / "1440x900" / "speech.png").read_bytes() == _png()
-        html = (directory / "1440x900" / "index.html").read_text(encoding="utf-8")
+        assert (directory / "1280x720" / "speech.png").read_bytes() == _png()
+        html = (directory / "1280x720" / "index.html").read_text(encoding="utf-8")
         assert "attacker.example" not in html
         assert "speech.png" in html
         assert "Hardware and Windows input are disabled" in html
@@ -42,7 +53,7 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     assert "&lt;script&gt;" in root
     assert api.writes == []
     assert comments[0]["body"].startswith(site.COMMENT_MARKER)
-    assert f"{BASE_URL}/pr-1/artifact-101/1440x900/speech.png" in comments[0]["body"]
+    assert f"{BASE_URL}/pr-1/artifact-101/1280x720/speech.png" in comments[0]["body"]
 
 
 def test_newest_gallery_wins_and_reruns_have_a_new_image_url(tmp_path):
@@ -150,7 +161,7 @@ def test_invalid_gallery_does_not_stop_another_pr_from_being_published(tmp_path)
     api.pulls.append(_pull(2, SECOND_SHA))
     api.runs[102] = _run(2, 102, SECOND_SHA)
     api.artifacts.append(_artifact(102, SECOND_SHA, 2))
-    api.archives[102] = _archive({"1440x900/speech.png": _png()})
+    api.archives[102] = _archive({"1280x720/speech.png": _png()})
 
     comments = site.prepare_site(api, tmp_path / "site", BASE_URL)
 
@@ -168,7 +179,7 @@ def test_failed_ci_still_publishes_available_images_and_reports_failure(tmp_path
     assert "CI: **failure**" in comments[0]["body"]
 
 
-@pytest.mark.parametrize("path", ["../speech.png", "/speech.png", "1440x900\\speech.png"])
+@pytest.mark.parametrize("path", ["../speech.png", "/speech.png", "1280x720\\speech.png"])
 def test_archive_rejects_paths_that_could_escape_the_output(path):
     archive = _archive({path: _png()})
     with ZipFile(io.BytesIO(archive)) as zipped:
@@ -178,7 +189,7 @@ def test_archive_rejects_paths_that_could_escape_the_output(path):
 
 
 def test_archive_rejects_symlinks_and_duplicate_images():
-    link = ZipInfo("1440x900/speech.png")
+    link = ZipInfo("1280x720/speech.png")
     link.create_system = 3
     link.external_attr = (stat.S_IFLNK | 0o777) << 16
     output = io.BytesIO()
@@ -189,8 +200,8 @@ def test_archive_rejects_symlinks_and_duplicate_images():
     with pytest.warns(UserWarning, match="Duplicate name"):
         duplicate = _archive(
             [
-                ("1440x900/speech.png", _png()),
-                ("1440x900/speech.png", _png()),
+                ("1280x720/speech.png", _png()),
+                ("1280x720/speech.png", _png()),
             ]
         )
     with pytest.raises(ValueError, match="unexpected image"):
@@ -206,20 +217,20 @@ def test_archive_rejects_invalid_or_incomplete_png_data(case):
         "checksum": _png()[:29] + b"xxxx" + _png()[33:],
     }
     with pytest.raises(ValueError):
-        site.read_images(_archive({"1440x900/speech.png": images[case]}))
+        site.read_images(_archive({"1280x720/speech.png": images[case]}))
 
 
 def test_png_text_metadata_is_removed_and_pixel_data_is_kept():
-    images = site.read_images(_archive({"1440x900/speech.png": _png(metadata=True, gamma=True)}))
+    images = site.read_images(_archive({"1280x720/speech.png": _png(metadata=True, gamma=True)}))
 
-    assert images["1440x900/speech.png"] == _png(gamma=True)
-    assert b"private metadata" not in images["1440x900/speech.png"]
+    assert images["1280x720/speech.png"] == _png(gamma=True)
+    assert b"private metadata" not in images["1280x720/speech.png"]
 
 
 def test_archive_and_site_size_limits_fail_before_deployment(tmp_path, monkeypatch):
     monkeypatch.setattr(site, "MAX_GALLERY_BYTES", 1)
     with pytest.raises(ValueError, match="expanded"):
-        site.read_images(_archive({"1440x900/speech.png": _png()}))
+        site.read_images(_archive({"1280x720/speech.png": _png()}))
     monkeypatch.setattr(site, "MAX_GALLERY_BYTES", 128 * 1024 * 1024)
     monkeypatch.setattr(site, "MAX_SITE_BYTES", 1)
     with pytest.raises(ValueError, match="site exceeds"):
@@ -297,7 +308,7 @@ def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(
     assert f"Latest PR commit: [`{SECOND_SHA[:7]}`]" in body
     assert "Latest CI: **in_progress**" in body
     assert f"Rendered commit: `{FIRST_SHA[:7]}`" in body
-    assert "artifact-101/1440x900/speech.png" in body
+    assert "artifact-101/1280x720/speech.png" in body
 
     # The start notification can arrive after CI has finished but before Pages does.
     api.runs[102].update(status="completed", conclusion="success")
@@ -307,7 +318,7 @@ def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(
     body = api.comments[1][0]["body"]
     assert "Gallery publication failed" in body
     assert "/actions/runs/203" in body
-    assert "artifact-101/1440x900/speech.png" in body
+    assert "artifact-101/1280x720/speech.png" in body
     site.update_status(api, "preparing", 202, ci_run_id=102, ci_attempt=1)
     assert api.comments[1][0]["body"] == body
 
@@ -318,7 +329,7 @@ def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(
     body = api.comments[1][0]["body"]
     assert "Gallery matches the latest PR commit and CI run" in body
     assert f"Rendered commit: `{SECOND_SHA[:7]}`" in body
-    assert "artifact-102/1440x900/speech.png" in body
+    assert "artifact-102/1280x720/speech.png" in body
     assert "artifact-101" not in body
     assert "Gallery publication failed" not in body
     assert body.count(site.STATUS_START) == 1
@@ -339,7 +350,7 @@ def test_rerun_of_same_commit_marks_existing_images_as_older(tmp_path, status):
     body = api.comments[1][0]["body"]
     assert "New gallery is being prepared" in body
     assert f"Latest CI: **{status}**" in body
-    assert "artifact-101/1440x900/speech.png" in body
+    assert "artifact-101/1280x720/speech.png" in body
     assert "Gallery matches the latest" not in body
 
 
@@ -398,17 +409,53 @@ def test_publication_reads_latest_ci_instead_of_reusing_build_status(tmp_path):
     assert "Gallery matches the latest" not in body
 
 
-@pytest.mark.parametrize("publication", ["preparing", "failed"])
-def test_status_only_updates_gallery_bot_comment_and_does_not_create_one(publication):
+def test_preparing_status_does_not_create_a_comment():
     api = FakeGitHub()
     api.comments[1] = [
         {"id": 1, "user": {"login": "reviewer"}, "body": site.COMMENT_MARKER},
         {"id": 2, "user": {"login": "github-actions[bot]"}, "body": "Other report"},
     ]
 
-    site.update_status(api, publication, 201, ci_run_id=101, ci_attempt=1)
+    site.update_status(api, "preparing", 201, ci_run_id=101, ci_attempt=1)
 
     assert api.writes == []
+
+
+@pytest.mark.parametrize("unrelated_comments", [False, True])
+def test_first_publication_failure_creates_one_comment_and_recovers(tmp_path, unrelated_comments):
+    api = FakeGitHub()
+    if unrelated_comments:
+        api.comments[1] = [
+            {"id": 1, "user": {"login": "reviewer"}, "body": site.COMMENT_MARKER},
+            {"id": 2, "user": {"login": "github-actions[bot]"}, "body": "Other report"},
+        ]
+    original_comments = deepcopy(api.comments[1])
+
+    site.update_status(api, "failed", 201, ci_run_id=101, ci_attempt=1)
+
+    body = api.comments[1][-1]["body"]
+    assert api.writes == [("POST", "issues/1/comments", {"body": body})]
+    assert body.startswith(site.COMMENT_MARKER)
+    assert "Gallery publication failed" in body
+    assert "/actions/runs/201" in body
+    assert "/actions/runs/101" in body
+    assert FIRST_SHA[:7] in body
+    assert "No UI gallery has been published yet" in body
+    assert "![" not in body
+
+    site.update_status(api, "failed", 201, ci_run_id=101, ci_attempt=1)
+    site.update_status(api, "preparing", 200, ci_run_id=101, ci_attempt=1)
+    assert len(api.writes) == 1
+
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=202)
+    assert api.writes[-1][:2] == ("PATCH", "issues/comments/99")
+    assert len(api.comments[1]) == len(original_comments) + 1
+    assert api.comments[1][:-1] == original_comments
+    body = api.comments[1][-1]["body"]
+    assert "Gallery matches the latest PR commit and CI run" in body
+    assert "No UI gallery has been published yet" not in body
+    assert "![" in body
 
 
 def test_status_keeps_timestamp_when_nothing_else_changes(tmp_path, monkeypatch):
@@ -479,8 +526,8 @@ class FakeGitHub:
         self.archives = {
             101: _archive(
                 {
-                    "1440x900/speech.png": _png(),
-                    "1440x900/index.html": '<script src="https://attacker.example"></script>',
+                    "1280x720/speech.png": _png(),
+                    "1280x720/index.html": '<script src="https://attacker.example"></script>',
                 }
             )
         }

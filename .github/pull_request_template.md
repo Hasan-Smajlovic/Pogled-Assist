@@ -1,41 +1,19 @@
+<!-- Choose Closes or Refs using CONTRIBUTING.md#issue-linking-and-pull-request-contents. -->
+
+Closes #<issue-number>
+
 ## Outcome
 
-<!-- State what the diff now does. Do not repeat the issue description. -->
-
-## Linked issue
-
-<!-- Check the current default branch. Use Closes #<number> when development is
-the default; otherwise use Refs #<number> for a normal PR to development.
-See CONTRIBUTING.md#issue-linking-and-pull-request-contents. -->
-
-## Changes
-
-<!-- List the material implementation and documentation changes. -->
-
--
-
-## Compatibility and risk
-
-<!-- Name preserved flows and any data, install, update, or rollback impact. -->
+<!-- Describe the result for the user and any implementation decision needed for review. Link to the issue for the original problem and acceptance criteria. -->
 
 ## Verification
 
-<!-- Record commands and results. Say Not run and why when a check was skipped. -->
+<!-- Record commands, results, and relevant evidence. Distinguish Not run from Not applicable and explain why. Keep software and hardware results separate. -->
 
 - Automated:
 - Manual Windows:
 - Manual Tobii hardware:
 
-## Evidence and limits
+## Risks and limits
 
-<!-- Link logs, artifacts, screenshots, or recordings when relevant. List any
-remaining uncertainty. Write None only when there is none. -->
-
-## Review checklist
-
-- [ ] The diff contains only work needed for the linked issue.
-- [ ] Existing user behavior is unchanged or the intended change is documented.
-- [ ] Every behavior change has a regression test in the existing pytest suite that fails without the change.
-- [ ] Visible UI changes update the HTML design reference first, or this pull request explains why the reference is unaffected.
-- [ ] Every row of the maintenance matrix in `AGENTS.md` that matches a changed path is updated.
-- [ ] Hardware-only claims are separated from software-only verification.
+<!-- Name specific risks, compatibility impacts, or remaining limitations. Write None only when there are none. -->

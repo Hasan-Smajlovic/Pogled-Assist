@@ -116,7 +116,17 @@ if ([string]::IsNullOrWhiteSpace($env:EDGE_PLAYBACK_EXE) -or -not (Test-Path -Li
 }
 
 try {
-    Start-Process -FilePath $AppExecutable -WorkingDirectory $AppRoot | Out-Null
+    $process = New-Object System.Diagnostics.Process
+    try {
+        $process.StartInfo.FileName = $AppExecutable
+        $process.StartInfo.WorkingDirectory = $AppRoot
+        $process.StartInfo.UseShellExecute = $false
+        # The Qt application must keep its normal visible window.
+        $process.StartInfo.CreateNoWindow = $false
+        if (-not $process.Start()) { throw "Application process did not start." }
+    } finally {
+        $process.Dispose()
+    }
 } catch {
     Write-Error "Could not launch Pogled Assist: $($_.Exception.Message)"
     if (-not $NoPause) {
