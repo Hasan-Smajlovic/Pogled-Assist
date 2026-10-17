@@ -3,6 +3,7 @@
 - [Installation readiness](#installation-readiness) and [before starting](#before-starting)
 - [Tracking notifications](#tracking-notifications-in-speech) and [gaze check](#gaze-check)
 - [Hotbar controls](#hotbar-controls) and [quick actions](#quick-actions)
+- [Windows taskbar setup](#windows-taskbar-setup)
 - [Speech](#speech), [Keyboard](#keyboard), and [Controller](#controller)
 - [Settings](#settings) and [updates](#update)
 - [Troubleshooting](#troubleshooting) and [exit](#exit)
@@ -60,6 +61,40 @@ starts again from zero rather than confirming a target using time spent waiting.
 The blue gaze marker disappears when either eye loses validity, or after
 500 ms without a new gaze point. It returns at the next valid gaze position.
 Restored eye indicators alone do not make an old marker position visible again.
+
+## Windows taskbar setup
+
+To keep the Windows taskbar out of the way, enable Windows auto-hide on the
+computer used with Pogled Assist. The app still starts with its existing top
+hotbar; opening **Govor** uses the existing borderless fullscreen Speech window.
+
+1. Note whether taskbar auto-hide is already enabled, so you can restore the
+   previous setting later.
+2. Right-click an empty part of the Windows taskbar and choose **Taskbar settings**.
+3. On Windows 11, expand **Taskbar behaviors** and select **Automatically hide
+   the taskbar**. On Windows 10, enable **Automatically hide the taskbar in
+   desktop mode**.
+4. Move the pointer away from the taskbar. Open Pogled Assist and check that
+   the taskbar hides during normal use. Move the pointer to the taskbar's
+   screen edge to reveal it, then away to let it hide again. Repeat with
+   **Govor** open, checking access to controls along the bottom of the screen.
+5. Use the existing exit controls to leave Speech and exit the application;
+   confirm that Windows remains accessible.
+
+Auto-hide is a Windows user preference and also affects other applications.
+It remains enabled after Pogled Assist exits. To reverse this setup, return to
+the same Windows page and restore the value noted in step 1. If auto-hide was
+previously off, clear its checkbox or turn its switch off. Confirm that the
+taskbar remains visible again. This setup does not change saved Pogled Assist
+settings or require stopping Windows Explorer.
+
+If the taskbar stays visible, check for an open taskbar menu or an application
+requesting attention. If it cannot be revealed over Speech on the target
+machine, record the failure rather than treating auto-hide as verified.
+Test gaze separately: normal selections must remain usable and intentional gaze
+movement to the edge must still allow Windows access.
+
+See Microsoft's [taskbar customization instructions](https://support.microsoft.com/en-us/windows/experience/personalization/customize-the-taskbar-in-windows).
 
 ## Tracking notifications in Speech
 

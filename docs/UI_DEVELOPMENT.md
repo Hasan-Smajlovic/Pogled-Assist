@@ -167,6 +167,16 @@ missing icons, unexpected scrollbars, and controls that are too small for gaze.
 
 ### Manual Windows checks
 
+For target devices using taskbar auto-hide, follow the
+[setup and rollback steps](USER_GUIDE.md#windows-taskbar-setup). Record the Windows
+version, display resolution/scaling, application version and previous auto-hide
+setting. Check that startup retains the top hotbar, Speech opens borderless
+fullscreen, the taskbar hides and reveals at its edge with both surfaces, exit
+still works, and restoring the previous Windows setting works. Record gaze use
+separately, including intentional edge access and lower Speech controls. A mouse
+check does not establish Tobii usability or certify Windows shell behavior on
+another device.
+
 Run the real application:
 
 ```powershell
