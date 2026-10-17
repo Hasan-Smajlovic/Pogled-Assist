@@ -305,13 +305,13 @@ class SpeechSurface(QWidget):
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(10)
         self._space_button = self._make_button(
-            "Razmak", "space", "utilityButton", minimum_height=76
+            "Razmak", "space", "utilityButton", minimum_height=81
         )
         self._backspace_button = self._make_button(
-            "Obriši slovo", "backspace", "utilityButton", minimum_height=76
+            "Obriši slovo", "backspace", "utilityButton", minimum_height=81
         )
         self._keyboard_toggle_button = self._make_button(
-            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=76
+            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=81
         )
         utility_row.addWidget(self._space_button, 14)
         utility_row.addWidget(self._backspace_button, 10)
@@ -458,7 +458,7 @@ class SpeechSurface(QWidget):
             self._key_grid.setRowStretch(row, 0)
         rows = max(1, math.ceil(max(1, item_count) / max(1, columns)))
         # Tighten gaps for five-row grids without shrinking gaze targets.
-        self._key_grid.setVerticalSpacing(6 if rows >= 5 else 10)
+        self._key_grid.setVerticalSpacing(5 if rows >= 5 else 10)
         for column in range(columns):
             self._key_grid.setColumnStretch(column, 1)
         for row in range(rows):
