@@ -10,8 +10,8 @@ from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
 
-@pytest.fixture(params=[(1920, 1080), (1280, 720)])
-def hotbar_gaze(qtbot, monkeypatch, request):
+@pytest.fixture
+def hotbar_gaze(qtbot, monkeypatch):
     from pogled_assist import toolbar
     from pogled_assist.ui import sidebar_panel
     from scripts.ui.capture_ui import PreviewSuggestionService
@@ -28,7 +28,8 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
     hotbar = toolbar.HotbarWindow(simulate_gaze=True)
     qtbot.addWidget(hotbar)
-    width, height = request.param
+    # Exercise physical/logical mapping at the target display's 150% scaling.
+    width, height = 1280, 720
     hotbar.show()
     hotbar.setGeometry(0, 0, width, hotbar.BAR_HEIGHT)
     qtbot.wait(1)

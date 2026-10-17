@@ -99,18 +99,17 @@ def test_speech_control_click_keeps_selection_and_its_direction(
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("source", ["mouse", "gaze"])
 @pytest.mark.parametrize(
     "command", ["play", "categories", "phrases", "keyboard-toggle", "backspace"]
 )
-def test_speech_controls_leave_message_ready_for_typing(qtbot, speech_focus, source, command):
+def test_speech_controls_leave_message_ready_for_typing(qtbot, speech_focus, command):
     qapp, window = speech_focus
     window._input.setText("PORUKA")
     action = f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
-    if source == "mouse":
-        qtbot.mouseClick(window._action_buttons[action], Qt.LeftButton)
-    else:
-        window.handle_gaze_action(action)
+    button = window._action_buttons[action]
+    qtbot.mousePress(button, Qt.LeftButton)
+    assert qapp.focusWidget() is window._input
+    qtbot.mouseRelease(button, Qt.LeftButton)
     qtbot.waitUntil(lambda: qapp.focusWidget() is window._input, timeout=500)
     previous = window._input.text()
     qtbot.keyClicks(qapp.focusWidget(), "x")

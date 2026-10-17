@@ -125,19 +125,21 @@ def test_stability_choices_and_similarity_slider_update_settings(settings):
     assert page.stability_buttons[50].isChecked() and page.similarity.value() == 70
 
 
-@pytest.mark.parametrize(
-    "used,percent,color",
-    [(0, 100, "#91dec0"), (850, 15, "#edc779"), (950, 5, "#e48c80"), (1100, 0, "#e48c80")],
-)
-def test_credits_display_remaining_and_warning_thresholds(settings, used, percent, color):
+def test_credits_display_remaining_and_warning_thresholds(settings):
     window, _store, _client, account, _ = settings
     window._open_eleven()
-    account.state = replace(account.state, subscription=Subscription(used, 1000))
-    window._eleven_page.refresh(account.state)
-    page = window._eleven_page
-    assert page.credits.value() == percent and color in page.credits.styleSheet()
-    assert f"({percent}%)" in page.credits_label.text()
-    assert "1.000 kredita" in page.credits_label.text()
+    for used, percent, color in [
+        (0, 100, "#91dec0"),
+        (850, 15, "#edc779"),
+        (950, 5, "#e48c80"),
+        (1100, 0, "#e48c80"),
+    ]:
+        account.state = replace(account.state, subscription=Subscription(used, 1000))
+        window._eleven_page.refresh(account.state)
+        page = window._eleven_page
+        assert page.credits.value() == percent and color in page.credits.styleSheet(), used
+        assert f"({percent}%)" in page.credits_label.text()
+        assert "1.000 kredita" in page.credits_label.text()
 
 
 def test_free_credit_refresh_and_missing_permission_leave_voice_options_available(settings, qtbot):
@@ -593,23 +595,24 @@ def test_empty_replacement_requires_save_or_cancel_before_check(settings):
     assert not page.key_input.isVisible()
 
 
-@pytest.mark.parametrize("preset", ["default", "human_like", "efendija"])
-def test_clicking_current_voice_keeps_exactly_one_voice_selected(settings, preset):
+def test_clicking_current_voice_keeps_exactly_one_voice_selected(settings):
     window, _store, _client, _account, _cleared = settings
     changes = []
     window.speech_settings_changed.connect(changes.append)
-    button = window._speech_page._voice_buttons[preset]
-    if not button.isChecked():
-        button.click()
-    before = len(changes)
-    for _ in range(2):
-        button.click()
-        assert button.isChecked()
-        assert (
-            sum(control.isChecked() for control in window._speech_page._voice_buttons.values()) == 1
-        )
-    assert window._speech_settings.voice_preset == preset
-    assert len(changes) == before
+    for preset in ["default", "human_like", "efendija"]:
+        button = window._speech_page._voice_buttons[preset]
+        if not button.isChecked():
+            button.click()
+        before = len(changes)
+        for _ in range(2):
+            button.click()
+            assert button.isChecked(), preset
+            assert (
+                sum(control.isChecked() for control in window._speech_page._voice_buttons.values())
+                == 1
+            )
+        assert window._speech_settings.voice_preset == preset
+        assert len(changes) == before
 
 
 def test_account_refresh_does_not_interrupt_dwell_on_unrelated_control(settings, monkeypatch):

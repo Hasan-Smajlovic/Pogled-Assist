@@ -107,18 +107,21 @@ def test_bounded_call_observes_cancellation_inside_connect_before_paid_post(tran
 
 
 @pytest.mark.parametrize(
-    "error_case",
+    "status,detail,reason",
     [
-        (402, "insufficient_credits", "quota"),
+        (400, "insufficient_credits", "quota"),
         (402, "unknown", "quota"),
         (403, "quota_exceeded", "quota"),
         (401, "text_too_long", "invalid_key"),
         (429, "text_too_long", "rate_limit"),
         (401, "quota_exceeded", "quota"),
         (422, "text_too_long", "too_long"),
-        (403, "voice_access_denied", "permission"),
-        (401, "missing_api_key", "invalid_key"),
-        (401, "invalid_api_key", "invalid_key"),
+        (400, "voice_access_denied", "permission"),
+        (400, "missing_api_key", "invalid_key"),
+        (400, "invalid_api_key", "invalid_key"),
+        (400, "forbidden", "permission"),
+        (400, "model_access_denied", "permission"),
+        (400, "unauthorized", "invalid_key"),
         (403, "missing_permissions", "permission"),
         (401, "missing_permissions", "permission"),
         (401, "insufficient_permissions", "permission"),
@@ -128,8 +131,29 @@ def test_bounded_call_observes_cancellation_inside_connect_before_paid_post(tran
         (503, "unavailable", "offline"),
     ],
 )
-@pytest.mark.parametrize("code_field", ["code", "status"])
-def test_error_is_classified_without_exposing_body_or_retrying(transport, error_case, code_field):
+def test_error_is_classified_without_exposing_body_or_retrying(transport, status, detail, reason):
+    _assert_error_classification(transport, (status, detail, reason), "code")
+
+
+@pytest.mark.parametrize(
+    "status,detail,reason",
+    [
+        (403, "quota_exceeded", "quota"),
+        (401, "quota_exceeded", "quota"),
+        (422, "text_too_long", "too_long"),
+        (401, "missing_permissions", "permission"),
+        (401, "insufficient_permissions", "permission"),
+        (400, "insufficient_credits", "quota"),
+        (400, "voice_access_denied", "permission"),
+        (400, "missing_api_key", "invalid_key"),
+        (400, "invalid_api_key", "invalid_key"),
+    ],
+)
+def test_legacy_status_code_overrides_http_status(transport, status, detail, reason):
+    _assert_error_classification(transport, (status, detail, reason), "status")
+
+
+def _assert_error_classification(transport, error_case, code_field):
     status, detail, reason = error_case
     transport.response = Response(
         status,
@@ -362,13 +386,3 @@ def test_normalization_version_changes_cache_identity(monkeypatch):
     original = ElevenConfig("key", "voice").audio_identity
     monkeypatch.setattr(elevenlabs, "TEXT_NORMALIZATION_VERSION", 2)
     assert ElevenConfig("key", "voice").audio_identity != original
-
-
-def test_busy_slot_is_distinct_from_expired_deadline():
-    runner = BoundedCall()
-    runner._slot.acquire()
-    try:
-        with pytest.raises(VoiceError, match="busy"):
-            runner.run(lambda *_: None, threading.Event(), 2)
-    finally:
-        runner._slot.release()

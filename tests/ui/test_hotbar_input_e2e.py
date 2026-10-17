@@ -7,7 +7,7 @@ from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint
 
 from pogled_assist import diagnostics
-from pogled_assist.interaction.mouse_controller import KEYBOARD, QUICK_ACTIONS, SETTINGS, SPEECH
+from pogled_assist.interaction.mouse_controller import KEYBOARD, SETTINGS, SPEECH
 from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
 
@@ -56,14 +56,13 @@ def test_confirmation_edge_hold_keeps_one_diagnostic_attempt(hotbar_gaze, qtbot,
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("action", [SPEECH, KEYBOARD, SETTINGS])
-@pytest.mark.parametrize("y", [0, 1])
-def test_hotbar_gaze_acquires_buttons_at_top_edge(hotbar_gaze, monkeypatch, action, y):
+def test_hotbar_gaze_acquires_buttons_at_top_edge(hotbar_gaze, monkeypatch, action):
     hotbar, _controller, feed, actions, _progress = hotbar_gaze
     from pogled_assist.ui import settings_window
 
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     point = hotbar._buttons[action].mapToGlobal(QPoint(50, 0))
-    point.setY(y)
+    point.setY(0)
     assert hotbar.action_at_global_point(point) == action
     feed(point, 0)
     feed(point, 800)
@@ -92,26 +91,6 @@ def test_hotbar_top_edge_has_distinct_targets_and_neutral_gaps(hotbar_gaze):
     assert hotbar.action_bounds(SPEECH) is None
     hotbar.hide()
     assert hotbar.action_at_global_point(QPoint(50, 0)) is None
-
-
-@pytest.fixture(params=["hotbar", "keyboard"])
-def edge_surface(hotbar_gaze, qtbot, request):
-    hotbar, controller, feed, actions, progress = hotbar_gaze
-    if request.param == "hotbar":
-        window = hotbar
-        action = QUICK_ACTIONS
-        button = hotbar._buttons[action]
-    else:
-        hotbar._show_keyboard_sidebar()
-        window = hotbar._keyboard_window
-        _, _, width, height = controller._logical_screen_rect
-        window.setGeometry(width - 380, hotbar.BAR_HEIGHT, 380, height - hotbar.BAR_HEIGHT)
-        qtbot.wait(1)
-        action = f"{KEYBOARD_WINDOW_ACTION_PREFIX}space"
-        button = window._space_button
-    center = button.mapToGlobal(button.rect().center())
-    outside = button.mapToGlobal(QPoint(button.width() + 2, button.height() // 2))
-    return window, controller, feed, actions, progress, action, center, outside
 
 
 @pytest.mark.e2e

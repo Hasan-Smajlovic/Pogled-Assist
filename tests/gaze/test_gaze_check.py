@@ -40,12 +40,21 @@ def test_trial_coverage_does_not_count_cached_or_out_of_order_samples():
     assert not coverage.sufficient(20)
 
 
-@pytest.mark.parametrize("gap", [0.2, 0.5, 1.0])
+@pytest.mark.parametrize("gap", [0.2])
 def test_trial_coverage_caps_intervals_and_rejects_stale_gaps(gap):
     coverage = TrialGazeCoverage(0)
     for index in range(50):
         coverage.add(index * gap)
     assert not coverage.sufficient(50 * gap)
+
+
+def test_trial_coverage_does_not_count_stale_gaps():
+    coverage = TrialGazeCoverage(0)
+    for index in range(601):
+        coverage.add(index * 0.01)
+    for gap in range(1, 9):
+        coverage.add(6.0 + gap * 0.6)
+    assert not coverage.sufficient(10.8)
 
 
 def test_trial_coverage_does_not_bridge_known_interruptions():

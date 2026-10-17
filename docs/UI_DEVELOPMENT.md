@@ -85,6 +85,8 @@ The command renders:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
+PNG capture uses a fixed Qt quality of 80 for lossless compression with less encoding work. Keep the image and gallery byte limits enforced by the publication script, and review the generated gallery when changing encoding.
+
 The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check equal action cells, the single-cell calibration control, voice choices below keyboard script, and aligned adjustment columns. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and covered by UI interaction tests; it is not part of the 104-surface gallery. Review it separately using `PogledAssist.exe --installation-check` after a build.

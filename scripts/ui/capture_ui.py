@@ -252,7 +252,7 @@ def _capture_widget(
     widget.grab()
     app.processEvents()
     pixmap = widget.grab()
-    if pixmap.isNull() or not pixmap.save(str(image_path), "PNG"):
+    if pixmap.isNull() or not pixmap.save(str(image_path), "PNG", 80):
         raise RuntimeError(f"Could not render UI snapshot: {name}")
     return image_path
 
