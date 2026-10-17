@@ -2,15 +2,40 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import subprocess
 import wave
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
+from edge_tts.constants import SEC_MS_GEC_VERSION
+from edge_tts.drm import DRM
 
 import pogled_assist.main as main_module
 from pogled_assist.speech import bundle_check, speech_service
 from scripts.release import prepare_speech_bundle as bundler
+
+
+def test_natural_speech_dependency_generates_v2_handshake_token(monkeypatch):
+    # Microsoft rejects the old v1 handshake with HTTP 403. Check the actual
+    # installed engine without sending text or making an online request.
+    monkeypatch.setattr(DRM, "get_unix_timestamp", lambda: 1791897600.0)
+    assert SEC_MS_GEC_VERSION.startswith("2-")
+    assert re.fullmatch(r"[0-9A-F]{16}-[0-9A-F]{64}", DRM.generate_sec_ms_gec())
+
+
+def test_edge_dependency_and_bundled_source_versions_match():
+    installed = version("edge-tts")
+    requirements = (Path(__file__).resolve().parents[2] / "requirements.txt").read_text(
+        encoding="utf-8"
+    )
+    assert f"edge-tts=={installed}" in requirements.splitlines()
+    assert bundler.EDGE_TTS_VERSION == installed
+    source = next(asset for asset in bundler.SOURCE_ASSETS if asset[0].startswith("edge_tts-"))
+    assert source[0] == f"edge_tts-{installed}.tar.gz"
+    assert source[1].endswith(f"/{source[0]}")
+    assert source[3] == f"edge_tts-{installed}/LICENSE"
 
 
 def test_bundle_discovery_precedes_external_tools_but_keeps_overrides(monkeypatch, tmp_path):
