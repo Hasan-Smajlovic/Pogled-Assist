@@ -31,7 +31,7 @@ def test_edge_dependency_and_bundled_source_versions_match():
         encoding="utf-8"
     )
     assert f"edge-tts=={installed}" in requirements.splitlines()
-    assert bundler.EDGE_TTS_VERSION == installed
+    assert installed == bundler.EDGE_TTS_VERSION
     source = next(asset for asset in bundler.SOURCE_ASSETS if asset[0].startswith("edge_tts-"))
     assert source[0] == f"edge_tts-{installed}.tar.gz"
     assert source[1].endswith(f"/{source[0]}")
