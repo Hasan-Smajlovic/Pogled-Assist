@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from scripts.release import prepare_release as release_script
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "release" / "prepare_release.py"
 
@@ -21,12 +24,13 @@ def run_git(directory: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
-@pytest.fixture
-def release_repository(tmp_path: Path) -> Path:
-    remote = tmp_path / "origin.git"
-    work = tmp_path / "work"
-    run_git(tmp_path, "init", "--bare", str(remote))
-    run_git(tmp_path, "clone", str(remote), str(work))
+@pytest.fixture(scope="module")
+def release_history(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("release-history")
+    remote = root / "origin.git"
+    work = root / "work"
+    run_git(root, "init", "--bare", str(remote))
+    run_git(root, "clone", str(remote), str(work))
     run_git(work, "config", "user.name", "Release Test")
     run_git(work, "config", "user.email", "release-test@example.invalid")
     run_git(work, "config", "commit.gpgsign", "false")
@@ -48,6 +52,14 @@ def release_repository(tmp_path: Path) -> Path:
     run_git(work, "commit", "-am", "feat: second release")
     run_git(work, "push", "origin", "development")
     run_git(work, "switch", "master")
+    return root
+
+
+@pytest.fixture
+def release_repository(release_history: Path, tmp_path: Path) -> Path:
+    shutil.copytree(release_history, tmp_path, dirs_exist_ok=True)
+    work = tmp_path / "work"
+    run_git(work, "remote", "set-url", "origin", str(tmp_path / "origin.git"))
     return work
 
 
@@ -65,11 +77,35 @@ def run_prepare(work: Path, bump: str, body_file: Path) -> subprocess.CompletedP
 @pytest.mark.parametrize(
     ("bump", "version"), [("patch", "0.4.8"), ("minor", "0.5.0"), ("major", "1.0.0")]
 )
+def test_cli_bump_choice_selects_the_next_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    bump: str,
+    version: str,
+) -> None:
+    body_file = tmp_path / "release-pr.md"
+    body_files = []
+
+    def prepare(selected: str, path: Path) -> str:
+        body_files.append(path)
+        return f"release/v{release_script.bump_version('0.4.7', selected)}"
+
+    monkeypatch.setattr(sys, "argv", ["prepare_release.py", bump, "--body-file", str(body_file)])
+    monkeypatch.setattr(release_script, "prepare_release", prepare)
+
+    release_script.main()
+
+    assert capsys.readouterr().out.strip() == f"release/v{version}"
+    assert body_files == [body_file]
+
+
 def test_prepared_branch_contains_both_parents_and_can_be_reused(
-    release_repository: Path, bump: str, version: str
+    release_repository: Path,
 ) -> None:
     work = release_repository
     body_file = work.parent / "release-pr.md"
+    bump, version = "minor", "0.5.0"
 
     first = run_prepare(work, bump, body_file)
 

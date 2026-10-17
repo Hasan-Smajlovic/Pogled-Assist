@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
@@ -283,26 +284,29 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
         lambda _point, value, _label: progress.append(value)
     )
     center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
-    times = iter((1.0, 1.249, 1.25, 1.45, 3.0, 4.0))
-    monkeypatch.setattr("pogled_assist.ui.settings_window.time.monotonic", lambda: next(times))
+    now = freeze_monotonic(monkeypatch, 1.0)
 
-    window.handle_gaze(QPoint(center))
-    window.handle_gaze(QPoint(center))
+    for at in (1.0, 1.249):
+        now[0] = at
+        window.handle_gaze(QPoint(center))
 
     assert progress == []
     assert window._stack.currentIndex() == 0
 
-    window.handle_gaze(QPoint(center))
-    window.handle_gaze(QPoint(center))
+    for at in (1.25, 1.45):
+        now[0] = at
+        window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]
 
     window.pause_gaze_interaction()
+    now[0] = 3.0
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]
     assert window._stack.currentIndex() == 1
 
+    now[0] = 4.0
     window.handle_gaze(QPoint(center))
 
     assert progress == [0.0, 1.0]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 
 import pytest
+from _clock import freeze_monotonic
 from _speech_fakes import FakeElevenClient
 
 from pogled_assist.speech.audio_cache import AudioCache
@@ -93,8 +94,7 @@ def test_preparation_has_thirty_seconds_then_three_for_fallback(route):
 
 def test_slow_valid_synthesis_is_not_discarded_after_five_seconds(route, monkeypatch):
     router, config, client, natural, played, notices, play = route
-    clock = [100.0]
-    monkeypatch.setattr("pogled_assist.speech.voice_router.time.monotonic", lambda: clock[0])
+    clock = freeze_monotonic(monkeypatch, 100.0)
 
     def synthesize(config, text, cancel, deadline):
         client.calls.append(("synthesize", config, text))

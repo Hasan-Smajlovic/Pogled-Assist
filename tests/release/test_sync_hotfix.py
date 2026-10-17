@@ -192,8 +192,18 @@ def test_existing_diverged_branch_is_never_overwritten(workflow):
     assert "different content" in summary
 
 
-@pytest.mark.parametrize("merge_commit", [False, True])
-@pytest.mark.parametrize("case", ["code", "version-only", "already-present", "conflict"])
+# Hotfixes reach master through merge commits. Both parent shapes apply the same
+# diff, so only the code case also covers the single-parent cherry-pick path.
+@pytest.mark.parametrize(
+    ("case", "merge_commit"),
+    [
+        ("code", False),
+        ("code", True),
+        ("version-only", True),
+        ("already-present", True),
+        ("conflict", True),
+    ],
+)
 def test_real_git_backport_preserves_development_version(tmp_path, monkeypatch, case, merge_commit):
     remote = tmp_path / "remote"
     remote.mkdir()

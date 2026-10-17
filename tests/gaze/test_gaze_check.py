@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist.tracking.gaze_check import (
     CheckSnapshot,
@@ -237,8 +238,7 @@ def test_fixation_spread_rejects_scattered_gaze_even_with_good_median():
 
 
 def test_provider_diagnostics_keep_raw_coordinates_and_expire_positions(qapp, monkeypatch):
-    now = [1.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 1.0)
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     backend = SimpleNamespace()
@@ -301,8 +301,7 @@ def test_positions_expire_and_clear_without_fresh_gaze_validity():
 
 
 def test_position_expiry_is_independent_of_fresh_eye_and_gaze_stream(qapp, monkeypatch):
-    now = [1.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 1.0)
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     backend = SimpleNamespace()

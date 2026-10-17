@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from _clock import freeze_monotonic
 from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeLibraryStore, FakeSpeechService
 from PySide6.QtCore import QPoint
 
@@ -35,8 +36,7 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     controller._logical_screen_rect = (0, 0, width, height)
     controller._physical_screen_rect = (0, 0, 1920, 1080)
     controller.handle_eye_status(True, True)
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.interaction.mouse_controller.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     actions = []
     progress = []
     controller.toolbar_action_requested.connect(actions.append)

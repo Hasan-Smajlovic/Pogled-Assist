@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from _clock import freeze_monotonic
 from _speech_fakes import FakeCredentials, FakeElevenClient
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
@@ -53,8 +54,7 @@ def test_stationary_gaze_cannot_repeat_paid_test_after_busy_completion(
 
     signal.connect(start)
     qtbot.wait(1)
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.ui.settings_window.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     center = button.mapToGlobal(button.rect().center())
 
     def feed(point, seconds):
@@ -620,8 +620,7 @@ def test_account_refresh_does_not_interrupt_dwell_on_unrelated_control(settings,
     )
     button = window._speech_page._saved_audio_button
     point = button.mapToGlobal(button.rect().center())
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.ui.settings_window.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     window.handle_gaze(point)
     account.changed.emit(replace(account.state, credits_message="Osvježavam kredite…"))
     assert window._gaze_selection.target is button

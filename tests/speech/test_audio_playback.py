@@ -137,7 +137,8 @@ def test_stalled_decoder_fails_without_waiting_forever(player, monkeypatch):
     result = PlaybackResult()
     playback.play(1, b"audio", result)
     instances[0].positionChanged.emit(15)
-    monkeypatch.setattr(audio_playback.time, "monotonic", lambda: playback._progress_at + 6)
+    stalled_at = playback._progress_at + 6
+    monkeypatch.setattr(audio_playback, "time", SimpleNamespace(monotonic=lambda: stalled_at))
     playback._watch_progress()
     assert result.done.is_set() and result.outcome == "failed" and result.started
     assert not result.invalid_audio

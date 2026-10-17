@@ -479,50 +479,79 @@ def test_powershell_focused_check_parses_only_selected_paths_and_rejects_escape(
             assert "Missing closing" in result.stderr
 
 
-@pytest.mark.parametrize(
-    ("filename", "source", "allowed"),
-    [
-        ("ordinary.ps1", 'Start-Process -FilePath "test.exe" -Wait', False),
-        ("ordinary.ps1", 'saps -FilePath "test.exe"', False),
-        ("ordinary.ps1", 'Microsoft.PowerShell.Management\\Start-Process "test.exe"', False),
-        ("ordinary.ps1", '$p = @{FilePath="test.exe"}; Start-Process @p', False),
-        ("ordinary.ps1", 'Start-Process "test.exe" -Verb Open', False),
-        ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb RunAs', True),
-        ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb:RunAs', True),
-        ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', True),
-        ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "test.exe")', False),
-        ("ordinary.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', False),
-        (
-            "ordinary.ps1",
-            "$p = New-Object Diagnostics.ProcessStartInfo; $p.UseShellExecute = $false",
-            True,
-        ),
-    ],
-)
-def test_powershell_check_enforces_direct_executable_launches(tmp_path, filename, source, allowed):
-    checks = tmp_path / "scripts/checks"
-    checks.mkdir(parents=True)
-    checker = checks / "check_powershell.ps1"
-    shutil.copy2(DEV_SCRIPT.parent / "scripts/checks/check_powershell.ps1", checker)
-    shutil.copy2(DEV_SCRIPT.parent / "PSScriptAnalyzerSettings.psd1", tmp_path)
-    (tmp_path / filename).write_text(source, encoding="utf-8")
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(checker),
-            "-Paths",
-            filename,
-        ],
+LAUNCH_CASES = [
+    ("ordinary.ps1", 'Start-Process -FilePath "test.exe" -Wait', False),
+    ("ordinary.ps1", 'saps -FilePath "test.exe"', False),
+    ("ordinary.ps1", 'Microsoft.PowerShell.Management\\Start-Process "test.exe"', False),
+    ("ordinary.ps1", '$p = @{FilePath="test.exe"}; Start-Process @p', False),
+    ("ordinary.ps1", 'Start-Process "test.exe" -Verb Open', False),
+    ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb RunAs', True),
+    ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb:RunAs', True),
+    ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', True),
+    ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "test.exe")', False),
+    ("ordinary.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', False),
+    (
+        "ordinary.ps1",
+        "$p = New-Object Diagnostics.ProcessStartInfo; $p.UseShellExecute = $false",
+        True,
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def launch_check_results(tmp_path_factory) -> dict[tuple[str, str], dict]:
+    # Every case keeps its own repository root; one PowerShell process runs them all.
+    root = tmp_path_factory.mktemp("launch-check")
+    for index, (filename, source, _allowed) in enumerate(LAUNCH_CASES):
+        case = root / f"case{index:02}"
+        checks = case / "scripts" / "checks"
+        checks.mkdir(parents=True)
+        shutil.copy2(DEV_SCRIPT.parent / "scripts/checks/check_powershell.ps1", checks)
+        shutil.copy2(DEV_SCRIPT.parent / "PSScriptAnalyzerSettings.psd1", case)
+        (case / filename).write_text(source, encoding="utf-8")
+        (case / "target.txt").write_text(filename, encoding="utf-8")
+    driver = root / "run-cases.ps1"
+    driver.write_text(
+        r"""
+$results = foreach ($case in Get-ChildItem -LiteralPath $PSScriptRoot -Directory | Sort-Object Name) {
+    $checker = Join-Path $case.FullName "scripts\checks\check_powershell.ps1"
+    $target = (Get-Content -LiteralPath (Join-Path $case.FullName "target.txt") -Raw).Trim()
+    $output = [System.Collections.Generic.List[string]]::new()
+    $allowed = $true
+    try {
+        & $checker -Paths $target *>&1 | ForEach-Object { $output.Add("$_") }
+    } catch {
+        $allowed = $false
+        $output.Add("$_")
+    }
+    [pscustomobject]@{ case = $case.Name; allowed = $allowed; output = $output -join "`n" }
+}
+ConvertTo-Json -InputObject @($results) -Compress
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=120,
         check=False,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
-    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    results = {item["case"]: item for item in json.loads(completed.stdout.strip().splitlines()[-1])}
+    assert len(results) == len(LAUNCH_CASES), completed.stdout
+    return {
+        (filename, source): results[f"case{index:02}"]
+        for index, (filename, source, _allowed) in enumerate(LAUNCH_CASES)
+    }
+
+
+@pytest.mark.parametrize(("filename", "source", "allowed"), LAUNCH_CASES)
+def test_powershell_check_enforces_direct_executable_launches(
+    launch_check_results, filename, source, allowed
+):
+    result = launch_check_results[(filename, source)]
+    assert result["allowed"] is allowed, result["output"]
     if not allowed:
-        assert "UseShellExecute=false" in result.stderr
+        assert "UseShellExecute=false" in result["output"]
