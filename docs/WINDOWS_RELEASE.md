@@ -131,7 +131,7 @@ manual recovery.
 ## Included speech tools
 
 The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone
-`edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.2.8. Installation
+`edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.0. Installation
 copies them under `speech/` along with their runtimes, licenses, and matching
 source archives. Users do not need to install Python, use pip, or adjust PATH.
 The portable ZIP also includes these tools. Standard speech works offline;
