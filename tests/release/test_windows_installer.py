@@ -49,11 +49,45 @@ SMOKE_APP_SOURCE = r"""
 using System;
 using System.IO;
 using System.Threading;
+using System.Diagnostics;
 
 public static class Program
 {
     public static int Main(string[] args)
     {
+        string records = Environment.GetEnvironmentVariable("FAKE_PROCESS_RECORD_DIR");
+        if (!String.IsNullOrEmpty(records))
+        {
+            string[] values = new string[args.Length + 2];
+            values[0] = Environment.CurrentDirectory;
+            values[1] = Environment.GetEnvironmentVariable("FAKE_INHERITED_VALUE") ?? "";
+            Array.Copy(args, 0, values, 2, args.Length);
+            File.WriteAllLines(Path.Combine(records, Process.GetCurrentProcess().Id + ".txt"), values);
+        }
+        if ((args.Length > 0 && args[0] == "--child") ||
+            (Environment.GetEnvironmentVariable("FAKE_BOOTSTRAP_CHILD") == "1" &&
+             (args.Length == 0 || (args[0] != "--delayed" && args[0] != "--hold"))))
+        {
+            ProcessStartInfo info = new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName);
+            info.UseShellExecute = false;
+            info.CreateNoWindow = true;
+            info.Arguments = Environment.GetEnvironmentVariable("FAKE_CHILD_HOLD") == "1"
+                ? "--hold" : "--delayed";
+            using (Process child = Process.Start(info)) { }
+            return 3010;
+        }
+        if (args.Length > 0 && args[0] == "--delayed")
+        {
+            Thread.Sleep(1500);
+            File.WriteAllText(Environment.GetEnvironmentVariable("FAKE_CHILD_DONE"), "done");
+            return 0;
+        }
+        if (Environment.GetEnvironmentVariable("FAKE_SMOKE_HOLD") == "1")
+        {
+            Thread.Sleep(60000);
+        }
+        string exitCode = Environment.GetEnvironmentVariable("FAKE_EXIT_CODE");
+        if (!String.IsNullOrEmpty(exitCode)) return Int32.Parse(exitCode);
         if (args.Length > 0 && args[0] == "--hold")
         {
             Thread.Sleep(60000);
@@ -120,6 +154,7 @@ def smoke_app(tmp_path_factory) -> Path:
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert executable_path.is_file()
@@ -175,7 +210,7 @@ def _run_installer(
 ) -> subprocess.CompletedProcess[str]:
     runner = package.parent.parent / "run-installer.ps1"
     runner.write_text(INSTALLER_RUNNER, encoding="utf-8")
-    return subprocess.run(
+    return _run_powershell(
         [
             "powershell.exe",
             "-NoProfile",
@@ -192,12 +227,402 @@ def _run_installer(
         ],
         cwd=package,
         env=environment or _installer_environment(),
-        check=False,
-        capture_output=True,
+    )
+
+
+def _run_powershell(command, *, cwd=None, env=None, timeout=30):
+    # Bound the harness too: a shell warning must fail the test and close its tree.
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        subprocess.run(
+            ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        process.communicate(timeout=5)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _run_definitions(tmp_path, script, body, *, environment=None, timeout=30):
+    runner = tmp_path / "process-driver.ps1"
+    runner.write_text(
+        r"""
+param([string]$ScriptPath)
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref]$tokens, [ref]$errors
+)
+if ($errors.Count) { throw "Script could not be parsed" }
+foreach ($statement in $ast.EndBlock.Statements) {
+    if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        . ([scriptblock]::Create($statement.Extent.Text))
+    }
+}
+"""
+        + body,
+        encoding="utf-8",
+    )
+    return _run_powershell(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(runner),
+            "-ScriptPath",
+            str(script),
+        ],
+        cwd=tmp_path,
+        env=environment or _installer_environment(),
+        timeout=timeout,
+    )
+
+
+def _mark_downloaded(path):
+    Path(str(path) + ":Zone.Identifier").write_text("[ZoneTransfer]\nZoneId=3\n", encoding="ascii")
+
+
+def test_downloaded_executable_installs_without_shell_warning(tmp_path, smoke_app):
+    package = _release_package(tmp_path, smoke_app)
+    _mark_downloaded(package / "PogledAssist.exe")
+    records = tmp_path / "records"
+    records.mkdir()
+    install_root = tmp_path / "installed with spaces"
+    result = _run_installer(
+        package,
+        install_root,
+        environment=_installer_environment(FAKE_PROCESS_RECORD_DIR=str(records)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    launches = [p.read_text().splitlines() for p in records.glob("*.txt")]
+    assert len(launches) == 2
+    assert all(record[2:] == ["--package-smoke-test"] for record in launches)
+    assert any(record[0] == str(install_root) for record in launches)
+    assert (
+        "ZoneId=3" in Path(str(install_root / "PogledAssist.exe") + ":Zone.Identifier").read_text()
+    )
+    _assert_no_transaction_files(install_root)
+
+
+@pytest.mark.parametrize("build_script", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "failure", "invalid", "timeout"])
+def test_package_process_outcomes_restore_environment_and_cleanup(
+    tmp_path, smoke_app, build_script, outcome
+):
+    app_root = tmp_path / "package with spaces"
+    app_root.mkdir()
+    executable = app_root / "PogledAssist.exe"
+    if outcome == "invalid":
+        executable.write_bytes(b"invalid executable")
+    else:
+        shutil.copy2(smoke_app, executable)
+    _mark_downloaded(executable)
+    records = tmp_path / "records"
+    records.mkdir()
+    report = tmp_path / "report.txt"
+    environment = _installer_environment(
+        FAKE_PROCESS_RECORD_DIR=str(records),
+        FAKE_APP_ROOT=str(app_root),
+        FAKE_REPORT_PATH=str(report),
+        POGLED_ASSIST_PACKAGE_SMOKE_REPORT="original report",
+        QT_QPA_PLATFORM="original platform",
+        FAKE_SMOKE_HOLD="1" if outcome == "timeout" else "0",
+        FAKE_EXIT_CODE="" if outcome == "failure" else "0",
+        FAKE_SMOKE_FAIL_ROOT="all" if outcome == "failure" else "",
+    )
+    if build_script:
+        script = REPO_ROOT / "scripts/release/build_windows_package.ps1"
+        call = "Invoke-BuiltPackageSmokeTest -PackageRoot $env:FAKE_APP_ROOT -SmokeReportPath $env:FAKE_REPORT_PATH"
+    else:
+        script = INSTALLER_SCRIPT
+        call = 'Invoke-PackageSmokeTest -Root $env:FAKE_APP_ROOT -Label "probe"'
+    result = _run_definitions(
+        tmp_path,
+        script,
+        r"""
+$beforePath = $env:PATH
+$failed = $false
+try {
+    CALL -TimeoutMilliseconds TIMEOUT
+} catch {
+    $failed = $true
+    Write-Output $_.Exception.Message
+}
+if ($env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT -ne "original report" -or
+    $env:QT_QPA_PLATFORM -ne "original platform" -or $env:PATH -ne $beforePath) {
+    throw "Environment was not restored"
+}
+if ($failed) { exit 5 }
+""".replace("CALL", call).replace("TIMEOUT", "300" if outcome == "timeout" else "5000"),
+        environment=environment,
+    )
+    assert result.returncode == (0 if outcome == "success" else 5), result.stdout + result.stderr
+    if outcome == "failure":
+        assert "exit code 7" in result.stdout
+    if outcome == "timeout":
+        assert "timed out" in result.stdout
+    if outcome == "invalid":
+        assert "not a valid" in result.stdout
+    assert not report.exists()
+    for record in records.glob("*.txt"):
+        assert not _process_running(int(record.stem)), record
+
+
+def _process_running(pid):
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x00100000, False, pid)
+    if not handle:
+        assert ctypes.get_last_error() == 87  # ERROR_INVALID_PARAMETER: exited PID
+        return False
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == 258  # WAIT_TIMEOUT
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+@pytest.mark.parametrize("timeout", [False, True])
+def test_setup_installer_waits_for_descendants_and_closes_tree(tmp_path, smoke_app, timeout):
+    executable = tmp_path / "bootstrap with spaces.exe"
+    shutil.copy2(smoke_app, executable)
+    _mark_downloaded(executable)
+    records = tmp_path / "records"
+    records.mkdir()
+    child_done = tmp_path / "child done.txt"
+    environment = _installer_environment(
+        FAKE_BOOTSTRAP_CHILD="1",
+        FAKE_CHILD_HOLD="1" if timeout else "0",
+        FAKE_PROCESS_RECORD_DIR=str(records),
+        FAKE_EXE=str(executable),
+        FAKE_CHILD_DONE=str(child_done),
+        FAKE_INHERITED_VALUE="value with spaces",
+    )
+    result = _run_definitions(
+        tmp_path,
+        REPO_ROOT / "setup_windows.ps1",
+        "Write-Output (Invoke-InstallerProcess -FilePath $env:FAKE_EXE "
+        '-Arguments @("--child", "one argument", \'a"b\', "C:\\trailing space\\", "") '
+        f"-TimeoutSeconds {1 if timeout else 10})",
+        environment=environment,
+    )
+    launches = [record.read_text().splitlines() for record in records.glob("*.txt")]
+    parent = next(record for record in launches if record[2] == "--child")
+    assert parent[:2] == [str(tmp_path), "value with spaces"]
+    assert parent[2:] == ["--child", "one argument", 'a"b', "C:\\trailing space\\", ""]
+    assert len(launches) == 2
+    if timeout:
+        assert result.returncode != 0
+        assert "process tree timed out" in result.stderr
+        assert not child_done.exists()
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "3010" in result.stdout
+        assert child_done.read_text() == "done"
+    for record in records.glob("*.txt"):
+        assert not _process_running(int(record.stem)), record
+
+
+@pytest.mark.parametrize("exit_code", [0, 3010, 7])
+def test_official_python_installer_preserves_arguments_and_exit_codes(
+    tmp_path, smoke_app, exit_code
+):
+    records = tmp_path / "records"
+    records.mkdir()
+    result = _run_definitions(
+        tmp_path,
+        REPO_ROOT / "setup_windows.ps1",
+        r"""
+function Write-Info { param([string]$Message) }
+function Write-Success { param([string]$Message) Write-Output $Message }
+function Write-WarningLog { param([string]$Message) Write-Output $Message }
+Invoke-OfficialPythonInstaller -InstallerPath $env:FAKE_EXE -TargetDir "C:\Python with spaces\" -X86
+""",
+        environment=_installer_environment(
+            FAKE_EXE=str(smoke_app),
+            FAKE_EXIT_CODE=str(exit_code),
+            FAKE_PROCESS_RECORD_DIR=str(records),
+        ),
+    )
+    assert (result.returncode == 0) is (exit_code in (0, 3010)), result.stdout + result.stderr
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert "TargetDir=C:\\Python with spaces\\" in record[2:]
+    assert "Include_pip=0" in record[2:]
+    if exit_code == 3010:
+        assert "requested a reboot" in result.stdout
+    elif exit_code == 7:
+        assert "exit code 7" in result.stderr
+
+
+def test_setup_native_probe_drains_both_output_streams_without_deadlock(tmp_path):
+    result = _run_definitions(
+        tmp_path,
+        REPO_ROOT / "setup_windows.ps1",
+        r"""
+function Write-Info { param([string]$Message) }
+Invoke-NativeCommandWithTimeout -Label "flood probe" -FilePath $env:FAKE_EXE -Arguments @(
+    "-c", "import sys; sys.stdout.write('o'*200000); sys.stderr.write('e'*200000)"
+) -TimeoutSeconds 10
+""",
+        environment=_installer_environment(FAKE_EXE=sys.executable),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "o" * 1000 in result.stdout and "e" * 1000 in result.stdout
+
+
+def test_package_launcher_starts_downloaded_executable_in_app_directory(tmp_path, smoke_app):
+    root = tmp_path / "portable with spaces"
+    root.mkdir()
+    launcher = root / "start_gaze_mouse.ps1"
+    shutil.copy2(REPO_ROOT / "packaging/windows/start_gaze_mouse.ps1", launcher)
+    shutil.copy2(smoke_app, root / "PogledAssist.exe")
+    _mark_downloaded(root / "PogledAssist.exe")
+    records = tmp_path / "records"
+    records.mkdir()
+    result = _run_powershell(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(launcher),
+            "-NoElevation",
+            "-NoPause",
+        ],
+        env=_installer_environment(FAKE_PROCESS_RECORD_DIR=str(records)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert record == [str(root), ""]
+
+
+def test_installation_check_keeps_normal_window_configuration(tmp_path, smoke_app):
+    result = _run_definitions(
+        tmp_path,
+        INSTALLER_SCRIPT,
+        r"""
+$process = Start-ApplicationProcess -FilePath $env:FAKE_EXE -Arguments "--installation-check" -WorkingDirectory $env:FAKE_ROOT
+try {
+    if ($process.StartInfo.UseShellExecute -or $process.StartInfo.CreateNoWindow -or
+        $process.StartInfo.WindowStyle -ne "Normal") { throw "Wrong window configuration" }
+    if (-not $process.WaitForExit(5000) -or $process.ExitCode -ne 0) { throw "Launch failed" }
+} finally { $process.Dispose() }
+""",
+        environment=_installer_environment(FAKE_EXE=str(smoke_app), FAKE_ROOT=str(tmp_path)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_post_install_launch_passes_launcher_path_with_spaces(tmp_path, smoke_app):
+    root = tmp_path / "installed with spaces"
+    root.mkdir()
+    records = tmp_path / "records"
+    records.mkdir()
+    launcher = root / "start_gaze_mouse.ps1"
+    launcher.write_text(
+        "param([switch]$NoPause)\nif (-not $NoPause) { exit 4 }\n"
+        '& $env:FAKE_EXE "--post-install"\n',
+        encoding="utf-8",
+    )
+    result = _run_definitions(
+        tmp_path,
+        INSTALLER_SCRIPT,
+        "Start-InstalledApplication -InstalledRoot $env:FAKE_ROOT",
+        environment=_installer_environment(
+            FAKE_EXE=str(smoke_app),
+            FAKE_ROOT=str(root),
+            FAKE_PROCESS_RECORD_DIR=str(records),
+        ),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    deadline = time.monotonic() + 5
+    while not list(records.glob("*.txt")) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    record = next(records.glob("*.txt")).read_text().splitlines()
+    assert record == [str(root), "", "--post-install"]
+
+
+def test_setup_installer_rejects_invalid_executable_without_shell(tmp_path):
+    executable = tmp_path / "invalid with spaces.exe"
+    executable.write_bytes(b"invalid executable")
+    _mark_downloaded(executable)
+    result = _run_definitions(
+        tmp_path,
+        REPO_ROOT / "setup_windows.ps1",
+        r"""
+try {
+    Invoke-InstallerProcess -FilePath $env:FAKE_EXE -Arguments @() -TimeoutSeconds 1
+} catch {
+    $cause = $_.Exception
+    while ($null -ne $cause.InnerException) { $cause = $cause.InnerException }
+    if ($cause -isnot [ComponentModel.Win32Exception]) { throw }
+    Write-Output "NativeErrorCode=$($cause.NativeErrorCode)"
+    exit 3
+}
+throw "Invalid executable unexpectedly started"
+""",
+        environment=_installer_environment(FAKE_EXE=str(executable)),
+    )
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert result.stdout.strip() in ("NativeErrorCode=193", "NativeErrorCode=216")
+
+
+@pytest.mark.parametrize("exit_code", [0, 3010, 7])
+def test_msi_setup_preserves_exit_codes_and_raw_path_argument(tmp_path, exit_code):
+    result = _run_definitions(
+        tmp_path,
+        REPO_ROOT / "setup_windows.ps1",
+        r"""
+function Write-Step { param([string]$Message) }
+function Write-Info { param([string]$Message) }
+function Write-Success { param([string]$Message) Write-Output $Message }
+function Write-WarningLog { param([string]$Message) Write-Output $Message }
+function Download-FileWithPowerShell { param($Url, $DestinationPath, $Label) }
+function Unblock-File { param($Path, $ErrorAction) }
+function Invoke-InstallerProcess {
+    param($FilePath, $Arguments)
+    if ($FilePath -ne (Join-Path $env:SystemRoot "System32\msiexec.exe") -or
+        $Arguments.Count -ne 4 -or $Arguments[0] -ne "/i" -or
+        $Arguments[1] -notlike "*PogledAssistSetup\installer with spaces.msi" -or
+        $Arguments[1].Contains('"') -or $Arguments[2] -ne "/quiet" -or $Arguments[3] -ne "/norestart") {
+        throw "Invalid installer invocation"
+    }
+    return [int]$env:FAKE_EXIT_CODE
+}
+$EspeakNgVersion = "1.52.0"
+$EspeakNgInstallerFileName = "installer with spaces.msi"
+$EspeakNgInstallerUrl = "https://example.invalid/installer"
+Install-EspeakNgFromMsi
+""",
+        environment=_installer_environment(FAKE_EXIT_CODE=str(exit_code)),
+    )
+    assert (result.returncode == 0) is (exit_code in (0, 3010)), result.stdout + result.stderr
+    if exit_code == 3010:
+        assert "requested a reboot" in result.stdout
+    elif exit_code == 7:
+        assert "exit code 7" in result.stderr
 
 
 def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(

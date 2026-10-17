@@ -157,6 +157,12 @@ Ruff is the Python equivalent of the ESLint, Prettier, and import-sorting parts 
 
 PSScriptAnalyzer uses a focused settings file. It checks unsafe or ambiguous PowerShell patterns without enforcing naming preferences that would cause large, low-value rewrites of the existing setup scripts.
 
+`scripts/checks/check_powershell.ps1` also rejects `Start-Process` (including its `start` and `saps` aliases) for ordinary executable launches. Windows PowerShell 5.1 defaults to the Windows shell, which can show **Open File – Security Warning** before the caller receives a process or starts its timeout. Use `ProcessStartInfo` with explicit `UseShellExecute = $false`; background console probes also use `CreateNoWindow = $true`. Keep normal window creation for the Qt application and installation summary. Drain redirected stdout and stderr concurrently before waiting, and bound output completion as well as process completion.
+
+The guard permits explicit `-Verb RunAs` for UAC and the exact `dev.ps1` command that opens the generated `index.html` in a browser. Splatting executable arguments does not exempt a call; elevation must state `-Verb RunAs` at the call site. The guard checks PowerShell command ASTs, not arbitrary dynamically constructed code or Python shell calls. Windows OSK and Tobii document/protocol launches retain their existing shell semantics. These exceptions do not authorize shell launching of downloaded application or test executables.
+
+Installer regressions compile an unsigned synthetic executable, attach an Internet `Zone.Identifier` stream, and exercise staging, installation, launch, failure and cleanup without clicking a warning. A separate harness timeout kills the test process tree if the production launch blocks. Source bootstrap installers use a private Windows job: the process starts suspended, joins the job before resuming, and the caller waits for descendants too. A 15-minute limit closes the tree on timeout; the root exit code, including `3010` (reboot requested), is preserved. This native start consumes the explicit `ProcessStartInfo` configuration because .NET Framework cannot suspend and assign a new child to a job through `Process.Start` alone. The standalone source setup keeps this helper inline so historical/source installations need no new support file.
+
 Mypy is not enforced yet. Much of the UI depends on PySide signals, dynamic Qt objects, and Windows ctypes boundaries, so introducing strict type checking should start as a separate change with a defined module-by-module adoption plan.
 
 ## Packaging

@@ -85,7 +85,7 @@ def update_status(
     ci_run_id: int | None = None,
     ci_attempt: int | None = None,
 ) -> None:
-    """Keep existing previews while CI runs or publication fails; never claim new images exist."""
+    """Preserve previews and report publication failures even before the first gallery."""
     workflow_id = api.get("actions/workflows/ci.yml")["id"]
     for pull in api.items("pulls?state=open&per_page=100"):
         if not _gallery_pull(pull):
@@ -95,10 +95,17 @@ def update_status(
             continue
         comments = api.items(f"issues/{pull['number']}/comments?per_page=100")
         existing = next((comment for comment in comments if _is_gallery_comment(comment)), None)
-        if existing is None or _publication_already_finished(publication, run, existing["body"]):
+        if existing is None and publication != "failed":
+            continue
+        body = existing["body"] if existing else "No UI gallery has been published yet."
+        if _publication_already_finished(publication, run, body):
             continue
         header = _status_header(pull, run, publication, publication_run_id)
-        payload = {"number": pull["number"], "body": _with_status(existing["body"], header)}
+        payload = {
+            "number": pull["number"],
+            "body": _with_status(body, header),
+            "create": publication == "failed",
+        }
         _write_comment(api, pull, payload, existing)
 
 

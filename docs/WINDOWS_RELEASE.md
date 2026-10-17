@@ -26,6 +26,14 @@ The previous application under `C:\TobiiExec` remains independent. The Pogled As
 
 The extracted folder is also portable. Run its `start_gaze_mouse.ps1` without installing if a portable copy is preferred.
 
+## Windows launch warnings and signing
+
+The package builder, installer smoke tests, packaged launcher, and installation summary start executable files directly with `UseShellExecute = false`. This avoids the shell's **Open File – Security Warning** dialog for an Internet-marked executable and lets launch failures reach the caller. Background console checks create no console window; the application and installation summary retain normal visible windows. Administrator relaunches still use `RunAs` and request UAC. The [development guide](DEVELOPMENT.md#lint-and-formatting) owns the guard and process lifecycle checks.
+
+Direct launching does not grant trust to a binary. [SmartScreen](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/), [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control), and organization application-control policies can still warn or block it. Keep those protections enabled; a blocked launch must be reported as a failure. Explorer launches and UAC can still identify this unsigned release as an unknown publisher.
+
+The release pipeline currently has no Windows Authenticode signing step. Before relying on publisher trust for distribution to colleagues, the release owner must provision a trusted code-signing identity (a suitable CA certificate or Microsoft Artifact Signing account), protect its key/service credentials in the release environment, and add signing plus a trusted timestamp for project-built EXEs and DLLs before final smoke tests, ZIP creation and SHA-256 generation. Preserve and verify third-party signatures where supplied, and verify all distributed executable components with the intended Windows trust policy on a clean machine. The pipeline must fail on signing or signature-verification errors. Certificate/service provisioning, CI credentials, signing integration and clean-machine policy validation remain outstanding; no certificate or Windows policy is configured by the launch fix.
+
 ## Update an installed release
 
 The installed app offers version selection in General Settings. See the [user flow](USER_GUIDE.md#update). It lists all official stable releases with the exact Windows ZIP and checksum assets, newest version first. It shows the installed version independently of the selection and checks again whenever Settings opens. No startup popup or automatic installation is used.
@@ -139,6 +147,7 @@ Software-only checks on a clean Windows x64 environment:
 - Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup).
 - Verify the SHA-256 file before extraction.
 - Run `install_windows.ps1` and confirm installation under `C:\PogledAssist`.
+- From a verified downloaded ZIP with Internet marks retained, run install, update, rollback and the packaged launcher without an **Open File – Security Warning** prompt. Confirm UAC still appears when elevation is needed, the setup summary and main Qt window are visible, and unattended checks finish without user input. Separately record any SmartScreen, Smart App Control or organization policy result and verify the expected publisher/signatures when signing is introduced.
 - Put a sentinel file under a test `C:\TobiiExec` installation and confirm the installer and updater reject that path without changing the sentinel.
 - Install an older release, run `update_windows.ps1`, and confirm `VERSION` matches the latest stable release.
 - Confirm a deliberately invalid checksum leaves the older version unchanged.
@@ -172,7 +181,7 @@ Hardware checks on the target Tobii machine:
 ## Known limits
 
 - The package supports Windows x64. AppBar behavior and Windows input do not work on other operating systems.
-- The executable is not code-signed, so Windows may show an unknown-publisher warning.
+- The executable is not code-signed; see [Windows launch warnings and signing](#windows-launch-warnings-and-signing) for remaining publisher and policy limits.
 - Multi-monitor mapping assumes the Tobii-calibrated display is primary.
 - Physical Tobii behavior cannot be proven by GitHub-hosted runners.
 - Prirodni and new Efendija audio depend on online services; Efendija also needs credentials, an accessible voice and credits. Saved clips can work offline.

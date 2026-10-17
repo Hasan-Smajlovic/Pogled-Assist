@@ -477,3 +477,52 @@ def test_powershell_focused_check_parses_only_selected_paths_and_rejects_escape(
             assert "must be a script inside the repository" in result.stderr
         else:
             assert "Missing closing" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("filename", "source", "allowed"),
+    [
+        ("ordinary.ps1", 'Start-Process -FilePath "test.exe" -Wait', False),
+        ("ordinary.ps1", 'saps -FilePath "test.exe"', False),
+        ("ordinary.ps1", 'Microsoft.PowerShell.Management\\Start-Process "test.exe"', False),
+        ("ordinary.ps1", '$p = @{FilePath="test.exe"}; Start-Process @p', False),
+        ("ordinary.ps1", 'Start-Process "test.exe" -Verb Open', False),
+        ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb RunAs', True),
+        ("ordinary.ps1", 'Start-Process "powershell.exe" -Verb:RunAs', True),
+        ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', True),
+        ("dev.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "test.exe")', False),
+        ("ordinary.ps1", 'Start-Process -FilePath (Join-Path $outputRoot "index.html")', False),
+        (
+            "ordinary.ps1",
+            "$p = New-Object Diagnostics.ProcessStartInfo; $p.UseShellExecute = $false",
+            True,
+        ),
+    ],
+)
+def test_powershell_check_enforces_direct_executable_launches(tmp_path, filename, source, allowed):
+    checks = tmp_path / "scripts/checks"
+    checks.mkdir(parents=True)
+    checker = checks / "check_powershell.ps1"
+    shutil.copy2(DEV_SCRIPT.parent / "scripts/checks/check_powershell.ps1", checker)
+    shutil.copy2(DEV_SCRIPT.parent / "PSScriptAnalyzerSettings.psd1", tmp_path)
+    (tmp_path / filename).write_text(source, encoding="utf-8")
+    result = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(checker),
+            "-Paths",
+            filename,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+    if not allowed:
+        assert "UseShellExecute=false" in result.stderr

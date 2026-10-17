@@ -409,17 +409,53 @@ def test_publication_reads_latest_ci_instead_of_reusing_build_status(tmp_path):
     assert "Gallery matches the latest" not in body
 
 
-@pytest.mark.parametrize("publication", ["preparing", "failed"])
-def test_status_only_updates_gallery_bot_comment_and_does_not_create_one(publication):
+def test_preparing_status_does_not_create_a_comment():
     api = FakeGitHub()
     api.comments[1] = [
         {"id": 1, "user": {"login": "reviewer"}, "body": site.COMMENT_MARKER},
         {"id": 2, "user": {"login": "github-actions[bot]"}, "body": "Other report"},
     ]
 
-    site.update_status(api, publication, 201, ci_run_id=101, ci_attempt=1)
+    site.update_status(api, "preparing", 201, ci_run_id=101, ci_attempt=1)
 
     assert api.writes == []
+
+
+@pytest.mark.parametrize("unrelated_comments", [False, True])
+def test_first_publication_failure_creates_one_comment_and_recovers(tmp_path, unrelated_comments):
+    api = FakeGitHub()
+    if unrelated_comments:
+        api.comments[1] = [
+            {"id": 1, "user": {"login": "reviewer"}, "body": site.COMMENT_MARKER},
+            {"id": 2, "user": {"login": "github-actions[bot]"}, "body": "Other report"},
+        ]
+    original_comments = deepcopy(api.comments[1])
+
+    site.update_status(api, "failed", 201, ci_run_id=101, ci_attempt=1)
+
+    body = api.comments[1][-1]["body"]
+    assert api.writes == [("POST", "issues/1/comments", {"body": body})]
+    assert body.startswith(site.COMMENT_MARKER)
+    assert "Gallery publication failed" in body
+    assert "/actions/runs/201" in body
+    assert "/actions/runs/101" in body
+    assert FIRST_SHA[:7] in body
+    assert "No UI gallery has been published yet" in body
+    assert "![" not in body
+
+    site.update_status(api, "failed", 201, ci_run_id=101, ci_attempt=1)
+    site.update_status(api, "preparing", 200, ci_run_id=101, ci_attempt=1)
+    assert len(api.writes) == 1
+
+    galleries = site.prepare_site(api, tmp_path / "site", BASE_URL)
+    site.update_comments(api, galleries, publication_run_id=202)
+    assert api.writes[-1][:2] == ("PATCH", "issues/comments/99")
+    assert len(api.comments[1]) == len(original_comments) + 1
+    assert api.comments[1][:-1] == original_comments
+    body = api.comments[1][-1]["body"]
+    assert "Gallery matches the latest PR commit and CI run" in body
+    assert "No UI gallery has been published yet" not in body
+    assert "![" in body
 
 
 def test_status_keeps_timestamp_when_nothing_else_changes(tmp_path, monkeypatch):

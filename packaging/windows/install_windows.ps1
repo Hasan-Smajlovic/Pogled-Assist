@@ -32,6 +32,29 @@ function Get-PowerShellExecutable {
     return Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 }
 
+function Start-ApplicationProcess {
+    param(
+        [string]$FilePath,
+        [string]$Arguments = "",
+        [string]$WorkingDirectory,
+        [switch]$Background
+    )
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo.FileName = $FilePath
+    $process.StartInfo.Arguments = $Arguments
+    $process.StartInfo.WorkingDirectory = $WorkingDirectory
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = [bool]$Background
+    try {
+        if (-not $process.Start()) { throw "Could not start $FilePath." }
+        return $process
+    } catch {
+        $process.Dispose()
+        throw
+    }
+}
+
 function Assert-DedicatedInstallRoot {
     $requestedRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd("\")
     $legacyRoot = [IO.Path]::GetFullPath("C:\TobiiExec").TrimEnd("\")
@@ -380,7 +403,8 @@ function Assert-PreservedPaths {
 function Invoke-PackageSmokeTest {
     param(
         [string]$Root,
-        [string]$Label
+        [string]$Label,
+        [int]$TimeoutMilliseconds = 60000
     )
 
     $appExecutable = Join-Path $Root "PogledAssist.exe"
@@ -392,17 +416,17 @@ function Invoke-PackageSmokeTest {
         ([IO.Path]::GetTempPath()) `
         ("PogledAssistSmoke_{0}.txt" -f [Guid]::NewGuid().ToString("N"))
     $previousReportPath = $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT
+    $smokeProcess = $null
     try {
         $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $reportPath
-        $smokeProcess = Start-Process `
+        $smokeProcess = Start-ApplicationProcess `
             -FilePath $appExecutable `
-            -ArgumentList "--package-smoke-test" `
+            -Arguments "--package-smoke-test" `
             -WorkingDirectory $Root `
-            -WindowStyle Hidden `
-            -PassThru
-        if (-not $smokeProcess.WaitForExit(60000)) {
+            -Background
+        if (-not $smokeProcess.WaitForExit($TimeoutMilliseconds)) {
             Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
-            throw "$Label timed out after 60 seconds."
+            throw "$Label timed out after $TimeoutMilliseconds milliseconds."
         }
         if ($smokeProcess.ExitCode -ne 0) {
             $report = if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
@@ -413,6 +437,13 @@ function Invoke-PackageSmokeTest {
             throw "$Label failed with exit code $($smokeProcess.ExitCode). $report"
         }
     } finally {
+        if ($null -ne $smokeProcess) {
+            if (-not $smokeProcess.HasExited) {
+                Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+                $smokeProcess.WaitForExit(5000) | Out-Null
+            }
+            $smokeProcess.Dispose()
+        }
         $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $previousReportPath
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
     }
@@ -804,11 +835,12 @@ function Start-InstalledApplication {
         "-File", (Quote-Argument $launcherPath),
         "-NoPause"
     )
-    Start-Process `
+    $process = Start-ApplicationProcess `
         -FilePath (Get-PowerShellExecutable) `
-        -ArgumentList ($launchArguments -join " ") `
+        -Arguments ($launchArguments -join " ") `
         -WorkingDirectory $InstalledRoot `
-        -WindowStyle Hidden | Out-Null
+        -Background
+    $process.Dispose()
 }
 
 function Ensure-Administrator {
@@ -868,10 +900,11 @@ function Invoke-Installer {
 
         if (-not $NoSetupWindow -and -not $NoDesktopShortcut) {
             try {
-                Start-Process `
+                $process = Start-ApplicationProcess `
                     -FilePath (Join-Path $paths.Install "PogledAssist.exe") `
-                    -ArgumentList "--installation-check" `
-                    -WorkingDirectory $paths.Install | Out-Null
+                    -Arguments "--installation-check" `
+                    -WorkingDirectory $paths.Install
+                $process.Dispose()
             } catch {
                 Write-Warning "Installation succeeded, but the setup check could not be opened: $($_.Exception.Message)"
             }

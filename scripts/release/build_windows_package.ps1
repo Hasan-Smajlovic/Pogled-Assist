@@ -176,40 +176,58 @@ foreach ($relativePath in $requiredFiles) {
     }
 }
 
-$previousQtPlatform = $env:QT_QPA_PLATFORM
-$previousSmokeReport = $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT
-$previousPath = $env:PATH
-$smokeReportPath = Join-Path $OutputRoot "package-smoke-test.txt"
-try {
-    $env:QT_QPA_PLATFORM = "offscreen"
-    $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $smokeReportPath
-    $env:PATH = (Join-Path $env:SystemRoot "System32") + ";" + $env:SystemRoot
-    Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
-    $smokeProcess = Start-Process `
-        -FilePath (Join-Path $PackageRoot "PogledAssist.exe") `
-        -ArgumentList "--package-smoke-test" `
-        -WorkingDirectory $PackageRoot `
-        -WindowStyle Hidden `
-        -PassThru
-    if (-not $smokeProcess.WaitForExit(60000)) {
-        Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
-        throw "Packaged application smoke test timed out after 60 seconds."
-    }
-    if ($smokeProcess.ExitCode -ne 0) {
-        $smokeReport = if (Test-Path -LiteralPath $smokeReportPath) {
-            (Get-Content -LiteralPath $smokeReportPath -Raw).Trim()
-        } else {
-            "No smoke-test report was written."
+function Invoke-BuiltPackageSmokeTest {
+    param(
+        [string]$PackageRoot,
+        [string]$SmokeReportPath,
+        [int]$TimeoutMilliseconds = 60000
+    )
+    $previousQtPlatform = $env:QT_QPA_PLATFORM
+    $previousSmokeReport = $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT
+    $previousPath = $env:PATH
+    $smokeProcess = $null
+    $started = $false
+    try {
+        $env:QT_QPA_PLATFORM = "offscreen"
+        $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $smokeReportPath
+        $env:PATH = (Join-Path $env:SystemRoot "System32") + ";" + $env:SystemRoot
+        Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
+        $smokeProcess = New-Object System.Diagnostics.Process
+        $smokeProcess.StartInfo.FileName = Join-Path $PackageRoot "PogledAssist.exe"
+        $smokeProcess.StartInfo.Arguments = "--package-smoke-test"
+        $smokeProcess.StartInfo.WorkingDirectory = $PackageRoot
+        $smokeProcess.StartInfo.UseShellExecute = $false
+        $smokeProcess.StartInfo.CreateNoWindow = $true
+        if (-not $smokeProcess.Start()) { throw "Packaged application smoke test did not start." }
+        $started = $true
+        if (-not $smokeProcess.WaitForExit($TimeoutMilliseconds)) {
+            Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Packaged application smoke test timed out after $TimeoutMilliseconds milliseconds."
         }
-        throw "Packaged application smoke test failed with exit code $($smokeProcess.ExitCode). $smokeReport"
+        if ($smokeProcess.ExitCode -ne 0) {
+            $smokeReport = if (Test-Path -LiteralPath $smokeReportPath) {
+                (Get-Content -LiteralPath $smokeReportPath -Raw).Trim()
+            } else {
+                "No smoke-test report was written."
+            }
+            throw "Packaged application smoke test failed with exit code $($smokeProcess.ExitCode). $smokeReport"
+        }
+    } finally {
+        if ($null -ne $smokeProcess) {
+            if ($started -and -not $smokeProcess.HasExited) {
+                Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+                $smokeProcess.WaitForExit(5000) | Out-Null
+            }
+            $smokeProcess.Dispose()
+        }
+        $env:QT_QPA_PLATFORM = $previousQtPlatform
+        $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $previousSmokeReport
+        $env:PATH = $previousPath
+        Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
     }
-} finally {
-    $env:QT_QPA_PLATFORM = $previousQtPlatform
-    $env:POGLED_ASSIST_PACKAGE_SMOKE_REPORT = $previousSmokeReport
-    $env:PATH = $previousPath
 }
 
-Remove-Item -LiteralPath $smokeReportPath -Force -ErrorAction SilentlyContinue
+Invoke-BuiltPackageSmokeTest -PackageRoot $PackageRoot -SmokeReportPath (Join-Path $OutputRoot "package-smoke-test.txt")
 
 & (Join-Path $PSScriptRoot "compress_package.ps1") -PackageRoot $PackageRoot -ArtifactPath $ArtifactPath
 
@@ -257,20 +275,25 @@ try {
         -LiteralPath $sourceScript `
         -Value "import time; time.sleep(60)" `
         -Encoding ASCII
-    $sourceProcess = Start-Process `
-        -FilePath $PythonExecutable `
-        -ArgumentList @("-B", ('"' + $sourceScript + '"')) `
-        -WorkingDirectory $InstallRoot `
-        -PassThru
+    $sourceProcess = New-Object System.Diagnostics.Process
+    $sourceStarted = $false
     try {
+        $sourceProcess.StartInfo.FileName = $PythonExecutable
+        $sourceProcess.StartInfo.Arguments = '-B "' + $sourceScript + '"'
+        $sourceProcess.StartInfo.WorkingDirectory = $InstallRoot
+        $sourceProcess.StartInfo.UseShellExecute = $false
+        $sourceProcess.StartInfo.CreateNoWindow = $true
+        if (-not $sourceProcess.Start()) { throw "Source application probe did not start." }
+        $sourceStarted = $true
         Start-Sleep -Milliseconds 500
         $runningSourceResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
         & (Join-Path $PSScriptRoot "check_running_app_rejection.ps1") `
             -ExitCode $runningSourceResult.ExitCode `
             -InstallerOutput $runningSourceResult.Output
     } finally {
-        if (-not $sourceProcess.HasExited) {
+        if ($sourceStarted -and -not $sourceProcess.HasExited) {
             Stop-Process -Id $sourceProcess.Id -Force -ErrorAction SilentlyContinue
+            $sourceProcess.WaitForExit(5000) | Out-Null
         }
         $sourceProcess.Dispose()
     }
