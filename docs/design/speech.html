@@ -23,10 +23,14 @@
         <div class="message-header">
           <label id="message-label" for="message">Vaša poruka</label>
           <span id="status" role="status" aria-live="polite"></span>
+          <div id="speech-voice-notice" class="speech-voice-notice" role="status" aria-live="polite" aria-atomic="true" hidden>
+            <span class="voice-notice-mark" aria-hidden="true">!</span>
+            <p><strong id="voice-notice-title"></strong><span id="voice-notice-detail"></span></p>
+          </div>
         </div>
-        <input id="message" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
+        <input id="message" type="text" aria-labelledby="message-label" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
       </div>
-      <button class="primary" type="button" data-action="speak">Izgovori</button>
+      <div class="speech-playback"><button id="speak-button" class="primary" type="button" data-action="speak">Izgovori</button><progress id="speech-progress" aria-label="Govor je aktivan" hidden></progress></div>
       <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
@@ -74,6 +78,10 @@
     <button id="single-letter-preview" type="button">1 slovo u grupi</button>
     <button id="twelve-letters-preview" type="button">12 slova u grupi</button>
     <label><input id="library-read-error" type="checkbox"> Biblioteka nije učitana</label>
+    <label>Glas i obavijest <select id="voice-demo-state"><option value="none">Glas preglednika</option><option value="efendija">Efendija · redovan izgovor</option><option value="quota">Nema dovoljno kredita → Prirodni</option><option value="offline">Servis nije dostupan → Prirodni</option><option value="timeout">Isteklo čekanje → Prirodni</option><option value="invalid">Neispravan ključ → Prirodni</option><option value="standard">Online glasovi nedostupni → Standardni</option><option value="cached">Sačuvani Efendijin glas</option><option value="cache-failed">Čuvanje zvuka nije uspjelo</option><option value="recovered">Efendijin glas se vratio</option><option value="partial">Izgovor je prekinut</option></select></label>
+    <label><input id="voice-demo-tracking" type="checkbox"> Prekid praćenja ima prednost</label>
+    <p class="voice-prototype-note">ElevenLabs stanja su vizuelna simulacija, bez zvuka i potrošnje kredita.</p>
+    <a href="settings.html?voice=efendija#speech-settings">Postavke Efendijinog glasa</a>
   </details>  <dialog id="letters-dialog" aria-labelledby="letters-title">
     <h2 id="letters-title">Odaberite slovo</h2>
     <div id="letters" class="letter-grid"></div>
@@ -120,7 +128,12 @@
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
+    <p>izabrani Efendija prvo koristi važeći sačuvani snimak cijele spremljene fraze ili odgovora. Za ostale poruke pokušava ElevenLabs, pa Prirodni, pa Standardni. Izbor glasa ostaje sačuvan. Efendija ima najviše 30 sekundi za pripremu zvuka, Prirodni još najviše 3 sekunde; potvrđena greška pokreće zamjenu odmah. To su pragovi za pripremu, ne obećanje početka zvuka u 33 sekunde. Dostupni sačuvani zvuk se može koristiti i kada nema interneta ili kredita.</p>
+    <p>Obavijest koristi postojeće zaglavlje poruke. Unutar gornjeg reda od 96 px zaglavlje se proširi sa 18 na 38 px, a polje poruke se smanji; dugmad i tastatura ostaju na istim mjestima. Razlog i dodatna poruka stoje jedan uz drugi, u dvije kolone koje po potrebi prelamaju tekst. Obavijest se ne zatvara potvrdom i ne uzima fokus. Obavijest o zamjenskom glasu ostaje nakon završetka izgovora dok se taj glas koristi. Tekst navodi stvarni korišteni glas i razlog zamjene. Izgovor sačuvanim Efendijinim glasom ne prikazuje da se koristi Prirodni. Obavijest o praćenju ima prednost; nakon nje vraća se aktuelno stanje govora.</p>
+    <p>Kasni odgovor ne smije pokrenuti drugi zvuk nakon prelaska na zamjenski glas. Ako je reprodukcija već počela pa prekinula, poruka ostaje u polju i prikazuje se Izgovor nije završen. Cijela poruka se ne ponavlja automatski. Korisnik može odabrati Izgovori. Efendija se automatski vraća za naredne poruke nakon oporavka, bez prekidanja tekućeg zvuka. Nakon uspješnog izgovora Efendijom zelena potvrda povratka ostaje vidljiva 5 sekundi, zatim sama nestaje. Ako je zakloni obavijest o praćenju, po povratku dobija punih 5 sekundi. Nova greška odmah zamjenjuje potvrdu. Sama provjera dostupnosti još ne potvrđuje uspješan povratak. Greška ključa, nedovoljni krediti i privremena nedostupnost imaju različite provjere oporavka bez plaćenog probnog generisanja u pozadini.</p>
     <ul>
+      <li>Brzi izbor koristi tekst veličine 27 px; u aplikaciji pet prijedloga ima minimalnu visinu 71 px (ranije 66 px i tekst 22 px). Gornja i donja margina aplikacije su po 3 px manje kako bi i prikaz jednog slova po grupi stao na 1280 × 720. Manje unutrašnje vertikalno rastojanje u dugmadima ostavlja prostor za duže riječi u dva reda. Redoslijed, odabir i poništavanje prijedloga se ne mijenjaju.</li>
+      <li>Donja dugmad Razmak, Obriši slovo i Brojevi i znakovi imaju minimalnu visinu 81 px, povećanu sa 76 px za 5 px. Širine ostaju prilagodljive ekranu. Redoslijed, oznake i radnje se ne mijenjaju; minimalna visina prebacivanja pisma ostaje 76 px. Prikaz jednog slova po grupi koristi razmak od 5 px između pet redova, uz zadržanu minimalnu visinu tipki od 72 px, da povećana donja dugmad stanu u prikaz 1280 × 720.</li>
       <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje 30 zasebnih grupa u pet redova s manjim razmakom između redova, uz zadržanu visinu dugmadi od najmanje 72 px. Pregled 12 slova prikazuje najveću dozvoljenu grupu: četiri kolone i tipke visoke najmanje 118 px pri 1280 × 720, tako da je i dugme za povratak u cijelosti vidljivo. Odabir jednog slova zatvara prozor i vraća grupe. Nema zasebne abecedne tastature ni stalno otvorenih slova.</li>
 <li>Kategorije su lijevo od poruke, fraze desno. Polje poruke zauzima cijelu dostupnu širinu; gornji red zadržava visinu od 96 px. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista. Obavijesti o prekidima i povratku praćenja imaju <a href="tracking.html">zaseban pregled</a>; koriste postojeće zaglavlje i ne pomjeraju dugmad.</li>
 <li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
@@ -130,7 +143,7 @@
 <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
 <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
 <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
-<li>Status se prikazuje uz naslov Vaša poruka. Nema donjeg statusnog reda niti zasebnog dugmeta za zatvaranje govora. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
+<li>Status se prikazuje uz naslov Vaša poruka. Tokom pripreme i izgovora isto dugme Izgovori postaje Zaustavi, uz animirani indikator. Identitet cilja ostaje isti, pa zadržavanje pogleda ne zaustavlja govor bez odlaska s cilja. Poruka i tastatura ostaju dostupne. Završetak, greška i prekid vraćaju Izgovori. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
 <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>500 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>500 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak za manje od 120 ms nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
 <li>Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta.</li>
 <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. U aplikaciji i gubitak praćenja jednog oka odmah poništava napredak; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>

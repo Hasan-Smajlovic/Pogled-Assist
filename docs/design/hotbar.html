@@ -41,11 +41,15 @@
         <option value="connecting">Povezivanje</option>
         <option value="retrying">Uređaj nije povezan</option>
         <option value="simulation">Simulacija mišem</option>
+        <option value="simulation-left">Simulacija: lijevo oko nije validno</option>
+        <option value="simulation-paused">Simulacija: zaustavljena isporuka pogleda</option>
+        <option value="simulation-disconnected">Simulacija: prekinuta veza</option>
         <option value="unavailable">Simulacija nije dostupna</option>
         <option value="stopped">Praćenje zaustavljeno</option>
       </select>
     </label>
     <p>Status je dio trake, nije dugme i nije površina odabira pogledom. Sakrij uklanja cijelu traku sa statusom. Prikaži vraća traku; dok je sakrivena, nema izdvojenog statusnog panela.</p>
+    <p>Razvojni simulator zadržava naslov Simulacija mišem i ispod njega prikazuje aktivni probni prekid. Dok je aplikacija aktivna i traka prikazana, F6 mijenja validnost lijevog oka, F7 desnog oka, F8 zaustavlja ili nastavlja isporuku pogleda, F9 prekida ili vraća vezu, a F10 vraća oba oka, vezu i isporuku pogleda. Prekidi se mogu kombinovati. Ove prečice postoje samo u razvojnom simulatoru; ne mijenjaju sačuvane postavke i ne predstavljaju mjerenje Tobii uređaja. Simulator provjerava odabir i oznaku pogleda; Tobii obavijesti i automatsko ponovno povezivanje provjeravaju se zasebno.</p>
     <p>Praćenje spremno zahtijeva aktivnu vezu, validne podatke oba oka i svježi uzorak pogleda. Gubitak oka prikazuje Praćenje pauzirano i zadržava obje oznake oka: ✓ za validan podatak, — kada podatak nije validan. Čekanje podataka se razlikuje od gubitka oka i nepovezanog uređaja. Simulacija mišem ne prikazuje lažnu potvrdu Tobii očiju. Prikaz nema treperenja, animacije ni zvučnih upozorenja pri treptaju.</p>
     <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
     <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>

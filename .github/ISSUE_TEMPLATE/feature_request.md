@@ -10,35 +10,10 @@ assignees: ""
 
 <!-- Who needs this and what problem does it solve? -->
 
-## User flow
+## Details
 
-<!-- Describe the full user flow, including gaze interaction where relevant. -->
+<!-- Describe the expected user flow, including gaze interaction where relevant. Link useful context and dependencies. Name scope boundaries, behavior or data that must stay compatible, and any unresolved decisions. -->
 
-1.
-2.
-3.
+## Done when
 
-## Scope
-
-- In scope:
-- Out of scope:
-- Relevant files or starting points:
-- Related issues, decisions, or dependencies:
-
-## Compatibility constraints
-
-<!-- Name existing flows and user data that must remain available. -->
-
-## Acceptance criteria
-
-- [ ]
-- [ ]
-- [ ]
-
-## Verification
-
-- Automated tests:
-- Manual Windows checks:
-- Manual Tobii hardware checks:
-- Design or visible evidence:
-- Known limits:
+<!-- List observable acceptance criteria as checkboxes, including any checks or design evidence specific to this feature. Standard verification is in CONTRIBUTING.md. -->

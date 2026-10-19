@@ -29,14 +29,15 @@ from ..speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
     SpeechLibraryStore,
-    clean_text,
     sorted_phrases,
     speech_library_store,
 )
 from ..speech.speech_service import SpeechService, SpeechSettings
 from ..suggestions.composition import Composition
 from ..suggestions.service import SuggestionService
-from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
+from .speech_editor import EditorContext
+from .speech_library_actions import ITEMS_PER_PAGE, SpeechLibraryActions
+from .speech_playback_controls import SpeechPlaybackControls
 from .speech_predictions import PredictionControls, SpeechPredictions
 from .speech_surface import SPEECH_WINDOW_ACTION_PREFIX as SPEECH_WINDOW_ACTION_PREFIX
 from .speech_surface import SpeechSurface
@@ -46,16 +47,19 @@ logger = logging.getLogger(__name__)
 MULTI_CHARACTER_LETTERS = ("DŽ", "LJ", "NJ")
 SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 PHRASE_BUTTON_MIN_HEIGHT = 64
-ITEMS_PER_PAGE = 6
 GROUP_GRID_MAX_COLUMNS = 6
 
 
-class SpeechWindow(SpeechSurface):
+class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
     """Fullscreen speech entry surface with gaze-selectable buttons."""
 
     closed = Signal()
     quit_requested = Signal()
     keyboard_script_changed = Signal(str)
+
+    @property
+    def has_unsaved_input(self) -> bool:
+        return bool(self._input.text().strip() or self._editor is not None)
 
     def __init__(
         self,
@@ -76,6 +80,7 @@ class SpeechWindow(SpeechSurface):
         self._speech = speech
         self._playback_id: int | None = None
         self._speech.playback_changed.connect(self._playback_changed)
+        self._speech.voice_changed.connect(self._voice_changed)
         self._speech_settings = initial_settings
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         self._letter_groups = _group_letters(
@@ -87,6 +92,7 @@ class SpeechWindow(SpeechSurface):
         self._alarm_sound = alarm_sound or AlarmSound(self)
         self._alarm_sound.failed.connect(self._alarm_failed)
         self._library = self._library_store.load()
+        self._sync_saved_audio()
         self._list_page = 0
         self._category_index: int | None = None
         self._deletion_mode = False
@@ -114,11 +120,16 @@ class SpeechWindow(SpeechSurface):
         self.dialog_closed.connect(self._after_dialog_closed)
         self._input.returnPressed.connect(self._play)
         self._sync_script_controls()
+        self._sync_voice_notice()
         self._input.textChanged.connect(self._text_changed)
         self._input.cursorPositionChanged.connect(self._refresh_suggestions)
         self._input.selectionChanged.connect(self._refresh_suggestions)
         self._show_group_level()
         self._predictions.show_status(self._suggestions.status)
+        state = speech.playback_state
+        if state in ("preparing", "speaking"):
+            self._playback_id = speech.request_id
+            self._playback_changed(speech.request_id, state)
         logger.info("Speech window initialized with %s letter groups.", len(self._letter_groups))
 
     def show_full_screen(self) -> None:
@@ -165,6 +176,7 @@ class SpeechWindow(SpeechSurface):
             self._refresh_suggestions()
 
         logger.info("Speech window settings updated: %s", self._speech_settings)
+        self._sync_voice_notice()
 
     def _sync_script_controls(self) -> None:
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
@@ -534,7 +546,7 @@ class SpeechWindow(SpeechSurface):
         self._phrases_button.setText("Tastatura" if phrase_mode else "Fraze")
         self._categories_button.setEnabled(not editor_mode)
         self._phrases_button.setEnabled(not editor_mode)
-        self._play_button.setEnabled(not editor_mode)
+        self._play_button.setEnabled(not editor_mode or self._speech.is_busy)
         self._back_button.setVisible(self._view_mode == "answers" and not editor_mode)
         self._add_item_button.setVisible(list_mode and not self._library_store.read_error)
         self._retry_library_button.setVisible(list_mode and self._library_store.read_error)
@@ -711,92 +723,6 @@ class SpeechWindow(SpeechSurface):
         self._deletion_mode = False
         self._show_list_level()
 
-    def _start_editor(self) -> None:
-        if not self._is_list_mode():
-            return
-        kind: EditorKind
-        if self._view_mode == "phrases":
-            kind = "phrase"
-        elif self._view_mode == "answers":
-            kind = "answer"
-        else:
-            kind = "category"
-        self._editor = EditorContext(
-            kind=kind,
-            category_index=self._category_index,
-            page=self._list_page,
-            message=self._input.text(),
-        )
-        self._conversation = self._composition
-        self._composition = Composition(self._suggestions.store, learn=False)
-        self._input.clear()
-        self._view_mode = "editor"
-        self._deletion_mode = False
-        self._symbols_mode = False
-        self._show_group_level()
-        self._view_title.setText(self._editor_title())
-        self._update_view_controls()
-        self._set_status("Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.")
-
-    def _save_editor(self) -> None:
-        if self._editor is None:
-            return
-        text = _uppercase(clean_text(self._input.text()))
-        editor = self._editor
-        try:
-            candidate = editor.prepare_entry(self._library, text)
-        except EntryError as error:
-            self._set_status(str(error))
-            return
-
-        if not self._library_store.save(candidate):
-            self._set_status("Čuvanje nije uspjelo. Novi unos nije sačuvan.")
-            return
-
-        self._library = candidate
-        if (
-            editor.kind in ("phrase", "answer")
-            and self._speech_settings.keyboard_script != ARABIC_SCRIPT
-        ):
-            self._suggestions.store.learn_text(text)
-            self._suggestions.persist()
-        self._composition = self._conversation
-        self._input.setText(editor.message)
-        self._view_mode = editor.list_mode
-        self._category_index = editor.category_index
-        self._editor = None
-        self._list_page = self._page_for_saved_item(editor.kind, text)
-        self._show_list_level()
-        self._set_status("Sačuvano. Vaša poruka je vraćena.")
-
-    def _cancel_editor(self) -> None:
-        if self._editor is None:
-            return
-        editor = self._editor
-        self._composition = self._conversation
-        self._input.setText(editor.message)
-        self._view_mode = editor.list_mode
-        self._category_index = editor.category_index
-        self._list_page = editor.page
-        self._editor = None
-        self._show_list_level()
-        self._set_status("Dodavanje je otkazano. Vaša poruka je vraćena.")
-
-    def _restore_message_if_editing(self) -> None:
-        if self._editor is not None:
-            self._composition = self._conversation
-            self._input.setText(self._editor.message)
-
-    def _page_for_saved_item(self, kind: str, text: str) -> int:
-        if kind == "category":
-            values = [category.name for category in self._library.categories]
-        elif kind == "phrase":
-            values = [phrase.text for phrase in self._library.phrases]
-        else:
-            category = self._active_category()
-            values = category.answers if category is not None else []
-        return page_for_text(values, text, ITEMS_PER_PAGE)
-
     def _select_list_item(self, index: int) -> None:
         items = self._list_items()
         if index < 0 or index >= len(items):
@@ -835,62 +761,10 @@ class SpeechWindow(SpeechSurface):
             self._set_status("Dodano u poruku, ali broj korištenja nije sačuvan.")
             return
         self._library = candidate
+        self._sync_saved_audio()
         self._list_page = self._page_for_saved_item("phrase", phrase.text)
         self._show_list_level()
         self._set_status("Fraza je dodana u poruku.")
-
-    def _toggle_deletion_mode(self) -> None:
-        if not self._is_list_mode():
-            return
-        self._deletion_mode = not self._deletion_mode
-        self._show_list_level()
-
-    def _confirm_item_deletion(self, index: int) -> None:
-        items = self._list_items()
-        if index < 0 or index >= len(items):
-            return
-        item = items[index]
-        if isinstance(item, CategoryRecord):
-            name = _uppercase(item.name)
-            copy_text = f'Kategorija "{name}" i svi njeni odgovori bit će obrisani.'
-        else:
-            text = item.text if isinstance(item, PhraseRecord) else item
-            text = _uppercase(text)
-            copy_text = f'"{text}" će biti obrisano iz liste.'
-        view_mode = self._view_mode
-        category_index = self._category_index
-        self._open_confirmation(
-            "Obrisati ovu stavku?",
-            copy_text,
-            "Obriši",
-            lambda: self._delete_list_item(view_mode, category_index, index),
-        )
-
-    def _delete_list_item(
-        self,
-        view_mode: str,
-        category_index: int | None,
-        index: int,
-    ) -> None:
-        candidate = copy.deepcopy(self._library)
-        if view_mode == "categories":
-            items: list[CategoryRecord] | list[str] | list[PhraseRecord] = candidate.categories
-        elif view_mode == "phrases":
-            items = candidate.phrases
-        elif category_index is not None and 0 <= category_index < len(candidate.categories):
-            items = candidate.categories[category_index].answers
-        else:
-            return
-        if not 0 <= index < len(items):
-            return
-        del items[index]
-        if not self._library_store.save(candidate):
-            self._set_status("Brisanje nije sačuvano. Stavka nije obrisana.")
-            return
-        self._library = candidate
-        self._clamp_list_page()
-        self._show_list_level()
-        self._set_status("Stavka je obrisana.")
 
     def _change_list_page(self, delta: int) -> None:
         old_page = self._list_page
@@ -970,9 +844,11 @@ class SpeechWindow(SpeechSurface):
     def _retry_library(self) -> None:
         library = self._library_store.load()
         if self._library_store.read_error:
+            self._sync_saved_audio()
             self._set_status("Učitavanje nije uspjelo. Biblioteka nije promijenjena.")
             return
         self._library = library
+        self._sync_saved_audio()
         self._category_index = None
         self._list_page = 0
         self._deletion_mode = False
@@ -980,37 +856,6 @@ class SpeechWindow(SpeechSurface):
             self._view_mode = "categories"
         self._show_list_level()
         self._set_status("Biblioteka je učitana.")
-
-    def _playback_changed(self, request_id: int, state: str) -> None:
-        if request_id != self._playback_id:
-            return
-        message = {
-            "speaking": "Poruka se izgovara.",
-            "finished": "Čitanje je završeno.",
-            "failed": "Govor nije uspio. Pokušajte ponovo.",
-            "stopped": "Govor je zaustavljen.",
-        }[state]
-        self._set_status(message)
-
-    def _play(self, *, source: str = "keyboard") -> None:
-        if self._editor is not None or self._dialogs.active is not None:
-            return
-        if not self._play_button.isEnabled():
-            return
-        text = self._input.text().strip()
-        if not text:
-            self._set_status("Prvo sastavite poruku.")
-            return
-        logger.info("Speech playback requested: source=%s.", source)
-        if self._speech_settings.keyboard_script != ARABIC_SCRIPT:
-            self._composition.submit()
-            self._suggestions.persist()
-        if self._speech.speak(text, self._speech_settings):
-            self._playback_id = self._speech.request_id
-            self._set_status("Pokrećem govor.")
-        else:
-            self._playback_id = None
-            self._set_status("Odabrani glas nije dostupan.")
 
     def _set_status(self, text: str) -> None:
         if text:

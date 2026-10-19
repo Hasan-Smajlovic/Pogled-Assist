@@ -49,7 +49,7 @@ def tracking_status_view(
         ),
         TrackingState.SIMULATING: (
             "Simulacija mišem",
-            "Upravljanje mišem",
+            status.detail or "Upravljanje mišem",
             "mouse-pointer",
             "#a0cef3",
         ),

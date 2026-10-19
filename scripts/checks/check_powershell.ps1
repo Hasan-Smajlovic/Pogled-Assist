@@ -38,14 +38,15 @@ $files = @(
 $files = @($files)
 
 $parseFailures = @()
+$processFailures = @()
 foreach ($file in $files) {
     $tokens = $null
     $parseErrors = $null
-    [System.Management.Automation.Language.Parser]::ParseFile(
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
         $file.FullName,
         [ref]$tokens,
         [ref]$parseErrors
-    ) | Out-Null
+    )
 
     foreach ($parseError in $parseErrors) {
         $parseFailures += "{0}:{1}:{2}: {3}" -f @(
@@ -55,11 +56,43 @@ foreach ($file in $files) {
             $parseError.Message
         )
     }
+
+    # Start-Process defaults to ShellExecute on Windows PowerShell 5.1. Keep
+    # shell semantics only for explicit UAC and the one HTML preview opener.
+    $commands = $ast.FindAll({ param($node)
+        $node -is [System.Management.Automation.Language.CommandAst]
+    }, $true)
+    foreach ($command in $commands) {
+        $name = $command.GetCommandName()
+        if ($null -eq $name -or ($name -split '\\')[-1] -notin @("Start-Process", "start", "saps")) {
+            continue
+        }
+        $elements = $command.CommandElements
+        $isElevation = $false
+        for ($index = 1; $index -lt $elements.Count; $index++) {
+            $element = $elements[$index]
+            if ($element -is [System.Management.Automation.Language.CommandParameterAst] -and
+                $element.ParameterName -eq "Verb") {
+                $value = if ($null -ne $element.Argument) { $element.Argument } elseif ($index + 1 -lt $elements.Count) { $elements[$index + 1] }
+                $isElevation = $value -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $value.Value -eq "RunAs"
+            }
+        }
+        $isGallery = $file.FullName -eq (Join-Path $RepoRoot "dev.ps1") -and
+            $command.Extent.Text -ceq 'Start-Process -FilePath (Join-Path $outputRoot "index.html")'
+        if (-not $isElevation -and -not $isGallery) {
+            $processFailures += "{0}:{1}: Start-Process requires a reviewed shell purpose. Use ProcessStartInfo with UseShellExecute=false for executable launches." -f $file.FullName, $command.Extent.StartLineNumber
+        }
+    }
 }
 
 if ($parseFailures.Count -gt 0) {
     $parseFailures | ForEach-Object { Write-Error $_ }
     throw "PowerShell parsing failed for $($parseFailures.Count) error(s)."
+}
+
+if ($processFailures.Count -gt 0) {
+    $processFailures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
+    throw "PowerShell process launch check failed with $($processFailures.Count) finding(s)."
 }
 
 $analyzerVersion = "1.25.0"

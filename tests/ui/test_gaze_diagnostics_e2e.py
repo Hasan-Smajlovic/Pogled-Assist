@@ -6,6 +6,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QRect
 
@@ -65,8 +66,7 @@ def test_clear_confirmation_survives_invalid_eyes_gap_and_logging_failure(
     diagnostic_mode, qtbot, monkeypatch
 ):
     mode, latest = diagnostic_mode
-    now = [100.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 100.0)
     window = SpeechWindow(
         FakeSpeech(), library_store=FakeLibraryStore(), alarm_sound=FakeAlarmSound()
     )
@@ -154,8 +154,7 @@ def test_pr73_collection_is_identical_with_logging_and_old_callbacks_are_ignored
     from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 
     mode, latest = diagnostic_mode
-    now = [100.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 100.0)
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     gaze, eyes = provider._new_stream_callbacks()

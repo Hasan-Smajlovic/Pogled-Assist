@@ -5,18 +5,27 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+import pytest
+import yaml
+from yaml.constructor import ConstructorError
+from yaml.nodes import MappingNode
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REQUIRED_FILES = (
     "AGENTS.md",
+    "CLAUDE.md",
     "README.md",
     "CONTRIBUTING.md",
     "docs/ARCHITECTURE.md",
     "docs/DEVELOPMENT.md",
+    "docs/UI_DEVELOPMENT.md",
+    "docs/UI_GALLERY.md",
     "docs/DEVELOPMENT_TROUBLESHOOTING.md",
     "docs/USER_GUIDE.md",
     "docs/WINDOWS_RELEASE.md",
     "docs/features/speech-suggestions.md",
+    "language/bs/README.md",
     "docs/design/speech-keyboard-reference.html",
     "docs/design/speech.html",
     "docs/design/settings.html",
@@ -32,19 +41,25 @@ REQUIRED_FILES = (
     ".github/ISSUE_TEMPLATE/feature_request.md",
     ".github/ISSUE_TEMPLATE/maintenance_task.md",
     ".github/ISSUE_TEMPLATE/config.yml",
+    ".agents/skills/blast-radius/SKILL.md",
+    ".agents/skills/grill-me/SKILL.md",
+    ".agents/skills/interrogate/SKILL.md",
     ".agents/skills/security-review/SKILL.md",
     ".agents/skills/shipping-a-change/SKILL.md",
 )
 
 AGENT_GUIDANCE = (
     "AGENTS.md",
+    "CLAUDE.md",
     ".agents/skills/*/SKILL.md",
+    ".claude/skills/*/SKILL.md",
 )
 
 # Runtime folders such as data/ and logs/ exist only on an installed machine,
 # so inline code under them is not checked.
 PATH_ROOTS = {
     ".agents",
+    ".claude",
     ".github",
     "assets",
     "docs",
@@ -60,37 +75,24 @@ ROOT_FILE_NAMES = {".gitattributes", ".gitignore", "VERSION"}
 REQUIRED_TEMPLATE_SECTIONS = {
     ".github/pull_request_template.md": {
         "Outcome",
-        "Linked issue",
-        "Changes",
-        "Compatibility and risk",
         "Verification",
-        "Evidence and limits",
-        "Review checklist",
+        "Risks and limits",
     },
     ".github/ISSUE_TEMPLATE/bug_report.md": {
         "Problem",
         "Reproduction",
-        "Context and evidence",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Context",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/feature_request.md": {
         "Goal",
-        "User flow",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Details",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/maintenance_task.md": {
         "Goal",
         "Context",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Done when",
     },
 }
 
@@ -129,45 +131,231 @@ class _DesignPage(HTMLParser):
 
 
 def test_design_pages_keep_local_resources_and_accessible_references() -> None:
-    errors: list[str] = []
+    errors = []
     for document in sorted(DESIGN_ROOT.glob("*.html")):
         page = _DesignPage(document.read_text(encoding="utf-8"))
-        if page.main_count != 1:
-            errors.append(f"{document.name}: expected one standalone main view")
-        if len(page.ids) != len(set(page.ids)):
-            errors.append(f"{document.name}: duplicate element IDs")
-        for identifier in page.id_references:
-            if identifier not in page.ids:
-                errors.append(f"{document.name}: missing labelled element {identifier}")
-        for target in page.links:
-            parsed = urlsplit(target)
-            if parsed.scheme:
-                continue
-            destination = document.parent / unquote(parsed.path) if parsed.path else document
-            if not destination.is_file():
-                errors.append(f"{document.name}: missing resource {target}")
-            elif parsed.fragment and unquote(parsed.fragment) not in _anchors(destination):
-                errors.append(f"{document.name}: missing fragment {target}")
+        errors.extend(_design_page_errors(document, page))
     assert not errors, "Broken design pages:\n" + "\n".join(errors)
 
 
+def _design_page_errors(document, page):
+    errors = []
+    if page.main_count != 1:
+        errors.append(f"{document.name}: expected one standalone main view")
+    if len(page.ids) != len(set(page.ids)):
+        errors.append(f"{document.name}: duplicate element IDs")
+    errors.extend(
+        f"{document.name}: missing labelled element {identifier}"
+        for identifier in page.id_references
+        if identifier not in page.ids
+    )
+    for target in page.links:
+        errors.extend(_design_link_errors(document, target))
+    return errors
+
+
+def _design_link_errors(document, target):
+    parsed = urlsplit(target)
+    if parsed.scheme:
+        return []
+    destination = document.parent / unquote(parsed.path) if parsed.path else document
+    if not destination.is_file():
+        return [f"{document.name}: missing resource {target}"]
+    if parsed.fragment and unquote(parsed.fragment) not in _anchors(destination):
+        return [f"{document.name}: missing fragment {target}"]
+    return []
+
+
 def test_design_scripts_only_require_elements_on_their_own_page() -> None:
-    errors: list[str] = []
+    errors = []
     for document in sorted(DESIGN_ROOT.glob("*.html")):
         page = _DesignPage(document.read_text(encoding="utf-8"))
         for script in page.scripts:
-            script_path = document.parent / script
-            content = script_path.read_text(encoding="utf-8")
-            for identifier in SCRIPT_ELEMENT_ID.findall(content):
-                if identifier not in page.ids:
-                    errors.append(f"{document.name}: {script} requires absent #{identifier}")
+            errors.extend(_script_element_errors(document, page, script))
     assert not errors, "Coupled design scripts:\n" + "\n".join(errors)
+
+
+def _script_element_errors(document, page, script):
+    content = (document.parent / script).read_text(encoding="utf-8")
+    return [
+        f"{document.name}: {script} requires absent #{identifier}"
+        for identifier in SCRIPT_ELEMENT_ID.findall(content)
+        if identifier not in page.ids
+    ]
 
 
 def test_required_guides_and_templates_exist() -> None:
     missing = [path for path in REQUIRED_FILES if not (REPO_ROOT / path).is_file()]
 
     assert not missing, "Missing required repository files:\n" + "\n".join(missing)
+
+
+def test_skills_have_valid_metadata() -> None:
+    errors = [
+        f"{document.relative_to(REPO_ROOT)}: {error}"
+        for document in sorted(REPO_ROOT.glob(".agents/skills/*/SKILL.md"))
+        for error in _skill_metadata_errors(document)
+    ]
+
+    assert not errors, "Invalid skill metadata:\n" + "\n".join(errors)
+
+
+def test_claude_skill_pointers_match_agent_skills() -> None:
+    errors = _claude_skill_pointer_errors(REPO_ROOT)
+
+    assert not errors, "Claude Code skill pointers are out of sync:\n" + "\n".join(errors)
+
+
+@pytest.mark.parametrize(
+    ("pointer", "expected_error"),
+    [
+        pytest.param(None, "missing .claude/skills/example-skill/SKILL.md", id="missing"),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Other text.\n---\n"
+            "[source](../../../.agents/skills/example-skill/SKILL.md)\n",
+            "metadata differs",
+            id="drifted-description",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n---\nCopied workflow.\n",
+            "does not link to",
+            id="no-source-link",
+        ),
+    ],
+)
+def test_claude_skill_pointer_check_rejects_unsynced_pointers(
+    tmp_path: Path, pointer: str | None, expected_error: str
+) -> None:
+    source = tmp_path / ".agents" / "skills" / "example-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\nname: example-skill\ndescription: Review changes.\n---\n", encoding="utf-8"
+    )
+    if pointer is not None:
+        target = tmp_path / ".claude" / "skills" / "example-skill" / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_text(pointer, encoding="utf-8")
+
+    assert any(expected_error in error for error in _claude_skill_pointer_errors(tmp_path))
+
+
+def test_claude_skill_pointer_check_rejects_pointer_without_source(tmp_path: Path) -> None:
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
+    pointer = tmp_path / ".claude" / "skills" / "orphan" / "SKILL.md"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text("---\nname: orphan\ndescription: Orphan.\n---\n", encoding="utf-8")
+
+    assert _claude_skill_pointer_errors(tmp_path) == [
+        ".claude/skills/orphan/SKILL.md: no matching .agents/skills/orphan/SKILL.md"
+    ]
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "name: example-skill\ndescription: Review project changes.\n",
+        'name: "example-skill"\ndescription: "Review changes: code and docs."\n',
+        "name: 'example-skill'\ndescription: >\n  Review project changes\n  and their consequences.\n",
+        "name: example-skill\ndescription: |\n  Review project changes.\n  Check their consequences.\n",
+        "name: example-skill\ndescription: Review changes.\n"
+        "metadata:\n  owner: contributors\n  areas: [code, docs]\n",
+    ],
+    ids=["plain", "quoted", "folded", "literal", "additional-metadata"],
+)
+def test_skill_metadata_accepts_valid_documents(tmp_path: Path, metadata: str) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    document.write_text(
+        f"---\n{metadata}---\n\n# Example skill\n\nBody: [this is Markdown, not YAML.\n",
+        encoding="utf-8",
+    )
+
+    assert _skill_metadata_errors(document) == []
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_error"),
+    [
+        pytest.param("", "must start with ---", id="empty-file"),
+        pytest.param("# Example skill\n", "must start with ---", id="missing-frontmatter"),
+        pytest.param(
+            "# Heading\n---\nname: example-skill\ndescription: Review changes.\n---\n",
+            "must start with ---",
+            id="frontmatter-after-body",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n",
+            "missing closing ---",
+            id="unclosed-frontmatter",
+        ),
+        pytest.param("---\n---\n", "must be a YAML mapping", id="empty-frontmatter"),
+        pytest.param("---\n- example-skill\n---\n", "must be a YAML mapping", id="sequence"),
+        pytest.param("---\nexample-skill\n---\n", "must be a YAML mapping", id="scalar"),
+        pytest.param(
+            "---\nname: example-skill\ndescription: [unfinished\n---\n",
+            "invalid YAML",
+            id="invalid-yaml",
+        ),
+        pytest.param(
+            "---\nname: other-skill\ndescription: Review changes.\n---\n",
+            "name must match directory 'example-skill'",
+            id="wrong-name",
+        ),
+        pytest.param(
+            "---\ndescription: Review changes.\n---\n",
+            "name must be a non-empty string",
+            id="missing-name",
+        ),
+        pytest.param(
+            "---\nname: example-skill\n---\n",
+            "description must be a non-empty string",
+            id="missing-description",
+        ),
+        pytest.param(
+            "---\nname: wrong-name\nname: example-skill\ndescription: Review changes.\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-name",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: First.\ndescription: Second.\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-description",
+        ),
+        pytest.param(
+            "---\nname: example-skill\ndescription: Review changes.\n"
+            "metadata:\n  owner: first\n  owner: second\n---\n",
+            "duplicate mapping keys",
+            id="duplicate-nested-key",
+        ),
+    ],
+)
+def test_skill_metadata_rejects_invalid_documents(
+    tmp_path: Path, content: str, expected_error: str
+) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    document.write_text(content, encoding="utf-8")
+
+    assert any(expected_error in error for error in _skill_metadata_errors(document))
+
+
+@pytest.mark.parametrize("field", ["name", "description"])
+@pytest.mark.parametrize(
+    "value",
+    ["null", "''", "'   '", "true", "42", "[text]", "{text: value}"],
+    ids=["null", "empty", "whitespace", "boolean", "number", "sequence", "mapping"],
+)
+def test_skill_metadata_rejects_empty_or_non_text_fields(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    document = tmp_path / "example-skill" / "SKILL.md"
+    document.parent.mkdir()
+    metadata = {"name": "example-skill", "description": "Review changes."}
+    metadata[field] = value
+    content = "\n".join(f"{key}: {item}" for key, item in metadata.items())
+    document.write_text(f"---\n{content}\n---\n", encoding="utf-8")
+
+    assert f"{field} must be a non-empty string" in _skill_metadata_errors(document)
 
 
 def test_agent_guidance_names_existing_paths() -> None:
@@ -229,6 +417,76 @@ def test_blank_issues_are_disabled() -> None:
     assert re.search(r"^blank_issues_enabled:\s*false\s*$", config, re.MULTILINE)
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[object, object]:
+        mapping = super().construct_mapping(node, deep=deep)
+        if len(mapping) != len(node.value):
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "duplicate mapping keys",
+                node.start_mark,
+            )
+        return mapping
+
+
+def _skill_metadata_errors(document: Path) -> list[str]:
+    lines = document.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0] != "---":
+        return ["metadata must start with --- on the first line"]
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return ["metadata is missing closing ---"]
+    try:
+        metadata = yaml.load("\n".join(lines[1:end]), Loader=_UniqueKeyLoader)
+    except yaml.YAMLError as error:
+        return [f"invalid YAML metadata: {error}"]
+    if not isinstance(metadata, dict):
+        return ["metadata must be a YAML mapping"]
+
+    return [
+        error
+        for field in ("name", "description")
+        if (error := _metadata_field_error(document, metadata, field))
+    ]
+
+
+def _metadata_field_error(document, metadata, field):
+    value = metadata.get(field)
+    if not isinstance(value, str) or not value.strip():
+        return f"{field} must be a non-empty string"
+    if field == "name" and value != document.parent.name:
+        return f"name must match directory '{document.parent.name}', got {value!r}"
+    return ""
+
+
+def _skill_metadata(document: Path) -> object:
+    lines = document.read_text(encoding="utf-8").splitlines()
+    end = lines.index("---", 1)
+    return yaml.load("\n".join(lines[1:end]), Loader=_UniqueKeyLoader)
+
+
+def _claude_skill_pointer_errors(root: Path) -> list[str]:
+    sources = {path.parent.name: path for path in (root / ".agents" / "skills").glob("*/SKILL.md")}
+    pointers = {path.parent.name: path for path in (root / ".claude" / "skills").glob("*/SKILL.md")}
+    errors = [
+        f".claude/skills/{name}/SKILL.md: no matching .agents/skills/{name}/SKILL.md"
+        for name in sorted(pointers.keys() - sources.keys())
+    ]
+    for name in sorted(sources):
+        if name not in pointers:
+            errors.append(f"missing .claude/skills/{name}/SKILL.md")
+            continue
+        pointer = pointers[name]
+        if _skill_metadata(pointer) != _skill_metadata(sources[name]):
+            errors.append(f".claude/skills/{name}/SKILL.md: metadata differs from its source")
+        source_link = f"../../../.agents/skills/{name}/SKILL.md"
+        if f"]({source_link})" not in pointer.read_text(encoding="utf-8"):
+            errors.append(f".claude/skills/{name}/SKILL.md: does not link to {source_link}")
+    return errors
+
+
 def _agent_guidance() -> list[Path]:
     return sorted(path for pattern in AGENT_GUIDANCE for path in REPO_ROOT.glob(pattern))
 
@@ -247,24 +505,29 @@ def _maintained_markdown() -> list[Path]:
 
 
 def _broken_local_links(document: Path) -> list[str]:
-    broken: list[str] = []
-    for raw_target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8")):
-        target = raw_target.strip()
-        if target.startswith("<") and target.endswith(">"):
-            target = target[1:-1]
-        elif " " in target:
-            target = target.split(maxsplit=1)[0]
+    return [
+        target
+        for target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8"))
+        if _local_link_broken(document, target)
+    ]
 
-        parsed = urlsplit(target)
-        if parsed.scheme:
-            continue
 
-        local_path = unquote(parsed.path)
-        destination = document.parent / local_path if local_path else document
-        fragment = unquote(parsed.fragment)
-        if not destination.exists() or (fragment and fragment not in _anchors(destination)):
-            broken.append(raw_target)
-    return broken
+def _local_link_broken(document, raw_target):
+    parsed = urlsplit(_link_target(raw_target))
+    if parsed.scheme:
+        return False
+    local_path = unquote(parsed.path)
+    destination = document.parent / local_path if local_path else document
+    if not destination.exists():
+        return True
+    return bool(parsed.fragment) and unquote(parsed.fragment) not in _anchors(destination)
+
+
+def _link_target(raw_target):
+    target = raw_target.strip()
+    if target.startswith("<") and target.endswith(">"):
+        return target[1:-1]
+    return target.split(maxsplit=1)[0] if " " in target else target
 
 
 def _anchors(document: Path) -> set[str]:

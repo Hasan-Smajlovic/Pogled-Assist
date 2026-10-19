@@ -1,60 +1,19 @@
 from __future__ import annotations
 
-import copy
-from dataclasses import replace
-
 import pytest
-from PySide6.QtCore import QObject, QPoint, Signal
+from _speech_fakes import FakeLibraryStore, FakeSpeech
+from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
+from PySide6.QtWidgets import QStyle, QStyleOptionButton
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
-from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
+from pogled_assist.speech.speech_library import PhraseRecord
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.suggestions.learning import WRITE_ERROR, LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.service import SuggestionService
 from pogled_assist.suggestions.text import START
-from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
-
-
-class FakeSpeech(QObject):
-    playback_changed = Signal(int, str)
-
-    def __init__(self, *, successful: bool = True) -> None:
-        super().__init__()
-        self.request_id = 0
-        self._settings = SpeechSettings()
-        self.successful = successful
-        self.requests: list[str] = []
-
-    @property
-    def settings(self) -> SpeechSettings:
-        return replace(self._settings)
-
-    def speak(self, text: str, _settings: SpeechSettings | None = None) -> bool:
-        self.request_id += 1
-        self.requests.append(text)
-        return self.successful
-
-    def stop(self) -> None:
-        return None
-
-
-class FakeLibraryStore:
-    read_error = False
-
-    def __init__(self) -> None:
-        self.library = SpeechLibrary(categories=default_categories())
-        self.fail_saves = False
-
-    def load(self) -> SpeechLibrary:
-        return copy.deepcopy(self.library)
-
-    def save(self, library: SpeechLibrary) -> bool:
-        if self.fail_saves:
-            return False
-        self.library = copy.deepcopy(library)
-        return True
 
 
 class ManualSuggestionService(QObject):
@@ -121,6 +80,63 @@ def conversation_model() -> dict[tuple[str, ...], int]:
         ("želim", "vodu"): 1200,
         (START, "želim", "vodu"): 1400,
     }
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+@pytest.mark.parametrize("use_gaze", [False, True])
+def test_larger_suggestions_fit_wrap_and_preserve_selection_and_undo(
+    qtbot, size, letters_per_group, use_gaze
+):
+    speech = FakeSpeech()
+    service = ManualSuggestionService()
+    window = SpeechWindow(
+        speech,
+        library_store=FakeLibraryStore(),
+        suggestions=service,
+        letters_per_group=letters_per_group,
+    )
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    window._input.setText("R")
+    words = ["RAZUMIJEVANJE", "RAZGOVARATI", "REHABILITACIJA", "RAZMIŠLJANJE", "RJEŠENJE"]
+    owner, revision, _text = service.requests[-1]
+    service.predictions_ready.emit(owner, revision, words)
+
+    assert (window.width(), window.height()) == size
+    assert [button.text() for button in window._prediction_buttons] == words
+    previous = None
+    for index, button in enumerate(window._prediction_buttons):
+        assert button.isVisible() and button.isEnabled()
+        assert button.height() == 71
+        assert button.font().pixelSize() == 27
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert window.rect().contains(rect)
+        if previous is not None:
+            assert previous.right() < rect.left()
+        previous = rect
+        option = QStyleOptionButton()
+        button.initStyleOption(option)
+        contents = button.style().subElementRect(QStyle.SE_PushButtonContents, option, button)
+        text_bounds = button.fontMetrics().boundingRect(
+            contents, int(Qt.AlignCenter | Qt.TextWrapAnywhere), button.text()
+        )
+        assert contents.contains(text_bounds), button.text()
+        point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 1))
+        action = f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:{index}"
+        assert window.action_at_global_point(point) == action
+
+    if use_gaze:
+        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:0")
+    else:
+        window._prediction_buttons[0].click()
+    assert window._input.text() == "RAZUMIJEVANJE "
+    assert speech.requests == []
+    window._undo_word_button.click()
+    assert window._input.text() == "R"
 
 
 @pytest.mark.e2e
@@ -334,7 +350,7 @@ def test_speech_failure_still_learns_once_for_an_unchanged_message(
     window._play_button.click()
     window._play_button.click()
 
-    assert speech.requests == ["HVALA", "HVALA"]
+    assert [text for text, _settings in speech.requests] == ["HVALA", "HVALA"]
     assert service.store.snapshot()[("hvala",)] == 1
 
 
@@ -345,11 +361,13 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
     try:
         service.store.learn_text("Želim vodu i čaj")
         assert service.store.save()
-        window = SettingsWindow(GazeSettings(), SpeechSettings(), suggestions=service)
+        window = SettingsWindow(
+            GazeSettings(), SpeechSettings(), services=SettingsServices(suggestions=service)
+        )
         qtbot.addWidget(window)
         window.show()
         window._speech_tab_button.click()
-        window._learned_words_button.click()
+        window._speech_page._learned_words_button.click()
         assert window._stack.currentIndex() == 3
 
         index = window._learning_page._visible_words.index("čaj")
@@ -407,7 +425,7 @@ def test_unavailable_base_model_never_blocks_message_editing_or_speech(qtbot, mo
 
         qtbot.waitUntil(lambda: bool(service.status))
         assert window._input.text() == "HVALA"
-        assert speech.requests == ["HVALA"]
+        assert [text for text, _settings in speech.requests] == ["HVALA"]
         assert all(not button.isEnabled() for button in window._prediction_buttons)
     finally:
         service.close()
