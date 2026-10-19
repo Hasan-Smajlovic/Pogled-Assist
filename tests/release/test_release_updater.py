@@ -393,14 +393,22 @@ def test_current_updater_migrates_source_layout_without_version(tmp_path, packag
     (install_root / package_dir).mkdir()
     archive = _release_archive(tmp_path)
 
-    with _serve_release(archive) as (_server, release_url):
+    checksum = f"{'0' * 64}  {ARTIFACT_NAME}" if package_dir == "gaze_mouse" else None
+    with _serve_release(archive, checksum=checksum) as (_server, release_url):
         completed = _run_updater(install_root, release_url)
 
-    assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "Migrating the existing source installation" in completed.stdout
-    assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == LATEST_VERSION
     assert (install_root / "data" / "app_settings.json").is_file()
-    assert not (install_root / "run_gaze_mouse.py").exists()
+    if package_dir == "gaze_mouse":
+        assert completed.returncode != 0
+        assert "Checksum mismatch" in completed.stdout + completed.stderr
+        assert not (install_root / "VERSION").exists()
+        assert (install_root / "run_gaze_mouse.py").is_file()
+        assert not (install_root / "new-app-file.txt").exists()
+    else:
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert (install_root / "VERSION").read_text(encoding="utf-8").strip() == LATEST_VERSION
+        assert not (install_root / "run_gaze_mouse.py").exists()
 
 
 def test_checksum_mismatch_stops_before_installer_runs(tmp_path):
@@ -500,11 +508,10 @@ def test_up_to_date_installation_does_not_download_assets(tmp_path):
 
 def test_network_error_does_not_change_installation(tmp_path):
     install_root = _installed_app(tmp_path)
-    server = _ReleaseServer()
-    unavailable_url = f"http://127.0.0.1:{server.server_port}/latest"
-    server.server_close()
-
-    completed = _run_updater(install_root, unavailable_url)
+    with _serve_release(b"") as (server, release_url):
+        server.routes["/latest"] = (503, "text/plain", b"synthetic unavailable")
+        completed = _run_updater(install_root, release_url)
+    assert server.requests == ["/latest"]
 
     assert completed.returncode != 0
     assert "Could not query the latest stable release" in completed.stdout + completed.stderr

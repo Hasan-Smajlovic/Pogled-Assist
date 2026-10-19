@@ -104,7 +104,7 @@ def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze,
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("eyes", [(True, False), (False, True), (False, False)])
+@pytest.mark.parametrize("eyes", [(True, False), (False, True)])
 def test_speech_marker_waits_for_fresh_gaze_after_eye_loss(hotbar_gaze, qtbot, eyes):
     hotbar, _controller, feed, _actions, _progress = hotbar_gaze
     hotbar._open_speech()

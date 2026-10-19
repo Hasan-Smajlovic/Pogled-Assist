@@ -75,37 +75,24 @@ ROOT_FILE_NAMES = {".gitattributes", ".gitignore", "VERSION"}
 REQUIRED_TEMPLATE_SECTIONS = {
     ".github/pull_request_template.md": {
         "Outcome",
-        "Linked issue",
-        "Changes",
-        "Compatibility and risk",
         "Verification",
-        "Evidence and limits",
-        "Review checklist",
+        "Risks and limits",
     },
     ".github/ISSUE_TEMPLATE/bug_report.md": {
         "Problem",
         "Reproduction",
-        "Context and evidence",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Context",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/feature_request.md": {
         "Goal",
-        "User flow",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Details",
+        "Done when",
     },
     ".github/ISSUE_TEMPLATE/maintenance_task.md": {
         "Goal",
         "Context",
-        "Scope",
-        "Compatibility constraints",
-        "Acceptance criteria",
-        "Verification",
+        "Done when",
     },
 }
 
@@ -144,39 +131,57 @@ class _DesignPage(HTMLParser):
 
 
 def test_design_pages_keep_local_resources_and_accessible_references() -> None:
-    errors: list[str] = []
+    errors = []
     for document in sorted(DESIGN_ROOT.glob("*.html")):
         page = _DesignPage(document.read_text(encoding="utf-8"))
-        if page.main_count != 1:
-            errors.append(f"{document.name}: expected one standalone main view")
-        if len(page.ids) != len(set(page.ids)):
-            errors.append(f"{document.name}: duplicate element IDs")
-        for identifier in page.id_references:
-            if identifier not in page.ids:
-                errors.append(f"{document.name}: missing labelled element {identifier}")
-        for target in page.links:
-            parsed = urlsplit(target)
-            if parsed.scheme:
-                continue
-            destination = document.parent / unquote(parsed.path) if parsed.path else document
-            if not destination.is_file():
-                errors.append(f"{document.name}: missing resource {target}")
-            elif parsed.fragment and unquote(parsed.fragment) not in _anchors(destination):
-                errors.append(f"{document.name}: missing fragment {target}")
+        errors.extend(_design_page_errors(document, page))
     assert not errors, "Broken design pages:\n" + "\n".join(errors)
 
 
+def _design_page_errors(document, page):
+    errors = []
+    if page.main_count != 1:
+        errors.append(f"{document.name}: expected one standalone main view")
+    if len(page.ids) != len(set(page.ids)):
+        errors.append(f"{document.name}: duplicate element IDs")
+    errors.extend(
+        f"{document.name}: missing labelled element {identifier}"
+        for identifier in page.id_references
+        if identifier not in page.ids
+    )
+    for target in page.links:
+        errors.extend(_design_link_errors(document, target))
+    return errors
+
+
+def _design_link_errors(document, target):
+    parsed = urlsplit(target)
+    if parsed.scheme:
+        return []
+    destination = document.parent / unquote(parsed.path) if parsed.path else document
+    if not destination.is_file():
+        return [f"{document.name}: missing resource {target}"]
+    if parsed.fragment and unquote(parsed.fragment) not in _anchors(destination):
+        return [f"{document.name}: missing fragment {target}"]
+    return []
+
+
 def test_design_scripts_only_require_elements_on_their_own_page() -> None:
-    errors: list[str] = []
+    errors = []
     for document in sorted(DESIGN_ROOT.glob("*.html")):
         page = _DesignPage(document.read_text(encoding="utf-8"))
         for script in page.scripts:
-            script_path = document.parent / script
-            content = script_path.read_text(encoding="utf-8")
-            for identifier in SCRIPT_ELEMENT_ID.findall(content):
-                if identifier not in page.ids:
-                    errors.append(f"{document.name}: {script} requires absent #{identifier}")
+            errors.extend(_script_element_errors(document, page, script))
     assert not errors, "Coupled design scripts:\n" + "\n".join(errors)
+
+
+def _script_element_errors(document, page, script):
+    content = (document.parent / script).read_text(encoding="utf-8")
+    return [
+        f"{document.name}: {script} requires absent #{identifier}"
+        for identifier in SCRIPT_ELEMENT_ID.findall(content)
+        if identifier not in page.ids
+    ]
 
 
 def test_required_guides_and_templates_exist() -> None:
@@ -440,14 +445,20 @@ def _skill_metadata_errors(document: Path) -> list[str]:
     if not isinstance(metadata, dict):
         return ["metadata must be a YAML mapping"]
 
-    errors = []
-    for field in ("name", "description"):
-        value = metadata.get(field)
-        if not isinstance(value, str) or not value.strip():
-            errors.append(f"{field} must be a non-empty string")
-        elif field == "name" and value != document.parent.name:
-            errors.append(f"name must match directory '{document.parent.name}', got {value!r}")
-    return errors
+    return [
+        error
+        for field in ("name", "description")
+        if (error := _metadata_field_error(document, metadata, field))
+    ]
+
+
+def _metadata_field_error(document, metadata, field):
+    value = metadata.get(field)
+    if not isinstance(value, str) or not value.strip():
+        return f"{field} must be a non-empty string"
+    if field == "name" and value != document.parent.name:
+        return f"name must match directory '{document.parent.name}', got {value!r}"
+    return ""
 
 
 def _skill_metadata(document: Path) -> object:
@@ -494,24 +505,29 @@ def _maintained_markdown() -> list[Path]:
 
 
 def _broken_local_links(document: Path) -> list[str]:
-    broken: list[str] = []
-    for raw_target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8")):
-        target = raw_target.strip()
-        if target.startswith("<") and target.endswith(">"):
-            target = target[1:-1]
-        elif " " in target:
-            target = target.split(maxsplit=1)[0]
+    return [
+        target
+        for target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8"))
+        if _local_link_broken(document, target)
+    ]
 
-        parsed = urlsplit(target)
-        if parsed.scheme:
-            continue
 
-        local_path = unquote(parsed.path)
-        destination = document.parent / local_path if local_path else document
-        fragment = unquote(parsed.fragment)
-        if not destination.exists() or (fragment and fragment not in _anchors(destination)):
-            broken.append(raw_target)
-    return broken
+def _local_link_broken(document, raw_target):
+    parsed = urlsplit(_link_target(raw_target))
+    if parsed.scheme:
+        return False
+    local_path = unquote(parsed.path)
+    destination = document.parent / local_path if local_path else document
+    if not destination.exists():
+        return True
+    return bool(parsed.fragment) and unquote(parsed.fragment) not in _anchors(destination)
+
+
+def _link_target(raw_target):
+    target = raw_target.strip()
+    if target.startswith("<") and target.endswith(">"):
+        return target[1:-1]
+    return target.split(maxsplit=1)[0] if " " in target else target
 
 
 def _anchors(document: Path) -> set[str]:

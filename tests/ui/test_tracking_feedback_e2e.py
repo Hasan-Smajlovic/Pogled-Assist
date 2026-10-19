@@ -48,7 +48,10 @@ def test_tracking_notice_preserves_targets_message_and_focus(
     notice = TrackingNotice(
         "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
     )
+    widget._animation.setDuration(10)
     window.set_tracking_notice(notice)
+    # Retain an intermediate frame so accumulated geometry drift is observable.
+    widget._animation.setCurrentTime(5)
     qtbot.waitUntil(lambda: widget.progress == 1.0)
     qtbot.wait(1)
     assert widget.isVisible()

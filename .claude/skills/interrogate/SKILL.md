@@ -5,6 +5,4 @@ description: Coordinate independent reviews of Pogled Assist changes and verify 
 
 # Interrogate
 
-Read and follow [`.agents/skills/interrogate/SKILL.md`](../../../.agents/skills/interrogate/SKILL.md).
-That file owns this workflow for every coding agent; this copy only makes it
-discoverable by Claude Code. Edit the source, never this pointer.
+Read and follow [`.agents/skills/interrogate/SKILL.md`](../../../.agents/skills/interrogate/SKILL.md). That file owns this workflow for every coding agent; this copy only makes it discoverable by Claude Code. Edit the source, never this pointer.

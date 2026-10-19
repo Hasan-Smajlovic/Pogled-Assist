@@ -38,7 +38,9 @@ def test_sidebar_pages_fit_and_send_actual_unicode(qtbot, monkeypatch, kind, lay
     expected = (
         ARABIC_LETTERS + ARABIC_SYMBOLS if script == "arabic" else BOSNIAN_LETTERS + SYMBOL_KEYS
     )
-    assert set(expected) <= set(sidebar.input.typed)
+    assert set(expected) <= set(sidebar.offered)
+    if sidebar.types_every_key:
+        assert set(expected) <= set(sidebar.input.typed)
     sidebar.window._script_button.click()
     assert (
         sidebar.window._group_page if kind == "keyboard" else sidebar.window._keyboard_group_page
@@ -57,6 +59,10 @@ class _Sidebar:
         )
         qtbot.addWidget(self.window)
         self.input = FakeControllerInput()
+        self.offered = []
+        # One group size per window and script sends every key; the others check
+        # each group's first and last key, where group and index offsets go wrong.
+        self.types_every_key = settings.letters_per_group == 1
         self.window._input = self.input
         self.window.set_target_window(50)
         self.prefix = (
@@ -123,18 +129,19 @@ class _Sidebar:
     def _type_group(self, groups, group_index, symbols):
         window = self.window
         group_action = self._group_action(group_index, symbols)
-        window._action_buttons[group_action].click()
-        for index, key in enumerate(groups[group_index]):
-            key_action = (
-                ("symbol:" if symbols else f"letter:{group_index}:")
-                if self.kind == "keyboard"
-                else ("keyboard_symbol:" if symbols else f"keyboard_letter:{group_index}:")
-            )
+        keys = groups[group_index]
+        self.offered.extend(keys)
+        key_action = (
+            ("symbol:" if symbols else f"letter:{group_index}:")
+            if self.kind == "keyboard"
+            else ("keyboard_symbol:" if symbols else f"keyboard_letter:{group_index}:")
+        )
+        indices = range(len(keys)) if self.types_every_key else sorted({0, len(keys) - 1})
+        for index in indices:
+            # Selecting a key closes its group, so reopen it before each key.
+            window._action_buttons[group_action].click()
             window._action_buttons[self.prefix + key_action + str(index)].click()
-            assert self.input.typed[-1] == key
-            # Selecting a key closes its group, so reopen it before the next key.
-            if index < len(groups[group_index]) - 1:
-                window._action_buttons[group_action].click()
+            assert self.input.typed[-1] == keys[index], (group_index, index)
         (
             window._show_current_group_level
             if self.kind == "keyboard"

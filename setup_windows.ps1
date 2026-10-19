@@ -101,10 +101,12 @@ function Format-ProcessArguments {
     param([string[]]$Arguments)
 
     $formattedArgs = foreach ($argument in $Arguments) {
-        if ($null -eq $argument) {
+        if ([string]::IsNullOrEmpty($argument)) {
             '""'
         } elseif ($argument -match '[\s"]') {
-            '"' + $argument.Replace('"', '\"') + '"'
+            # Windows argv parsing doubles backslashes before quotes and the closing quote.
+            $escaped = [Regex]::Replace($argument, '(\\*)"', '$1$1\"')
+            '"' + [Regex]::Replace($escaped, '(\\+)$', '$1$1') + '"'
         } else {
             $argument
         }
@@ -169,6 +171,9 @@ function Invoke-NativeCommandWithTimeout {
             throw "$Label failed to start."
         }
 
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $timer = [Diagnostics.Stopwatch]::StartNew()
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try {
                 $process.Kill()
@@ -178,8 +183,12 @@ function Invoke-NativeCommandWithTimeout {
             throw "$Label timed out after $TimeoutSeconds seconds."
         }
 
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $stderr = $process.StandardError.ReadToEnd()
+        $remaining = [Math]::Max(0, $TimeoutSeconds * 1000 - [int]$timer.ElapsedMilliseconds)
+        if (-not [Threading.Tasks.Task]::WaitAll(@($stdoutTask, $stderrTask), $remaining)) {
+            throw "$Label output timed out after $TimeoutSeconds seconds."
+        }
+        $stdout = $stdoutTask.Result
+        $stderr = $stderrTask.Result
 
         if (-not [string]::IsNullOrWhiteSpace($stdout)) {
             $stdout -split "(`r`n|`n|`r)" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object {
@@ -198,6 +207,147 @@ function Invoke-NativeCommandWithTimeout {
     } finally {
         $process.Dispose()
     }
+}
+
+function Invoke-InstallerProcess {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 900
+    )
+
+    # Bootstrap installers can exit before their children finish. Start suspended,
+    # assign a private job, then resume so no child can escape the wait/cleanup.
+    # Keep this helper here: source setup is also distributed as a standalone script.
+    if (-not ("PogledAssist.SetupInstallerProcess" -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+
+namespace PogledAssist {
+    public static class SetupInstallerProcess {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct StartupInfo {
+            public int Size;
+            public string Reserved, Desktop, Title;
+            public int X, Y, XSize, YSize, XCountChars, YCountChars, FillAttribute, Flags;
+            public short ShowWindow, ReservedSize;
+            public IntPtr ReservedPointer, Input, Output, Error;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ProcessInfo { public IntPtr Process, Thread; public uint Id, ThreadId; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct BasicLimits {
+            public long ProcessTime, JobTime;
+            public uint Flags;
+            public UIntPtr MinWorkingSet, MaxWorkingSet;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct IoCounters { public ulong A, B, C, D, E, F; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ExtendedLimits {
+            public BasicLimits Basic;
+            public IoCounters Io;
+            public UIntPtr ProcessMemory, JobMemory, PeakProcessMemory, PeakJobMemory;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct Accounting {
+            public long UserTime, KernelTime, PeriodUserTime, PeriodKernelTime;
+            public uint PageFaults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
+        }
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits limits, int size);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool QueryInformationJobObject(IntPtr job, int kind, out Accounting info, int size, IntPtr length);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool CreateProcess(string file, StringBuilder command, IntPtr processAttributes,
+            IntPtr threadAttributes, bool inheritHandles, uint flags, IntPtr environment,
+            string directory, ref StartupInfo startup, out ProcessInfo process);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint ResumeThread(IntPtr thread);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool TerminateJobObject(IntPtr job, uint code);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool TerminateProcess(IntPtr process, uint code);
+        [DllImport("kernel32.dll")]
+        static extern bool CloseHandle(IntPtr handle);
+
+        public static int Run(ProcessStartInfo info, int timeoutSeconds) {
+            if (info.UseShellExecute || !info.CreateNoWindow || timeoutSeconds <= 0)
+                throw new ArgumentException("Installer requires direct background execution and a positive timeout.");
+            IntPtr job = CreateJobObject(IntPtr.Zero, null);
+            if (job == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+            ProcessInfo process = new ProcessInfo();
+            bool finished = false;
+            try {
+                ExtendedLimits limits = new ExtendedLimits();
+                limits.Basic.Flags = 0x2000; // KILL_ON_JOB_CLOSE
+                if (!SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(limits)))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                StartupInfo startup = new StartupInfo();
+                startup.Size = Marshal.SizeOf(startup);
+                StringBuilder command = new StringBuilder("\"" + info.FileName + "\" " + info.Arguments);
+                if (!CreateProcess(info.FileName, command, IntPtr.Zero, IntPtr.Zero, false,
+                    0x08000004, IntPtr.Zero, info.WorkingDirectory, ref startup, out process))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                if (!AssignProcessToJobObject(job, process.Process))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                if (ResumeThread(process.Thread) == UInt32.MaxValue)
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                Stopwatch timer = Stopwatch.StartNew();
+                for (;;) {
+                    Accounting accounting;
+                    if (!QueryInformationJobObject(job, 1, out accounting, Marshal.SizeOf(typeof(Accounting)), IntPtr.Zero))
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    if (accounting.ActiveProcesses == 0) break;
+                    if (timer.Elapsed.TotalSeconds >= timeoutSeconds)
+                        throw new TimeoutException("Installer process tree timed out after " + timeoutSeconds + " seconds.");
+                    Thread.Sleep(50);
+                }
+                uint exitCode;
+                if (!GetExitCodeProcess(process.Process, out exitCode))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                finished = true;
+                return unchecked((int)exitCode);
+            } finally {
+                if (!finished && process.Process != IntPtr.Zero) {
+                    TerminateJobObject(job, 1);
+                    TerminateProcess(process.Process, 1); // also covers a failed job assignment
+                    WaitForSingleObject(process.Process, 5000);
+                }
+                if (process.Thread != IntPtr.Zero) CloseHandle(process.Thread);
+                if (process.Process != IntPtr.Zero) CloseHandle(process.Process);
+                CloseHandle(job);
+            }
+        }
+    }
+}
+'@
+    }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = [IO.Path]::GetFullPath($FilePath)
+    $startInfo.Arguments = Format-ProcessArguments -Arguments $Arguments
+    $startInfo.WorkingDirectory = (Get-Location).ProviderPath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    # The job-aware native start consumes this configuration; .NET Framework
+    # Process.Start alone cannot assign a child to a job before it executes.
+    return [PogledAssist.SetupInstallerProcess]::Run($startInfo, $TimeoutSeconds)
 }
 
 function Invoke-NativeProbe {
@@ -1002,7 +1152,7 @@ function Get-OfficialPythonInstallerArguments {
     return @(
         "/quiet",
         "InstallAllUsers=0",
-        "TargetDir=`"$TargetDir`"",
+        "TargetDir=$TargetDir",
         "PrependPath=$prependPath",
         "Include_pip=$includePip",
         "Include_launcher=1",
@@ -1025,16 +1175,13 @@ function Invoke-OfficialPythonInstaller {
     Write-Info "Installer path: $InstallerPath"
     Write-Info "Install target: $TargetDir"
     Write-Info "Running official $description installer silently."
-    $process = Start-Process -FilePath $InstallerPath -ArgumentList $installerArguments -Wait -PassThru
-    if ($null -eq $process) {
-        throw "$description installer process did not return a process object."
-    }
-    if ($process.ExitCode -eq 3010) {
+    $exitCode = Invoke-InstallerProcess -FilePath $InstallerPath -Arguments $installerArguments
+    if ($exitCode -eq 3010) {
         Write-WarningLog "$description installer requested a reboot, but installation may still be usable now."
         return
     }
-    if ($process.ExitCode -ne 0) {
-        throw "$description installer failed with exit code $($process.ExitCode)."
+    if ($exitCode -ne 0) {
+        throw "$description installer failed with exit code $exitCode."
     }
     Write-Success "Official $description installer completed successfully."
 }
@@ -1363,7 +1510,7 @@ function Install-EspeakNgFromMsi {
 
     $arguments = @(
         "/i",
-        "`"$installerPath`"",
+        $installerPath,
         "/quiet",
         "/norestart"
     )
@@ -1371,23 +1518,17 @@ function Install-EspeakNgFromMsi {
     Write-Info "Installer path: $installerPath"
     Write-Info "Running eSpeak NG MSI installer silently."
 
-    $process = Start-Process `
-        -FilePath "msiexec.exe" `
-        -ArgumentList $arguments `
-        -Wait `
-        -PassThru
+    $exitCode = Invoke-InstallerProcess `
+        -FilePath (Join-Path $env:SystemRoot "System32\msiexec.exe") `
+        -Arguments $arguments
 
-    if ($null -eq $process) {
-        throw "eSpeak NG installer process did not return a process object."
-    }
-
-    if ($process.ExitCode -eq 3010) {
+    if ($exitCode -eq 3010) {
         Write-WarningLog "eSpeak NG installer requested a reboot, but installation may still be usable now."
         return
     }
 
-    if ($process.ExitCode -ne 0) {
-        throw "eSpeak NG MSI installer failed with exit code $($process.ExitCode)."
+    if ($exitCode -ne 0) {
+        throw "eSpeak NG MSI installer failed with exit code $exitCode."
     }
 
     Write-Success "eSpeak NG MSI installer completed successfully."

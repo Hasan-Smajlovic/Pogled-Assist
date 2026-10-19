@@ -11,20 +11,22 @@ from pogled_assist.speech.speech_service import SpeechSettings
 @pytest.mark.e2e
 def test_version_dropdown_keeps_installed_label_and_requires_install_action(qtbot, monkeypatch):
     from pogled_assist.release_update import StableVersion
-    from pogled_assist.ui.settings_window import SettingsWindow
+    from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
     from scripts.ui.capture_ui import PreviewReleaseManager
 
     monkeypatch.setattr(
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
     )
     manager = PreviewReleaseManager()
-    window = SettingsWindow(GazeSettings(), SpeechSettings(), update_manager=manager)
+    window = SettingsWindow(
+        GazeSettings(), SpeechSettings(), services=SettingsServices(update_manager=manager)
+    )
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window.show()
     requested = []
     window.update_requested.connect(requested.append)
-    row = window._update_row
+    row = window._general_page._update_row
     assert row._installed_label.text() == "Trenutno koristite v0.3.5"
     assert "novija verzija v0.4.0" in row._status_label.text()
     row._version_combo.setCurrentIndex(3)
@@ -70,7 +72,7 @@ def test_version_restart_warning_cancels_without_losing_input(
         speech._start_editor()
         assert speech._input.text() == ""
     hotbar._open_settings()
-    row = hotbar._settings_window._update_row
+    row = hotbar._settings_window._general_page._update_row
     version = StableVersion(0, 1, 0)
     row._check_completed(
         ReleaseCheckResult(StableVersion(0, 3, 5), StableVersion(0, 3, 5), (version,))
@@ -117,6 +119,6 @@ def test_verified_version_restarts_only_after_explicit_confirmation(
     monkeypatch.setattr(hotbar, "_quit_application", lambda: quits.append(True))
     manager._prepare_done.emit(tmp_path, None)
     assert quits == []
-    hotbar._settings_window._update_row._confirm_button.click()
+    hotbar._settings_window._general_page._update_row._confirm_button.click()
     assert quits == [True]
     assert (tmp_path / "install").exists()

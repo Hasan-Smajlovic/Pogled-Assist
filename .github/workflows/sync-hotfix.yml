@@ -1,0 +1,172 @@
+name: Sync hotfix to development
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Each hotfix owns a sync/<PR-number> branch; distinct hotfixes must not cancel pending runs.
+  group: sync-hotfix-development-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync-hotfix:
+    name: sync-hotfix-pr
+    if: >-
+      github.repository == 'Hasan-Smajlovic/Pogled-Assist' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Never execute checked-out code while this job holds a write token.
+      - name: Prepare isolated hotfix backport and draft pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
+
+          def summary(message):
+              print(message)
+              with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as output:
+                  output.write(message + "\n")
+
+          def safe_error(error):
+              message = error.stderr or "Command failed."
+              token = os.environ.get("GH_TOKEN", "")
+              if token:
+                  message = message.replace(token, "<redacted>")
+                  encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+                  message = message.replace(encoded, "<redacted>")
+              message = re.sub(r"(?i)(authorization:)[^\r\n]*", r"\1 <redacted>", message)
+              return message[:4000]
+
+          def run(command, **kwargs):
+              return subprocess.run(command, text=True, capture_output=True, check=True, **kwargs)
+
+          def api(path, payload=None):
+              command = ["gh", "api", f"repos/{REPOSITORY}/{path}"]
+              if payload is not None:
+                  command += ["--method", "POST", "--input", "-"]
+              result = run(command, input=None if payload is None else json.dumps(payload))
+              return json.loads(result.stdout)
+
+          def validated_pull():
+              event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+              pull = event["pull_request"]
+              head = pull.get("head", {})
+              source = head.get("repo") or {}
+              valid = (os.environ["GITHUB_REPOSITORY"] == REPOSITORY
+                       and pull.get("merged") is True
+                       and pull.get("base", {}).get("ref") == "master"
+                       and source.get("full_name") == REPOSITORY
+                       and head.get("ref", "").startswith("hotfix/"))
+              if not valid:
+                  raise SystemExit("Only a merged repository hotfix targeting master can open this PR.")
+              if not re.fullmatch(r"[0-9a-f]{40}", pull.get("merge_commit_sha", "")):
+                  raise SystemExit("Invalid hotfix merge commit.")
+              return pull
+
+          def git_environment():
+              environment = os.environ.copy()
+              credential = base64.b64encode(f"x-access-token:{environment['GH_TOKEN']}".encode()).decode()
+              environment.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                                  "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {credential}", "GIT_TERMINAL_PROMPT": "0"})
+              return environment
+
+          def prepare_branch(directory, pull, branch):
+              environment = git_environment()
+
+              def git(*args):
+                  return run(["git", "-c", "core.hooksPath=/dev/null", *args], cwd=directory, env=environment)
+
+              git("init", "--quiet")
+              git("remote", "add", "origin", f"https://github.com/{REPOSITORY}.git")
+              git("fetch", "--no-tags", "origin", "development", "master", pull["merge_commit_sha"])
+              git("checkout", "-b", branch, "origin/development")
+              git("config", "user.name", "github-actions[bot]")
+              git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
+              parents = git("rev-list", "--parents", "-n", "1", pull["merge_commit_sha"]).stdout.split()
+              mainline = ["-m", "1"] if len(parents) > 2 else []
+              try:
+                  git("cherry-pick", "--no-commit", *mainline, pull["merge_commit_sha"])
+              except subprocess.CalledProcessError as error:
+                  unchanged = not git("diff", "--name-only", "HEAD").stdout.strip()
+                  conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
+                  if conflicts != ["VERSION"] and not (unchanged and not conflicts):
+                      git("reset", "--hard", "HEAD")
+                      summary("Hotfix cherry-pick failed; nothing was pushed. Resolve it on a branch from development.\n" + safe_error(error))
+                      return False
+              # Release versions belong to master; preserve development's version even on conflict.
+              git("restore", "--source=HEAD", "--staged", "--worktree", "--", "VERSION")
+              if not git("diff", "--cached", "--name-only").stdout.strip():
+                  git("reset", "--hard", "HEAD")
+                  summary("No PR needed: no hotfix changes remain after excluding VERSION.")
+                  return False
+              git("-c", "commit.gpgsign=false", "commit", "-C", pull["merge_commit_sha"])
+              return push_or_reuse(git, branch)
+
+          def push_or_reuse(git, branch):
+              existing = git("ls-remote", "--heads", "origin", f"refs/heads/{branch}").stdout.strip()
+              if existing:
+                  git("fetch", "--no-tags", "origin", branch)
+                  difference = git("diff", "--name-only", "FETCH_HEAD", "HEAD").stdout.strip()
+                  if difference:
+                      summary("The sync branch already exists with different content; review it manually. Nothing was pushed.")
+                      return False
+                  return True
+              git("push", "origin", f"HEAD:refs/heads/{branch}")
+              return True
+
+          def pr_body(pull):
+              return (f"Refs #{pull['number']} (original hotfix PR).\n\n"
+                      "## Outcome\n\nBackport the released hotfix onto a branch from development, excluding the root VERSION file. "
+                      "Development keeps its existing version; master owns release versions.\n\n"
+                      "## Verification\n\n- Automated: Not run here; review required CI checks.\n"
+                      "- Manual Windows: Not run; requires validation on Windows.\n"
+                      "- Manual Tobii hardware: Not run; requires the target device.\n\n"
+                      "The original hotfix PR owns the release evidence.\n\n"
+                      "## Risks and limits\n\nReview the complete backport diff. "
+                      "Squash-merge manually after required checks and independent review pass.\n")
+
+          def main():
+              pull = validated_pull()
+              branch = f"sync/{int(pull['number'])}"
+              owner = REPOSITORY.split("/")[0]
+              existing = api(f"pulls?state=open&base=development&head={owner}:{branch}&per_page=100")
+              if existing:
+                  summary("Hotfix sync: " + existing[0]["html_url"])
+                  return
+              if not api("compare/development...master")["files"]:
+                  summary("No PR needed: development already contains the released changes.")
+                  return
+              with tempfile.TemporaryDirectory(prefix="hotfix-sync-") as directory:
+                  if not prepare_branch(directory, pull, branch):
+                      return
+              created = api("pulls", {"base": "development", "head": branch, "draft": True,
+                                     "title": f"Backport hotfix #{pull['number']} to development", "body": pr_body(pull)})
+              summary("Hotfix sync: " + created["html_url"])
+
+          try:
+              main()
+          except subprocess.CalledProcessError as error:
+              summary("Hotfix sync failed:\n" + safe_error(error))
+              raise SystemExit(1) from None
+          PY

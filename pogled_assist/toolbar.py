@@ -12,6 +12,7 @@ from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 from . import diagnostics
+from .hotbar_speech import HotbarSpeech
 from .interaction.mouse_controller import (
     CLICK_ACTIONS,
     CONTROLLER,
@@ -46,7 +47,7 @@ from .ui.interaction_overlay import InteractionOverlayWindow
 from .ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
 from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
-from .ui.settings_window import SettingsWindow
+from .ui.settings_window import SettingsServices, SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .ui.tracking_feedback import TrackingFeedback
 from .windows.appbar import WindowsAppBar
@@ -55,11 +56,8 @@ from .windows.windows_input import WindowsInputController
 
 logger = logging.getLogger(__name__)
 
-SPEECH_TEST_TEXT = "Zdravo. Ovo je test govora na bosanskom jeziku."
-ARABIC_SPEECH_TEST_TEXT = "مَرْحَبًا. هٰذَا اخْتِبَارٌ لِلصَّوْتِ بِاللُّغَةِ الْعَرَبِيَّةِ."
 
-
-class HotbarWindow(QWidget):
+class HotbarWindow(HotbarSpeech, QWidget):
     """Frameless top toolbar that reserves desktop work area on Windows."""
 
     BAR_HEIGHT = 76
@@ -81,13 +79,7 @@ class HotbarWindow(QWidget):
         self._appbar = WindowsAppBar()
         self._gaze = MouseGazeProvider(self) if simulate_gaze else TobiiGazeProvider(self)
         self._initial_gaze_settings, self._initial_speech_settings = load_app_settings()
-        self._speech = SpeechService()
-        self._speech_test_id: int | None = None
-        self._speech.playback_changed.connect(self._speech_playback_changed)
-        self._settings_save_failed = False
-        self._speech.update_settings(self._initial_speech_settings)
-        self._speech_library_store = speech_library_store(get_project_root())
-        self._speech_library_store.load()
+        self._setup_speech(SpeechService(), speech_library_store(get_project_root()))
         self._suggestions = SuggestionService(
             self, path=get_project_root() / "data" / "speech_learning.json"
         )
@@ -821,8 +813,12 @@ class HotbarWindow(QWidget):
             self._mouse.settings,
             self._speech.settings,
             self,
-            update_manager=self._release_update_manager,
-            suggestions=self._suggestions,
+            services=SettingsServices(
+                update_manager=self._release_update_manager,
+                suggestions=self._suggestions,
+                account=self._speech.account,
+                clear_audio=self._speech.audio_cache.clear,
+            ),
         )
         diagnostics.emit(
             "settings_constructed",
@@ -835,6 +831,8 @@ class HotbarWindow(QWidget):
         window.calibration_requested.connect(self._launch_tobii_calibration)
         window.gaze_check_requested.connect(self._open_gaze_check)
         window.speech_test_requested.connect(self._test_current_speech_settings)
+        window.efendija_test_requested.connect(self._test_efendija)
+        window.speech_stop_requested.connect(self._speech.stop)
         window.update_requested.connect(self._start_release_update)
         window.restart_confirmed.connect(self._restart_for_update)
         window.install_cancelled.connect(self._release_update_manager.finish_cancel)
@@ -846,6 +844,7 @@ class HotbarWindow(QWidget):
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
 
         self._settings_window = window
+        window.set_speech_playback_state(self._speech.playback_state)
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
         diagnostics.emit(
@@ -922,6 +921,9 @@ class HotbarWindow(QWidget):
             self._gaze_check_window.set_calibration_notice(message)
 
     def _settings_window_closed(self) -> None:
+        if self._efendija_test_id == self._speech.request_id:
+            self._speech.stop()
+        self._efendija_test_id = None
         if not self._restarting_for_update:
             self._release_update_manager.finish_cancel()
         window = self._settings_window
@@ -1043,41 +1045,6 @@ class HotbarWindow(QWidget):
 
     def _change_keyboard_script(self, script: str) -> None:
         self._update_speech_settings(replace(self._speech.settings, keyboard_script=script))
-
-    def _test_current_speech_settings(self) -> None:
-        try:
-            text = (
-                ARABIC_SPEECH_TEST_TEXT
-                if self._speech.settings.keyboard_script == "arabic"
-                else SPEECH_TEST_TEXT
-            )
-            if self._speech.speak(text):
-                self._speech_test_id = self._speech.request_id
-                self._set_speech_test_status("Test govora je pokrenut.")
-            else:
-                self._set_speech_test_status(
-                    "Govor nije uspio: odabrani glas nije pronađen ili se nije mogao pokrenuti.",
-                    "Govor nije uspio.",
-                )
-        except Exception:
-            logger.exception("Speech settings test failed.")
-            self._set_speech_test_status("Govor nije uspio.")
-
-    def _speech_playback_changed(self, request_id: int, state: str) -> None:
-        if request_id != self._speech_test_id:
-            return
-        message = {
-            "speaking": "Test govora je pokrenut.",
-            "finished": "Test govora je završen.",
-            "failed": "Govor nije uspio. Pokušajte ponovo.",
-            "stopped": "Govor je zaustavljen.",
-        }[state]
-        self._set_speech_test_status(message)
-
-    def _set_speech_test_status(self, text: str, settings_text: str | None = None) -> None:
-        self._set_status(text)
-        if self._settings_window is not None:
-            self._settings_window.set_status(text if settings_text is None else settings_text)
 
     def _launch_tobii_calibration(self) -> None:
         if self._settings_window is not None:

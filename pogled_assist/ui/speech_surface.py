@@ -22,8 +22,10 @@ from PySide6.QtWidgets import (
 
 from .. import diagnostics
 from ..keyboard_layouts import switch_label
+from ..speech.voice_state import RECOVERY_NOTICE_MS, VoiceState
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
+from .settings_controls import busy_indicator
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
 from .tracking_feedback import MessageTrackingHeader
@@ -53,6 +55,12 @@ class SpeechSurface(QWidget):
         self._main_dynamic_actions: set[str] = set()
         self._gaze_target_action: str | None = None
         self._tracking_notice: TrackingNotice | None = None
+        self._speech_notice: TrackingNotice | None = None
+        self._speech_recovery = False
+        self._playback_state = "stopped"
+        self._speech_notice_timer = QTimer(self)
+        self._speech_notice_timer.setSingleShot(True)
+        self._speech_notice_timer.timeout.connect(self._hide_speech_recovery)
         self._diagnostic_context = diagnostics.TargetContext("speech")
         self._diagnostic_snapshot_pending = False
         self._build_ui(keyboard_script)
@@ -65,7 +73,7 @@ class SpeechSurface(QWidget):
     def _build_ui(self, keyboard_script: str) -> None:
         self.setStyleSheet(SPEECH_STYLE)
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 10, 12, 10)
+        root.setContentsMargins(12, 7, 12, 7)
         root.setSpacing(9)
         root.addLayout(self._build_topbar())
         root.addLayout(self._build_predictions())
@@ -86,16 +94,34 @@ class SpeechSurface(QWidget):
         self._play_button = self._make_button(
             "Izgovori", "play", "primaryButton", minimum_height=86
         )
+        playback = QWidget(self)
+        playback.setFixedHeight(96)
+        playback_layout = QGridLayout(playback)
+        playback_layout.setContentsMargins(0, 0, 0, 0)
+        playback_layout.setVerticalSpacing(3)
+        playback_layout.addWidget(self._play_button, 0, 0)
+        self._playback_progress = busy_indicator(playback)
+        self._playback_progress.setStyleSheet(
+            "QProgressBar { background: #303747; border: 0; } QProgressBar::chunk { background: #91dec0; }"
+        )
+        playback_layout.addWidget(self._playback_progress, 1, 0)
+        self._playback_progress.hide()
         self._phrases_button = self._make_button(
             "Fraze", "phrases", "topButton", minimum_height=86, checkable=True
         )
         topbar.addWidget(self._clear_button, 8)
         topbar.addWidget(self._categories_button, 10)
         topbar.addWidget(message_box, 40)
-        topbar.addWidget(self._play_button, 10)
+        topbar.addWidget(playback, 10)
         topbar.addWidget(self._phrases_button, 9)
 
         return topbar
+
+    def set_playback_state(self, state: str) -> None:
+        self._playback_state = state
+        active = state in ("preparing", "speaking")
+        self._play_button.setText("Zaustavi" if active else "Izgovori")
+        self._playback_progress.setVisible(active)
 
     def _build_message_box(self) -> QWidget:
         message_box = QWidget(self)
@@ -139,7 +165,7 @@ class SpeechSurface(QWidget):
         self._prediction_buttons = []
         for index in range(5):
             button = self._make_button(
-                "·", f"suggestion:{index}", "predictionButton", minimum_height=66
+                "·", f"suggestion:{index}", "predictionButton", minimum_height=71
             )
             button.setEnabled(False)
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -409,6 +435,28 @@ class SpeechSurface(QWidget):
         self._tracking_notice = notice
         self._render_tracking_notice(immediate=immediate)
 
+    def set_speech_notice(self, state: VoiceState | None, *, immediate: bool = False) -> None:
+        notice = state.notice if state is not None else None
+        self._speech_notice = (
+            TrackingNotice(notice[1], notice[2], notice[0]) if notice is not None else None
+        )
+        self._speech_recovery = state is not None and state.recovered
+        self._speech_notice_timer.stop()
+        self._render_tracking_notice(immediate=immediate)
+
+    def _hide_speech_recovery(self) -> None:
+        self._speech_notice = None
+        self._speech_recovery = False
+        self._render_tracking_notice()
+
+    def hideEvent(self, event) -> None:
+        self._speech_notice_timer.stop()
+        super().hideEvent(event)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._render_tracking_notice()
+
     def accepts_tracking_notice(self) -> bool:
         return (
             self._dialogs.active is None or self._dialogs.active in self._dialogs.tracking_notices
@@ -418,10 +466,26 @@ class SpeechSurface(QWidget):
         active = self._dialogs.active
         hosts = ((None, self._message_header.notice), *self._dialogs.tracking_notices.items())
         for dialog, widget in hosts:
+            notice = self._tracking_notice
+            if dialog is None and notice is None:
+                notice = self._speech_notice
             widget.set_notice(
-                self._tracking_notice if active is dialog else None,
+                notice if active is dialog else None,
                 immediate=immediate or active is not dialog,
             )
+        self._sync_recovery_timer(active)
+
+    def _sync_recovery_timer(self, active):
+        recovery_visible = (
+            self._speech_recovery
+            and self._tracking_notice is None
+            and active is None
+            and self.isVisible()
+        )
+        if not recovery_visible:
+            self._speech_notice_timer.stop()
+        elif not self._speech_notice_timer.isActive():
+            self._speech_notice_timer.start(RECOVERY_NOTICE_MS)
 
     def _close_dialog(self) -> None:
         self._dialogs.close()
@@ -680,7 +744,8 @@ SPEECH_STYLE = """
                 background: #173447;
                 border-color: #366c8d;
                 color: #eef2f8;
-                font-size: 22px;
+                font-size: 27px;
+                padding: 2px 8px;
             }
             QPushButton#predictionButton:disabled { color: #667184; background: #171a22; }
             QPushButton#groupButton {

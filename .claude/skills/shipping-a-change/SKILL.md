@@ -5,6 +5,4 @@ description: Apply when changing Pogled Assist UI, settings, bundled runtime ass
 
 # Shipping a change
 
-Read and follow [`.agents/skills/shipping-a-change/SKILL.md`](../../../.agents/skills/shipping-a-change/SKILL.md).
-That file owns this workflow for every coding agent; this copy only makes it
-discoverable by Claude Code. Edit the source, never this pointer.
+Read and follow [`.agents/skills/shipping-a-change/SKILL.md`](../../../.agents/skills/shipping-a-change/SKILL.md). That file owns this workflow for every coding agent; this copy only makes it discoverable by Claude Code. Edit the source, never this pointer.

@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from _powershell import powershell_literal
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows file sharing is required")
 
@@ -22,6 +23,7 @@ def test_package_archive_retries_a_temporarily_locked_file(tmp_path: Path) -> No
     source = package / "base_library.zip"
     source.write_bytes(b"bundled Python library")
     archive_path = tmp_path / "PogledAssist.zip"
+    archive_path.write_bytes(b"partial archive from a previous attempt")
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateFileW.argtypes = (
@@ -45,12 +47,11 @@ def test_package_archive_retries_a_temporarily_locked_file(tmp_path: Path) -> No
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
-                "-File",
-                str(ARCHIVE_SCRIPT),
-                "-PackageRoot",
-                str(package),
-                "-ArtifactPath",
-                str(archive_path),
+                "-Command",
+                "function Start-Sleep { Microsoft.PowerShell.Utility\\Start-Sleep -Milliseconds 250 }; "
+                f"& {powershell_literal(ARCHIVE_SCRIPT)} "
+                f"-PackageRoot {powershell_literal(package)} "
+                f"-ArtifactPath {powershell_literal(archive_path)}",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
