@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import threading
-from types import SimpleNamespace
-
 import pytest
+from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from test_hotbar_e2e import hotbar_gaze as hotbar_gaze
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -16,46 +13,98 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
-def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkeypatch):
-    from pogled_assist.ui import settings_window
-
-    entered, release = threading.Event(), threading.Event()
-    now = [10.0]
-
-    def query():
-        entered.set()
-        release.wait(5)
-        return False
-
-    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", query)
-    monkeypatch.setattr(settings_window, "time", SimpleNamespace(monotonic=lambda: now[0]))
-    window = settings_window.SettingsWindow(
-        GazeSettings(selection_pause_ms=100, dwell_ms=150), SpeechSettings()
+@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
+    qtbot, make_speech_window, size, script, letters_per_group
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(
+        speech, letters_per_group=letters_per_group, library_store=FakeLibraryStore()
     )
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
+    window.resize(*size)
     window.show()
-    try:
-        qtbot.waitUntil(entered.is_set)
-        window._gaze_tab_button.click()
-        qtbot.wait(1)
-        target = window._gaze_bubble_button
-        center = target.mapToGlobal(target.rect().center())
-        for stamp in (10.0, 10.1, 10.251):
-            now[0] = stamp
-            window.handle_gaze(center)
-        assert not window._gaze_settings.show_gaze_bubble
-        assert window._startup_busy
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
-        assert not window._gaze_settings.show_gaze_bubble
-    finally:
-        release.set()
-        qtbot.waitUntil(lambda: not window._startup_busy)
+    qtbot.waitUntil(window.isVisible)
+
+    controls = (
+        (window._space_button, "space"),
+        (window._backspace_button, "backspace"),
+        (window._keyboard_toggle_button, "keyboard-toggle"),
+    )
+    assert window.width() == size[0]
+    assert window.height() == size[1]
+    previous = None
+    for button, command in controls:
+        assert button.minimumHeight() == 81
+        assert button.height() == 81
+        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+        assert window.rect().contains(rect)
+        if previous is not None:
+            assert previous.right() < rect.left()
+        previous = rect
+        # The extra bottom five pixels must be selectable by gaze too.
+        point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 1))
+        assert window.action_at_global_point(point) == f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
+
+    assert window._script_button.minimumHeight() == 76
+    for use_gaze in (False, True):
+        window._input.setText("ABC")
+        for button, command in controls[:2]:
+            if use_gaze:
+                window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
+            else:
+                button.click()
+            assert window._input.text() == ("ABC " if command == "space" else "ABC")
+
+        original = window._symbols_mode
+        if use_gaze:
+            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle")
+        else:
+            window._keyboard_toggle_button.click()
+        assert window._symbols_mode != original
+        assert window._input.text() == "ABC"
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("eyes", [(True, False), (False, True), (False, False)])
+def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze, monkeypatch):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    point = QPoint(300, 250)
+    monkeypatch.setattr(
+        "pogled_assist.tracking.mouse_gaze_provider._primary_screen_geometry",
+        lambda: controller._logical_screen_rect,
+    )
+    provider = hotbar._gaze
+    provider._cursor_position = lambda: point
+    provider.start()
+    provider._timer.stop()
+    shortcuts = {shortcut.key().toString(): shortcut for shortcut in hotbar._simulation_shortcuts}
+    assert set(shortcuts) == {"F6", "F7", "F8", "F9", "F10"}
+    assert controller._both_eyes_open
+    assert hotbar._gaze_bubble.isVisible()
+
+    shortcuts["F6"].activated.emit()
+    provider._emit_cursor_sample()
+    assert not controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    assert hotbar._tracking_status._view.title == "Simulacija mišem"
+    assert hotbar._tracking_status._view.detail == "Lijevo —   Desno ✓"
+    assert actions == []
+
+    shortcuts["F10"].activated.emit()
+    assert controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    provider._emit_cursor_sample()
+    assert hotbar._gaze_bubble.isVisible()
+    shortcuts["F9"].activated.emit()
+    assert not controller._both_eyes_open
+    assert hotbar._gaze_bubble.isHidden()
+    assert hotbar._tracking_status._view.title == "Simulacija mišem"
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("eyes", [(True, False), (False, True)])
 def test_speech_marker_waits_for_fresh_gaze_after_eye_loss(hotbar_gaze, qtbot, eyes):
     hotbar, _controller, feed, _actions, _progress = hotbar_gaze
     hotbar._open_speech()

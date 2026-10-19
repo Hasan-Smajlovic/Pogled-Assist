@@ -500,13 +500,12 @@ function Ensure-Administrator {
             FilePath = $powerShell
             ArgumentList = $argumentLine
             WorkingDirectory = $ScriptRoot
-            Verb = "RunAs"
         }
         if (-not (Get-ShowLauncherWindow)) {
             $startParams.WindowStyle = "Hidden"
         }
 
-        Start-Process @startParams | Out-Null
+        Start-Process @startParams -Verb RunAs | Out-Null
         Write-Info "Elevated launcher process requested."
         exit 0
     } catch {

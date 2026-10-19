@@ -2,6 +2,15 @@
 
 Development and release checks run on Windows x64 with Python 3.10.
 
+This guide owns setup, commands, automated verification, and test strategy. Read the sections relevant to the task; use these guides for conditional detail:
+
+| Work | Guide |
+| --- | --- |
+| Visible UI, mouse simulation, screenshots, or manual Windows/Tobii checks | [UI development and review](UI_DEVELOPMENT.md) |
+| Gallery publication, Pages setup, permissions, or recovery | [UI gallery publication](UI_GALLERY.md) |
+| Bosnian model preparation, evaluation, or benchmarks | [Bosnian language guide](../language/bs/README.md#preparation-and-evaluation) |
+| A failing local check | [Development troubleshooting](DEVELOPMENT_TROUBLESHOOTING.md) |
+
 ## First setup
 
 Run PowerShell from the repository root:
@@ -11,30 +20,19 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\dev.ps1 setup
 ```
 
-Setup creates `.venv`, installs the application, test and packaging dependencies,
-and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored
-`.dev-tools` directory. It does not install Tobii software or change the
-system-wide Python environment. The `.venv` always uses Python 3.10.
-If `.venv` points to a removed or unsupported interpreter, setup moves it to
-`.dev-tools\venv-backups` before creating a fresh one. To use a specific
-installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup.
+Setup creates `.venv`, installs the application, test and packaging dependencies, and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored `.dev-tools` directory. It does not install Tobii software or change the system-wide Python environment. The `.venv` always uses Python 3.10. If `.venv` points to a removed or unsupported interpreter, setup moves it to `.dev-tools\venv-backups` before creating a fresh one. To use a specific installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup. Interpreter probes start executables directly without the Windows shell, so a broken interpreter returns an error without an interactive security warning.
 
-`tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same
-interpreter is used for development, Tobii Pro discovery, automated checks,
-and Windows packaging.
+`tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same interpreter is used for development, Tobii Pro discovery, automated checks, and Windows packaging.
 
 ## Command reference
 
-Run these commands in Windows PowerShell. The automated checks do not require a
-Tobii tracker, calibrated display, eSpeak NG, or the online speech service.
-Only the real gaze and external speech checks listed below require those
-components.
+Run these commands in Windows PowerShell. The automated checks do not require a Tobii tracker, calibrated display, eSpeak NG, or the online speech service. Only the [manual gaze and external speech checks](UI_DEVELOPMENT.md#manual-tobii-checks) require those components.
 
 | Command | Tobii hardware | What it verifies |
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 70 main UI surfaces without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 104 main UI surfaces at 1280 × 720 without external services |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -49,238 +47,57 @@ components.
 | `.\dev.ps1 coverage -Workers 2` | Not required | Explicit parallel coverage measurement; slower Qt runs are possible |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
 
-`coverage` and `check` temporarily clear `PYTEST_ADDOPTS` so environment options
-cannot omit tests or override the coverage floor. This also ignores diagnostic
-options supplied through that variable. The commands restore its original value
-after testing, including on failure. Use `test` or `test-ui` for custom pytest
-options while investigating a failure.
+`coverage` and `check` temporarily clear `PYTEST_ADDOPTS` so environment options cannot omit tests or override the coverage floor. This also ignores diagnostic options supplied through that variable. The commands restore its original value after testing, including on failure. Use `test` or `test-ui` for custom pytest options while investigating a failure.
 
-The supporting scripts are grouped by purpose: `scripts/checks/` validates
-source and workflows, `scripts/release/` builds and publishes releases,
-`scripts/ui/` renders and prepares UI galleries, and `scripts/speech_suggestions/`
-prepares and evaluates Bosnian prediction models.
+The supporting scripts are grouped by purpose: `scripts/checks/` validates source and workflows, `scripts/release/` builds and publishes releases, `scripts/ui/` renders and prepares UI galleries, and `scripts/speech_suggestions/` prepares and evaluates Bosnian prediction models.
 
-Before running the model commands below in Windows PowerShell, use UTF-8 for
-Python's output so printed Bosnian text works with older console encodings:
-
-```powershell
-$env:PYTHONIOENCODING = "utf-8"
-```
-
-Reproduce the frozen Bosnian suggestion measurements from the repository root:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset development --output language\bs\evaluation\reports\development.json
-.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
-```
-
-The development set is available for model decisions. Do not tune from the
-held-out result. The scoring contract and frozen hashes are under
-`tests\fixtures\speech_suggestions`.
-
-The original held-out messages have now been inspected in repeated reviews;
-keep their frozen text as a regression set, not a fresh blind quality estimate.
-The frozen fixture protocol records the rules used for the first comparison;
-its instruction to withhold those messages no longer describes their current
-status.
-An independently authored and reviewed set, withheld until model selection is
-complete, is still needed for that claim. Reports separate sentence starters,
-exact next-word hits before the first letter, and completion queries along the
-simulated typing path. Their percentages are not interchangeable.
-
-When changing the prepared language data, compare the supported vocabulary
-sizes in one corpus pass before rebuilding the bundled model:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\speech_suggestions\benchmark_speech_models.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz --output-dir .dev-tools\speech-model-benchmark --report language\bs\benchmarks\model.json
-.\.venv\Scripts\python.exe scripts\speech_suggestions\prepare_speech_model.py .dev-tools\corpora\CLASSLA-web.bs.2.0.jsonl.gz
-.\.venv\Scripts\python.exe scripts\speech_suggestions\compare_speech_ranking.py --output language\bs\benchmarks\ranking.json
-```
-
-The ranking comparison holds language data fixed and compares the original fixed
-weights with adaptive discounts of 2, 10, and 40 on development messages only.
-It rejects latency or quality regressions, checks that sparse contexts back off
-while supported contexts remain useful, and records its selection rule and
-recommendation. If changing the chosen discount, update
-`WordModel.context_discount` and rerun the vocabulary comparison before
-evaluating the regression set.
-
-The verified CLASSLA archive is a local development input and is not downloaded
-by setup or included in a release. Its source URL and integrity hashes are in the
-bundled model metadata. Candidate selection uses only the development set; run
-the held-out evaluation once after the model choice is fixed.
-The [model metadata](../pogled_assist/assets/bosnian-model.meta.json) records the
-archive, inputs, preparation script, and tokenizer used for that build. Compare
-those recorded checksums with the files being reviewed; the presence of a bundled
-model does not establish that it was built from the current source. Keep the
-archive outside the repository's tracked files for future rebuilds.
-
-`language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv`
-are build inputs that the installed application does not load. Rebuild the
-bundled model after changing them or the preparation script. Spelling
-replacements apply only to web training data; personal spelling and typed text
-are preserved. The vocabulary budget
-reserves space for reviewed words, and reviewed word combinations survive the
-web-only pruning limits. Run the commands above to refresh the generated model,
-metadata, and comparison reports before review. An old report does not validate
-a model with a different checksum.
-
-Preparation and tokenizer checksums cover the complete source files. A refactor
-or formatting change therefore requires rebuilding the affected model even when
-prediction behavior is intended to stay the same. Run `.\dev.ps1 format` before
-preparation so formatting cannot immediately invalidate the new metadata. Never
-replace a recorded checksum by hand to make a test pass.
-
-The reviewed Islamic terminology is a separate offline layer, so it can be
-rebuilt without downloading the 2.63 GB CLASSLA archive:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\speech_suggestions\prepare_islamic_model.py
-```
-
-`language\bs\model\domains\islamic.tsv` contains project-authored examples informed by the
-terminology of the Islamic Community in Bosnia and Herzegovina. The generated
-`bosnian-islamic-model.json.gz` and metadata are packaged beside the general
-model and merged in memory at startup. Rebuild the layer after changing its TSV,
-tokenisation, or preparation script, then run both frozen evaluations and the
-focused suggestion tests. Do not copy articles, sermons, private correspondence,
-or a user's messages into the repository.
-
-The evaluation report includes each exact-word miss before typing, classified
-as missing vocabulary, missing context, or a word ranked below the five visible
-candidates. Completion remains a separate metric. Compare these causes as well
-as activation counts when choosing the next data change.
-
-Measure personal learning and large synthetic profiles separately:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_learning.py --stress-sizes 0 10000 50000 150000 --output language\bs\evaluation\reports\learning.json
-```
-
-This uses synthetic scenarios from `language/bs/evaluation/learning.tsv`, with separate
-profiles and checkpoints after zero, one, three, and ten message uses. It also
-records unrelated control predictions and exits unsuccessfully if a target is
-not visible after one use, not first after three uses, or displaces an unrelated
-expected top-five result. The optional stress measurements report index
-construction, the first query, and reused-index queries separately. They exclude
-Qt dispatch, display, file I/O, and Tobii processing, so they cannot establish
-the Windows end-to-end latency target.
-
-For fresh quality validation, have a separate author prepare and freeze a TSV
-with `id`, `category`, and `text` columns and its SHA-256 before the candidate is
-selected. Use synthetic text with the same punctuation supported by the frozen
-keyboard protocol. Keep those messages out of preparation and tuning. After
-selecting the candidate, evaluate that exact file:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --cases C:\Temp\speech-evaluation.tsv --expected-sha256 "<previously-frozen-sha256>" --output .dev-tools\speech-external-evaluation.json
-```
-
-The script verifies the supplied checksum and reports miss diagnostics. It does
-not certify independent authorship or freeze a set retroactively. Do not add
-private conversations to the repository. Existing regression fixtures remain
-unchanged.
+Model preparation, provenance, benchmarks, and evaluation commands are maintained in the [Bosnian language guide](../language/bs/README.md#preparation-and-evaluation). Run those commands from the repository root with the same Python 3.10 `.venv` created by `dev.ps1 setup`. Documented model and diagnostic commands may invoke that interpreter directly; standard lint, test, and package verification uses `dev.ps1`. Do not substitute system Python, a temporary environment, or ad hoc tool installation.
 
 ## Verification before a pull request
 
-During development, run `.\dev.ps1 check-fast` after each meaningful change and
-repeat it after fixes. Once the final diff is ready, run `.\dev.ps1 check` once
-before pushing a pull request; rerun it if the diff changes afterwards. It runs
-with Python 3.10
-and covers the same three categories enforced by the required `code-quality`,
-`tests`, and `windows-package` pull request checks.
+During development, run `.\dev.ps1 check-fast` after each meaningful change and repeat it after fixes. Run `.\dev.ps1 check` against the final diff before marking a pull request ready for review; rerun it after subsequent changes. It uses Python 3.10 and covers the same three categories enforced by the required `code-quality`, `tests`, and `windows-package` pull request checks.
 
-The fast command compares committed topic-branch changes against the merge base
-of `origin/development`, then adds staged, unstaged and untracked files. It
-includes both paths of a rename and deleted paths. Fetch `origin/development`
-before starting a topic branch; the fast command does not fetch automatically.
-Use `-BaseRef <ref>` when deliberately comparing another base. Missing Git
-history or an unavailable ref selects the full suite instead of skipping tests.
+An implementation handoff or draft pull request can precede complete verification. Record unfinished work and skipped checks as Not run with a reason; neither handoff nor draft status establishes readiness for review. When the user defers execution, finish the implementation and documentation, inspect the diff, and report "Implemented; verification not run" with the outstanding checks. Required CI checks and human review remain prerequisites for merge, as defined in [CONTRIBUTING.md](../CONTRIBUTING.md#review-and-merge-responsibility).
 
-Selection rules live in `scripts/checks/select_tests.py`. Changes to gaze,
-speech, suggestions, UI, Windows or release code select the boundary's tests
-and its application/UI consumers. Changed and new test modules are included.
-Documentation selects repository documentation/link tests. Unknown paths,
-shared test helpers, deleted tests, dependencies, workflow/check configuration,
-model data and bundled assets select every test. Maintain the mapping when
-adding consumers; use the full-suite fallback whenever the impact is uncertain.
-This is a development feedback aid; the final check and CI always run all tests.
+The fast command compares committed topic-branch changes against the merge base of `origin/development`, then adds staged, unstaged and untracked files. It includes both paths of a rename and deleted paths. Fetch `origin/development` before starting a topic branch; the fast command does not fetch automatically. Use `-BaseRef <ref>` when deliberately comparing another base. Missing Git history or an unavailable ref selects the full suite instead of skipping tests.
 
-`check-fast` prints changed paths, selection reasons and selected test files.
-It runs Ruff lint, formatting and Python compilation across the repository,
-but checks only changed PowerShell scripts and affected Actions workflows.
-A full-suite fallback also checks all PowerShell and Actions files. It omits
-coverage and packaging even when all tests are selected. With no changes, it
-still checks Python source and explicitly reports that no tests were selected.
-All verification commands report stage and total durations, including failures.
+Selection rules live in `scripts/checks/select_tests.py`. Changes to gaze, speech, suggestions, UI, Windows or release code select the boundary's tests and its application/UI consumers. Changed and new test modules are included. Documentation selects repository documentation/link tests. Unknown paths, shared test helpers, deleted tests, dependencies, workflow/check configuration, model data and bundled assets select every test. Maintain the mapping when adding consumers; use the full-suite fallback whenever the impact is uncertain. This is a development feedback aid; the final check and CI always run all tests.
 
-Tests without coverage default to two pytest-xdist processes with
-`--dist=loadfile`, keeping each test file on one worker. Each worker has its own
-QApplication and temporary directories. With the default `-Workers 0`, fast
-selections of fewer than four test files use one process to avoid startup
-overhead. `-Workers 1` disables parallel execution for debugging; `-Workers 2`
-uses two processes even for a small selection.
+`check-fast` prints changed paths, selection reasons and selected test files. It runs Ruff lint, formatting and Python compilation across the repository, but checks only changed PowerShell scripts and affected Actions workflows. A full-suite fallback also checks all PowerShell and Actions files. It omits coverage and packaging even when all tests are selected. With no changes, it still checks Python source and explicitly reports that no tests were selected. All verification commands report stage and total durations, including failures.
 
-The full `coverage` and `check` commands default to one test process. On the
-measured Windows/Python 3.10 environment, parallel coverage made repeated Qt
-sidebar interactions much slower: the full test stage took about 400 seconds,
-compared with the earlier sequential baseline of 163 seconds. The suites differ
-by 50 new regression cases, so this is diagnostic evidence rather than a precise
-speedup comparison. Keep coverage sequential until a measured alternative helps.
-`-Workers 2` explicitly enables parallel coverage; worker results are combined
-before enforcing the same 60 percent floor and writing the HTML report. PR CI
-continues to run every test with coverage in one process. Its existing quality,
-test and packaging jobs continue to run independently.
+Tests without coverage default to two pytest-xdist processes with `--dist=loadfile`, keeping each test file on one worker. Each worker has its own QApplication and temporary directories. With the default `-Workers 0`, fast selections of fewer than four test files use one process to avoid startup overhead. `-Workers 1` disables parallel execution for debugging; `-Workers 2` uses two processes even for a small selection.
 
-For manual focused work, `test` and `test-ui` accept `-TestPaths` (one or more
-pytest paths); add `-Workers 1` for a small selection. `coverage`, `check` and
-`check-fast` reject `-TestPaths` so a partial selection cannot be mistaken for
-their documented checks. Run `.\dev.ps1 setup` once after pulling the new
-development dependency to install the pinned pytest-xdist plugin.
+The full `coverage` and `check` commands default to one test process because parallel coverage slowed repeated Qt sidebar interactions on Windows/Python 3.10. `-Workers 2` explicitly enables parallel coverage; worker results are combined before enforcing the same 60 percent floor and writing the HTML report. PR CI runs every test with coverage in two worker processes, grouped by file, and lists the 30 slowest tests so suite changes can be compared run to run. Its existing quality, test and packaging jobs continue to run independently.
 
-Documentation-only work also runs these checks to confirm the runtime baseline.
-Its links and commands need a manual documentation review. If a required device
-check cannot run, record it as not run. Never infer a hardware result from a
-mocked test or a package smoke test.
+For manual focused work, `test` and `test-ui` accept `-TestPaths` (one or more pytest paths); add `-Workers 1` for a small selection. `coverage`, `check` and `check-fast` reject `-TestPaths` so a partial selection cannot be mistaken for their documented checks.
 
-If a local check fails, use the [local checks troubleshooting guide](DEVELOPMENT_TROUBLESHOOTING.md)
-to identify common Windows and pytest causes.
+Documentation-only work follows the same verification requirements before review. Its links and commands also need a manual documentation review. For runtime changes, follow the applicable [manual Windows and Tobii checks](UI_DEVELOPMENT.md#manual-windows-checks). Record every applicable hardware check as passed, failed, or Not run with a reason. Never infer a hardware result from a mocked test or a package smoke test.
+
+If a local check fails, use the [local checks troubleshooting guide](DEVELOPMENT_TROUBLESHOOTING.md) to identify common Windows and pytest causes.
 
 ## Test strategy
 
 The suite uses five layers:
 
-1. Unit tests cover coordinate mapping, dwell state, settings validation, speech
-   commands, phrase storage, and Windows helper behavior.
-2. Integration tests cover provider fallback, app startup, logging, packaging
-   paths, release publication recovery, release download and checksum failures,
-   transactional installation and rollback, and the optional x86 bridge
-   discovery logic.
-3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise
-   Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
-4. Repository tests check required guides and templates, local documentation
-   links, and the minimum sections agents need for issues and pull requests.
-5. Manual Tobii checks verify the device runtime, calibration, gaze quality,
-   AppBar behavior, clicks, and speech on the target machine.
+1. Unit tests cover coordinate mapping, dwell state, settings validation, speech commands, phrase storage, and Windows helper behavior.
+2. Integration tests cover provider fallback, app startup, logging, packaging paths, release publication recovery, release download and checksum failures, transactional installation and rollback, and the optional x86 bridge discovery logic.
+3. UI tests use `pytest-qt` with mocked speech and Windows input. They exercise Settings, Speech, Keyboard, Controller, Hotbar, zoom, and radial-menu flows.
+4. Repository tests check required guides and templates, local documentation links, skill metadata, and the minimum sections agents need for issues and pull requests.
+5. Manual Tobii checks verify the device runtime, calibration, gaze quality, AppBar behavior, clicks, and speech on the target machine.
 
-Provider regressions also exercise worker-thread eye notifications arriving
-before Qt has dispatched them, shutdown/reconnect with pending callbacks, and
-stale gaze queued during a GUI stall. These cases use the real provider and
-controller with fake device inputs; sequential callback tests alone cannot
-verify their dispatch ordering. Speech UI tests cover gaze, button and Return
-activation and check that source diagnostics omit the message text.
+Provider regressions also exercise worker-thread eye notifications arriving before Qt has dispatched them, shutdown/reconnect with pending callbacks, and stale gaze queued during a GUI stall. These cases use the real provider and controller with fake device inputs; sequential callback tests alone cannot verify their dispatch ordering. Speech UI tests cover gaze, button and Return activation and check that source diagnostics omit the message text.
 
-Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`,
-`tests/suggestions/`, `tests/ui/`, `tests/release/`, and `tests/tooling/`.
-Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation
-data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from
-the repository root; pytest discovers all of these folders through `tests/`.
+Automated tests live under `tests/app/`, `tests/gaze/`, `tests/speech/`, `tests/suggestions/`, `tests/ui/`, `tests/release/`, and `tests/tooling/`. Shared pytest setup stays in `tests/conftest.py`, and fixed speech evaluation data stays in `tests/fixtures/speech_suggestions/`. Run the whole suite from the repository root; pytest discovers all of these folders through `tests/`.
 
-Updater tests use deterministic native and source-process records so another
-worker's installer smoke executable cannot block an unrelated update test.
-They still verify rejection before network access or app-data changes. Installer
-tests retain their real executable/process checks, and the final package build
-also verifies running-source rejection.
+`tests/tooling/test_repository_docs.py` checks every `.agents/skills/*/SKILL.md`. Each skill must start with a closed YAML metadata block containing non-empty text fields `name` and `description`; `name` must match the skill directory. Mapping keys must be unique. Quoted values, multiline descriptions, and additional metadata are supported. Each skill also needs a pointer at `.claude/skills/<name>/SKILL.md` with identical metadata that links to its source, so Claude Code discovers the same skills as Codex. PyYAML is a development dependency.
+
+Tests that control `time.monotonic` across modules use `freeze_monotonic` from `tests/_clock.py`. It sets one process-wide value because gaze timestamps cross the provider, controller and window modules, and its clock cannot run out when an unrelated widget's Qt timer reads it during teardown. A test that needs only one module's clock replaces that module's `time` attribute with `SimpleNamespace(monotonic=...)`. `tests/tooling/test_clock_patches.py` rejects any other `time.monotonic` replacement.
+
+Independent PowerShell probes share module-scoped drivers through `tests/_powershell.py`. Each case keeps a named parametrized pytest result, its own working directory and child scope, and explicit environment overrides. The driver captures all output streams and restores the environment and location even after a case throws. Batch only bodies that return or throw; `exit` would terminate the driver. Full installer/updater transactions, concurrent updaters and `dev.ps1` initialization/environment-recovery tests retain separate processes. Process probes keep their own deadlines and PID cleanup assertions; the shared harness also has a 120-second deadline and kills its process tree on timeout. Assertions about production environment recovery run before the harness restores state.
+
+When removing or combining coverage, name the remaining test and temporarily introduce the corresponding production fault to confirm it fails. Restore the original bytes in `finally` and inspect the diff; do not use a Git reset that could discard unrelated local work. Keep inexpensive branch tables parametrized. Hotbar gaze tests use 1280 × 720 logical pixels mapped to 1920 × 1080 physical pixels, retaining the scaled-coordinate boundary; separate 1440 × 900 layout cases remain.
+
+Updater tests use deterministic native and source-process records so another worker's installer smoke executable cannot block an unrelated update test. They still verify rejection before network access or app-data changes. Installer tests retain their real executable/process checks, and the final package build also verifies running-source rejection.
 
 Use these existing fakes and regression tests when changing a runtime boundary:
 
@@ -289,261 +106,44 @@ Use these existing fakes and regression tests when changing a runtime boundary:
 | Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
-| Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_e2e.py` |
+| Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |
 | Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
 | AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
 | External window and cursor tracking | `tests/ui/test_foreground_tracker.py` |
+| ElevenLabs account, requests and cancellation | `tests/speech/test_eleven_account.py`, `tests/speech/test_elevenlabs.py` and `tests/speech/test_elevenlabs_cancellation.py` |
+| Efendija routing, cache and playback | `tests/speech/test_voice_router.py`, `tests/speech/test_audio_cache.py`, `tests/speech/test_audio_playback.py`, `tests/speech/test_efendija_service.py` and `tests/ui/test_elevenlabs_e2e.py` |
 | Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |
 | Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py` and `tests/ui/test_speech_predictions.py` |
 | Learning checkpoints and ranking selection rules | `tests/suggestions/test_speech_evaluation.py` |
 
-Shared UI service fakes live in `tests/ui/_ui_fakes.py`. Speech window fixtures
-live in `tests/ui/_speech_fixtures.py` and are imported by the Speech test modules;
-global pytest setup remains in `tests/conftest.py`. `.\dev.ps1 test-ui` selects
-tests marked `e2e`; use `.\dev.ps1 test` or `.\dev.ps1 check` to include the
-unmarked prediction, tracker, and native API tests as well.
+Shared speech and library fakes live in `tests/_speech_fakes.py`; the service fixture is in `tests/_speech_service_fakes.py`. Windows and other UI fakes live in `tests/ui/_ui_fakes.py`. Hotbar fixtures live in `tests/ui/_hotbar_fixtures.py`, and Speech fixtures in `tests/ui/_speech_fixtures.py`. Import shared fixtures from these helper modules, never from another test module, so `check-fast` recognizes changes to shared inputs and selects all consumers. Version-selection UI tests live in `tests/ui/test_release_update_e2e.py`. Global pytest setup remains in `tests/conftest.py`. `.\dev.ps1 test-ui` selects tests marked `e2e`; use `.\dev.ps1 test` or `.\dev.ps1 check` to include the unmarked prediction, tracker, and native API tests as well.
 
-Coverage is a regression floor, not a quality score. The initial floor is 60
-percent because hardware DLL calls and Windows shell behavior cannot run safely
-in a normal test process. New pure-Python behavior should include tests, and the
-floor should only move upward as meaningful cases are added.
+Coverage is a regression floor, not a quality score. The initial floor is 60 percent because hardware DLL calls and Windows shell behavior cannot run safely in a normal test process. New pure-Python behavior should include tests, and the floor should only move upward as meaningful cases are added.
 
-The native API fakes check arguments, callback filtering, failure cleanup, and
-resource ownership. They do not load a real DLL, exercise a native streaming
-thread, reserve an actual Windows work area, or prove cross-application focus.
-Provider and bridge tests cover delivery gaps, terminal protocol failures, and
-reconnect decisions separately. Use the manual checks below for the real Windows
-and Tobii boundaries.
+The native API fakes check arguments, callback filtering, failure cleanup, and resource ownership. They do not load a real DLL, exercise a native streaming thread, reserve an actual Windows work area, or prove cross-application focus. Provider and bridge tests cover delivery gaps, terminal protocol failures, and reconnect decisions separately. Use the [manual checks](UI_DEVELOPMENT.md#manual-windows-checks) for the real Windows and Tobii boundaries.
 
-Pixel baselines are intentionally not enforced in CI. Qt rendering changes with
-Windows fonts, scaling, and GPU backends, which would make strict image diffs
-noisy. CI confirms that every surface renders. A human reviews the generated
-gallery for clipping, overlap, spacing, contrast, and consistency.
+Pixel baselines are intentionally not enforced in CI. Qt rendering changes with Windows fonts, scaling, and GPU backends, which would make strict image diffs noisy. CI confirms that every surface renders. A human reviews the generated gallery for clipping, overlap, spacing, contrast, and consistency.
 
 ## Mouse gaze simulation
 
-Run the interactive simulator when Tobii hardware is unavailable:
-
-```powershell
-.\dev.ps1 simulate
-```
-
-The primary-screen mouse position is emitted through the same normalized gaze
-signal used by the Tobii providers. Both eyes remain valid, so holding the cursor
-over a gaze-selectable control shows the gaze bubble and dwell progress before
-activating it. Pointer movement is disabled in this mode because the mouse is the
-gaze source. If a click mode is armed, completed dwell actions still perform the
-real Windows click.
-
-This mode does not validate Tobii discovery, calibration, eye-loss behavior,
-sample quality, latency, or hardware accuracy. Report those checks as not run.
+See [mouse gaze simulation](UI_DEVELOPMENT.md#mouse-gaze-simulation) for the interactive simulator, failure controls, and hardware limits.
 
 ## UI review
 
+See the [UI development guide](UI_DEVELOPMENT.md#ui-review) for rendered surfaces and manual Windows and Tobii checks.
+
 ### Application design reference workflow
 
-The [application design reference](design/speech-keyboard-reference.html) is
-the design source of truth for the visible Pogled Assist interface. That
-historical filename is now the entry point; old fragments such as `#tracking`
-open the matching standalone page. Open the HTML files directly in a browser;
-they use local styles and classic scripts, without a server or build step.
+The [design surface map and workflow](UI_DEVELOPMENT.md#application-design-reference-workflow) identify the reference page and assets to update before changing Qt UI.
 
-| Surface | HTML document | Styles and interaction |
-| --- | --- | --- |
-| Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
-| Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
-| Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
-| Tracking notifications | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
-| Hotbar and gaze bubble | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
-| Standalone keyboard | [keyboard.html](design/keyboard.html) | `docs/design/assets/keyboard.css`, `docs/design/assets/keyboard.js` |
-| Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
-| Installation summary | [installation.html](design/installation.html) | Shared styles; illustrative actions only |
+## UI gallery publication
 
-Shared navigation and preview session state live in
-`docs/design/assets/reference.js`; shared tokens and controls are in
-`docs/design/assets/reference.css`. The tracking page also reuses Speech's
-layout styles. Keyboard data and the mouse gaze simulation have separate shared
-scripts, `docs/design/assets/keyboard-data.js` and
-`docs/design/assets/gaze-demo.js`. Preview state is separate from application
-data and settings. Each page owns its feature notes; the
-[reference notes](design/reference-notes.html) own shared language conventions.
-Other gaze overlays do not yet have their own pages. Add the relevant page before
-changing one of those surfaces.
-
-Every change to visible layout, copy, control sizes, states, or interaction flow
-must update the matching page and its assets in the same pull request. When
-instructions name `docs/design/speech-keyboard-reference.html`, they refer to
-this collection through its entry point; edit the index only when navigation
-changes. Update and review the reference first, then implement the matching
-PySide6 change so the reference never describes an older UI. This rule applies
-to every window, sidebar, overlay, dialog, and system control, not only the
-Speech window. If a code change has no visible or interaction impact, state that
-explicitly in the pull request instead of editing the reference unnecessarily.
-
-Review the HTML reference at the target display size before generating the Qt
-gallery. The reference documents the intended result; the gallery and real
-application checks confirm that the implementation matches it.
-
-Application-owned labels and feedback use standard Bosnian. The
-[**O ovoj referenci** page](design/reference-notes.html) owns the UI terminology
-and language conventions; check these when adding or reviewing copy.
-
-Generate the gallery:
-
-```powershell
-.\dev.ps1 ui -Open
-```
-
-The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots
-already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured,
-the separate **UI gallery** workflow publishes a browser gallery and updates
-one PR bot comment with main screenshots, resolution links, the rendered commit,
-and a download link. Status reporting, setup, permissions and cleanup are defined in
-[CONTRIBUTING.md](../CONTRIBUTING.md#ui-gallery-publication).
-To review the artifact offline, download and extract it from the workflow run,
-then open `index.html` inside `1280x720` or `1440x900`.
-Each folder contains the same 70 surfaces; the artifact is kept for 14 days and
-any available screenshots are uploaded even when the test suite fails.
-CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that
-variable, rendering tests continue to use pytest's temporary directories.
-The Pages site uses a separate generated index and only checked PNG files; it
-does not publish the HTML supplied by a PR's CI artifact. Available screenshots
-from a failed CI run can appear, with the failure shown in the comment. A gallery
-is visual evidence, not a passing test or a Windows/Tobii verification result.
-
-The command renders:
-
-- Hotbar, including one-eye pause, waiting for fresh data, disconnected-device,
-  mouse-simulation, and unsaved-settings states
-- General, gaze, speech, and learned-word Settings surfaces, including save failure
-- Gaze check: unavailable data, unsupported positions, disconnected device,
-  live position, eye positions without valid gaze, too-close/too-far/outside-frame
-  guidance without valid gaze, eye loss, fixation target with and without gaze,
-  incomplete results, optional measurements, measured misses, passed targets,
-  three local dwell trial sizes, cancelled selection and wrong-neighbor feedback,
-  trial results needing adjustment, a trial without gaze data, completed check,
-  and free check with and without live gaze
-- Speech keyboard, categories, answers, saved phrases, shared editor, and library read failure
-- Speech tracking notifications: eye loss, missing gaze, disconnected device,
-  repeated interruptions, recovery, letter selection and deletion confirmation
-- Speech alarm, sleep, and exit confirmation dialogs
-- Keyboard letters, numpad, and symbols tabs
-- Controller general, keyboard, and settings tabs
-- Latin Keyboard and Controller with two letters per group and page controls
-- Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
-- Arabic Settings and both sidebar keyboards, including their second symbols page
-
-Hotbar snapshots use at most 1280 logical pixels of width. Settings and Gaze check
-snapshots use at most 1280 × 720 logical pixels, to review the 1920 × 1080 display at 150%
-scaling. Other surfaces use the requested gallery size. In Settings, check equal
-action cells, the single-cell calibration control, the voice below keyboard
-script, and aligned decrease/value/increase columns.
-The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar
-below the 76-pixel hotbar at 150% scaling.
-
-The separate installation summary is documented in the HTML reference and
-covered by UI interaction tests; it is not part of the 70-surface gallery.
-Review it separately using `PogledAssist.exe --installation-check` after a build.
-
-Check the gallery at 100 percent and at the scale used by the target machine.
-Look for clipped labels, overlapping controls, inconsistent spacing, low contrast,
-missing icons, unexpected scrollbars, and controls that are too small for gaze.
-
-Then run the real application:
-
-```powershell
-.\dev.ps1 run
-```
-
-On a normal development machine, verify:
-
-- The hotbar spans the primary screen and does not cover maximized windows.
-- Hide and Show restore the Windows work area.
-- Settings, Speech, Keyboard, and Controller open at the expected size.
-- Gaze check opens from Settings, fits 1280 × 720 logical pixels, retains speech
-  text, blocks normal gaze input while open/minimized, and returns to Settings
-  using mouse or Escape. Check target timing, cancellation, resizing, calibration
-  handoff and taskbar return. Check all nine free targets, live-gaze expiry, the
-  result map and visible metrics, and all three neighbor-control sizes. Confirm
-  the caregiver panel covers no target. Simulator results must be labeled as synthetic.
-- The Controller Speech tab, hidden hotbar, Quick actions, precision zoom, and
-  gaze feedback remain usable.
-- Opening Keyboard closes Controller and opening Controller closes Keyboard.
-- Settings survive an application restart.
-- Tracking notifications are initially enabled, can be disabled in Gaze Settings,
-  leave targets fixed in Speech and its letter/deletion dialogs, and restore the
-  message field after recovery. Check that Rest, Settings and Gaze check suppress
-  them, without suppressing the independent both-eye safety gate.
-- Logs appear under `logs` only when logging is enabled.
-- Closing the app removes AppBar reservations and child windows.
-- Bosnian suggestions complete a partial word and offer a next word offline.
-- Moving the caret or selecting text disables suggestions; returning to the end
-  restores them without changing the message.
-- Suggestion undo, punctuation spacing, phrase or answer editor restoration, and
-  individual learned-word removal work with mouse and simulated gaze.
-- Closing and reopening preserves `data\speech_learning.json`; a forced write
-  failure leaves the previous file intact and can be retried from Settings.
-- Switch Latin/Arabic from Settings and each keyboard, including an unfinished
-  phrase or answer. The shared choice survives restart without changing existing
-  text or entries. Review Arabic shaping, mixed text, both digit forms, mark
-  entry/removal, and sidebar pagination at 1920 × 1080 with 150% scaling (1280 ×
-  720 logical pixels). Arabic has no suggestions; returning to Latin restores
-  them. Test Hamed playback and unavailable/offline errors separately.
-
-On the Tobii machine, additionally verify:
-
-- In Gaze check, confirm the actual runtime supplies normalized positions before
-  accepting movement guidance. Move the attached display nearer/further and
-  sideways, verify both eye markers and depth, and confirm unavailable data has
-  no checkmark. Test five fixations near the screen edges, the nine-point free
-  check and all three local dwell trials, including wrong-neighbor selection, a blink,
-  sustained one-eye loss, disconnect/reconnect and normal control after closing.
-  Record OS, tracker, installed Tobii app/driver versions and selected application
-  backend. Test the user's existing Tobii Core installation, including calibration
-  settings launch, named-profile recalibration and return. Confirm that this
-  settings action never starts Guest calibration. Verify Display setup uses the
-  primary display and tracker alignment; this feature must not require a switch
-  to Tobii Experience.
-- The hotbar status distinguishes connecting, unavailable device, waiting for
-  fresh data, and ready tracking. Readiness requires both eyes and fresh gaze;
-  it does not certify calibration accuracy.
-- Both labeled eye indicators reflect real validity. Hide removes the whole
-  status with the hotbar; Show restores its current state.
-- Losing one eye cancels dwell progress and stops pointer movement.
-- In Speech and its letter/deletion dialogs, check short blinks, sustained one-eye
-  loss, repeated losses, missing gaze and disconnect/reconnect. A sustained issue
-  shows the correct notice; fresh tracking turns it green briefly and then hides
-  it. Turning notifications off must never allow selection with one invalid eye.
-- At 150% scaling, select Speech, Keyboard, and Settings from the top screen edge
-  without a mouse. Gaps between buttons must not select either neighbor.
-- In Speech, the hotbar, and standalone Keyboard, a brief movement just beyond a button edge freezes progress without
-  selecting either button. Returning resumes it; a sustained or farther move
-  starts a new selection. Check letters, suggestions, and `Izgovori`, including
-  deliberate fast switches and the leave-before-repeat rule. Record selection
-  errors and switching delay before and after the change on the user's display.
-- Disconnect and reconnect the tracker while dwelling. Progress must cancel,
-  the connection must recover, and the first new selection must start from zero.
-  Confirm that normal invalid-eye samples do not repeatedly restart the backend.
-- With the x86 bridge, resume after Windows sleep and confirm that old dwell
-  progress cannot fire an action. A direct native connection pauses until data
-  returns and does not start a replacement native subscription during an outage.
-- Pointer mapping reaches all corners of the calibrated display.
-- Left, right, double-click, precision zoom, and Quick actions work.
-- Default and human-like speech are tested separately.
-- Select Arabic groups, letters, marks, and the script switch by Tobii. Eye loss
-  and script/page changes must cancel pending dwell; a replacement label must
-  require leaving and returning before another action. Record actual Hamed audio
-  playback and pronunciation separately from process startup and fake speech.
-
-Record software-only and hardware results separately in the pull request.
+See the [UI gallery guide](UI_GALLERY.md) for status reporting, Pages setup, permissions, cleanup, and recovery.
 
 ## Diagnostic log analysis
 
-The [architecture](ARCHITECTURE.md#diagnostic-logging) owns schema, clocks,
-queue, privacy and session limits. The [user guide](USER_GUIDE.md#diagnostic-log-collection)
-owns collection and the short trace launch. For source launches, set the same
-`POGLED_ASSIST_GAZE_DIAGNOSTICS=trace` variable before `dev.ps1 run`.
+The [architecture](ARCHITECTURE.md#diagnostic-logging) owns schema, clocks, queue, privacy and session limits. The [user guide](USER_GUIDE.md#diagnostic-log-collection) owns collection and the short trace launch. For source launches, set the same `POGLED_ASSIST_GAZE_DIAGNOSTICS=trace` variable before `dev.ps1 run`.
 
 An offline reader imports neither Qt nor a Tobii backend:
 
@@ -551,43 +151,25 @@ An offline reader imports neither Qt nor a Tobii backend:
 .\.venv\Scripts\python.exe -m pogled_assist.log_reader .\logs\diagnostics\<session-id>.jsonl
 ```
 
-It counts provider rejection reasons from summaries, selection-end reasons from
-events, and reports process-cumulative writer health. Do not sum those cumulative
-loss counts repeatedly. Basic event counts can be lower than actual transitions;
-check suppressed counters in the summaries. Missing start/end, malformed or
-partial last lines, dropped records and size limits constrain the conclusion.
-Read the requested time range's raw events when explaining a specific attempt.
-Compare event timestamps with video time; file rotation names are not session
-start timestamps. Do not infer tracking accuracy without a known intended target.
+It counts provider rejection reasons from summaries, selection-end reasons from events, and reports process-cumulative writer health. Do not sum those cumulative loss counts repeatedly. Basic event counts can be lower than actual transitions; check suppressed counters in the summaries. Missing start/end, malformed or partial last lines, dropped records and size limits constrain the conclusion. Read the requested time range's raw events when explaining a specific attempt. Compare event timestamps with video time; file rotation names are not session start timestamps. Do not infer tracking accuracy without a known intended target.
 
-For changes to diagnostics, test the same provider/controller/Qt input sequence
-with logging off, basic, trace and a blocked writer. Include the existing gaze
-check and tracking-feedback suites: their snapshots, coverage, interruption
-counts and UI state must agree. Test actual blocked file/console sinks, overflow,
-runtime rotation, missing streams, exceptions and bounded shutdown. Keep stdout
-IPC atomic and independent of droppable logging. Use the existing pytest fakes
-and repository verification commands; Mac-only checks are not Windows or Tobii
-hardware verification. Measure producer/Qt latency, CPU, memory and output size
-on the same reference Windows device before release. A background thread still
-shares Python scheduling and the GIL, so asynchronous output alone does not
-establish zero overhead.
+For changes to diagnostics, test the same provider/controller/Qt input sequence with logging off, basic, trace and a blocked writer. Include the existing gaze check and tracking-feedback suites: their snapshots, coverage, interruption counts and UI state must agree. Test actual blocked file/console sinks, overflow, runtime rotation, missing streams, exceptions and bounded shutdown. Keep stdout IPC atomic and independent of droppable logging. Use the existing pytest fakes and repository verification commands; Mac-only checks are not Windows or Tobii hardware verification. Measure producer/Qt latency, CPU, memory and output size on the same reference Windows device before release. A background thread still shares Python scheduling and the GIL, so asynchronous output alone does not establish zero overhead.
 
 ## Lint and formatting
 
-actionlint checks GitHub Actions YAML syntax and workflow expressions before a
-push.
+actionlint checks GitHub Actions YAML syntax and workflow expressions before a push.
 
-Ruff is the Python equivalent of the ESLint, Prettier, and import-sorting parts of
-a JavaScript toolchain. The repository enables syntax and import checks,
-Pyflakes, pyupgrade, bugbear, simplify, and Ruff-specific correctness rules.
+Ruff is the Python equivalent of the ESLint, Prettier, and import-sorting parts of a JavaScript toolchain. The repository enables syntax and import checks, Pyflakes, pyupgrade, bugbear, simplify, and Ruff-specific correctness rules.
 
-PSScriptAnalyzer uses a focused settings file. It checks unsafe or ambiguous
-PowerShell patterns without enforcing naming preferences that would cause large,
-low-value rewrites of the existing setup scripts.
+PSScriptAnalyzer uses a focused settings file. It checks unsafe or ambiguous PowerShell patterns without enforcing naming preferences that would cause large, low-value rewrites of the existing setup scripts.
 
-Mypy is not enforced yet. Much of the UI depends on PySide signals, dynamic Qt
-objects, and Windows ctypes boundaries, so introducing strict type checking should
-start as a separate change with a defined module-by-module adoption plan.
+`scripts/checks/check_powershell.ps1` also rejects `Start-Process` (including its `start` and `saps` aliases) for ordinary executable launches. Windows PowerShell 5.1 defaults to the Windows shell, which can show **Open File – Security Warning** before the caller receives a process or starts its timeout. Use `ProcessStartInfo` with explicit `UseShellExecute = $false`; background console probes also use `CreateNoWindow = $true`. Keep normal window creation for the Qt application and installation summary. Drain redirected stdout and stderr concurrently before waiting, and bound output completion as well as process completion.
+
+The guard permits explicit `-Verb RunAs` for UAC and the exact `dev.ps1` command that opens the generated `index.html` in a browser. Splatting executable arguments does not exempt a call; elevation must state `-Verb RunAs` at the call site. The guard checks PowerShell command ASTs, not arbitrary dynamically constructed code or Python shell calls. Windows OSK and Tobii document/protocol launches retain their existing shell semantics. These exceptions do not authorize shell launching of downloaded application or test executables.
+
+Installer regressions compile an unsigned synthetic executable, attach an Internet `Zone.Identifier` stream, and exercise staging, installation, launch, failure and cleanup without clicking a warning. A separate harness timeout kills the test process tree if the production launch blocks. Source bootstrap installers use a private Windows job: the process starts suspended, joins the job before resuming, and the caller waits for descendants too. A 15-minute limit closes the tree on timeout; the root exit code, including `3010` (reboot requested), is preserved. This native start consumes the explicit `ProcessStartInfo` configuration because .NET Framework cannot suspend and assign a new child to a job through `Process.Start` alone. The standalone source setup keeps this helper inline so historical/source installations need no new support file.
+
+Mypy is not enforced yet. Much of the UI depends on PySide signals, dynamic Qt objects, and Windows ctypes boundaries, so introducing strict type checking should start as a separate change with a defined module-by-module adoption plan.
 
 ## Packaging
 
@@ -597,12 +179,6 @@ Build the same Windows ZIP checked by CI:
 .\dev.ps1 package
 ```
 
-The command uses the checked-in PyInstaller spec, verifies required assets,
-runs `--package-smoke-test` from the frozen executable, installs an extracted copy
-in an isolated directory, and writes the versioned ZIP under `dist`.
+The command uses the checked-in PyInstaller spec, verifies required assets, runs `--package-smoke-test` from the frozen executable, installs an extracted copy in an isolated directory, and writes the versioned ZIP under `dist`.
 
-The build includes and verifies the speech tools described in the
-[release guide](WINDOWS_RELEASE.md#included-speech-tools). It does not prove
-physical Tobii behavior, audio-device playback, or online voice availability.
-Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before
-approving a release.
+The build includes and verifies the speech tools described in the [release guide](WINDOWS_RELEASE.md#included-speech-tools). It does not prove physical Tobii behavior, audio-device playback, or online voice availability. Follow the manual checks in [WINDOWS_RELEASE.md](WINDOWS_RELEASE.md) before approving a release.

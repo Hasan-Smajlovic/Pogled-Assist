@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect
 
 from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
@@ -50,14 +51,13 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     assert overlay._mode == "fired"
     assert overlay._progress == 1.0
     overlay._fired_started_ms = 0
-    monkeypatch.setattr("pogled_assist.ui.interaction_overlay.time.monotonic", lambda: 10.0)
+    freeze_monotonic(monkeypatch, 10.0)
     overlay._tick()
     assert overlay.isHidden()
 
 
 def test_gaze_bubble_expires_without_fresh_positions(qtbot, monkeypatch):
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.ui.gaze_bubble.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     monkeypatch.setattr(
         "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
     )
@@ -85,8 +85,7 @@ def test_gaze_bubble_expires_without_fresh_positions(qtbot, monkeypatch):
 
 
 def test_enabling_gaze_bubble_rejects_stale_points_received_while_hidden(qtbot, monkeypatch):
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.ui.gaze_bubble.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
     bubble.set_enabled(False)
@@ -106,13 +105,11 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     menu.action_selected.connect(selected.append)
     menu.set_selection_settings(pause_ms=250, dwell_ms=150, radius_px=48)
     menu.show_at(QPoint(400, 300))
-    times = iter((1.0, 1.249, 1.25, 1.4))
-    monkeypatch.setattr("pogled_assist.ui.quick_action_menu.time.monotonic", lambda: next(times))
+    now = freeze_monotonic(monkeypatch, 1.0)
 
-    menu.handle_gaze(QPoint(400, 200))
-    menu.handle_gaze(QPoint(400, 200))
-    menu.handle_gaze(QPoint(400, 200))
-    menu.handle_gaze(QPoint(400, 200))
+    for at in (1.0, 1.249, 1.25, 1.4):
+        now[0] = at
+        menu.handle_gaze(QPoint(400, 200))
 
     assert selected == [LEFT_CLICK]
     assert menu._selection_emitted is True
@@ -128,13 +125,11 @@ def test_quick_action_zoom_maps_and_selects_stable_gaze_target(qtbot, monkeypatc
     zoom.show()
     selected = []
     zoom.target_selected.connect(lambda point: selected.append(QPoint(point)))
-    times = iter((1.0, 1.249, 1.25, 1.4))
-    monkeypatch.setattr("pogled_assist.ui.quick_action_zoom.time.monotonic", lambda: next(times))
+    now = freeze_monotonic(monkeypatch, 1.0)
 
-    zoom.handle_gaze(QPoint(500, 400))
-    zoom.handle_gaze(QPoint(500, 400))
-    zoom.handle_gaze(QPoint(500, 400))
-    zoom.handle_gaze(QPoint(500, 400))
+    for at in (1.0, 1.249, 1.25, 1.4):
+        now[0] = at
+        zoom.handle_gaze(QPoint(500, 400))
 
     assert selected == [QPoint(190, 290)]
     assert zoom._selection_emitted is True

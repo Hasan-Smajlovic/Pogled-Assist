@@ -12,6 +12,20 @@ from .interaction.gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PA
 from .interaction.mouse_controller import GazeSettings
 from .keyboard_layouts import KEYBOARD_SCRIPTS, LATIN_SCRIPT
 from .logging_setup import get_project_root
+from .settings_limits import (
+    CLICK_COOLDOWN_MS_RANGE,
+    DWELL_MS_RANGE,
+    DWELL_RADIUS_RANGE,
+    ELEVENLABS_PERCENT_RANGE,
+    ELEVENLABS_STABILITY_STEPS,
+    LETTERS_PER_GROUP_RANGE,
+    SMOOTHING_RANGE,
+    SPEECH_AMPLITUDE_RANGE,
+    SPEECH_PITCH_RANGE,
+    SPEECH_SPEED_RANGE,
+    clamp,
+)
+from .speech.elevenlabs import DEFAULT_MODEL, valid_identifier
 from .speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
 logger = logging.getLogger(__name__)
@@ -24,12 +38,12 @@ def load_app_settings() -> tuple[GazeSettings, SpeechSettings]:
     """Load persisted app settings, falling back field-by-field to defaults."""
 
     path = _settings_path()
-    if not path.exists():
+    if not path.exists() and not (path.parent / "version-history").exists():
         logger.info("No app settings file found at %s; using defaults.", path)
         return GazeSettings(), SpeechSettings()
 
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _settings_payload(path)
     except Exception:
         logger.exception("Could not load app settings from %s; using defaults.", path)
         return GazeSettings(), SpeechSettings()
@@ -48,13 +62,19 @@ def save_app_settings(gaze: GazeSettings, speech: SpeechSettings) -> bool:
     """Persist app settings as UTF-8 JSON in the project data folder."""
 
     path = _settings_path()
-    payload = {
-        "version": SETTINGS_VERSION,
-        "gaze": asdict(gaze),
-        "speech": asdict(speech),
-    }
-
     try:
+        payload = _settings_payload(path)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("version", SETTINGS_VERSION) != SETTINGS_VERSION
+        ):
+            raise ValueError("Cannot safely write this settings format")
+        for section, settings in (("gaze", gaze), ("speech", speech)):
+            previous = payload.get(section, {})
+            if not isinstance(previous, dict):
+                previous = {}
+            payload[section] = {**previous, **asdict(settings)}
+        payload["version"] = SETTINGS_VERSION
         path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_suffix(path.suffix + ".tmp")
         temp_path.write_text(
@@ -73,19 +93,44 @@ def _settings_path() -> Path:
     return get_project_root() / "data" / SETTINGS_FILE
 
 
+def _settings_payload(path: Path) -> Any:
+    payload: Any = {}
+    history = path.parent / "version-history"
+    if history.exists():
+        for snapshot in sorted(history.iterdir()):
+            saved = snapshot / SETTINGS_FILE
+            if saved.is_file():
+                previous = json.loads(saved.read_text(encoding="utf-8-sig"))
+                if not isinstance(previous, dict):
+                    raise ValueError("Invalid settings snapshot")
+                payload = _merge_settings(payload, previous)
+    if path.exists():
+        payload = _merge_settings(payload, json.loads(path.read_text(encoding="utf-8")))
+    return payload
+
+
+def _merge_settings(saved: Any, current: Any) -> Any:
+    # Old releases omit unknown fields when saving; their supported edits still win.
+    if not isinstance(saved, dict) or not isinstance(current, dict):
+        return current
+    return {
+        key: _merge_settings(saved.get(key), current[key]) if key in current else saved[key]
+        for key in saved.keys() | current.keys()
+    }
+
+
 def _coerce_gaze_settings(value: Any) -> GazeSettings:
     settings = _dataclass_from_mapping(GazeSettings(), value)
     return replace(
         settings,
-        smoothing=_clamp_float(settings.smoothing, 0.05, 1.0),
-        selection_pause_ms=_clamp_int(
+        smoothing=clamp(settings.smoothing, SMOOTHING_RANGE),
+        selection_pause_ms=clamp(
             settings.selection_pause_ms,
-            MIN_SELECTION_PAUSE_MS,
-            MAX_SELECTION_PAUSE_MS,
+            (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
         ),
-        dwell_ms=_clamp_int(settings.dwell_ms, 150, 5000),
-        dwell_radius_px=_clamp_int(settings.dwell_radius_px, 10, 160),
-        click_cooldown_ms=_clamp_int(settings.click_cooldown_ms, 100, 5000),
+        dwell_ms=clamp(settings.dwell_ms, DWELL_MS_RANGE),
+        dwell_radius_px=clamp(settings.dwell_radius_px, DWELL_RADIUS_RANGE),
+        click_cooldown_ms=clamp(settings.click_cooldown_ms, CLICK_COOLDOWN_MS_RANGE),
         move_mouse=bool(settings.move_mouse),
         show_gaze_bubble=bool(settings.show_gaze_bubble),
         show_interaction_overlay=bool(settings.show_interaction_overlay),
@@ -99,10 +144,12 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
 
 def _coerce_speech_settings(value: Any) -> SpeechSettings:
     settings = _dataclass_from_mapping(SpeechSettings(), value)
+    mapping = value if isinstance(value, dict) else {}
     language = str(settings.language).strip() or SpeechSettings().language
     voice_preset = str(settings.voice_preset).strip() or VOICE_PRESET_DEFAULT
     if voice_preset not in VOICE_PRESET_LABELS:
         voice_preset = VOICE_PRESET_DEFAULT
+    settings = _coerce_elevenlabs(mapping, settings)
     return replace(
         settings,
         language=language,
@@ -111,11 +158,23 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
             if settings.keyboard_script in dict(KEYBOARD_SCRIPTS)
             else LATIN_SCRIPT
         ),
-        speed=_clamp_int(settings.speed, 80, 320),
-        pitch=_clamp_int(settings.pitch, 0, 99),
-        amplitude=_clamp_int(settings.amplitude, 0, 200),
-        letters_per_group=_clamp_int(settings.letters_per_group, 1, 12),
+        speed=clamp(settings.speed, SPEECH_SPEED_RANGE),
+        pitch=clamp(settings.pitch, SPEECH_PITCH_RANGE),
+        amplitude=clamp(settings.amplitude, SPEECH_AMPLITUDE_RANGE),
+        letters_per_group=clamp(settings.letters_per_group, LETTERS_PER_GROUP_RANGE),
         voice_preset=voice_preset,
+    )
+
+
+def _coerce_elevenlabs(mapping, settings):
+    return replace(
+        settings,
+        elevenlabs_voice_id=valid_identifier(mapping.get("elevenlabs_voice_id")),
+        elevenlabs_model_id=valid_identifier(mapping.get("elevenlabs_model_id")) or DEFAULT_MODEL,
+        elevenlabs_stability=min(
+            ELEVENLABS_STABILITY_STEPS, key=lambda step: abs(step - settings.elevenlabs_stability)
+        ),
+        elevenlabs_similarity=clamp(settings.elevenlabs_similarity, ELEVENLABS_PERCENT_RANGE),
     )
 
 
@@ -176,11 +235,3 @@ def _coerce_float(value: Any, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
-
-
-def _clamp_int(value: int, minimum: int, maximum: int) -> int:
-    return min(maximum, max(minimum, value))
-
-
-def _clamp_float(value: float, minimum: float, maximum: float) -> float:
-    return min(maximum, max(minimum, value))

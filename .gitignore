@@ -51,6 +51,7 @@ logs/
 # Runtime settings and user data
 data/*.json
 data/*.tmp
+data/version-history/
 install_info.json
 
 # Generated Windows launchers and shortcut icon output
@@ -72,3 +73,7 @@ Desktop.ini
 
 # Codex/agent runtime metadata mounted into the workspace
 .codex/
+
+# Claude Code personal settings and notes
+.claude/settings.local.json
+CLAUDE.local.md

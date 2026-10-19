@@ -96,6 +96,8 @@ def test_selection_includes_consumers_of_changed_boundaries(path, required):
         "pytest.ini",
         "tests/conftest.py",
         "tests/ui/_ui_fakes.py",
+        "tests/ui/_hotbar_fixtures.py",
+        "tests/_speech_fakes.py",
         "tests/ui/deleted_test.py",
         "tests/fixtures/new.json",
         ".github/workflows/ci.yml",

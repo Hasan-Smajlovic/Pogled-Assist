@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import time
 from contextlib import ExitStack
 from dataclasses import replace
 from html import escape
@@ -16,29 +15,32 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
+from pogled_assist.release_update import ReleaseCheckResult, StableVersion
+from pogled_assist.speech.audio_cache import AudioCache
+from pogled_assist.speech.eleven_account import ElevenAccount
+from pogled_assist.speech.elevenlabs import ENV_OVERRIDES
 from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
+from pogled_assist.speech.voice_state import ACTIVE_PLAYBACK_STATES, VoiceState
 from pogled_assist.suggestions.learning import LearningStore
 from pogled_assist.suggestions.model import WordModel
 from pogled_assist.suggestions.text import START
 from pogled_assist.tracking.feedback import TrackingNotice
-from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
-from pogled_assist.ui.gaze_check_views import TARGETS
-from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
-from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
+from scripts.ui.capture_gaze_check import CaptureGazeCheck
+from scripts.ui.capture_speech_voices import CaptureSpeechVoices
 
 
 class PreviewAppBar:
@@ -54,6 +56,29 @@ class PreviewAppBar:
         return None
 
 
+class PreviewReleaseManager(QObject):
+    check_started = Signal()
+    check_completed = Signal(object)
+    check_failed = Signal(str)
+    supported = True
+    installed_version = StableVersion(0, 3, 5)
+
+    def check(self) -> None:
+        self.check_started.emit()
+        self.check_completed.emit(
+            ReleaseCheckResult(
+                self.installed_version,
+                StableVersion(0, 4, 0),
+                (
+                    StableVersion(0, 4, 0),
+                    self.installed_version,
+                    StableVersion(0, 3, 4),
+                    StableVersion(0, 1, 0),
+                ),
+            )
+        )
+
+
 class PreviewInput:
     def foreground_window(self) -> None:
         return None
@@ -65,14 +90,33 @@ class PreviewInput:
         return 640, 360
 
 
+class PreviewCredentials:
+    def read(self):
+        return ""
+
+
 class PreviewSpeech(QObject):
     playback_changed = Signal(int, str)
+    voice_changed = Signal(int, object)
+    test_finished = Signal(int, str)
     available = True
 
     def __init__(self) -> None:
         super().__init__()
         self.request_id = 0
+        self.playback_state = "stopped"
         self._settings = SpeechSettings()
+        self.voice_state = VoiceState()
+        self.audio_cache = AudioCache(None)
+        self.account = ElevenAccount(self, store=PreviewCredentials())
+        self.account.configure(self._settings)
+
+    def set_saved_texts(self, _texts) -> None:
+        return None
+
+    @property
+    def is_busy(self):
+        return self.playback_state in ACTIVE_PLAYBACK_STATES
 
     @property
     def settings(self) -> SpeechSettings:
@@ -80,6 +124,7 @@ class PreviewSpeech(QObject):
 
     def update_settings(self, settings: SpeechSettings) -> None:
         self._settings = replace(settings)
+        self.account.configure(self._settings)
 
     def speak(self, _text: str, settings: SpeechSettings | None = None) -> bool:
         if settings is not None:
@@ -185,9 +230,9 @@ def _capture_widget(
     widget: QWidget,
     output_dir: Path,
     name: str,
-    width: int,
-    height: int,
+    size: tuple[int, int],
 ) -> Path:
+    width, height = size
     # Re-show each state so reused native windows apply child visibility changes.
     widget.hide()
     widget.resize(width, height)
@@ -207,7 +252,7 @@ def _capture_widget(
     widget.grab()
     app.processEvents()
     pixmap = widget.grab()
-    if pixmap.isNull() or not pixmap.save(str(image_path), "PNG"):
+    if pixmap.isNull() or not pixmap.save(str(image_path), "PNG", 80):
         raise RuntimeError(f"Could not render UI snapshot: {name}")
     return image_path
 
@@ -252,7 +297,7 @@ def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
     return gallery_path
 
 
-def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> list[Path]:
+def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(["capture-ui"])
     session = _CaptureSession(app, output_dir, (width, height))
@@ -272,7 +317,7 @@ def capture_ui(output_dir: Path, *, width: int = 1440, height: int = 900) -> lis
     return [path for _, path in session.snapshots]
 
 
-class _CaptureSession:
+class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
     """Keep preview windows alive until all states have been captured."""
 
     def __init__(self, app: QApplication, output_dir: Path, size: tuple[int, int]) -> None:
@@ -286,6 +331,10 @@ class _CaptureSession:
 
     def patches(self) -> tuple:
         return (
+            patch.dict(
+                os.environ,
+                dict.fromkeys(ENV_OVERRIDES, ""),
+            ),
             patch.object(toolbar_module, "WindowsAppBar", PreviewAppBar),
             patch.object(toolbar_module, "WindowsInputController", PreviewInput),
             patch.object(toolbar_module, "SpeechService", PreviewSpeech),
@@ -297,13 +346,14 @@ class _CaptureSession:
             ),
             patch.object(sidebar_module, "WindowsAppBar", PreviewAppBar),
             patch.object(settings_module, "is_windows_startup_enabled", return_value=False),
+            patch.object(ElevenAccount, "refresh_subscription", return_value=None),
         )
 
     def capture(
         self, widget: QWidget, name: str, title: str, *, size: tuple[int, int] | None = None
     ) -> None:
         width, height = self.size if size is None else size
-        path = _capture_widget(self.app, widget, self.output_dir, name, width, height)
+        path = _capture_widget(self.app, widget, self.output_dir, name, (width, height))
         self.snapshots.append((title, path))
 
     def capture_hotbar(self) -> None:
@@ -324,11 +374,30 @@ class _CaptureSession:
             hotbar._tracking_status.set_tracking_status(TrackingStatus(state))
             hotbar._tracking_status.set_eye_status(False, True)
             self.capture(hotbar, name, title, size=size)
+        for name, detail in (
+            ("eye-loss", "Lijevo —   Desno ✓"),
+            ("paused", "Isporuka pogleda pauzirana"),
+            ("disconnected", "Veza je prekinuta"),
+        ):
+            hotbar._tracking_status.set_tracking_status(
+                TrackingStatus(TrackingState.SIMULATING, detail)
+            )
+            self.capture(
+                hotbar, f"hotbar-simulation-{name}", f"Hotbar: simulated {name}", size=size
+            )
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
+        releases = PreviewReleaseManager()
         self.settings = SettingsWindow(
-            self.gaze_settings, self.speech_settings, suggestions=suggestions
+            self.gaze_settings,
+            self.speech_settings,
+            services=SettingsServices(
+                suggestions=suggestions,
+                update_manager=releases,
+                account=ElevenAccount(suggestions, store=PreviewCredentials()),
+                clear_audio=lambda: True,
+            ),
         )
         self.widgets.append(self.settings)
         size = min(self.size[0], 1280), min(self.size[1], 720)
@@ -339,183 +408,42 @@ class _CaptureSession:
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
+        for state in ("preparing", "speaking"):
+            self.settings.set_speech_playback_state(state)
+            self.capture(
+                self.settings, f"settings-speech-{state}", f"Speech settings: {state}", size=size
+            )
+        self.settings.set_speech_playback_state("finished")
+        self.capture_eleven_settings(size)
         self.settings._open_learning()
         self.capture(self.settings, "settings-learned-words", "Settings: learned words", size=size)
         self.settings._select_tab(1)
         self.settings.set_save_error(True)
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
-
-    def capture_gaze_check(self) -> None:
-        window = GazeCheckWindow(self.gaze_settings)
-        self.widgets.append(window)
-        size = min(self.size[0], 1280), min(self.size[1], 720)
-        # Static synthetic data and frozen UI ticks keep the gallery deterministic.
-        window._timer.timeout.disconnect(window._tick)
-        self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
-        window._snapshot = CheckSnapshot(position_supported=False)
-        window._render_position()
+        self.settings._select_tab(0)
+        row = self.settings._general_page._update_row
+        row._version_combo.setCurrentIndex(3)
         self.capture(
-            window, "gaze-check-unsupported", "Gaze check: eye positions unsupported", size=size
+            self.settings, "settings-older-version", "Settings: older version selected", size=size
         )
-        window.handle_tracking_status(TrackingStatus(TrackingState.RETRYING))
-        self.capture(window, "gaze-check-disconnected", "Gaze check: disconnected", size=size)
-        window.handle_tracking_status(TrackingStatus(TrackingState.CONNECTED))
-        window._snapshot = CheckSnapshot(
-            True,
-            True,
-            (0.6, 0.5, 0.45),
-            (0.4, 0.5, 0.45),
-            gaze=(0.5, 0.5),
-            observed_seconds=10,
-            available_fraction=0.98,
-            longest_loss_seconds=0.15,
-        )
-        window._render_position()
-        self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
-        window._snapshot = replace(
-            window._snapshot,
-            left=False,
-            right=False,
-            gaze=None,
-            available_fraction=0.6,
-            longest_loss_seconds=1.1,
-        )
-        window._render_position()
+        row._request_update()
         self.capture(
-            window,
-            "gaze-check-position-without-gaze",
-            "Gaze check: eye positions without valid gaze",
+            self.settings,
+            "settings-version-preparing",
+            "Settings: downloading selected version",
             size=size,
         )
-        waiting_snapshot = window._snapshot
-        for name, title, left, right in (
-            ("too-close", "move display away", (0.6, 0.5, -0.2), (0.4, 0.5, -0.1)),
-            ("too-far", "move display closer", (0.6, 0.5, 1.2), (0.4, 0.5, 1.1)),
-            ("outside-frame", "align display", (1.2, -0.1, 0.5), (1.1, -0.1, 0.5)),
-        ):
-            window._snapshot = replace(waiting_snapshot, left_position=left, right_position=right)
-            window._render_position()
-            self.capture(window, f"gaze-check-{name}", f"Gaze check: {title}", size=size)
-        window._snapshot = replace(
-            waiting_snapshot,
-            left=True,
-            right_position=None,
-        )
-        window._render_position()
-        self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
-        window._start_precision()
-        self.capture(window, "gaze-check-precision", "Gaze check: fixation target", size=size)
-        window._snapshot = CheckSnapshot(True, False)
-        window._snapshot_at = time.monotonic()
-        window._check.started_at = time.monotonic() - 1.2
-        window._tick()
+        row.confirm_restart()
         self.capture(
-            window, "gaze-check-precision-waiting", "Gaze check: fixation eye loss", size=size
+            self.settings, "settings-version-warning", "Settings: unsaved input warning", size=size
         )
-        targets = list(TARGETS)
-        window._check = FixationCheck(targets, size, 36, 0)
-        window._check.results = [
-            FixationResult(name, 90, 0.9 if near is not None else 0.2, error, spread, near, center)
-            for name, error, spread, near, center in (
-                ("Sredina", 12, 8, True, (0.51, 0.5)),
-                ("Gore lijevo", 14, 10, True, (0.05, 0.07)),
-                ("Gore desno", 48, 12, False, (0.92, 0.09)),
-                ("Dolje lijevo", 18, 9, True, (0.05, 0.93)),
-                ("Dolje desno", None, None, None, None),
-            )
-        ]
-        window._show_results()
-        self.capture(window, "gaze-check-results", "Gaze check: measured results", size=size)
-        window._details_button.click()
+        row.show_error("Provjera paketa nije uspjela. Trenutna verzija ostaje dostupna.")
+        row._check_failed(
+            "Provjera verzija nije uspjela. Provjerite internet vezu i pokušajte ponovo."
+        )
         self.capture(
-            window, "gaze-check-results-details", "Gaze check: optional measurements", size=size
-        )
-        window._details_button.click()
-        window._check.results[-1] = FixationResult(
-            "Dolje desno", 90, 0.9, 48, 12, False, (0.92, 0.9)
-        )
-        window._show_results()
-        self.capture(window, "gaze-check-results-misses", "Gaze check: measured misses", size=size)
-        window._check.results = [
-            FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in targets
-        ]
-        window._show_results()
-        self.capture(window, "gaze-check-results-ready", "Gaze check: targets passed", size=size)
-        window._start_trial()
-        window._target.progress = 0.6
-        window._target.progress_target = window._target.expected_button
-        self.capture(window, "gaze-check-trial", "Gaze check: local dwell trial", size=size)
-        window._selection.update(
-            window._target.expected_button,
-            time.monotonic() * 1000,
-            pause_ms=500,
-            dwell_ms=500,
-        )
-        window.handle_eye_status(True, False)
-        self.capture(
-            window, "gaze-check-trial-interrupted", "Gaze check: cancelled selection", size=size
-        )
-        wrong = window._target.mapToGlobal(window._target.button_rect(0).center())
-        screen = QGuiApplication.primaryScreen().geometry()
-        gaze = (
-            (wrong.x() - screen.left()) / (screen.width() - 1),
-            (wrong.y() - screen.top()) / (screen.height() - 1),
-        )
-        start = time.monotonic()
-        duration = (self.gaze_settings.selection_pause_ms + self.gaze_settings.dwell_ms) / 1000
-        for sample in range(round(duration / 0.02) + 3):
-            at = start + sample * 0.02
-            window._trial_sample(CheckSnapshot(True, True, gaze=gaze, gaze_at=at), at)
-        self.capture(window, "gaze-check-trial-wrong", "Gaze check: neighbor selected", size=size)
-        window._finish_trial_target(True, time.monotonic())
-        window._target.progress = 0.6
-        window._target.progress_target = window._target.expected_button
-        self.capture(
-            window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size
-        )
-        window._finish_trial_target(True, time.monotonic())
-        window._target.progress = 0.6
-        window._target.progress_target = window._target.expected_button
-        self.capture(
-            window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
-        )
-        window._finish_trial_target(False, time.monotonic())
-        window._trial_tracked_targets = {0, 1, 2}
-        window._show_results()
-        self.capture(
-            window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
-        )
-        window._trial_results = [True] * 3
-        window._trial_losses = window._trial_wrong_selections = 0
-        window._show_results()
-        self.capture(
-            window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
-        )
-        window._start_trial()
-        for _ in range(3):
-            window._finish_trial_target(False, time.monotonic())
-        self.capture(
-            window, "gaze-check-trial-no-gaze", "Gaze check: trial without gaze data", size=size
-        )
-        window._start_free()
-        screen = QGuiApplication.primaryScreen().geometry()
-        point = window._target.mapToGlobal(window._target.rect().center() + QPoint(16, -10))
-        window._snapshot = CheckSnapshot(
-            True,
-            True,
-            gaze=(
-                (point.x() - screen.left()) / (screen.width() - 1),
-                (point.y() - screen.top()) / (screen.height() - 1),
-            ),
-            gaze_at=time.monotonic(),
-        )
-        window._render_free()
-        self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
-        window._snapshot = CheckSnapshot()
-        window._render_free()
-        self.capture(
-            window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size
+            self.settings, "settings-version-error", "Settings: version check failed", size=size
         )
 
     def capture_speech(self) -> None:
@@ -534,6 +462,7 @@ class _CaptureSession:
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.capture_speech_voices()
         self.capture_tracking_feedback()
         self.speech._view_mode = "categories"
         self.speech._show_list_level()
@@ -736,8 +665,8 @@ class _CaptureSession:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("dist/ui-preview"))
-    parser.add_argument("--width", type=int, default=1440)
-    parser.add_argument("--height", type=int, default=900)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
     arguments = parser.parse_args()
 
     snapshots = capture_ui(

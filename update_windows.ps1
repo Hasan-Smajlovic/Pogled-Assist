@@ -6,6 +6,8 @@ param(
     [switch]$NoPause,
     [switch]$NoElevation,
     [int]$WaitForProcessId = 0,
+    [string]$TargetVersion = "",
+    [string]$ControlDirectory = "",
     [string]$ReleaseApiUrl = "https://api.github.com/repos/Hasan-Smajlovic/Pogled-Assist/releases/latest"
 )
 
@@ -122,11 +124,18 @@ function Ensure-Administrator {
         $arguments += "-WaitForProcessId"
         $arguments += $WaitForProcessId
     }
+    if ($TargetVersion) {
+        $arguments += @("-TargetVersion", (Quote-Argument $TargetVersion))
+    }
+    if ($ControlDirectory) {
+        $arguments += @("-ControlDirectory", (Quote-Argument $ControlDirectory))
+    }
 
     Start-Process `
         -FilePath (Get-PowerShellExecutable) `
         -ArgumentList ($arguments -join " ") `
         -WorkingDirectory (Split-Path -Parent ([IO.Path]::GetFullPath($InstallRoot))) `
+        -WindowStyle Hidden `
         -Verb RunAs | Out-Null
     $script:ElevationRequested = $true
     exit 0
@@ -239,6 +248,9 @@ function Remove-OperationRoot {
 }
 
 function Wait-BeforeExit {
+    if ($ControlDirectory) {
+        return
+    }
     # Keep errors visible when the application started an update with -NoPause.
     $applicationUpdateFailed = $WaitForProcessId -gt 0 -and $script:ExitCode -ne 0
     if ($NoPause -and -not $applicationUpdateFailed) {
@@ -357,22 +369,55 @@ function Wait-ForRequestingApplication {
         return
     }
 
-    $requestingProcess = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
-    if ($null -eq $requestingProcess) {
+    Write-Info "Waiting for Pogled Assist process $WaitForProcessId to close."
+    $deadline = [DateTime]::UtcNow.AddMinutes(15)
+    while ($null -ne (Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue)) {
+        Assert-RequestNotCancelled
+        if ([DateTime]::UtcNow -ge $deadline) {
+            throw "Pogled Assist did not close. The installation was not changed."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    Assert-RequestNotCancelled
+    if ($ControlDirectory -and -not (Test-Path -LiteralPath (Join-Path $ControlDirectory "install"))) {
+        throw "The application closed without confirming installation. The installation was not changed."
+    }
+}
+
+function Assert-ControlDirectory {
+    if (-not $ControlDirectory) {
         return
     }
-
-    Write-Info "Waiting for Pogled Assist process $WaitForProcessId to close."
-    try {
-        if (-not $requestingProcess.WaitForExit(60000)) {
-            throw "Pogled Assist did not close within 60 seconds. The update was not started."
-        }
-    } catch {
-        $stillRunning = Get-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
-        if ($null -ne $stillRunning) {
-            throw
-        }
+    $fullPath = [IO.Path]::GetFullPath($ControlDirectory).TrimEnd("\")
+    $tempPath = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd("\")
+    $parentPath = Split-Path -Parent $fullPath
+    if (
+        -not $parentPath.Equals($tempPath, [StringComparison]::OrdinalIgnoreCase) -or
+        (Split-Path -Leaf $fullPath) -notmatch '^PogledAssistUpdateRequest_[a-zA-Z0-9_-]+$' -or
+        -not (Test-Path -LiteralPath $fullPath -PathType Container) -or
+        ((Get-Item -LiteralPath $fullPath).Attributes -band [IO.FileAttributes]::ReparsePoint)
+    ) {
+        throw "The application update request directory is invalid."
     }
+}
+
+function Assert-RequestNotCancelled {
+    if ($ControlDirectory -and (Test-Path -LiteralPath (Join-Path $ControlDirectory "cancel"))) {
+        throw "The user cancelled the installation. The installation was not changed."
+    }
+}
+
+function Write-RequestResult {
+    param([bool]$Ready, [string]$ErrorMessage = "")
+    if (-not $ControlDirectory) {
+        return
+    }
+    Assert-ControlDirectory
+    $destination = Join-Path $ControlDirectory "ready.json"
+    $temporary = Join-Path $ControlDirectory "ready.tmp"
+    @{ ready = $Ready; error = $ErrorMessage } | ConvertTo-Json |
+        Set-Content -LiteralPath $temporary -Encoding UTF8
+    Move-Item -LiteralPath $temporary -Destination $destination -Force
 }
 
 function Get-ReleaseMetadata {
@@ -387,15 +432,20 @@ function Get-ReleaseMetadata {
         [Net.ServicePointManager]::SecurityProtocol -bor
         [Net.SecurityProtocolType]::Tls12
     )
-    Write-Step "Checking the latest stable release"
+    $metadataUrl = $ReleaseApiUrl
+    if ($TargetVersion) {
+        $version = ConvertTo-StableVersion -Value $TargetVersion -Label "TargetVersion"
+        $metadataUrl = $ReleaseApiUrl -replace '/latest$', "/tags/v$($version.ToString(3))"
+    }
+    Write-Step "Checking the stable release"
     try {
         $response = Invoke-WebRequest `
-            -Uri $ReleaseApiUrl `
+            -Uri $metadataUrl `
             -Headers @{
                 "Accept" = "application/vnd.github+json"
                 "User-Agent" = "PogledAssistUpdater"
             } `
-            -UseBasicParsing
+            -UseBasicParsing -TimeoutSec 30
         $metadata = $response.Content | ConvertFrom-Json
     } catch {
         throw "Could not query the latest stable release: $($_.Exception.Message)"
@@ -413,7 +463,7 @@ function Assert-StableReleaseMetadata {
             throw "Latest release metadata is missing '$property'. The installation was not changed."
         }
     }
-    if ([bool]$Metadata.draft -or [bool]$Metadata.prerelease) {
+    if ($Metadata.draft -isnot [bool] -or $Metadata.prerelease -isnot [bool] -or $Metadata.draft -or $Metadata.prerelease) {
         throw "GitHub returned a draft or prerelease instead of a stable release. The installation was not changed."
     }
 
@@ -422,6 +472,9 @@ function Assert-StableReleaseMetadata {
     $normalizedTag = "v$($version.ToString(3))"
     if ($tag -ne $normalizedTag) {
         throw "Latest release tag must be exactly $normalizedTag. Found: $tag"
+    }
+    if ($TargetVersion -and $version -ne (ConvertTo-StableVersion -Value $TargetVersion -Label "TargetVersion")) {
+        throw "The release metadata does not match the selected version."
     }
 
     return $version
@@ -503,7 +556,7 @@ function Save-ReleaseAsset {
             -Uri $Url `
             -OutFile $Destination `
             -Headers @{ "User-Agent" = "PogledAssistUpdater" } `
-            -UseBasicParsing
+            -UseBasicParsing -TimeoutSec 300
     } catch {
         throw "Could not download $Label from $Url`: $($_.Exception.Message)"
     }
@@ -617,7 +670,9 @@ function Test-ReleaseAlreadyInstalled {
 }
 
 function Invoke-ReleaseUpdate {
-    Assert-AppNotRunning
+    if ($WaitForProcessId -le 0) {
+        Assert-AppNotRunning
+    }
     $installed = Get-InstalledRelease
     Write-Info "Installed version: $($installed.DisplayVersion)"
 
@@ -626,11 +681,13 @@ function Invoke-ReleaseUpdate {
 
     if (Test-ReleaseAlreadyInstalled -Installed $installed -Release $release) {
         Write-Success "Pogled Assist v$($installed.Version.ToString(3)) is already up to date."
+        Write-RequestResult -Ready $false -ErrorMessage "The selected version is already installed."
         return
     }
     if (
         $null -ne $installed.Version -and
-        $installed.Version -gt $release.Version
+        $installed.Version -gt $release.Version -and
+        -not $TargetVersion
     ) {
         throw "Installed VERSION $($installed.Version.ToString(3)) is newer than latest stable release $($release.Version.ToString(3)). Automatic downgrade is not supported."
     }
@@ -655,6 +712,18 @@ function Invoke-ReleaseUpdate {
     $packageRoot = Expand-VerifiedRelease `
         -ArtifactPath $artifactPath `
         -ExpectedVersion $release.Version
+    if ($TargetVersion) {
+        # Use the current transaction and preservation code for historical packages.
+        $safeInstaller = Join-Path $InstallRoot "install_windows.ps1"
+        if (-not (Test-Path -LiteralPath $safeInstaller -PathType Leaf)) {
+            throw "The current transactional installer is missing. The installation was not changed."
+        }
+        Copy-Item -LiteralPath $safeInstaller -Destination (Join-Path $packageRoot "install_windows.ps1") -Force
+    }
+    Assert-RequestNotCancelled
+    Write-RequestResult -Ready $true
+    Wait-ForRequestingApplication
+    Assert-AppNotRunning
     Invoke-ReleaseInstaller -PackageRoot $packageRoot -ExpectedVersion $release.Version
 
     $installedVersionText = (Get-Content -LiteralPath (Join-Path $InstallRoot "VERSION") -Raw).Trim()
@@ -673,17 +742,24 @@ function Invoke-Updater {
         }
 
         Assert-DedicatedInstallRoot
+        Assert-ControlDirectory
         Ensure-Administrator
         Enter-UpdateLock
         Start-UpdateTranscript
         Write-Step "Starting Pogled Assist release update"
         Write-Info "Install folder: $InstallRoot"
-        Wait-ForRequestingApplication
         Invoke-ReleaseUpdate
     } catch {
         $script:ExitCode = 1
         Write-Host ""
         Write-ErrorLog "Update failed: $($_.Exception.Message)"
+        if ($ControlDirectory) {
+            try {
+                Write-RequestResult -Ready $false -ErrorMessage $_.Exception.Message
+            } catch {
+                Write-WarningLog "Could not report the update failure."
+            }
+        }
     } finally {
         if ($script:ElevationRequested) {
             exit 0

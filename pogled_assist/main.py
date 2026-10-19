@@ -192,10 +192,11 @@ def package_smoke_test() -> int:
 
 def _verify_bundled_runtime() -> None:
     if getattr(sys, "frozen", False):
-        from .speech.bundle_check import verify_bundled_speech
+        from .speech.bundle_check import verify_audio_decoder, verify_bundled_speech
         from .tracking.tobii_stream_engine_bridge_backend import verify_bundled_bridge
 
         verify_bundled_speech(Path(sys.executable).resolve().parent)
+        verify_audio_decoder()
         verify_bundled_bridge(Path(sys.executable).resolve().parent)
 
 
