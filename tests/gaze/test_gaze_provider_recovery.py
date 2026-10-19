@@ -4,6 +4,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
@@ -12,8 +13,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 
 @pytest.fixture
 def active_stream(qapp, monkeypatch):
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     stopped = []
     provider = TobiiGazeProvider()
     provider._stream_engine = SimpleNamespace(

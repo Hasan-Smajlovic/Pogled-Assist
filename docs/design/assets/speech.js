@@ -26,6 +26,22 @@
   let savedUndo = null;
   let autoSpace = false;
   let lastText = '';
+  let previewSpeechTimer;
+  let recoveryNoticeTimer;
+  const requestedVoiceState = new URLSearchParams(location.search).get('voice-demo');
+  const voiceStates = {
+    efendija: null,
+    quota: ['Nema dovoljno ElevenLabs kredita.', 'Koristi se Prirodni glas.', 'warning'],
+    offline: ['ElevenLabs trenutno nije dostupan.', 'Koristi se Prirodni glas.', 'warning'],
+    timeout: ['Efendijin glas se predugo priprema.', 'Koristi se Prirodni glas.', 'warning'],
+    invalid: ['Provjerite ElevenLabs ključ u Postavkama.', 'Koristi se Prirodni glas.', 'warning'],
+    standard: ['Online glasovi trenutno nisu dostupni.', 'Koristi se Standardni glas.', 'warning'],
+    cached: ['Koristi se sačuvani Efendijin glas.', 'Ovaj snimak ne troši nove kredite.', 'ready'],
+    'cache-failed': ['Zvuk nije sačuvan.', 'Ponavljanje može trošiti kredite.', 'warning'],
+    recovered: ['Efendijin glas je ponovo dostupan.', 'Naredne poruke koriste Efendiju.', 'ready'],
+    partial: ['Izgovor nije završen.', 'Za ponavljanje odaberite Izgovori.', 'error'],
+  };
+  if (Object.hasOwn(voiceStates, requestedVoiceState)) $('voice-demo-state').value = requestedVoiceState;
   const savedPreview = ReferenceDesign.readSession('speech', null);
   if (savedPreview && typeof savedPreview.message === 'string') {
     message.value = savedPreview.message;
@@ -37,6 +53,55 @@
       savedMessage = typeof savedPreview.savedMessage === 'string' ? savedPreview.savedMessage : '';
     }
   }
+  if (requestedVoiceState && !message.value) message.value = 'TREBAM VODE, MOLIM TE.';
+  $('voice-demo-state').addEventListener('change', () => {
+    clearTimeout(recoveryNoticeTimer); recoveryNoticeTimer = null;
+    renderVoiceNotice();
+  });
+  $('voice-demo-tracking').addEventListener('change', renderVoiceNotice);
+  renderVoiceNotice();
+
+  function renderVoiceNotice() {
+    const state = $('voice-demo-state').value;
+    const tracking = $('voice-demo-tracking').checked;
+    syncRecoveryNotice(state, tracking);
+    const notice = tracking
+      ? ['Praćenje oba oka je prekinuto', 'pogledajte prema ekranu', 'warning']
+      : arabic ? null : voiceStates[state];
+    renderNotice(notice, tracking, state);
+  }
+
+  function renderNotice(notice, tracking, state) {
+    document.querySelector('.message-box').dataset.voiceNotice = String(Boolean(notice));
+    $('speech-voice-notice').hidden = !notice;
+    if (notice) {
+      $('voice-notice-title').textContent = notice[0];
+      $('voice-notice-detail').textContent = notice[1];
+      $('speech-voice-notice').dataset.tone = notice[2];
+      document.querySelector('.voice-notice-mark').textContent = tracking ? '!' : ({ ready: '✓' }[notice[2]] || '!');
+    } else {
+      const status = { efendija: 'Glas: Efendija' };
+      say(arabic && state !== 'none' ? 'Glas: Prirodni · Hamed' : status[state] || '');
+    }
+  }
+  function recoveryVisible(state, tracking) {
+    if (tracking) return false;
+    if (arabic) return false;
+    return state === 'recovered';
+  }
+
+  function syncRecoveryNotice(state, tracking) {
+    if (!recoveryVisible(state, tracking)) {
+      clearTimeout(recoveryNoticeTimer); recoveryNoticeTimer = null;
+    } else if (!recoveryNoticeTimer) {
+      recoveryNoticeTimer = setTimeout(() => {
+        recoveryNoticeTimer = null;
+        $('voice-demo-state').value = 'efendija';
+        renderVoiceNotice();
+      }, 5000);
+    }
+  }
+
   $('library-read-error').addEventListener('change', () => { deleting = false; render(); });
   $('single-letter-preview').addEventListener('click', () => {
     activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
@@ -50,7 +115,7 @@
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
     if ($('letters-dialog').open) closeDialog($('letters-dialog'));
-    symbols = false; render(); restoreMessageFocus();
+    symbols = false; render(); renderVoiceNotice(); restoreMessageFocus();
   });
 
   document.addEventListener('click', event => {
@@ -63,28 +128,48 @@
   });
   message.addEventListener('input', () => {
     const appended = message.value.length === lastText.length + 1 && message.value.startsWith(lastText);
-    const boundary = appended && /[.?]$/.test(message.value);
-    const duplicateSpace = appended && /[.?] $/.test(lastText) && /\s$/.test(message.value);
-    if (autoSpace && appended && /[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
-    if (boundary) message.value += ' ';
-    if (duplicateSpace) message.value = lastText;
-    const moveToEnd = boundary || duplicateSpace;
+    const moveToEnd = spaceAfterPunctuation(appended);
     const start = moveToEnd ? message.value.length : message.selectionStart;
     const end = moveToEnd ? message.value.length : message.selectionEnd;
     message.value = message.value.toLocaleUpperCase('bs');
     message.setSelectionRange(start, end);
     undoWord = null; autoSpace = false; renderPredictions(); updateSave();
   });
+
+  function spaceAfterPunctuation(appended) {
+    const boundary = appended && /[.?]$/.test(message.value);
+    const duplicateSpace = appended && repeatedBoundarySpace();
+    if (autoSpace && appended) removeSpaceBeforePunctuation();
+    if (boundary) message.value += ' ';
+    if (duplicateSpace) message.value = lastText;
+    return boundary || duplicateSpace;
+  }
+
+  function removeSpaceBeforePunctuation() {
+    if (/[.,?!]$/.test(message.value)) message.value = lastText.slice(0, -1) + message.value.slice(-1);
+  }
+
+  function repeatedBoundarySpace() { return /[.?] $/.test(lastText) && /\s$/.test(message.value); }
+
   for (const event of ['click', 'keyup', 'select']) message.addEventListener(event, renderPredictions);
   document.addEventListener('keydown', event => {
-    if (event.altKey || event.ctrlKey || event.metaKey || document.querySelector('dialog[open]')) return;
-    if (event.key === 'Tab' && event.target === message && !$('speech-screen').hidden) { event.preventDefault(); return; }
-    if (event.target.closest('input, summary')) return;
-    if (event.target.closest('.reference-tools, .reference-switcher')) return;
-    if (event.key === ' ' && event.target.closest('button')) return;
+    if (ignoreKey(event)) return;
+    if (messageTab(event)) { event.preventDefault(); return; }
+    if (nativeKeyTarget(event)) return;
     if (event.key === 'Backspace') { event.preventDefault(); backspace(); }
     else if (event.key.length === 1) { event.preventDefault(); append(event.key); }
   });
+  function messageTab(event) { return event.key === 'Tab' && event.target === message && !$('speech-screen').hidden; }
+
+  function nativeKeyTarget(event) {
+    if (event.target.closest('input, summary, .reference-tools, .reference-switcher')) return true;
+    return event.key === ' ' && Boolean(event.target.closest('button'));
+  }
+
+  function ignoreKey(event) {
+    return event.altKey || event.ctrlKey || event.metaKey || Boolean(document.querySelector('dialog[open]'));
+  }
+
   window.addEventListener('focus', () => requestAnimationFrame(restoreMessageFocus));
   for (const dialog of document.querySelectorAll('dialog')) {
     dialog.addEventListener('cancel', event => {
@@ -99,7 +184,9 @@
   });
 
   function restoreMessageFocus() {
-    if (!document.hasFocus() || $('speech-screen').hidden || document.querySelector('dialog[open]')) return;
+    if (!document.hasFocus()) return;
+    if ($('speech-screen').hidden) return;
+    if (document.querySelector('dialog[open]')) return;
     const start = message.selectionStart;
     const end = message.selectionEnd;
     const direction = message.selectionDirection;
@@ -109,107 +196,142 @@
 
   function render() {
     gazeDemo.reset();
-    for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
-    message.dir = arabic ? 'rtl' : 'ltr';
-    message.style.textAlign = arabic ? 'right' : 'center';
-    document.querySelector('.predictions').hidden = arabic;
-    const browsing = view !== 'keyboard';
-    const activeCategory = library.categories.find(item => item.id === category);
-    $('categories-toggle').textContent = view === 'categories' ? 'Tastatura' : 'Kategorije';
-    $('phrases-toggle').textContent = view === 'phrases' ? 'Tastatura' : 'Fraze';
-    $('categories-toggle').setAttribute('aria-pressed', String(view === 'categories'));
-    $('phrases-toggle').setAttribute('aria-pressed', String(view === 'phrases'));
-    $('categories-toggle').disabled = Boolean(editor);
-    $('phrases-toggle').disabled = Boolean(editor);
-    $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
-    message.placeholder = editor ? 'Unesite tekst…' : 'Odaberite grupu slova…';
-    $('view-title').textContent = editor ? editorTitle() : view === 'phrases' ? 'Moje fraze' : browsing ? activeCategory?.name.toLocaleUpperCase('bs') || 'Kategorije' : symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
-    $('back').hidden = !browsing || !category;
-    $('add').hidden = !browsing;
-    $('add').textContent = view === 'phrases' ? 'Dodaj frazu' : category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
-    $('manage').hidden = !browsing;
-    const libraryBlocked = $('library-read-error').checked;
-    $('retry-library').hidden = !browsing || !libraryBlocked;
-    if (browsing && libraryBlocked) {
-      $('add').hidden = true; $('manage').hidden = true;
-      $('view-title').textContent = 'Biblioteka nije učitana';
-    }
-    $('manage').textContent = deleting ? 'Gotovo' : 'Obriši';
-    $('manage').setAttribute('aria-pressed', String(deleting));
-    $('cancel-edit').hidden = !editor;
-    $('save').hidden = !editor;
-    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
-    content.replaceChildren();
-    content.className = browsing ? 'item-grid' : symbols ? 'key-grid symbols' : activeGroups.length >= 20 ? 'key-grid dense' : 'key-grid';
-    const keyCount = symbols ? grouped(ARABIC_SPEECH_SYMBOLS).length : activeGroups.length;
-    let columns = keyCount <= 1 ? 1 : keyCount <= 8 ? 2 : Math.min(6, Math.ceil(keyCount / 5));
-    if (!symbols) columns = Math.max(columns, Math.ceil(keyCount / 5));
-    content.style.gridTemplateColumns = !browsing && arabic ? `repeat(${columns}, minmax(0, 1fr))` : '';
-    content.style.gridTemplateRows = !browsing && arabic ? `repeat(${Math.ceil(keyCount / columns)}, minmax(72px, 1fr))` : '';
-    content.dir = !browsing && arabic ? 'rtl' : 'ltr';
-    if (browsing) renderItems();
-    else {
-      $('paging').hidden = true;
-      if (symbols && arabic) grouped(ARABIC_SPEECH_SYMBOLS).forEach((keys, index) => content.append(makeButton(keys.map(keyLabel).join(' '), 'symbol-group', index, 'group')));
-      else if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
-      else activeGroups.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
-    }
+    renderScript();
+    renderViewHeader();
+    renderLibraryActions();
+    renderKeyboardGrid();
     renderPredictions();
     updateSave();
   }
 
-  function handleAction(action, value) {
-    switch (action) {
-      case 'group': openLetters(Number(value)); break;
-      case 'symbol-group': openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); break;
-      case 'letter': append(value); closeDialog($('letters-dialog')); break;
-      case 'symbol': append(value); break;
-      case 'close-letters': closeDialog($('letters-dialog')); break;
-      case 'word': appendWord(value, true); break;
-      case 'undo-word':
-        if (undoWord) { message.value = undoWord.text; autoSpace = undoWord.autoSpace; undoWord = null; renderPredictions(); updateSave(); }
-        break;
-      case 'space': append(' '); break;
-      case 'backspace': backspace(); break;
-      case 'clear':
-        if (message.value) askConfirm('Obrisati sav tekst?', editor ? 'Obrisat će se samo novi unos. Vaša poruka za razgovor ostaje sačuvana.' : 'Cijela poruka bit će obrisana.', 'Obriši tekst', () => { message.value = ''; renderPredictions(); updateSave(); say('Tekst je obrisan.'); });
-        break;
-      case 'speak': speak(); break;
-      case 'categories': switchView(view === 'categories' ? 'keyboard' : 'categories'); break;
-      case 'phrases': switchView(view === 'phrases' ? 'keyboard' : 'phrases'); break;
-      case 'keyboard-toggle':
-        if (view !== 'keyboard') switchView('keyboard');
-        else { symbols = !symbols; render(); }
-        break;
-      case 'back': category = null; page = 0; deleting = false; render(); break;
-      case 'previous': page--; renderItems(); break;
-      case 'next': page++; renderItems(); break;
-      case 'manage': deleting = !deleting; render(); say(deleting ? 'Odaberite stavku koju želite obrisati.' : ''); break;
-      case 'item': selectItem(value); break;
-      case 'add': startEditor(); break;
-      case 'cancel-edit': finishEditor(false); break;
-      case 'save': finishEditor(true); break;
-      case 'retry-library': $('library-read-error').checked = false; category = null; page = 0; render(); say('Biblioteka je učitana.'); break;
-      case 'cancel-confirm': closeDialog($('confirm-dialog')); confirmAction = null; break;
-      case 'confirm': {
+  function renderScript() {
+    for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
+    message.dir = arabic ? 'rtl' : 'ltr';
+    message.style.textAlign = arabic ? 'right' : 'center';
+    document.querySelector('.predictions').hidden = arabic;
+  }
+
+  function viewTitle() {
+    if (editor) return editorTitle();
+    if (view === 'phrases') return 'Moje fraze';
+    if (view !== 'keyboard') return library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs') || 'Kategorije';
+    return symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
+  }
+
+  function renderViewHeader() {
+    for (const [id, target, label] of [['categories-toggle', 'categories', 'Kategorije'], ['phrases-toggle', 'phrases', 'Fraze']]) {
+      $(id).textContent = view === target ? 'Tastatura' : label;
+      $(id).setAttribute('aria-pressed', String(view === target));
+      $(id).disabled = Boolean(editor);
+    }
+    $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
+    message.placeholder = editor ? 'Unesite tekst…' : 'Odaberite grupu slova…';
+    $('view-title').textContent = viewTitle();
+    $('cancel-edit').hidden = !editor;
+    $('save').hidden = !editor;
+  }
+
+  function renderLibraryActions() {
+    const browsing = view !== 'keyboard';
+    const libraryBlocked = $('library-read-error').checked;
+    $('back').hidden = !browsing || !category;
+    $('add').hidden = $('manage').hidden = !browsing || libraryBlocked;
+    $('add').textContent = addEntryLabel();
+    $('retry-library').hidden = !browsing || !libraryBlocked;
+    if (browsing && libraryBlocked) $('view-title').textContent = 'Biblioteka nije učitana';
+    $('manage').textContent = deleting ? 'Gotovo' : 'Obriši';
+    $('manage').setAttribute('aria-pressed', String(deleting));
+  }
+
+  function addEntryLabel() {
+    if (view === 'phrases') return 'Dodaj frazu';
+    return category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
+  }
+
+  function renderKeyboardGrid() {
+    const browsing = view !== 'keyboard';
+    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
+    content.replaceChildren();
+    content.className = browsing ? 'item-grid' : keyboardGridClass();
+    const keyCount = symbols ? grouped(ARABIC_SPEECH_SYMBOLS).length : activeGroups.length;
+    const columns = keyboardColumns(keyCount);
+    applyKeyboardDirection(browsing, keyCount, columns);
+    if (browsing) renderItems();
+    else fillKeyboard();
+  }
+
+  function applyKeyboardDirection(browsing, keyCount, columns) {
+    const rtl = !browsing && arabic;
+    content.style.gridTemplateColumns = rtl ? `repeat(${columns}, minmax(0, 1fr))` : '';
+    content.style.gridTemplateRows = rtl ? `repeat(${Math.ceil(keyCount / columns)}, minmax(72px, 1fr))` : '';
+    content.dir = rtl ? 'rtl' : 'ltr';
+  }
+
+  function keyboardGridClass() {
+    if (symbols) return 'key-grid symbols';
+    return activeGroups.length >= 20 ? 'key-grid dense' : 'key-grid';
+  }
+
+  function keyboardColumns(count) {
+    let columns = count <= 1 ? 1 : count <= 8 ? 2 : Math.min(6, Math.ceil(count / 5));
+    if (!symbols) columns = Math.max(columns, Math.ceil(count / 5));
+    return columns;
+  }
+
+  function fillKeyboard() {
+    $('paging').hidden = true;
+    if (symbols && arabic) grouped(ARABIC_SPEECH_SYMBOLS).forEach((keys, index) => content.append(makeButton(keys.map(keyLabel).join(' '), 'symbol-group', index, 'group')));
+    else if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
+    else activeGroups.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
+  }
+
+  const actionHandlers = {
+    'group': value => { openLetters(Number(value)); },
+    'symbol-group': value => { openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); },
+    'letter': value => { append(value); closeDialog($('letters-dialog')); },
+    'symbol': value => { append(value); },
+    'close-letters': value => { closeDialog($('letters-dialog')); },
+    'word': value => { appendWord(value, true); },
+    'undo-word': value => { if (undoWord) { message.value = undoWord.text; autoSpace = undoWord.autoSpace; undoWord = null; renderPredictions(); updateSave(); } },
+    'space': value => { append(' '); },
+    'backspace': value => { backspace(); },
+    'clear': value => { if (message.value) askConfirm('Obrisati sav tekst?', editor ? 'Obrisat će se samo novi unos. Vaša poruka za razgovor ostaje sačuvana.' : 'Cijela poruka bit će obrisana.', 'Obriši tekst', () => { message.value = ''; renderPredictions(); updateSave(); say('Tekst je obrisan.'); }); },
+    'speak': value => { speak(); },
+    'stop-speech': value => { clearTimeout(previewSpeechTimer); window.speechSynthesis?.cancel(); playback(false); say('Govor je zaustavljen.'); },
+    'categories': value => { switchView(view === 'categories' ? 'keyboard' : 'categories'); },
+    'phrases': value => { switchView(view === 'phrases' ? 'keyboard' : 'phrases'); },
+    'keyboard-toggle': value => { if (view !== 'keyboard') switchView('keyboard');
+        else { symbols = !symbols; render(); } },
+    'back': value => { category = null; page = 0; deleting = false; render(); },
+    'previous': value => { page--; renderItems(); },
+    'next': value => { page++; renderItems(); },
+    'manage': value => { deleting = !deleting; render(); say(deleting ? 'Odaberite stavku koju želite obrisati.' : ''); },
+    'item': value => { selectItem(value); },
+    'add': value => { startEditor(); },
+    'cancel-edit': value => { finishEditor(false); },
+    'save': value => { finishEditor(true); },
+    'retry-library': value => { $('library-read-error').checked = false; category = null; page = 0; render(); say('Biblioteka je učitana.'); },
+    'cancel-confirm': value => { closeDialog($('confirm-dialog')); confirmAction = null; },
+    'confirm': value => { {
         const actionToRun = confirmAction;
         confirmAction = null;
         closeDialog($('confirm-dialog'));
         actionToRun?.();
-        break;
-      }
-      case 'alarm': startAlarm(); break;
-      case 'stop-alarm': stopAlarm(); break;
-      case 'sleep': window.speechSynthesis?.cancel(); openDialog($('sleep-screen')); break;
-      case 'wake': closeDialog($('sleep-screen')); say('Možete nastaviti.'); break;
-      case 'exit': openDialog($('exit-dialog')); break;
-      case 'cancel-exit': closeDialog($('exit-dialog')); break;
-      case 'leave-speech': window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('speech-closed-screen')); break;
-      case 'quit-app': window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('closed-screen')); break;
-      case 'reopen-speech': closeDialog($('speech-closed-screen')); break;
-      case 'reopen': closeDialog($('closed-screen')); break;
-    }
-  }
+
+      } },
+    'alarm': value => { startAlarm(); },
+    'stop-alarm': value => { stopAlarm(); },
+    'sleep': value => { window.speechSynthesis?.cancel(); openDialog($('sleep-screen')); },
+    'wake': value => { closeDialog($('sleep-screen')); say('Možete nastaviti.'); },
+    'exit': value => { openDialog($('exit-dialog')); },
+    'cancel-exit': value => { closeDialog($('exit-dialog')); },
+    'leave-speech': value => { window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('speech-closed-screen')); },
+    'quit-app': value => { window.speechSynthesis?.cancel(); closeDialog($('exit-dialog')); openDialog($('closed-screen')); },
+    'reopen-speech': value => { closeDialog($('speech-closed-screen')); },
+    'reopen': value => { closeDialog($('closed-screen')); },
+  };
+
+  function handleAction(action, value) { actionHandlers[action]?.(value); }
 
   function openLetters(index, previewSize = 0, groups = activeGroups) {
     const letters = previewSize ? groups.flat().slice(0, previewSize) : groups[index];
@@ -319,8 +441,8 @@
     if (!editor) return;
     const text = message.value.trim().replace(/\s+/g, ' ').toLocaleUpperCase('bs');
     if (save && !text) { say('Prvo unesite tekst.'); return; }
-    const destination = editor.kind === 'phrase' ? library.phrases : editor.kind === 'category' ? library.categories : library.categories.find(item => item.id === editor.category).items;
-    if (save && destination.some(item => (item.name || item.text).toLocaleLowerCase('bs') === text.toLocaleLowerCase('bs'))) {
+    const destination = editorDestination();
+    if (save && duplicateEntry(destination, text)) {
       say('Ova stavka već postoji. Unesite drugi tekst ili odaberite Odustani.');
       return;
     }
@@ -329,6 +451,25 @@
       destination.push(editor.kind === 'category' ? { id: makeId(), name: text, items: [] } : { id: makeId(), text });
       stored = saveLibrary();
     }
+    restoreEditor(save, destination);
+    say(editorResult(save, stored));
+  }
+
+  function editorResult(save, stored) {
+    if (!save) return 'Dodavanje je otkazano. Vaša poruka je vraćena.';
+    return stored ? 'Sačuvano. Vaša poruka je vraćena.' : 'Dodano za ovaj pregled. Lokalno čuvanje nije dostupno.';
+  }
+
+  function editorDestination() {
+    const lists = { phrase: library.phrases, category: library.categories };
+    return lists[editor.kind] || library.categories.find(item => item.id === editor.category).items;
+  }
+
+  function duplicateEntry(destination, text) {
+    return destination.some(item => (item.name || item.text).toLocaleLowerCase('bs') === text.toLocaleLowerCase('bs'));
+  }
+
+  function restoreEditor(save, destination) {
     view = editor.view;
     category = editor.category;
     page = save ? Math.floor((destination.length - 1) / PAGE_SIZE) : editor.page;
@@ -338,8 +479,8 @@
     savedMessage = '';
     editor = null;
     render();
-    say(save ? stored ? 'Sačuvano. Vaša poruka je vraćena.' : 'Dodano za ovaj pregled. Lokalno čuvanje nije dostupno.' : 'Dodavanje je otkazano. Vaša poruka je vraćena.');
   }
+
 
   function append(value) {
     if (value === ' ' && /[.?] $/.test(message.value)) return;
@@ -355,12 +496,17 @@
   function appendWord(word, complete = false) {
     undoWord = complete ? { text: message.value, autoSpace } : null;
     let prefix = message.value;
-    if (complete && prefix && !/\s$/.test(prefix)) prefix = prefix.replace(/[a-zčćđšž]+$/iu, '');
+    if (complete) prefix = completedWordPrefix(prefix);
     if (prefix && !/\s$/.test(prefix)) prefix += ' ';
     message.value = `${prefix}${word.toLocaleUpperCase('bs')} `;
     autoSpace = complete;
     renderPredictions();
     updateSave();
+  }
+
+  function completedWordPrefix(prefix) {
+    if (!prefix || /\s$/.test(prefix)) return prefix;
+    return prefix.replace(/[a-zčćđšž]+$/iu, '');
   }
 
   function backspace() {
@@ -378,34 +524,74 @@
     gazeDemo.blockCurrent();
     gazeDemo.reset();
     const partial = message.value.match(/[a-zčćđšž]+$/iu)?.[0].toLocaleLowerCase('bs') || '';
-    const pattern = new RegExp('^' + (partial.match(/dj|./gu) || []).map(letter => ({ dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' }[letter] || letter)).join(''), 'iu');
-    const enabled = !arabic && editor?.kind !== 'category' && message.selectionStart === message.value.length && message.selectionEnd === message.value.length && (partial || !message.value || /[\s.,?!]$/.test(message.value));
-    const matches = enabled ? (partial ? WORDS.filter(word => pattern.test(word)) : /ŽELIM\s+$/iu.test(message.value) ? ['VODU', 'RAZGOVARATI', 'ČAJ', 'KAFU', 'ODMORITI'] : WORDS) : [];
+    const matches = predictionMatches(partial);
     if (!$('predictions').children.length) for (let index = 0; index < 5; index++) $('predictions').append(makeButton('·', 'word', '', 'word'));
     for (let index = 0; index < 5; index++) {
       const word = matches[index];
       const button = $('predictions').children[index];
-      button.textContent = word || '·'; button.dataset.value = word || '';
-      button.disabled = !word;
-      button.setAttribute('aria-label', word || 'Nema prijedloga');
+      renderPrediction(button, word);
     }
     $('undo-word').disabled = !undoWord;
   }
 
+  function renderPrediction(button, word) {
+    button.textContent = word || '·'; button.dataset.value = word || '';
+    button.disabled = !word;
+    button.setAttribute('aria-label', word || 'Nema prijedloga');
+  }
+
+  function predictionMatches(partial) {
+    if (!predictionsEnabled(partial)) return [];
+    if (!partial) return /ŽELIM\s+$/iu.test(message.value) ? ['VODU', 'RAZGOVARATI', 'ČAJ', 'KAFU', 'ODMORITI'] : WORDS;
+    const letters = partial.match(/dj|./gu) || [];
+    const variants = { dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' };
+    const pattern = new RegExp('^' + letters.map(letter => variants[letter] || letter).join(''), 'iu');
+    return WORDS.filter(word => pattern.test(word));
+  }
+
+  function predictionsEnabled(partial) {
+    if (arabic || editor?.kind === 'category') return false;
+    if (!cursorAtEnd()) return false;
+    return Boolean(partial || !message.value || /[\s.,?!]$/.test(message.value));
+  }
+
+  function cursorAtEnd() {
+    return message.selectionStart === message.value.length && message.selectionEnd === message.value.length;
+  }
+
+  function playback(active) {
+    $('speak-button').dataset.playing = String(active);
+    $('speak-button').textContent = active ? 'Zaustavi' : 'Izgovori';
+    $('speech-progress').hidden = !active;
+  }
   function speak() {
+    if ($('speak-button').dataset.playing === 'true') { clearTimeout(previewSpeechTimer); window.speechSynthesis?.cancel(); playback(false); say('Govor je zaustavljen.'); return; }
     const text = message.value.trim();
     if (!text) { say('Prvo sastavite poruku.'); return; }
+    if ($('voice-demo-state').value !== 'none') { previewSpeech(); return; }
+    browserSpeech(text);
+  }
+
+  function browserSpeech(text) {
     if (!('speechSynthesis' in window)) { say('Izgovor nije podržan u ovom pregledniku.'); return; }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = arabic ? 'ar-SA' : 'bs-BA';
     const voice = window.speechSynthesis.getVoices().find(voice => (arabic ? /^ar(?:-|$)/i : /^bs(?:-|$)/i).test(voice.lang));
     if (voice) utterance.voice = voice;
+    playback(true);
     utterance.onstart = () => say('Poruka se izgovara.');
-    utterance.onend = () => say('Čitanje je završeno.');
-    utterance.onerror = () => say('Govor nije uspio. Pokušajte ponovo.');
+    utterance.onend = () => { playback(false); say('Čitanje je završeno.'); };
+    utterance.onerror = () => { playback(false); say('Govor nije uspio. Pokušajte ponovo.'); };
     say('Pokrećem govor.');
     window.speechSynthesis.speak(utterance);
+  }
+
+  function previewSpeech() {
+      clearTimeout(previewSpeechTimer);
+      say('Pripremam govor…');
+      playback(true);
+      previewSpeechTimer = setTimeout(() => { say('Poruka se izgovara.'); previewSpeechTimer = setTimeout(() => { playback(false); say('Čitanje je završeno.'); renderVoiceNotice(); }, 2000); }, 650);
   }
 
   function askConfirm(title, copy, label, action) {
@@ -434,11 +620,7 @@
     $('alarm-copy').textContent = 'Pokrećem zvučni signal…';
     openDialog($('alarm-dialog'));
     try {
-      const Audio = window.AudioContext || window.webkitAudioContext;
-      if (!Audio) throw new Error('Audio unavailable');
-      audioContext ||= new Audio();
-      const ready = audioContext.resume();
-      if (audioContext.state !== 'running') $('alarm-copy').textContent = 'Zvuk čeka dozvolu preglednika. Ako se ne čuje, zaustavite alarm i ponovo ga otvorite klikom.';
+      const ready = prepareAlarmAudio();
       await ready;
       if (!$('alarm-dialog').open) return;
       if (audioContext.state !== 'running') throw new Error('Audio blocked');
@@ -448,6 +630,15 @@
     } catch {
       $('alarm-copy').textContent = 'Zvuk nije dostupan u ovom pregledniku. Za probu zvuka ponovo otvorite Alarm klikom.';
     }
+  }
+
+  function prepareAlarmAudio() {
+      const Audio = window.AudioContext || window.webkitAudioContext;
+      if (!Audio) throw new Error('Audio unavailable');
+      audioContext ||= new Audio();
+      const ready = audioContext.resume();
+      if (audioContext.state !== 'running') $('alarm-copy').textContent = 'Zvuk čeka dozvolu preglednika. Ako se ne čuje, zaustavite alarm i ponovo ga otvorite klikom.';
+      return ready;
   }
 
   function beep() {
@@ -497,7 +688,7 @@
     try {
       const stored = JSON.parse(localStorage.getItem(STORE_KEY));
       const validItem = item => item && typeof item.id === 'string' && typeof item.text === 'string';
-      if (stored && Array.isArray(stored.categories) && Array.isArray(stored.phrases) && stored.phrases.every(validItem) && stored.categories.every(item => item && typeof item.id === 'string' && typeof item.name === 'string' && Array.isArray(item.items) && item.items.every(validItem))) return stored;
+      if (validLibrary(stored, validItem)) return stored;
     } catch {}
     const category = (id, name, texts) => ({ id, name, items: texts.map((text, index) => ({ id: `${id}-${index}`, text })) });
     return {
@@ -509,6 +700,20 @@
       ],
       phrases: ['Trebam vode', 'Hvala ti', 'Pozovi Hasana', 'Namjesti mi jastuk'].map((text, index) => ({ id: `phrase-${index}`, text }))
     };
+  }
+
+  function validLibrary(stored, validItem) {
+    if (!stored) return false;
+    if (!Array.isArray(stored.categories)) return false;
+    if (!Array.isArray(stored.phrases)) return false;
+    return stored.phrases.every(validItem) && stored.categories.every(item => validCategory(item, validItem));
+  }
+
+  function validCategory(item, validItem) {
+    if (!item) return false;
+    if (typeof item.id !== 'string') return false;
+    if (typeof item.name !== 'string') return false;
+    return Array.isArray(item.items) && item.items.every(validItem);
   }
 
   function saveLibrary() {

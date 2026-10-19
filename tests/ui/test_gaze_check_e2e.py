@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QWidget
 
@@ -26,8 +27,7 @@ def gaze_check(qtbot, monkeypatch):
     window.show()
     qtbot.wait(1)
     window._timer.stop()
-    now = [10.0]
-    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     return window, now, screen
 
 

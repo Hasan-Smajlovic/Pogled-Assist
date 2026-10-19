@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist.tracking.gaze_check import (
     CheckSnapshot,
@@ -39,12 +40,21 @@ def test_trial_coverage_does_not_count_cached_or_out_of_order_samples():
     assert not coverage.sufficient(20)
 
 
-@pytest.mark.parametrize("gap", [0.2, 0.5, 1.0])
+@pytest.mark.parametrize("gap", [0.2])
 def test_trial_coverage_caps_intervals_and_rejects_stale_gaps(gap):
     coverage = TrialGazeCoverage(0)
     for index in range(50):
         coverage.add(index * gap)
     assert not coverage.sufficient(50 * gap)
+
+
+def test_trial_coverage_does_not_count_stale_gaps():
+    coverage = TrialGazeCoverage(0)
+    for index in range(601):
+        coverage.add(index * 0.01)
+    for gap in range(1, 9):
+        coverage.add(6.0 + gap * 0.6)
+    assert not coverage.sufficient(10.8)
 
 
 def test_trial_coverage_does_not_bridge_known_interruptions():
@@ -237,8 +247,7 @@ def test_fixation_spread_rejects_scattered_gaze_even_with_good_median():
 
 
 def test_provider_diagnostics_keep_raw_coordinates_and_expire_positions(qapp, monkeypatch):
-    now = [1.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 1.0)
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     backend = SimpleNamespace()
@@ -301,8 +310,7 @@ def test_positions_expire_and_clear_without_fresh_gaze_validity():
 
 
 def test_position_expiry_is_independent_of_fresh_eye_and_gaze_stream(qapp, monkeypatch):
-    now = [1.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 1.0)
     provider = TobiiGazeProvider()
     provider.set_check_active(True)
     backend = SimpleNamespace()

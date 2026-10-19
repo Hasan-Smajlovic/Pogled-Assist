@@ -22,7 +22,7 @@ REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
 COMMENT_MARKER = "<!-- pogled-assist-ui-gallery -->"
 STATUS_START = "<!-- pogled-assist-ui-gallery-status -->"
 STATUS_END = "<!-- /pogled-assist-ui-gallery-status -->"
-RESOLUTIONS = ("1280x720", "1440x900")
+RESOLUTIONS = ("1280x720",)
 PREVIEWS = (
     ("speech.png", "Speech"),
     ("settings-general.png", "Settings"),
@@ -85,34 +85,46 @@ def update_status(
     ci_run_id: int | None = None,
     ci_attempt: int | None = None,
 ) -> None:
-    """Keep existing previews while CI runs or publication fails; never claim new images exist."""
+    """Preserve previews and report publication failures even before the first gallery."""
     workflow_id = api.get("actions/workflows/ci.yml")["id"]
     for pull in api.items("pulls?state=open&per_page=100"):
-        if pull["base"]["ref"] not in ("development", "master") or not pull["head"]["repo"]:
+        if not _gallery_pull(pull):
             continue
         run = _latest_ci(api, pull, workflow_id)
-        if ci_run_id is not None and (
-            run is None or run["id"] != ci_run_id or run["run_attempt"] != ci_attempt
-        ):
+        if not _requested_run(run, ci_run_id, ci_attempt):
             continue
         comments = api.items(f"issues/{pull['number']}/comments?per_page=100")
         existing = next((comment for comment in comments if _is_gallery_comment(comment)), None)
-        if existing is None:
+        if existing is None and publication != "failed":
             continue
-        # A delayed start event must not replace a completed publication's status.
-        if (
-            publication == "preparing"
-            and run
-            and run["status"] == "completed"
-            and any(
-                _publication_marker(run, phase) in existing["body"]
-                for phase in ("published", "failed")
-            )
-        ):
+        body = existing["body"] if existing else "No UI gallery has been published yet."
+        if _publication_already_finished(publication, run, body):
             continue
         header = _status_header(pull, run, publication, publication_run_id)
-        payload = {"number": pull["number"], "body": _with_status(existing["body"], header)}
+        payload = {
+            "number": pull["number"],
+            "body": _with_status(body, header),
+            "create": publication == "failed",
+        }
         _write_comment(api, pull, payload, existing)
+
+
+def _gallery_pull(pull):
+    return pull["base"]["ref"] in ("development", "master") and bool(pull["head"]["repo"])
+
+
+def _requested_run(run, run_id, attempt):
+    if run_id is None:
+        return True
+    return run is not None and run["id"] == run_id and run["run_attempt"] == attempt
+
+
+def _publication_already_finished(publication, run, body):
+    if publication != "preparing":
+        return False
+    if not run or run["status"] != "completed":
+        return False
+    return any(_publication_marker(run, phase) in body for phase in ("published", "failed"))
 
 
 def _latest_ci(api, pull: dict, workflow_id: int) -> dict | None:
@@ -172,22 +184,7 @@ def _status_header(
         f"Latest PR commit: [`{sha[:7]}`](https://github.com/{REPOSITORY}/commit/{sha})",
         "",
     ]
-    if publication == "failed":
-        lines.append("**Gallery publication failed.** Existing previews have not been refreshed.")
-    elif run is None:
-        lines.append("**Waiting for CI for the latest commit.** Existing previews may be older.")
-    elif run["status"] != "completed":
-        lines.append(
-            "**New gallery is being prepared.** Existing previews are from an earlier CI run."
-        )
-    elif publication == "preparing":
-        lines.append(
-            "**Waiting for gallery publication.** Existing previews have not been refreshed."
-        )
-    elif rendered and all(rendered[key] == run[key] for key in ("head_sha", "id", "run_attempt")):
-        lines.append("**Gallery matches the latest PR commit and CI run.**")
-    else:
-        lines.append("**No gallery for the latest CI run.** Existing previews may be older.")
+    lines.append(_publication_status(publication, run, rendered))
     if run:
         state = run["conclusion"] or run["status"]
         lines.append(
@@ -198,6 +195,27 @@ def _status_header(
             f"[Gallery workflow](https://github.com/{REPOSITORY}/actions/runs/{publication_run_id})"
         )
     return "\n".join([*lines, STATUS_END])
+
+
+def _publication_status(publication, run, rendered):
+    if publication == "failed":
+        return "**Gallery publication failed.** Existing previews have not been refreshed."
+    elif run is None:
+        return "**Waiting for CI for the latest commit.** Existing previews may be older."
+    elif run["status"] != "completed":
+        return "**New gallery is being prepared.** Existing previews are from an earlier CI run."
+    elif publication == "preparing":
+        return "**Waiting for gallery publication.** Existing previews have not been refreshed."
+    elif _same_rendered_run(rendered, run):
+        return "**Gallery matches the latest PR commit and CI run.**"
+    else:
+        return "**No gallery for the latest CI run.** Existing previews may be older."
+
+
+def _same_rendered_run(rendered, run):
+    if not rendered:
+        return False
+    return all(rendered[key] == run[key] for key in ("head_sha", "id", "run_attempt"))
 
 
 def _with_status(body: str, header: str) -> str:
@@ -442,6 +460,9 @@ def _image_path(entry, images: dict[str, bytes]) -> str | None:
     if entry.is_dir() or path.suffix != ".png":
         return None
     _check_image_name(path)
+    # Older CI archives contain both sizes; retain their 720p gallery during rollout.
+    if path.parts[0] not in RESOLUTIONS:
+        return None
     if entry.file_size > MAX_IMAGE_BYTES or path.as_posix() in images:
         raise ValueError("The UI archive contains an unexpected image.")
     return path.as_posix()
@@ -450,7 +471,7 @@ def _image_path(entry, images: dict[str, bytes]) -> str | None:
 def _check_image_name(path: PurePosixPath) -> None:
     if len(path.parts) != 2:
         raise ValueError("The UI archive contains an unexpected image.")
-    if path.parts[0] not in RESOLUTIONS:
+    if path.parts[0] not in (*RESOLUTIONS, "1440x900"):
         raise ValueError("The UI archive contains an unexpected image.")
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.png", path.name):
         raise ValueError("The UI archive contains an unexpected image.")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint
 
 from pogled_assist.interaction.gaze_targets import GazeTargets
@@ -40,8 +41,7 @@ def make_controller():
 
 
 def test_diagnostic_suspension_blocks_input_and_cannot_resume_pending_dwell(monkeypatch):
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.interaction.mouse_controller.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     controller = make_controller()
     controller.update_settings(GazeSettings(use_precision_zoom=False))
     controller.handle_eye_status(True, True)

@@ -128,18 +128,16 @@ def prepare_release(bump: str, body_file: Path) -> str:
     changes = "\n".join(f"- {subject}" for subject in reversed(subjects))
     body_file.write_text(
         f"## Outcome\n\nPrepare Pogled Assist v{version} from the reviewed development branch.\n\n"
-        f"## Included changes\n\n{changes}\n\n"
-        "## Compatibility and risk\n\nReview the merged diff and confirm installation, "
-        "update, rollback, gaze, input, speech, and settings compatibility.\n\n"
+        f"{changes}\n\n"
         "## Verification\n\n"
         "- Automated: PR dependency-review, code-quality, tests, and windows-package "
         "checks pending.\n"
-        "- Manual Windows: Not run. Record results before review is complete.\n"
-        "- Manual Tobii hardware: Not run. Record results before review is complete.\n\n"
-        "## Release review\n\n"
-        "- [ ] Check the exact diff and version.\n"
-        "- [ ] Record manual checks and known limitations.\n"
-        "- [ ] Obtain an independent approval, then merge with a merge commit.\n",
+        "- Manual Windows: Not run; requires validation on Windows.\n"
+        "- Manual Tobii hardware: Not run; requires the target device.\n\n"
+        "## Risks and limits\n\nReview the merged diff and version; confirm installation, "
+        "update, rollback, gaze, input, speech, and settings compatibility. "
+        "Record results and known limitations before review is complete. "
+        "Obtain an independent approval, then merge with a merge commit.\n",
         encoding="utf-8",
     )
     return branch

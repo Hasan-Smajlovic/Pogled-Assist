@@ -19,6 +19,22 @@ sys.dont_write_bytecode = True
 
 
 @pytest.fixture(autouse=True)
+def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
+    from _speech_fakes import FakeCredentials
+
+    from pogled_assist.speech.elevenlabs import ENV_OVERRIDES
+
+    monkeypatch.setattr(
+        "pogled_assist.speech.eleven_account.WindowsCredentialStore", FakeCredentials
+    )
+    monkeypatch.setattr(
+        "pogled_assist.speech.speech_service.cache_root", lambda: tmp_path / "speech-audio"
+    )
+    for name in ENV_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def close_top_level_widgets(qapp) -> Iterator[None]:
     yield
     for widget in qapp.topLevelWidgets():

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from _powershell import powershell_literal, run_powershell_cases
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell is required")
 
@@ -82,82 +82,66 @@ $env:POGLED_ASSIST_X86_PYTHON
 """
 
 
-def _run_runner(tmp_path: Path, name: str, script: str, *args: str) -> str:
-    runner = tmp_path / name
-    runner.write_text(script, encoding="utf-8")
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(runner),
-            *args,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+@pytest.fixture(scope="module")
+def bridge_discovery_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("bridge-discovery")
+    results = {}
+    for kind, source in [
+        ("source", SOURCE_DISCOVERY_RUNNER),
+        ("package", PACKAGE_DISCOVERY_RUNNER),
+    ]:
+        batch = root / kind
+        batch.mkdir()
+        runner = batch / "discovery.ps1"
+        runner.write_text(source, encoding="utf-8")
+        cases = {}
+        expected = {}
+        for name in ("missing", "invalid", "new"):
+            directory = batch / name
+            directory.mkdir()
+            legacy = directory / "legacy-python.exe"
+            legacy.touch()
+            current = directory / "current-python.exe"
+            current.touch()
+            new = {
+                "missing": "NONE",
+                "invalid": "invalid-new",
+                "new": "new-python" if kind == "source" else str(current),
+            }[name]
+            old = "legacy-python" if kind == "source" else str(legacy)
+            expected[name] = new if name == "new" else old
+            args = (
+                {"SetupScript": str(SOURCE_SETUP)}
+                if kind == "source"
+                else {"LauncherScript": str(PACKAGE_LAUNCHER), "Root": str(directory)}
+            )
+            args.update(NewPath=new, LegacyPath=old)
+            body = "& '../discovery.ps1' " + " ".join(
+                f"-{key} {powershell_literal(value)}" for key, value in args.items()
+            )
+            cases[name] = {"body": body}
+        results[kind] = (run_powershell_cases(batch, cases), expected)
+    return results
+
+
+@pytest.mark.parametrize("case", ["missing", "invalid", "new"])
+def test_source_setup_accepts_old_bridge_runtime_path(bridge_discovery_results, case):
+    results, expected = bridge_discovery_results["source"]
+    result = results[case]
     assert result.returncode == 0, result.stdout + result.stderr
-    return result.stdout.strip().splitlines()[-1]
+    assert result.stdout.strip().splitlines()[-1] == expected[case]
 
 
-@pytest.mark.parametrize(
-    ("new_path", "expected"),
-    [("NONE", "legacy-python"), ("invalid-new", "legacy-python"), ("new-python", "new-python")],
-)
-def test_source_setup_accepts_old_bridge_runtime_path(tmp_path, new_path, expected):
-    found = _run_runner(
-        tmp_path,
-        "source-discovery.ps1",
-        SOURCE_DISCOVERY_RUNNER,
-        "-SetupScript",
-        str(SOURCE_SETUP),
-        "-NewPath",
-        new_path,
-        "-LegacyPath",
-        "legacy-python",
-    )
-    assert found == expected
+@pytest.mark.parametrize("case", ["missing", "invalid"])
+def test_package_launcher_uses_old_bridge_runtime_path(bridge_discovery_results, case):
+    results, expected = bridge_discovery_results["package"]
+    result = results[case]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().splitlines()[-1] == expected[case]
 
 
-@pytest.mark.parametrize("new_path", ["NONE", "missing-python.exe"])
-def test_package_launcher_uses_old_bridge_runtime_path(tmp_path, new_path):
-    legacy = tmp_path / "legacy-python.exe"
-    legacy.touch()
-    found = _run_runner(
-        tmp_path,
-        "package-discovery.ps1",
-        PACKAGE_DISCOVERY_RUNNER,
-        "-LauncherScript",
-        str(PACKAGE_LAUNCHER),
-        "-NewPath",
-        new_path,
-        "-LegacyPath",
-        str(legacy),
-        "-Root",
-        str(tmp_path),
-    )
-    assert found == str(legacy)
-
-
-def test_package_launcher_keeps_new_bridge_runtime_path(tmp_path):
-    current = tmp_path / "current-python.exe"
-    current.touch()
-    legacy = tmp_path / "legacy-python.exe"
-    legacy.touch()
-    found = _run_runner(
-        tmp_path,
-        "package-discovery.ps1",
-        PACKAGE_DISCOVERY_RUNNER,
-        "-LauncherScript",
-        str(PACKAGE_LAUNCHER),
-        "-NewPath",
-        str(current),
-        "-LegacyPath",
-        str(legacy),
-        "-Root",
-        str(tmp_path),
-    )
-    assert found == str(current)
+def test_package_launcher_keeps_new_bridge_runtime_path(bridge_discovery_results):
+    results, expected = bridge_discovery_results["package"]
+    result = results["new"]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().splitlines()[-1] == expected["new"]

@@ -32,6 +32,15 @@ class SpeechLibrary:
     phrases: list[PhraseRecord] = field(default_factory=list)
 
 
+def saved_entry_texts(store, library: SpeechLibrary) -> set[str] | None:
+    if store.read_error:
+        return None
+    return {
+        *(phrase.text for phrase in library.phrases),
+        *(answer for category in library.categories for answer in category.answers),
+    }
+
+
 DEFAULT_CATEGORIES = (
     (
         "Trebam",

@@ -42,3 +42,16 @@ def verify_bundled_speech(root: Path) -> None:
                 raise ValueError("Bundled eSpeak NG produced an empty WAV")
     for name in ("edge-tts.exe", "edge-playback.exe"):
         run(edge / name, "--help")
+
+
+def verify_audio_decoder() -> None:
+    """Require the packaged Qt media backend without opening an audio device."""
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtMultimedia import QMediaFormat
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    formats = QMediaFormat().supportedAudioCodecs(QMediaFormat.Decode)
+    if QMediaFormat.AudioCodec.MP3 not in formats:
+        raise RuntimeError("The packaged Qt MP3 decoder is unavailable")
+    # Keep the application alive until plugin discovery has finished.
+    del app

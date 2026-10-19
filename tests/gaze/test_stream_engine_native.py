@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist.tracking import tobii_stream_engine as engine
 
@@ -154,8 +155,7 @@ def test_invalid_native_gaze_breaks_check_even_when_eyes_stay_valid(
     )
     from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 
-    now = [10.0]
-    monkeypatch.setattr("pogled_assist.tracking.gaze_provider.time.monotonic", lambda: now[0])
+    now = freeze_monotonic(monkeypatch, 10.0)
     provider = TobiiGazeProvider()
     gaze, eyes = provider._new_stream_callbacks()
     provider.set_check_active(True)

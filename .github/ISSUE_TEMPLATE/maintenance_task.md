@@ -12,27 +12,8 @@ assignees: ""
 
 ## Context
 
-<!-- Link relevant files, guides, issues, decisions, or prior work. -->
+<!-- Link relevant files, guides, or prior work. Name scope boundaries, compatibility constraints, dependencies, and unresolved decisions when relevant. -->
 
-## Scope
+## Done when
 
-- In scope:
-- Out of scope:
-
-## Compatibility constraints
-
-<!-- Name behavior, user data, installation, and rollback paths that must remain unchanged. -->
-
-## Acceptance criteria
-
-- [ ]
-- [ ]
-- [ ]
-
-## Verification
-
-- Automated checks:
-- Manual Windows checks:
-- Manual Tobii hardware checks:
-- Visible evidence:
-- Known limits:
+<!-- List observable acceptance criteria as checkboxes, including any checks specific to this task. Standard verification is defined in CONTRIBUTING.md. -->
