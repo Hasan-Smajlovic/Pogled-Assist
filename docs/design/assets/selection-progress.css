@@ -1,0 +1,19 @@
+.selection-preview { height: calc(100dvh - 24px); min-height: 640px; display: flex; flex-direction: column; gap: 24px; padding: 24px; border: 1px solid #394253; border-radius: 12px; }
+.selection-preview h1 { margin: 0 0 16px; font-size: 28px; }
+.selection-preview header p { margin: 8px 0; color: #bec9d9; }
+.selection-preview-buttons { display: flex; align-items: center; justify-content: center; gap: 24px; flex: 1; }
+.selection-preview-buttons > button, .selection-preview-target { width: 240px; }
+.selection-preview-buttons button { width: 100%; height: 112px; }
+.selection-preview-target { position: relative; }
+.selection-preview-note { margin: auto 0 12px; max-width: 850px; color: #bec9d9; line-height: 1.5; }
+.selection-progress-ring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 138px; height: 138px; pointer-events: none; display: grid; place-items: center; }
+.selection-progress-ring::before { content: ''; position: absolute; inset: 15px; border: 5px solid #f59e0bba; border-radius: 50%; background: #f59e0b20; animation: selection-pulse 1.2s ease-in-out infinite; }
+.selection-progress-arc { position: absolute; inset: 21px; border-radius: 50%; background: conic-gradient(#fffffff0 65%, #0f172a7d 0); mask: radial-gradient(transparent 54%, #000 56%); }
+.selection-progress-symbol { z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid #fff; border-radius: 50%; background: #0f172ad0; color: #fff; font-size: 18px; font-weight: 700; }
+.selection-progress-label { position: absolute; top: 96px; width: 130px; text-align: center; color: #fff; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+.selection-progress-ring[data-state="held"]::before { animation: none; border-color: #f2ce76; background: #b8851929; }
+.selection-preview-target[data-state="active"] > button { animation: selection-button-pulse 1.2s ease-in-out infinite; }
+.selection-preview-target[data-state="held"] > button { border: 2px solid #f2ce76; background: #43381d; }
+@keyframes selection-pulse { 50% { opacity: .65; } }
+@keyframes selection-button-pulse { 50% { border-color: #8bd5f5; background: #245f9f; } }
+@media (prefers-reduced-motion: reduce) { .selection-progress-ring::before, .selection-preview-target > button { animation: none !important; } }

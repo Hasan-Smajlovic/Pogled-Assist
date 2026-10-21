@@ -8,6 +8,7 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import Any
 
+from .interaction.eye_tracking_policy import valid_policy
 from .interaction.gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PAUSE_MS
 from .interaction.mouse_controller import GazeSettings
 from .keyboard_layouts import KEYBOARD_SCRIPTS, LATIN_SCRIPT
@@ -16,6 +17,8 @@ from .settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
+    EYE_TRACKING_HOLD_MS_RANGE,
+    EYE_TRACKING_HOLD_MS_STEP,
     ELEVENLABS_PERCENT_RANGE,
     ELEVENLABS_STABILITY_STEPS,
     LETTERS_PER_GROUP_RANGE,
@@ -121,6 +124,7 @@ def _merge_settings(saved: Any, current: Any) -> Any:
 
 def _coerce_gaze_settings(value: Any) -> GazeSettings:
     settings = _dataclass_from_mapping(GazeSettings(), value)
+    hold_ms = clamp(settings.eye_tracking_hold_ms, EYE_TRACKING_HOLD_MS_RANGE)
     return replace(
         settings,
         smoothing=clamp(settings.smoothing, SMOOTHING_RANGE),
@@ -129,6 +133,13 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
             (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
         ),
         dwell_ms=clamp(settings.dwell_ms, DWELL_MS_RANGE),
+        eye_tracking_policy=valid_policy(
+            value.get("eye_tracking_policy") if isinstance(value, dict) else None
+        ),
+        eye_tracking_hold_ms=(
+            (hold_ms + EYE_TRACKING_HOLD_MS_STEP // 2) // EYE_TRACKING_HOLD_MS_STEP
+            * EYE_TRACKING_HOLD_MS_STEP
+        ),
         dwell_radius_px=clamp(settings.dwell_radius_px, DWELL_RADIUS_RANGE),
         click_cooldown_ms=clamp(settings.click_cooldown_ms, CLICK_COOLDOWN_MS_RANGE),
         move_mouse=bool(settings.move_mouse),

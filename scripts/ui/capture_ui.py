@@ -15,7 +15,7 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
@@ -36,6 +36,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
@@ -307,6 +308,7 @@ def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> lis
         try:
             session.capture_hotbar()
             session.capture_settings()
+            session.capture_selection_progress()
             session.capture_gaze_check()
             session.capture_speech()
             session.capture_sidebars()
@@ -385,6 +387,30 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             self.capture(
                 hotbar, f"hotbar-simulation-{name}", f"Hotbar: simulated {name}", size=size
             )
+        status = hotbar._tracking_status
+        status.set_tracking_status(TrackingStatus(TrackingState.CONNECTED))
+        status.set_eye_tracking_policy("any")
+        status.set_eye_status(True, False)
+        status.handle_gaze(0.5, 0.5, 0)
+        self.capture(hotbar, "hotbar-one-eye-ready", "Hotbar: one-eye selection ready", size=size)
+        status._last_gaze_at = None
+        status._refresh()
+        self.capture(hotbar, "hotbar-one-eye-waiting", "Hotbar: one eye without gaze", size=size)
+        status.set_eye_tracking_policy("hold")
+        status.set_holding(True)
+        self.capture(hotbar, "hotbar-selection-held", "Hotbar: selection on hold", size=size)
+
+    def capture_selection_progress(self) -> None:
+        scene = QWidget()
+        scene.setStyleSheet("background: #111318;")
+        self.widgets.append(scene)
+        overlay = InteractionOverlayWindow()
+        overlay.setParent(scene, Qt.Widget)
+        overlay._timer.timeout.disconnect(overlay._tick)
+        overlay.show_progress(QPoint(320, 180), 0.65, "Pogledaj")
+        self.capture(scene, "selection-progress", "Selection progress: active", size=(640, 360))
+        overlay.set_paused(True)
+        self.capture(scene, "selection-held", "Selection progress: paused", size=(640, 360))
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
@@ -408,6 +434,19 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
+        self.settings._select_tab(1)
+        for policy, name, title in (
+            ("hold", "settings-gaze-hold", "Settings: brief interruption"),
+            ("any", "settings-gaze-one-eye", "Settings: one-eye selection"),
+        ):
+            combo = self.settings._gaze_page._policy_combo
+            combo.setCurrentIndex(combo.findData(policy))
+            self.capture(self.settings, name, title, size=size)
+        combo.setCurrentIndex(combo.findData("both"))
+        self.settings._gaze_page.show_tab(1)
+        self.capture(self.settings, "settings-gaze-pointer", "Settings: pointer and check", size=size)
+        self.settings._gaze_page.show_tab(0)
+        self.settings._select_tab(2)
         for state in ("preparing", "speaking"):
             self.settings.set_speech_playback_state(state)
             self.capture(

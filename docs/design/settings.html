@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="assets/reference.css">
   <link rel="stylesheet" href="assets/settings.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/settings.js" defer></script>
 </head>
@@ -60,23 +61,37 @@
       <section id="gaze-settings" class="settings-page settings-panel" hidden>
         <header class="settings-page-header">
           <h2>Postavke pogleda</h2>
-          <p>Podesite brzinu, stabilnost i povratnu informaciju pogleda.</p>
-          <label class="settings-checkbox"><input id="show-tracking-feedback" type="checkbox" checked>Obavijesti o praćenju pogleda</label>
+          <p>Podesite odabir, pokazivač i provjerite pogled.</p>
         </header>
-        <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
-        <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
-        <div class="setting-row"><div class="setting-copy"><h3>Radijus stabilnog pogleda</h3><p>Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">48 px</strong><button>+&nbsp; Više</button></div>
+        <div class="gaze-settings-tabs" role="tablist" aria-label="Postavke pogleda">
+          <button id="gaze-selection-tab" type="button" role="tab" aria-selected="true" aria-controls="gaze-selection-settings" data-gaze-tab="selection">Odabir pogledom</button>
+          <button id="gaze-pointer-tab" type="button" role="tab" aria-selected="false" aria-controls="gaze-pointer-settings" data-gaze-tab="pointer">Pokazivač i provjera</button>
+        </div>
+        <section id="gaze-selection-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-selection-tab">
+        <div class="setting-row eye-policy-row"><div class="setting-copy"><h3><label for="eye-policy">Režim praćenja očiju</label></h3><p id="eye-policy-hint"></p></div><select id="eye-policy" aria-describedby="eye-policy-hint"></select></div>
+        <div id="eye-hold-row" class="setting-row"><div class="setting-copy"><h3>Čuvanje napretka</h3><p>Najduži prekid jednog oka. Koristi se samo u režimu kratkih prekida.</p></div><button id="eye-hold-less" type="button" aria-label="Kraće čuvanje napretka">−&nbsp; Manje</button><strong id="eye-hold-value" class="setting-value">150 ms</strong><button id="eye-hold-more" type="button" aria-label="Duže čuvanje napretka">+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">250 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">850 ms</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Pauza između radnji</h3><p>Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">350 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="gaze-feedback-options">
+          <label class="settings-checkbox"><input id="show-tracking-feedback" type="checkbox" checked>Obavijesti o praćenju pogleda</label>
+          <button class="settings-primary" type="button" aria-pressed="true">Prikaži napredak radnje</button>
+        </div>
+        <p class="gaze-policy-scope">Režim važi za kontrole aplikacije, uključujući Upravljač. Pomjeranje pokazivača i direktni klikovi na desktopu zahtijevaju oba oka.</p>
+        </section>
+        <section id="gaze-pointer-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-pointer-tab" hidden>
+        <div class="setting-row"><div class="setting-copy"><h3>Radijus stabilnog pogleda</h3><p>Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">48 px</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Uglađivanje pokazivača</h3><p>Niže vrijednosti su mirnije, a više brže prate pogled.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">1.00</strong><button>+&nbsp; Više</button></div>
         <p class="settings-group-label">Ponašanje i kalibracija</p>
         <div class="settings-action-grid">
           <button class="settings-primary" type="button">Pomjeraj pokazivač pogledom</button>
           <button class="settings-primary" type="button">Prikaži oznaku pogleda</button>
-          <button class="settings-primary" type="button">Prikaži napredak radnje</button>
           <label class="settings-checkbox"><input type="checkbox" checked>Koristi precizno uvećanje</label>
           <button type="button">Pokreni Tobii kalibraciju</button>
           <button type="button" data-open-view="gaze-check">Provjera pogleda</button>
         </div>
+        <p class="gaze-policy-scope">Pokazivač, Brze radnje i precizno uvećanje zahtijevaju oba oka u svakom režimu. Provjera pogleda koristi izabrani režim i ne šalje unos drugim programima.</p>
+        </section>
       </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>
         <header class="settings-page-header">
@@ -177,6 +192,9 @@
     <a id="tracking-setting-preview" href="tracking.html">Pregled obavijesti o praćenju</a>
   </details>
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
+    <p>Stavka 5 ticketa #92: Odabir pogledom i Pokazivač i provjera su dva taba unutar postojeće kategorije Postavke pogleda. Kontrole ostaju visoke 58 px, bez skrolanja na 1280 × 720 logičkih piksela. Pogledom se prolazi kroz tri izbora režima, kao kroz postojeće izbore verzija; miš otvara dropdown.</p>
+    <p>Oba oka je početni režim, uključujući stare ili neispravne postavke. Čuvanje napretka je 50–500 ms, korak 50 ms, početno 150 ms. Red ostaje na istom mjestu, onemogućen izvan režima kratkih prekida; sačuvano trajanje se ne mijenja pri promjeni režima. Promjena režima ili trajanja poništava tekući pokušaj. Izbor drugog taba također prekida pokušaj na prethodnom prikazu.</p>
+    <p>U probnom režimu jedno oko dopušta novi i završeni izbor samo uz svježe, validne podatke o pogledu. Nedostatak pogleda prikazuje čekanje, bez automatske promjene režima. Sva postojeća dugmad aplikacije, tastature, dijalozi i Controller klikovi prate režim. Direktno pomjeranje pokazivača, desktop klikovi, Brze radnje i precizno uvećanje zadržavaju oba oka. Početna pauza, zadržavanje, ponavljanje i postojeće potvrde ostaju na snazi.</p>
     <p>Referenca koristi probne podatke; kvalitet glasa potvrđuje se slušanjem u aplikaciji. Glas Efendija je treći izbor uz Standardni i Prirodni. Izbor se čuva odvojeno od glasa koji se privremeno koristi.</p>
     <p>API ključ se čuva tek odabirom Sačuvaj ključ, u Windows Credential Manageru trenutnog korisnika. Ne ulazi u JSON postavke, instalater niti zapisnike. Sačuvani ključ prikazuje potvrdu i dugmad Zamijeni ključ i Ukloni ključ; polje je skriveno. Zamjena otvara prazan, maskiran unos; Odustani zadržava stari ključ. Uspješno čuvanje zatvara unos; neuspješno čuvanje zadržava unos skriven za ponovni pokušaj. Provjeri vezu i Isprobaj Efendiju zahtijevaju čuvanje zamjene ili Odustani. Uklanjanje otvara prazan unos. Ovaj HTML ne čuva uneseni ključ. Postavke glasa i modela u aplikaciji se čuvaju automatski; promjena modela prekida prethodni izgovor i zahtijeva novu probu. Neuspjela provjera ne briše prethodno sačuvan ključ ili glas.</p>
     <p>Lista glasova sadrži samo sačuvane glasove s ElevenLabs računa, preko filtera voice_type=saved; ne dodaje podrazumijevane glasove ili ranije sačuvani ID izvan kolekcije. Ako prethodni glas nije u listi, odaberite sačuvani glas prije probe. Prazna kolekcija prikazuje Nema glasova. Za izbor glasa i modela potrebne su dozvole Čitanje glasova i Čitanje modela uz Pretvaranje teksta u govor za izgovor. Nedostajuća dozvola ima zasebnu poruku i ne znači da je ključ neispravan. Čitanje podataka o računu je neobavezan za stanje kredita; nakon isteka pauze novi Izgovori može ponovo pokušati Efendiju i bez te dozvole. Pritisak na već odabrani glas zadržava njegovu oznaku.</p>

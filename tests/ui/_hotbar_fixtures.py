@@ -11,22 +11,27 @@ from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
 
 @pytest.fixture
-def hotbar_gaze(qtbot, monkeypatch):
+def hotbar_gaze(qtbot, monkeypatch, request):
     from pogled_assist import toolbar
     from pogled_assist.ui import sidebar_panel
     from scripts.ui.capture_ui import PreviewSuggestionService
 
+    if hasattr(request, "param"):
+        monkeypatch.setattr(toolbar, "TobiiGazeProvider", request.param)
     monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
     monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
     monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
     monkeypatch.setattr(toolbar, "SuggestionService", PreviewSuggestionService)
     monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
-    monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
+    monkeypatch.setattr(
+        toolbar, "load_app_settings",
+        lambda: (GazeSettings(selection_pause_ms=500, dwell_ms=500), SpeechSettings()),
+    )
     monkeypatch.setattr(toolbar.HotbarWindow, "_start_services", lambda _self: None)
     monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
     monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
     monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
-    hotbar = toolbar.HotbarWindow(simulate_gaze=True)
+    hotbar = toolbar.HotbarWindow(simulate_gaze=not hasattr(request, "param"))
     qtbot.addWidget(hotbar)
     # Exercise physical/logical mapping at the target display's 150% scaling.
     width, height = 1280, 720
@@ -34,6 +39,8 @@ def hotbar_gaze(qtbot, monkeypatch):
     hotbar.setGeometry(0, 0, width, hotbar.BAR_HEIGHT)
     qtbot.wait(1)
     controller = hotbar._mouse
+    if hasattr(request, "param"):
+        controller._input = FakeHotbarInput()
     controller._logical_screen_rect = (0, 0, width, height)
     controller._physical_screen_rect = (0, 0, 1920, 1080)
     controller.handle_eye_status(True, True)

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication
 
+from ..interaction.eye_tracking_policy import BOTH_EYES, EyeState, eyes_usable, valid_policy
 from .gaze_check import CheckSnapshot, CheckTelemetry
 from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 
@@ -22,6 +23,8 @@ class MouseGazeProvider(QObject):
 
     gaze_updated = Signal(float, float, object)
     eye_status_changed = Signal(bool, bool)
+    eye_state_changed = Signal(object)
+    continuity_lost = Signal()
     status_changed = Signal(str)
     tracker_changed = Signal(str)
     tracking_status_changed = Signal(object)
@@ -36,6 +39,7 @@ class MouseGazeProvider(QObject):
         super().__init__(parent)
         self._cursor_position = cursor_position or QCursor.pos
         self._running = False
+        self._eye_tracking_policy = BOTH_EYES
         self._eyes = (True, True)
         self._connected = True
         self._paused = False
@@ -63,6 +67,7 @@ class MouseGazeProvider(QObject):
         self._paused = False
         self._last_gaze_at = None
         self._check_telemetry = CheckTelemetry()
+        self._check_telemetry.policy = self._eye_tracking_policy
         self.tracker_changed.emit("Simulator pogleda mišem")
         self._publish_state()
         self._emit_cursor_sample()
@@ -79,6 +84,7 @@ class MouseGazeProvider(QObject):
         self.diagnostics_updated.emit(CheckSnapshot())
         self.tracking_status_changed.emit(TrackingStatus(TrackingState.STOPPED))
         self.eye_status_changed.emit(False, False)
+        self.eye_state_changed.emit(EyeState(False, False, time.monotonic()))
         logger.info("Mouse gaze simulator stopped.")
 
     def toggle_left_eye(self) -> None:
@@ -105,6 +111,7 @@ class MouseGazeProvider(QObject):
         if not self._running:
             return
         self.eye_status_changed.emit(False, False)
+        self.continuity_lost.emit()
         self._eyes = (True, True)
         self._connected = True
         self._paused = False
@@ -129,6 +136,7 @@ class MouseGazeProvider(QObject):
             self._check_telemetry.record_eyes(*eyes, now=time.monotonic())
         self.tracking_status_changed.emit(TrackingStatus(TrackingState.SIMULATING, detail))
         self.eye_status_changed.emit(*eyes)
+        self.eye_state_changed.emit(EyeState(*eyes, time.monotonic()))
         self.status_changed.emit(
             f"Simulacija: {detail}." if detail else "Praćenje simulacijom miša je aktivno."
         )
@@ -143,7 +151,7 @@ class MouseGazeProvider(QObject):
         eyes = self._eyes if self._connected else (False, False)
         if self._check_active:
             self._check_telemetry.record_eyes(*eyes, now=now)
-        if all(eyes) and not self._paused:
+        if eyes_usable(self._eye_tracking_policy, *eyes) and not self._paused:
             if (
                 self._last_gaze_at is not None
                 and now - self._last_gaze_at >= GAZE_DELIVERY_GAP_SECONDS
@@ -151,12 +159,14 @@ class MouseGazeProvider(QObject):
                 # Match the provider's gate pulse so waiting time cannot finish a dwell.
                 self.eye_status_changed.emit(False, False)
                 self.eye_status_changed.emit(*eyes)
+                self.continuity_lost.emit()
             point = self._cursor_position()
             x, y = _normalize_cursor_position(point, self._screen_geometry)
             self._last_gaze_at = now
             if self._check_active:
                 self._check_telemetry.record_gaze(x, y, now)
-            self.gaze_updated.emit(x, y, time.monotonic_ns())
+            timestamp = time.monotonic_ns()
+            self.gaze_updated.emit(x, y, timestamp)
         if self._check_active:
             self.diagnostics_updated.emit(self.check_snapshot())
 
@@ -166,6 +176,16 @@ class MouseGazeProvider(QObject):
     def set_check_active(self, active: bool) -> None:
         self._check_active = bool(active)
         self._check_telemetry = CheckTelemetry()
+        self._check_telemetry.policy = self._eye_tracking_policy
+
+    def set_eye_tracking_policy(self, policy: str) -> None:
+        policy = valid_policy(policy)
+        if policy != self._eye_tracking_policy:
+            self._eye_tracking_policy = policy
+            self._check_telemetry.policy = policy
+            self._check_telemetry.record_gaze_invalid()
+            self._last_gaze_at = None
+            self.continuity_lost.emit()
 
 
 def _primary_screen_geometry() -> tuple[int, int, int, int] | None:

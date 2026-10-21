@@ -62,6 +62,9 @@
 .tracking-stage[data-context="confirm"] #tracking-letter-options, .tracking-stage[data-context="letters"] #tracking-confirm-options { display: none; }
 .tracking-demo-target { border: 3px solid #8bd5f5; background: #203b4e; }
 .tracking-demo-target::after { content: ''; position: absolute; bottom: 5px; left: 5px; width: var(--demo-progress, 0%); height: 7px; border-radius: 3px; background: #70dfa1; transition: width 180ms ease; }
+.tracking-demo-target[data-held="true"] { border-color: #f2ce76; background: #43381d; animation: none; }
+.tracking-demo-target[data-held="true"]::after { background: #f2ce76; transition: none; }
+.tracking-hold-label { position: absolute; bottom: 20px; left: 0; width: 100%; color: #f2ce76; font-size: 15px; }
 .tracking-gaze-dot { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; border: 3px solid #8bd5f5; border-radius: 50%; background: #245f9f38; pointer-events: none; transform: translate(-50%, -50%); }
 .tracking-gaze-dot::after { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: #eef8ff; }
 @media (max-width: 1000px) {

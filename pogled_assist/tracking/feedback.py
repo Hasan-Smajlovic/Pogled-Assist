@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 
+from ..interaction.eye_tracking_policy import BOTH_EYES, eyes_usable
 from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 
 NOTICE_DELAY_SECONDS = 0.8
@@ -32,6 +33,7 @@ def _problem(
     eyes: tuple[bool, bool] | None,
     gaze_at: float | None,
     now: float,
+    policy: str = BOTH_EYES,
 ) -> TrackingNotice | None:
     if status.state == TrackingState.RETRYING:
         return TrackingNotice("Uređaj nije povezan", "pokušavam ponovo", "error")
@@ -39,7 +41,7 @@ def _problem(
         return TrackingNotice("Povezivanje s uređajem", "odabir je zaustavljen", "quiet")
     if status.state == TrackingState.WAITING or eyes is None:
         return TrackingNotice("Čekam podatke o pogledu", "odabir je zaustavljen", "quiet")
-    if not all(eyes):
+    if not eyes_usable(policy, *eyes):
         if eyes == (False, False):
             return TrackingNotice(
                 "Praćenje oba oka je prekinuto", "pogledajte prema ekranu", eyes=eyes
@@ -73,6 +75,7 @@ class TrackingFeedbackState:
         now: float,
         *,
         active: bool = True,
+        policy: str = BOTH_EYES,
     ) -> TrackingNotice | None:
         if not active or status.state in (
             TrackingState.STOPPED,
@@ -83,13 +86,14 @@ class TrackingFeedbackState:
             return None
         while self._gaps and now - self._gaps[0] > REPEATED_WINDOW_SECONDS:
             self._gaps.popleft()
-        problem = _problem(status, eyes, gaze_at, now)
+        problem = _problem(status, eyes, gaze_at, now, policy)
         if problem is not None:
             self._healthy_since = None
             if self._problem_since is None:
                 self._problem_since = now
                 self._eye_gap = (
-                    status.state == TrackingState.CONNECTED and eyes is not None and not all(eyes)
+                    status.state == TrackingState.CONNECTED and eyes is not None
+                    and not eyes_usable(policy, *eyes)
                 )
             if status.state != TrackingState.CONNECTED:
                 self._eye_gap = False

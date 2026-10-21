@@ -97,6 +97,14 @@
 .setting-value { display: grid; place-items: center; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
 .setting-choice { grid-template-columns: minmax(260px, 1fr) 260px; }
 .setting-choice button { background: #0f1110; border-color: #4c534e; font-size: 20px; text-align: left; justify-content: flex-start; }
+.gaze-settings-tabs, .gaze-feedback-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gaze-settings-tabs button { height: 58px; }
+.gaze-settings-tabs button[aria-selected="true"] { background: #1d6f68; border-color: #74d3c6; }
+.gaze-settings-content { display: flex; flex-direction: column; gap: 8px; }
+.eye-policy-row { grid-template-columns: minmax(0, 1fr) 360px; }
+.eye-policy-row select { width: 100%; height: 58px; padding: 8px 12px; border: 1px solid #4c534e; border-radius: 10px; background: #0f1110; color: #fff; font: inherit; font-size: 18px; }
+.gaze-policy-scope { margin: 2px 0 0; color: #aeb9b3; font-size: 13px; line-height: 1.4; }
+#eye-hold-row[data-disabled="true"] .setting-copy, #eye-hold-row[data-disabled="true"] .setting-value { color: #8b928e; }
 .settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; height: 58px; }
 .learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -210,6 +218,8 @@
   .setting-copy { grid-column: 1 / -1; }
   .settings-action-grid { grid-template-columns: 1fr; }
   .setting-choice { grid-template-columns: 1fr; }
+  .eye-policy-row { grid-template-columns: 1fr; }
+  .eye-policy-row select { grid-column: 1 / -1; }
   .secret-input-row { grid-template-columns: minmax(0, 1fr) 100px; }
   .secret-input-row > .settings-primary { grid-column: 1 / -1; }
   .eleven-summary, .eleven-test-card, .audio-clear-row, .eleven-selects { grid-template-columns: 1fr; }

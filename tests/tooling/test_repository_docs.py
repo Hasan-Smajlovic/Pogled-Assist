@@ -32,6 +32,7 @@ REQUIRED_FILES = (
     "docs/design/gaze-check.html",
     "docs/design/tracking.html",
     "docs/design/hotbar.html",
+    "docs/design/selection-progress.html",
     "docs/design/keyboard.html",
     "docs/design/controller-keyboard.html",
     "docs/design/installation.html",

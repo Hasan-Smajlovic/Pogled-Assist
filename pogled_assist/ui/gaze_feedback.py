@@ -14,7 +14,7 @@ def set_gaze_feedback(widget: QWidget, active: bool) -> None:
         widget.setProperty("gazeTarget", True)
         widget.setProperty("gazePulse", "0")
         _refresh_style(widget)
-        if not timer.isActive():
+        if not timer.isActive() and not widget.property("gazePaused"):
             timer.start()
         return
 
@@ -22,6 +22,18 @@ def set_gaze_feedback(widget: QWidget, active: bool) -> None:
     widget.setProperty("gazeTarget", False)
     widget.setProperty("gazePulse", "")
     _refresh_style(widget)
+
+
+def set_gaze_paused(widget: QWidget, paused: bool) -> None:
+    widget.setProperty("gazePaused", paused)
+    if widget.property("gazeTarget"):
+        timer = _feedback_timer(widget)
+        if paused:
+            timer.stop()
+            widget.setProperty("gazePulse", "0")
+        else:
+            timer.start()
+        _refresh_style(widget)
 
 
 def _feedback_timer(widget: QWidget) -> QTimer:

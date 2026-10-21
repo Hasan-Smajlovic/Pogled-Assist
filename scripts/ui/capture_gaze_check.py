@@ -74,6 +74,28 @@ class CaptureGazeCheck:
         self._capture_precision(window, size)
         self._capture_trial(window, size)
         self._capture_free(window, size)
+        single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
+        self.widgets.append(single)
+        single.resize(*size)
+        single._timer.timeout.disconnect(single._tick)
+        single.show()
+        self.app.processEvents()
+        single._start_free()
+        single._snapshot = CheckSnapshot(True, False, gaze=(0.5, 0.5), gaze_at=time.monotonic())
+        single._render_free()
+        self.capture(single, "gaze-check-one-eye-free", "Gaze check: one-eye free view", size=size)
+        held = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="hold"))
+        self.widgets.append(held)
+        held.resize(*size)
+        held._timer.timeout.disconnect(held._tick)
+        held.show()
+        self.app.processEvents()
+        held._start_trial()
+        held._target.progress = 0.65
+        held._target.progress_target = held._target.expected_button
+        held._target.paused = True
+        held._set_trial_hint("Na čekanju · čuvam napredak do povratka oba oka.")
+        self.capture(held, "gaze-check-trial-held", "Gaze check: paused trial", size=size)
 
     def _capture_precision(self, window, size):
         window._start_precision()

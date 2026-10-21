@@ -90,6 +90,7 @@ class CheckTargetView(QWidget):
         self.free = False
         self.gaze_point: QPoint | None = None
         self.progress = 0.0
+        self.paused = False
         self.progress_target: int | None = None
         self.radius = 36
         self.hide()
@@ -144,10 +145,12 @@ class CheckTargetView(QWidget):
                             round((rect.width() - 8) * self.progress),
                             8,
                         ),
-                        QColor(COLORS[index == self.expected_button]),
+                        QColor("#ffd36a" if self.paused else COLORS[index == self.expected_button]),
                     )
                 painter.setPen(QColor("#eef2f8"))
                 label = "Pogledaj" if index == self.expected_button else "Drugo"
+                if self.paused and index == self.progress_target:
+                    label = "Ⅱ " + label
                 painter.drawText(rect, Qt.AlignCenter, label)
         else:
             for point in self.free_centers() if self.free else [center]:

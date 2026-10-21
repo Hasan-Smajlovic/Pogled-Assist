@@ -19,11 +19,14 @@
 .check-target { position: absolute; left: calc(50% - 36px); top: calc(50% - 36px); width: 72px; height: 72px; border: 2px solid #8bd5f5; border-radius: 50%; background: #1c2029; display: grid; place-items: center; font-size: 26px; }
 .depth-labels { display:flex; justify-content:space-between; font-size:15px; color:#bac5d4; }
 .check-stage.fullscreen { position:fixed; inset:0; z-index:100; background:#111318; border:0; }
-.check-controls { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:min(760px, calc(100% - 32px)); height:148px; padding:10px 14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
+.check-controls { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:min(760px, calc(100% - 32px)); height:168px; padding:10px 14px; text-align:center; background:#1c2029; border:1px solid #58647a; border-radius:12px; }
 .check-controls p { font-size:17px; margin:0 0 6px; line-height:1.4; }
 .check-controls progress { display:block; width:100%; height:6px; margin:0 0 6px; accent-color:#8bd5f5; }
 .check-trial-progress { position:absolute; left:4px; bottom:4px; height:8px; width:60%; background:#70dfa1; }
 .check-trial-progress.neighbor { background:#f0c84a; }
+.check-trial-progress.held { background: #f2ce76; }
+.check-trial-hold { position: absolute; bottom: 16px; left: 0; width: 100%; color: #f2ce76; font-size: 12px; }
+.check-controls .check-policy-label { font-size: 13px; color: #bac5d4; margin-bottom: 4px; }
 .check-stage.free .check-controls { top:calc(72% - 70px); bottom:auto; }
 .check-controls button { min-height:60px; min-width:220px; }
 .check-gaze { position:absolute; left:52%; top:48%; width:20px; height:20px; border:3px solid #70dfa1; border-radius:50%; }

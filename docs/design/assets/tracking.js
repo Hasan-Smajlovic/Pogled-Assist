@@ -4,11 +4,12 @@
   const { GROUPS } = ReferenceKeyboard;
   const trackingStates = {
     ready: { title: '', detail: '', tone: 'ready', eyes: [true, true], gaze: true },
-    brief: { title: 'Praćenje je prekinuto', detail: '', tone: 'quiet', eyes: [false, true], gaze: false },
-    right: { title: 'Desno oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [true, false], gaze: false },
-    left: { title: 'Lijevo oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [false, true], gaze: false },
+    brief: { title: 'Praćenje je prekinuto', detail: '', tone: 'quiet', eyes: [false, true], gaze: true },
+    right: { title: 'Desno oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [true, false], gaze: true },
+    left: { title: 'Lijevo oko se trenutno ne prati', detail: 'odabir je zaustavljen', tone: 'warning', eyes: [false, true], gaze: true },
     both: { title: 'Praćenje oba oka je prekinuto', detail: 'pogledajte prema ekranu', tone: 'warning', eyes: [false, false], gaze: false },
     waiting: { title: 'Čekam podatke o pogledu', detail: 'odabir je zaustavljen', tone: 'quiet', eyes: [true, true], gaze: false },
+    'one-waiting': { title: 'Čekam podatke o pogledu', detail: 'odabir je zaustavljen', tone: 'quiet', eyes: [false, true], gaze: false },
     frequent: { title: 'Praćenje često prekida', detail: 'provjerite položaj uređaja', tone: 'warning', eyes: [true, true], gaze: true },
     disconnected: { title: 'Uređaj nije povezan', detail: 'pokušavam ponovo', tone: 'error', eyes: [null, null], gaze: false },
     stabilizing: { title: 'Praćenje se vraća', detail: '', tone: 'quiet', eyes: [true, true], gaze: true },
@@ -59,7 +60,10 @@
     const stateKey = $('tracking-state').value;
     const state = trackingStates[stateKey];
     const context = $('tracking-context').value;
-    trackingPreviewProgress = state.gaze ? progress : 0;
+    const usable = ReferenceEyePolicy.usable(state.eyes, state.gaze);
+    const held = stateKey === 'brief' && ReferenceEyePolicy.read() === 'hold';
+    if (usable && ['brief', 'left', 'right'].includes(stateKey)) trackingNoticeOpen = false;
+    trackingPreviewProgress = usable || held ? progress : 0;
     $('tracking-stage').dataset.context = context;
     const showFeedback = $('show-tracking-feedback').checked;
     $('tracking-stage').dataset.feedback = showFeedback ? 'on' : 'off';
@@ -98,12 +102,21 @@
     document.querySelectorAll('.tracking-demo-target').forEach(button => {
       button.classList.remove('tracking-demo-target');
       button.style.removeProperty('--demo-progress');
+      button.removeAttribute('data-held');
       button.querySelector('.tracking-gaze-dot')?.remove();
+      button.querySelector('.tracking-hold-label')?.remove();
     });
-    if (!state.gaze || context === 'message') return;
+    if ((!usable && !held) || context === 'message') return;
     const target = context === 'confirm' ? $('tracking-confirm') : $('tracking-letter-options').children[2];
     target.classList.add('tracking-demo-target');
     target.style.setProperty('--demo-progress', trackingPreviewProgress + '%');
+    if (held) {
+      target.dataset.held = 'true';
+      const pause = document.createElement('span');
+      pause.className = 'tracking-hold-label'; pause.textContent = 'Ⅱ Na čekanju';
+      target.append(pause);
+      return;
+    }
     const dot = document.createElement('span');
     dot.className = 'tracking-gaze-dot';
     dot.setAttribute('aria-hidden', 'true');
@@ -126,7 +139,11 @@
     renderTrackingPreview(0);
   }
   $('tracking-context').addEventListener('change', () => { stopTrackingDemo(); renderTrackingPreview(0); });
-  $('tracking-state').addEventListener('change', () => { stopTrackingDemo(); setTrackingState($('tracking-state').value, 0); });
+  $('tracking-state').addEventListener('change', () => { stopTrackingDemo(); setTrackingState($('tracking-state').value, trackingPreviewProgress || 55); });
+  ReferenceEyePolicy.setupSelect($('tracking-policy-preview'), () => {
+    stopTrackingDemo(); stopTrackingRecovery(); trackingNoticeOpen = false;
+    renderTrackingPreview(0);
+  });
   $('show-tracking-feedback').addEventListener('change', () => {
     ReferenceDesign.writeSession('feedback', $('show-tracking-feedback').checked);
     ReferenceDesign.refreshLinks();
@@ -158,8 +175,9 @@
     };
     setTrackingState('ready', 20);
     step(650, 'ready', 55);
-    step(1100, 'brief');
-    step(2200, 'left');
+    step(1100, 'brief', 55);
+    if (ReferenceEyePolicy.read() === 'hold') step(1100 + ReferenceEyePolicy.holdMs(), 'left');
+    step(2200, 'left', ReferenceEyePolicy.read() === 'any' ? 70 : 0);
     step(11100, 'waiting');
     step(11400, 'stabilizing', 5);
     trackingDemoTimers.push(setTimeout(() => renderTrackingPreview(35), 12600));

@@ -9,6 +9,7 @@ import qtawesome as qta
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES, eyes_usable
 from ..tracking.gaze_provider import GAZE_DELIVERY_GAP_SECONDS
 from ..tracking.status import TrackingState, TrackingStatus
 
@@ -26,6 +27,8 @@ def tracking_status_view(
     eyes: tuple[bool, bool] | None,
     last_gaze_at: float | None,
     now: float,
+    policy: str = BOTH_EYES,
+    holding: bool = False,
 ) -> TrackingStatusView:
     fixed = {
         TrackingState.CONNECTING: (
@@ -67,12 +70,15 @@ def tracking_status_view(
             "Čekam podatke", "Čekam stanje očiju", "hourglass-half", "#f2ce76"
         )
     detail = f"Lijevo {'✓' if eyes[0] else '—'}    Desno {'✓' if eyes[1] else '—'}"
-    if not all(eyes):
+    if holding:
+        return TrackingStatusView("Odabir na čekanju", detail, "pause-circle", "#f2ce76")
+    if not eyes_usable(policy, *eyes):
         return TrackingStatusView("Praćenje pauzirano", detail, "pause-circle", "#f2ce76")
     if last_gaze_at is None or now - last_gaze_at >= GAZE_DELIVERY_GAP_SECONDS:
         detail = "Čekam podatke o pogledu" if last_gaze_at is None else "Podaci o pogledu kasne"
         return TrackingStatusView("Čekam podatke", detail, "hourglass-half", "#f2ce76")
-    return TrackingStatusView("Praćenje spremno", detail, "check-circle", "#70dfa1")
+    title = "Odabir jednim okom" if policy == ANY_EYE and not all(eyes) else "Praćenje spremno"
+    return TrackingStatusView(title, detail, "check-circle", "#70dfa1")
 
 
 class TrackingStatusWidget(QWidget):
@@ -86,6 +92,8 @@ class TrackingStatusWidget(QWidget):
         self.setFocusPolicy(Qt.NoFocus)
         self._status = TrackingStatus(TrackingState.CONNECTING)
         self._eyes: tuple[bool, bool] | None = None
+        self._policy = BOTH_EYES
+        self._holding = False
         self._last_gaze_at: float | None = None
         self._view: TrackingStatusView | None = None
         self._accessible_name: str | None = None
@@ -129,18 +137,38 @@ class TrackingStatusWidget(QWidget):
         self._refresh()
 
     def set_eye_status(self, left_valid: bool, right_valid: bool) -> None:
+        changed = self._eyes != (bool(left_valid), bool(right_valid))
         self._eyes = (bool(left_valid), bool(right_valid))
-        if not all(self._eyes):
+        if changed or not eyes_usable(self._policy, *self._eyes):
             self._last_gaze_at = None
         self._refresh()
 
     def handle_gaze(self, _x: float, _y: float, _timestamp: object) -> None:
-        if self._status.state == TrackingState.CONNECTED and self._eyes == (True, True):
+        if (
+            self._status.state == TrackingState.CONNECTED and self._eyes is not None
+            and eyes_usable(self._policy, *self._eyes)
+        ):
             self._last_gaze_at = time.monotonic()
             self._refresh()
 
+    def set_eye_tracking_policy(self, policy: str) -> None:
+        if policy != self._policy:
+            self._last_gaze_at = None
+        self._policy = policy
+        self._refresh()
+
+    def invalidate_gaze(self) -> None:
+        self._last_gaze_at = None
+        self._refresh()
+
+    def set_holding(self, holding: bool) -> None:
+        self._holding = holding
+        self._refresh()
+
     def _refresh(self) -> None:
-        view = tracking_status_view(self._status, self._eyes, self._last_gaze_at, time.monotonic())
+        view = tracking_status_view(
+            self._status, self._eyes, self._last_gaze_at, time.monotonic(), self._policy, self._holding
+        )
         if view != self._view:
             self._view = view
             self._title.setText(view.title)

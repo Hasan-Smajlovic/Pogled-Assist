@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 from statistics import median
 
+from ..interaction.eye_tracking_policy import BOTH_EYES, eyes_usable
 FRESH_SECONDS = 0.5
 HISTORY_SECONDS = 10.0
 SETTLE_SECONDS = 1.0
@@ -53,6 +54,7 @@ class CheckTelemetry:
     """Time-weighted availability over ten seconds, guarded by the provider lock."""
 
     def __init__(self) -> None:
+        self.policy = BOTH_EYES
         self.eyes: tuple[bool, bool, float] | None = None
         self.positions: tuple[Position | None, Position | None, float] | None = None
         self.gaze: tuple[float, float, float] | None = None
@@ -61,6 +63,8 @@ class CheckTelemetry:
         self._history: deque[tuple[float, bool]] = deque(maxlen=4096)
 
     def record_eyes(self, left: bool, right: bool, now: float) -> None:
+        if self.eyes is not None and self.eyes[:2] != (left, right):
+            self.gaze = None
         if self.eyes is not None and now - self.eyes[2] >= FRESH_SECONDS:
             self._history.append((self.eyes[2] + FRESH_SECONDS, False))
         self.eyes = left, right, now
@@ -68,7 +72,7 @@ class CheckTelemetry:
             self._history.append((now, left and right))
         while len(self._history) > 1 and self._history[1][0] < now - HISTORY_SECONDS:
             self._history.popleft()
-        if not (left and right):
+        if not eyes_usable(self.policy, left, right):
             self.record_gaze_invalid()
 
     def record_gaze_invalid(self) -> None:
@@ -90,7 +94,10 @@ class CheckTelemetry:
             # A valid eye origin does not require a valid gaze point.
             left_position, right_position = self.positions[:2]
         gaze = gaze_at = None
-        if left and right and self.gaze is not None and 0 <= now - self.gaze[2] < FRESH_SECONDS:
+        if (
+            eyes_usable(self.policy, left, right) and self.gaze is not None
+            and 0 <= now - self.gaze[2] < FRESH_SECONDS
+        ):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
         observed, fraction, longest = self._availability(now)
         return CheckSnapshot(
@@ -176,7 +183,10 @@ class FixationCheck:
         screen_size: tuple[int, int],
         radius: float,
         now: float,
+        *,
+        policy: str = BOTH_EYES,
     ) -> None:
+        self.policy = policy
         self.targets = targets
         self.screen_size = screen_size
         self.radius = radius
@@ -202,7 +212,7 @@ class FixationCheck:
         if (
             snapshot.gaze is None
             or snapshot.gaze_at is None
-            or not (snapshot.left and snapshot.right)
+            or not eyes_usable(self.policy, snapshot.left, snapshot.right)
             or not 0 <= now - snapshot.gaze_at < FRESH_SECONDS
             or not all(math.isfinite(value) for value in snapshot.gaze)
         ):

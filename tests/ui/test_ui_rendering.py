@@ -18,6 +18,13 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     def capture_with_script_control_check(app, widget, output_dir, name, size):
         snapshot = capture_widget(app, widget, output_dir, name, size)
+        if name == "gaze-check-one-eye-free":
+            assert widget._phase == "free"
+            assert widget._target.gaze_point is not None
+        if name == "gaze-check-trial-held":
+            assert widget._phase == "trial"
+            assert widget._target.paused
+            assert widget._target.progress == 0.65
         if name in (
             "controller-keyboard",
             "controller-latin-paged",
@@ -46,7 +53,7 @@ def test_all_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     output_dir = Path(gallery_root) / f"{size[0]}x{size[1]}" if gallery_root else tmp_path
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 104
+    assert len(snapshots) == 114
     assert (output_dir / "index.html").is_file()
     for snapshot in snapshots:
         image = QImage(str(snapshot))

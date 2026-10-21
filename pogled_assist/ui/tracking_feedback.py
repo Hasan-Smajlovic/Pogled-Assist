@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, Q
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QStyle, QWidget
 
 from .. import diagnostics
+from ..interaction.eye_tracking_policy import BOTH_EYES, eyes_usable
 from ..tracking.feedback import TrackingFeedbackState, TrackingNotice
 from ..tracking.status import TrackingState, TrackingStatus
 
@@ -27,6 +28,7 @@ class TrackingFeedback(QObject):
         self._state = TrackingFeedbackState()
         self._status = TrackingStatus(TrackingState.STOPPED)
         self._eyes: tuple[bool, bool] | None = None
+        self._policy = BOTH_EYES
         self._gaze_at: float | None = None
         self.notice: TrackingNotice | None = None
         self._timer = QTimer(self)
@@ -49,14 +51,29 @@ class TrackingFeedback(QObject):
         self.refresh()
 
     def handle_eyes(self, left: bool, right: bool) -> None:
+        changed = self._eyes != (bool(left), bool(right))
         self._eyes = bool(left), bool(right)
-        if not all(self._eyes):
+        if changed or not eyes_usable(self._policy, *self._eyes):
             self._gaze_at = None
         self.refresh()
 
     def handle_gaze(self, _x: float, _y: float, _timestamp: object) -> None:
-        if self._status.state == TrackingState.CONNECTED and self._eyes == (True, True):
+        if (
+            self._status.state == TrackingState.CONNECTED and self._eyes is not None
+            and eyes_usable(self._policy, *self._eyes)
+        ):
             self._gaze_at = time.monotonic()
+        self.refresh()
+
+    def set_eye_tracking_policy(self, policy: str) -> None:
+        if policy != self._policy:
+            self._gaze_at = None
+            self._state.reset()
+        self._policy = policy
+        self.refresh()
+
+    def invalidate_gaze(self) -> None:
+        self._gaze_at = None
         self.refresh()
 
     def refresh(self) -> None:
@@ -66,6 +83,7 @@ class TrackingFeedback(QObject):
             self._gaze_at,
             time.monotonic(),
             active=self._enabled and self._active(),
+            policy=self._policy,
         )
         if notice != self.notice:
             self.notice = notice

@@ -67,6 +67,48 @@
     renderScript();
   });
   $('show-tracking-feedback').checked = ReferenceDesign.readSession('feedback', true);
+  function renderEyePolicy() {
+    const holding = ReferenceEyePolicy.read() === 'hold';
+    const duration = ReferenceEyePolicy.holdMs();
+    $('eye-policy-hint').textContent = ReferenceEyePolicy.description();
+    $('eye-hold-value').textContent = duration + ' ms';
+    $('eye-hold-row').dataset.disabled = String(!holding);
+    $('eye-hold-less').disabled = !holding || duration <= 50;
+    $('eye-hold-more').disabled = !holding || duration >= 500;
+  }
+  ReferenceEyePolicy.setupSelect($('eye-policy'), () => {
+    renderEyePolicy();
+    $('settings-status').textContent = 'Režim je promijenjen. Odabir počinje ispočetka.';
+  });
+  for (const [id, delta] of [['eye-hold-less', -50], ['eye-hold-more', 50]]) {
+    $(id).addEventListener('click', () => {
+      ReferenceEyePolicy.setHoldMs(ReferenceEyePolicy.holdMs() + delta);
+      renderEyePolicy();
+      $('settings-status').textContent = 'Čuvanje napretka: ' + ReferenceEyePolicy.holdMs() + ' ms.';
+    });
+  }
+  function showGazeTab(name) {
+    for (const button of document.querySelectorAll('[data-gaze-tab]')) {
+      const selected = button.dataset.gazeTab === name;
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      $(button.getAttribute('aria-controls')).hidden = !selected;
+    }
+  }
+  for (const button of document.querySelectorAll('[data-gaze-tab]')) {
+    button.addEventListener('click', () => showGazeTab(button.dataset.gazeTab));
+    button.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = [...document.querySelectorAll('[data-gaze-tab]')];
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+        : (tabs.indexOf(button) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      showGazeTab(tabs[index].dataset.gazeTab);
+      tabs[index].focus();
+    });
+  }
+  showGazeTab(query.get('gaze-tab') === 'pointer' ? 'pointer' : 'selection');
+  renderEyePolicy();
   for (const button of document.querySelectorAll('[data-voice]')) button.addEventListener('click', () => {
     selectedVoice = button.dataset.voice;
     ReferenceDesign.writeSession('voice', selectedVoice);

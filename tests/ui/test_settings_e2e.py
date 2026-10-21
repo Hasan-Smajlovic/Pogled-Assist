@@ -97,6 +97,7 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     window.show()
 
     qtbot.mouseClick(window._gaze_tab_button, Qt.LeftButton)
+    window._gaze_page.show_tab(1)
     qtbot.mouseClick(window._gaze_page._move_pointer_button, Qt.LeftButton)
     qtbot.mouseClick(window._gaze_page._precision_zoom_checkbox, Qt.LeftButton)
     for _ in range(100):
@@ -148,7 +149,6 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
             (
                 window._gaze_page._move_pointer_button,
                 window._gaze_page._gaze_bubble_button,
-                window._gaze_page._interaction_overlay_button,
                 window._gaze_page._precision_zoom_checkbox,
                 window._gaze_page._calibration_button,
             ),
@@ -163,6 +163,8 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
         ),
     ):
         window._select_tab(tab)
+        if tab == 1:
+            window._gaze_page.show_tab(1)
         qtbot.wait(1)
         for button in (window._exit_button, window._gaze_tab_button):
             rect = QRect(button.mapTo(window, QPoint()), button.size())
@@ -285,6 +287,7 @@ def test_settings_gaze_waits_before_progress_and_locks_completed_control(qtbot, 
     )
     center = window._gaze_tab_button.mapToGlobal(window._gaze_tab_button.rect().center())
     now = freeze_monotonic(monkeypatch, 1.0)
+    window.handle_eye_status(True, True)
 
     for at in (1.0, 1.249):
         now[0] = at

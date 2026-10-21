@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 from . import diagnostics
 from .hotbar_speech import HotbarSpeech
+from .interaction.eye_tracking_policy import EyeState, eyes_usable
 from .interaction.mouse_controller import (
     CLICK_ACTIONS,
     CONTROLLER,
@@ -41,7 +42,7 @@ from .tracking.tobii_calibration import launch_tobii_guest_calibration, launch_t
 from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from .ui.gaze_bubble import GazeBubbleWindow
 from .ui.gaze_check_window import GazeCheckWindow
-from .ui.gaze_feedback import set_gaze_feedback
+from .ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .ui.hotbar_controls import HotbarControls, no_focus_tool_window_flags
 from .ui.interaction_overlay import InteractionOverlayWindow
 from .ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
@@ -117,6 +118,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._build_ui()
         self._build_restore_button()
         self._connect_signals()
+        self._configure_eye_tracking()
         self._install_shortcuts()
         self._foreground.prime()
         logger.info("Hotbar window initialized.")
@@ -212,6 +214,14 @@ class HotbarWindow(HotbarSpeech, QWidget):
             return None
         return self._hotbar_action_bounds(action)
 
+    def selection_bounds(self, action: str) -> QRect | None:
+        if (
+            isinstance(action, str) and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
+            and _is_visible(self._controller_window)
+        ):
+            return self._controller_window.action_bounds(action)
+        return self.action_bounds(action)
+
     def _hotbar_action_bounds(self, action: str) -> QRect | None:
         button = self._available_button(action)
         if button is None:
@@ -290,9 +300,13 @@ class HotbarWindow(HotbarSpeech, QWidget):
     def _connect_signals(self) -> None:
         self._foreground.status_changed.connect(self._set_status)
         self._gaze.gaze_updated.connect(self._mouse.handle_gaze)
+        if hasattr(self._gaze, "eye_state_changed"):
+            self._gaze.eye_state_changed.connect(self._forward_eye_state)
+            self._gaze.continuity_lost.connect(self._reset_tracking_continuity)
+            if hasattr(self._gaze, "gaze_invalidated"):
+                self._gaze.gaze_invalidated.connect(self._invalidate_gaze)
         self._gaze.gaze_updated.connect(self._tracking_status.handle_gaze)
         self._gaze.gaze_updated.connect(self._tracking_feedback.handle_gaze)
-        self._gaze.eye_status_changed.connect(self._mouse.handle_eye_status)
         self._gaze.eye_status_changed.connect(self._handle_eye_status_changed)
         self._gaze.eye_status_changed.connect(self._tracking_feedback.handle_eyes)
         self._gaze.status_changed.connect(self._set_status)
@@ -301,12 +315,16 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._gaze.tracking_status_changed.connect(self._tracking_feedback.handle_status)
         self._tracking_feedback.changed.connect(self._show_tracking_notice)
         self._mouse.gaze_position_changed.connect(self._gaze_bubble.handle_gaze)
-        self._mouse.gaze_position_changed.connect(self._quick_menu.handle_gaze)
-        self._mouse.gaze_position_changed.connect(self._quick_zoom.handle_gaze)
+        self._mouse.desktop_gaze_position_changed.connect(self._quick_menu.handle_gaze)
+        self._mouse.desktop_gaze_position_changed.connect(self._quick_zoom.handle_gaze)
         self._mouse.status_changed.connect(self._set_status)
         self._mouse.interaction_progress_changed.connect(self._interaction_overlay.show_progress)
         self._mouse.interaction_finished.connect(self._interaction_overlay.show_fired)
         self._mouse.interaction_cancelled.connect(self._interaction_overlay.clear)
+        self._mouse.interaction_hold_changed.connect(self._set_interaction_paused)
+        self._mouse._eye_gate.hold_started.connect(lambda _at: self._tracking_status.set_holding(True))
+        self._mouse._eye_gate.hold_finished.connect(lambda: self._tracking_status.set_holding(False))
+        self._mouse._eye_gate.interrupted.connect(lambda: self._tracking_status.set_holding(False))
         self._mouse.toolbar_action_requested.connect(
             lambda action: self._run_toolbar_action(action, source="gaze")
         )
@@ -842,6 +860,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         window.interaction_progress_changed.connect(self._interaction_overlay.show_progress)
         window.interaction_finished.connect(self._interaction_overlay.show_fired)
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
+        window.interaction_hold_changed.connect(self._set_interaction_paused)
+        window.handle_eye_status(*self._mouse._eye_gate.eyes)
 
         self._settings_window = window
         window.set_speech_playback_state(self._speech.playback_state)
@@ -872,7 +892,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         window.closed.connect(self._gaze_check_closed)
         window.calibration_requested.connect(self._calibrate_from_gaze_check)
         self._gaze.diagnostics_updated.connect(window.handle_snapshot)
-        self._gaze.eye_status_changed.connect(window.handle_eye_status)
+        window.handle_eye_status(*self._mouse._eye_gate.eyes)
         window.handle_tracking_status(self._check_status)
         window.handle_snapshot(self._gaze.check_snapshot())
         window.show_fullscreen_on_primary()
@@ -882,7 +902,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if window is None:
             return
         self._gaze.diagnostics_updated.disconnect(window.handle_snapshot)
-        self._gaze.eye_status_changed.disconnect(window.handle_eye_status)
         self._gaze_check_window = None
         self._gaze.set_check_active(False)
         window.deleteLater()
@@ -1002,7 +1021,13 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._quit_application()
 
     def _update_gaze_settings(self, settings: object) -> None:
+        previous = (
+            self._mouse.settings.eye_tracking_policy, self._mouse.settings.eye_tracking_hold_ms
+        )
         self._mouse.update_settings(settings)
+        if previous != (settings.eye_tracking_policy, settings.eye_tracking_hold_ms):
+            self._reset_tracking_continuity()
+        self._configure_eye_tracking()
         self._tracking_feedback.set_enabled(self._mouse.settings.show_tracking_notifications)
         if not self._mouse.settings.show_tracking_notifications:
             self._show_tracking_notice(None)
@@ -1013,6 +1038,55 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if self._controller_window is not None:
             self._controller_window.update_gaze_settings(self._mouse.settings)
         self._save_settings()
+
+    def _configure_eye_tracking(self) -> None:
+        policy = self._mouse.settings.eye_tracking_policy
+        setter = getattr(self._gaze, "set_eye_tracking_policy", None)
+        if setter is not None:
+            setter(policy)
+        self._tracking_status.set_eye_tracking_policy(policy)
+        self._tracking_feedback.set_eye_tracking_policy(policy)
+
+    def _forward_eye_state(self, state: EyeState) -> None:
+        self._mouse.handle_eye_status(state.left, state.right, state.received_at)
+        for window in (self._settings_window, self._gaze_check_window):
+            if window is not None:
+                window.handle_eye_status(state.left, state.right, state.received_at)
+
+    def _reset_tracking_continuity(self) -> None:
+        self._mouse._eye_gate.cancel()
+        self._close_tracking_overlays()
+        self._interaction_overlay.clear()
+        if self._settings_window is not None:
+            self._settings_window._eye_gate.cancel()
+        if self._gaze_check_window is not None:
+            self._gaze_check_window._eye_gate.cancel()
+
+    def _invalidate_gaze(self, received_at: float) -> None:
+        self._mouse._eye_gate.invalidate_gaze(received_at)
+        for window in (self._settings_window, self._gaze_check_window):
+            if window is not None:
+                window._eye_gate.invalidate_gaze(received_at)
+        self._close_tracking_overlays()
+        if not (
+            self._mouse._toolbar_selection.tracking_held
+            or (self._settings_window is not None and self._settings_window._gaze_selection.tracking_held)
+        ):
+            self._interaction_overlay.clear()
+
+    def _close_tracking_overlays(self) -> None:
+        self._quick_zoom.close_zoom()
+        self._quick_menu.close_menu()
+        self._zoom_context = None
+        self._gaze_bubble.clear()
+        self._tracking_status.invalidate_gaze()
+        self._tracking_feedback.invalidate_gaze()
+
+    def _set_interaction_paused(self, paused: bool) -> None:
+        self._interaction_overlay.set_paused(paused)
+        for widget in QApplication.allWidgets():
+            if widget.property("gazeTarget") or widget.property("gazePaused"):
+                set_gaze_paused(widget, paused)
 
     def _update_speech_settings(self, settings: object) -> None:
         self._speech.update_settings(settings)
@@ -1071,23 +1145,20 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
     def _handle_eye_status_changed(self, left_open: bool, right_open: bool) -> None:
         self._tracking_status.set_eye_status(left_open, right_open)
+        if (left_open, right_open) != self._mouse._eye_gate.eyes:
+            self._mouse.handle_eye_status(left_open, right_open)
+            for window in (self._settings_window, self._gaze_check_window):
+                if window is not None:
+                    window.handle_eye_status(left_open, right_open)
         if left_open and right_open:
             return
 
-        self._gaze_bubble.clear()
+        if not eyes_usable(self._mouse.settings.eye_tracking_policy, left_open, right_open):
+            self._gaze_bubble.clear()
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()
         self._zoom_context = None
         self._mouse.cancel_zoomed_click(reset_mode=False)
-        self._interaction_overlay.clear()
-        if self._speech_window is not None:
-            self._speech_window.cancel_gaze_interaction()
-        if self._keyboard_window is not None:
-            self._keyboard_window.cancel_gaze_interaction()
-        if self._controller_window is not None:
-            self._controller_window.cancel_gaze_interaction()
-        if self._settings_window is not None:
-            self._settings_window.pause_gaze_interaction()
 
 
 def _is_visible(window: QWidget | None) -> bool:

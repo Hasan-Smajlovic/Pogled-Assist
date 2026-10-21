@@ -9,6 +9,42 @@
   // Synthetic examples only; measurement rules belong to docs/ARCHITECTURE.md.
   let checkDetails = false;
   const checkNames = ['Sredina', 'Gore lijevo', 'Gore desno', 'Dolje lijevo', 'Dolje desno'];
+  function checkPolicyLabel() {
+    return 'Režim: ' + ReferenceEyePolicy.label()
+      + (ReferenceEyePolicy.read() === 'hold' ? ' · prekid do ' + ReferenceEyePolicy.holdMs() + ' ms' : '');
+  }
+  function renderCheckTracking() {
+    const state = checkEl('check-tracking-preview').value;
+    const eyes = { both: [true, true], left: [true, false], right: [false, true], held: [true, false], 'no-gaze': [true, false], none: [false, false] }[state];
+    const usable = ReferenceEyePolicy.usable(eyes, !['no-gaze', 'none'].includes(state));
+    const held = state === 'held' && ReferenceEyePolicy.read() === 'hold';
+    for (const [id, label, valid] of [['check-left-eye', 'Lijevo', eyes[0]], ['check-right-eye', 'Desno', eyes[1]]]) {
+      checkEl(id).textContent = (valid ? '✓ ' : '— ') + label + ' oko · ' + (valid ? 'prepoznato' : 'trenutno se ne prati');
+      checkEl(id).className = 'check-line ' + (valid ? 'check-pass' : 'check-attention');
+    }
+    checkEl('check-gaze-state').textContent = usable ? '✓ Pogled je dostupan u ovom režimu' : '— Čekam pogled dopušten u ovom režimu';
+    checkEl('check-gaze-state').className = 'check-line ' + (usable ? 'check-pass' : 'check-attention');
+    const stableExample = state === 'both' || state === 'held';
+    checkEl('check-both-continuity').textContent = stableExample ? '✓ Oba oka · praćenje je uglavnom neprekinuto' : '— Oba oka · praćenje ima prekide';
+    checkEl('check-both-continuity').className = 'check-line ' + (stableExample ? 'check-pass' : 'check-attention');
+    checkEl('check-both-continuity').title = 'Izmišljeni primjer kontinuiteta oba oka kroz vrijeme; ovo nije ocjena izabranog režima niti mjerenje preciznosti.';
+    for (const id of ['check-policy-summary', 'check-test-policy', 'check-result-policy']) checkEl(id).textContent = checkPolicyLabel();
+    checkEl('check-gaze').hidden = checkMode !== 'free' || !usable;
+    for (const bar of document.querySelectorAll('.check-trial-progress')) {
+      bar.hidden = !usable && !held;
+      bar.classList.toggle('held', held);
+      bar.parentElement.querySelector('.check-trial-hold')?.remove();
+      if (held) {
+        const pause = document.createElement('small');
+        pause.className = 'check-trial-hold'; pause.textContent = 'Ⅱ Na čekanju';
+        bar.parentElement.append(pause);
+      }
+    }
+    if (checkMode === 'trial') checkEl('check-test-copy').textContent = held
+      ? 'Ⅱ Napredak je na čekanju. Rok: ' + ReferenceEyePolicy.holdMs() + ' ms.'
+      : !usable ? 'Nema odabira bez dopuštenog svježeg pogleda.'
+        : 'Dugme ' + (checkTrialIndex + 1) + ' od 3 · Gledajte „Pogledaj“.';
+  }
   function checkResultTable() {
     const missingTrialGaze = noGazeExample && checkTrialFinished;
     const statuses = missingTrialGaze ? Array(5).fill('✓ Pogled blizu mete') : [
@@ -35,9 +71,10 @@
     checkEl('check-metrics-help').hidden = !checkDetails;
     checkEl('check-result-title').textContent = missingTrialGaze
       ? '✓ Pogled je bio blizu 5 od 5 meta.' : '— Za 1 od 5 meta nema dovoljno podataka.';
+    const requirement = ReferenceEyePolicy.read() === 'any' ? 'najmanje jedno oko i svjež pogled' : 'oba oka i svjež pogled';
     checkEl('check-result-advice').textContent = missingTrialGaze
-      ? 'Tokom dijela probe nije bilo dovoljno podataka o pogledu. Podesite položaj dok se prate oba oka, pa ponovite probu.'
-      : 'Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru.';
+      ? 'Tokom dijela probe nije bilo dovoljno podataka o pogledu. Podesite položaj: potrebni su ' + requirement + ', pa ponovite probu.'
+      : 'Odaberite „Podesi položaj“. Za novi test potrebni su ' + requirement + '.';
     if (missingTrialGaze) {
       checkEl('check-trial-result').textContent = '! Probni izbor: 0/3 · pogrešni izbori: 0 · poništeni izbori: 0';
     }
@@ -56,6 +93,7 @@
     checkEl('check-notice').textContent = 'Upravljanje pogledom je pauzirano tokom provjere.';
     checkEl('check-next').textContent = 'Provjeri preciznost';
     checkEl('check-reset').hidden = true;
+    renderCheckTracking();
   }
 
   function checkStage(mode) {
@@ -115,6 +153,7 @@
           + '<span class="muted">Zadržite pogled dok se traka ne popuni.</span>'
         : 'Meta 1 od 5 · Gledajte križić u krugu.<br>'
           + '<span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span>';
+    renderCheckTracking();
   }
   checkEl('check-next').addEventListener('click', () => {
     checkStage(checkMode === 'results' ? 'trial' : 'precision');
@@ -141,6 +180,7 @@
     checkEl('check-reset').textContent = 'Podesi položaj';
     checkEl('check-reset').hidden = false;
     checkResultTable();
+    renderCheckTracking();
   });
   checkEl('check-details').addEventListener('click', () => {
     checkDetails = !checkDetails;
@@ -158,5 +198,7 @@
     if (!checkEl('check-test').hidden) checkReset();
     else ReferenceDesign.returnTo();
   });
+  ReferenceEyePolicy.setupSelect(checkEl('check-policy-preview'), checkReset);
+  checkEl('check-tracking-preview').addEventListener('change', renderCheckTracking);
   checkReset();
 })();

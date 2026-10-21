@@ -10,7 +10,7 @@
 .hotbar-tracking-icon { width: 18px; text-align: center; color: var(--tracking-color); }
 .hotbar-tracking-detail { color: #bec9d9; font-size: 13px; white-space: nowrap; }
 .hotbar-status-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
-.hotbar-status-preview select { padding: 8px; font: inherit; }
+.hotbar-status-preview select { padding: 8px; font: inherit; max-width: 480px; color: #eef2f8; background: #1c2029; border: 1px solid #58647a; border-radius: 6px; }
 #hotbar-restore { width: 86px; min-height: 76px; font-size: 13px; }
 .gaze-marker-preview { position: relative; height: 320px; border: 1px solid var(--border); border-radius: 8px; margin-top: 20px; }
 .gaze-marker-preview > p { margin: 20px; color: #bec9d9; }

@@ -8,20 +8,22 @@
   <link rel="stylesheet" href="assets/reference.css">
   <link rel="stylesheet" href="assets/gaze-check.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
   <script src="assets/gaze-check.js" defer></script>
 </head>
 <body data-reference-page="gaze-check">
   <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <main id="gaze-check-screen" class="gaze-check" aria-label="Provjera pogleda">
-    <header><div><h1>Provjera pogleda</h1></div><button data-reference-return>Zatvori · Esc</button></header>
+    <header><div><h1>Provjera pogleda</h1><p id="check-policy-summary" class="muted"></p></div><button data-reference-return>Zatvori · Esc</button></header>
     <p id="check-step">1 · Položaj i praćenje</p>
     <div id="check-live" class="check-columns">
       <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth" title="Udaljenost unutar područja koje uređaj može pratiti; nije mjerenje u centimetrima."></div><div class="depth-labels"><span>Bliže uređaju</span><span>Dalje od uređaja</span></div><p class="muted">Okvir pokazuje položaj očiju, traka ispod udaljenost.</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
-      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p class="check-line check-pass">✓ Desno oko · prepoznato</p><p class="check-line check-pass">✓ Pogled se prati</p><p class="check-line check-pass">✓ Praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i odaberite „Provjeri preciznost“.</p><p class="muted">Kratak prekid može biti treptaj. Preciznost provjerite na metama.</p></section>
+      <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p id="check-left-eye" class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p id="check-right-eye" class="check-line check-pass">✓ Desno oko · prepoznato</p><p id="check-gaze-state" class="check-line check-pass">✓ Pogled se prati</p><p id="check-both-continuity" class="check-line check-pass">✓ Oba oka · praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i odaberite „Provjeri preciznost“.</p><p class="muted">Pokazatelji očiju ostaju stvarni. Odabir jednim okom ne potvrđuje preciznost pogleda.</p></section>
     </div>
-    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-copy">Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span></p><progress id="check-progress" value="1" max="5" aria-label="Napredak provjere"></progress><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini test · Esc zatvara</button></div></div>
+    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-policy" class="check-policy-label"></p><p id="check-test-copy">Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span></p><progress id="check-progress" value="1" max="5" aria-label="Napredak provjere"></progress><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini test · Esc zatvara</button></div></div>
     <div id="check-results" class="check-card" hidden style="flex:1">
       <h2 id="check-result-title">— Za 1 od 5 meta nema dovoljno podataka.</h2>
+      <p id="check-result-policy" class="muted"></p>
       <div class="check-result-columns"><div><div class="check-map"><span style="left:50%;top:50%"></span><span style="left:4%;top:6%"></span><span style="left:96%;top:6%"></span><span style="left:4%;top:94%"></span><span style="left:96%;top:94%"></span><i style="left:92%;top:12%"></i></div><p class="muted">Krug = meta · tačka = pogled<br>Linija pokazuje koliko je pogled promašio.</p></div><table id="check-result-table" class="check-metrics"></table></div>
       <p id="check-result-advice">Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru.</p>
       <p id="check-trial-result" hidden></p>
@@ -36,5 +38,14 @@
       Caregiver flow and Tobii Core instructions: ../USER_GUIDE.md#gaze-check
       Keep targets still; animate only progress, and pair colors with text. -->
   </main>
+  <details class="reference-tools"><summary>Opcije pregleda · izmišljeni podaci</summary>
+    <label>Režim <select id="check-policy-preview"></select></label>
+    <label>Trenutni podaci <select id="check-tracking-preview"><option value="both">Oba oka i svjež pogled</option><option value="left">Samo lijevo oko i svjež pogled</option><option value="right">Samo desno oko i svjež pogled</option><option value="held">Kratak prekid desnog oka</option><option value="no-gaze">Jedno oko, nema svježeg pogleda</option><option value="none">Oba oka izgubljena</option></select></label>
+  </details>
+  <details class="design-notes"><summary>Režim tokom provjere</summary>
+    <p>Preciznost, slobodni prikaz i probni izbor koriste izabrani režim. Naziv ostaje vidljiv i tokom prikaza preko cijelog ekrana te uz rezultate. Probni režim broji samo stvarne svježe, validne uzorke; ne pretpostavlja pogled iz položaja oka. U režimu kratkih prekida mjerenje ne dobija uzorke tokom prekida, a probni izbor može zamrznuti napredak. Vrijeme bez pogleda ne ulazi u pokrivenost podacima.</p>
+    <p>Pokazatelji pojedinačnih očiju i dostupnosti oba oka ne mijenjaju značenje s režimom. Kada jedno oko daje upotrebljiv pogled, ukupna dostupnost oba oka i dalje može biti niska. Nepoznati položaj oka ostaje nepoznat. Mjerenja ne daju izmišljenu preciznost ili slaganje lijevog i desnog pogleda na 4C uređaju.</p>
+    <p>Normalan unos i pomjeranje pokazivača ostaju zaustavljeni tokom cijele provjere, i dok je minimizirana. Probni izbor ne šalje Windows klik. Promjena režima poništava prethodni test; različiti režimi se ne spajaju u jedan rezultat. Ovi prikazi i brojevi su primjeri dizajna, bez čuvanja rezultata ili izvoza dijagnostike.</p>
+  </details>
 </body>
 </html>

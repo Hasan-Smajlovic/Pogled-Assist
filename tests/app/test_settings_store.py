@@ -98,6 +98,62 @@ def point_settings_at(monkeypatch, tmp_path):
     return path
 
 
+@pytest.mark.parametrize("value,expected", [
+    (None, "both"), ([], "both"), ({}, "both"), (True, "both"), ("unknown", "both"),
+    ("both", "both"), ("hold", "hold"), ("any", "any"),
+])
+def test_eye_policy_is_validated_without_stringifying_invalid_values(
+    monkeypatch, tmp_path, value, expected
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"gaze": {"eye_tracking_policy": value}}), encoding="utf-8")
+    assert load_app_settings()[0].eye_tracking_policy == expected
+
+
+@pytest.mark.parametrize("value,expected", [
+    (None, 150), ("bad", 150), (-100, 50), (1000, 500), ("200", 200), (171, 150),
+    (10 ** 400, 500), (-(10 ** 400), 50), (125, 150),
+])
+def test_eye_tracking_hold_is_bounded_and_uses_fifty_ms_steps(
+    monkeypatch, tmp_path, value, expected
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"gaze": {"eye_tracking_hold_ms": value}}), encoding="utf-8")
+    assert load_app_settings()[0].eye_tracking_hold_ms == expected
+
+
+def test_eye_policy_defaults_and_timing_do_not_replace_saved_values(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    gaze, speech = load_app_settings()
+    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (250, 850)
+    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms) == ("both", 150)
+    path.parent.mkdir()
+    path.write_text('{"gaze":{"selection_pause_ms":500,"dwell_ms":700}}', encoding="utf-8")
+    gaze, speech = load_app_settings()
+    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (500, 700)
+    assert gaze.eye_tracking_policy == "both"
+    gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms = "hold", 400
+    assert save_app_settings(gaze, speech)
+    assert load_app_settings() == (gaze, speech)
+
+
+def test_older_writer_preserves_eye_policy_from_installation_snapshot(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    gaze = GazeSettings(eye_tracking_policy="any", eye_tracking_hold_ms=450)
+    assert save_app_settings(gaze, SpeechSettings())
+    snapshot = path.parent / "version-history" / "20261021-eye-policy"
+    snapshot.mkdir(parents=True)
+    (snapshot / path.name).write_bytes(path.read_bytes())
+    path.write_text('{"gaze":{"dwell_ms":950}}', encoding="utf-8")
+    loaded, speech = load_app_settings()
+    assert (loaded.eye_tracking_policy, loaded.eye_tracking_hold_ms) == ("any", 450)
+    assert loaded.dwell_ms == 950
+    assert save_app_settings(loaded, speech)
+    assert load_app_settings()[0] == loaded
+
+
 def test_unknown_settings_survive_saves_and_downgrade_round_trip(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
