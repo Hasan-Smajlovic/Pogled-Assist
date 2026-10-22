@@ -118,5 +118,3 @@ def test_gallery_profiles_filter_before_grabbing_widgets(qapp, tmp_path, monkeyp
     session.capture(widget, "gaze-check-precision", "Fixation target")
     assert dispatched == [True]  # Omitted states must still finish deferred Qt setup.
     widget.close()
-
-

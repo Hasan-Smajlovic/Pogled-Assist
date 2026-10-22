@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from _powershell import run_dev_driver as _run_dev_driver
@@ -103,7 +106,7 @@ def _prepare_setup_environment(tmp_path):
         tmp_path / ".dev-tools" / "PSScriptAnalyzer" / "1.25.0" / "PSScriptAnalyzer.psd1"
     )
     analyzer_path.parent.mkdir(parents=True)
-    analyzer_path.write_text("test", encoding="utf-8")
+    analyzer_path.write_text("@{ ModuleVersion = '1.25.0' }", encoding="utf-8")
     check_script = tmp_path / "scripts" / "checks" / "check_github_actions.ps1"
     check_script.parent.mkdir(parents=True)
     check_script.write_text("", encoding="utf-8")
@@ -181,54 +184,102 @@ Install-DevEnvironment
     assert "-m pip install" in commands
 
 
-@pytest.mark.parametrize("registered", [False, True])
-def test_analyzer_setup_registers_missing_gallery_and_reuses_download(tmp_path, registered):
+def _prepare_analyzer_installer(tmp_path, failure=None):
     script = tmp_path / "scripts" / "checks" / "install_powershell_analyzer.ps1"
     script.parent.mkdir(parents=True)
-    shutil.copy2(DEV_SCRIPT.parent / "scripts" / "checks" / script.name, script)
+    package = tmp_path / "package.zip"
+    with ZipFile(package, "w") as archive:
+        archive.writestr(
+            "PSScriptAnalyzer.psd1",
+            "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }",
+        )
+        if failure != "module":
+            archive.writestr(
+                "PSScriptAnalyzer.psm1", "function Invoke-ScriptAnalyzer { 'synthetic analyzer' }"
+            )
+    checksum = hashlib.sha256(package.read_bytes()).hexdigest()
+    if failure == "checksum":
+        checksum = "0" * 64
+    source = (DEV_SCRIPT.parent / "scripts" / "checks" / script.name).read_text(encoding="utf-8")
+    source, replacements = re.subn(
+        r'(?m)^\$expectedHash = "[0-9a-f]{64}"$', f'$expectedHash = "{checksum}"', source
+    )
+    assert replacements == 1
+    script.write_text(source, encoding="utf-8")
+
+
+ANALYZER_DOWNLOAD_FAKE = r"""
+$state = @{ Calls = 0; Failures = 0 }
+function Invoke-WebRequest {
+    param($Uri, $OutFile, [switch]$UseBasicParsing, $TimeoutSec)
+    if ($Uri -ne "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg" -or
+        -not $UseBasicParsing -or $TimeoutSec -ne 30) { throw "Unexpected download source or deadline" }
+    $state.Calls++
+    if ($state.Calls -le $state.Failures) { throw "Synthetic network failure" }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "package.zip") -Destination $OutFile -Force
+}
+function Start-Sleep { param($Seconds) }
+function Get-PSRepository { throw "Legacy PSGallery must not be used" }
+function Save-Module { throw "Legacy PSGallery must not be used" }
+"""
+
+
+def test_analyzer_installs_without_gallery_retries_and_repairs_incomplete_cache(tmp_path):
+    _prepare_analyzer_installer(tmp_path)
     result = run_powershell_cases(
         tmp_path,
         {
             "install": {
                 "body": r"""
-$state = @{
-    Registered = REGISTERED
-    Calls = [System.Collections.Generic.List[string]]::new()
-}
-function Get-PSRepository {
-    param($Name, $ErrorAction)
-    if ($state.Registered) { [pscustomobject]@{ Name = "PSGallery" } }
-}
-function Register-PSRepository {
-    param([switch]$Default, $ErrorAction)
-    if (-not $Default) { throw "Expected the default PowerShell repository" }
-    $state.Calls.Add("register")
-    $state.Registered = $true
-}
-function Save-Module {
-    param($Name, $RequiredVersion, $Path, $Repository, [switch]$Force, $ErrorAction)
-    if (-not $state.Registered) { throw "Unable to find repository 'PSGallery'" }
-    if ($Name -ne "PSScriptAnalyzer" -or $RequiredVersion -ne "1.25.0" -or $Repository -ne "PSGallery") {
-        throw "Unexpected analyzer source or version"
-    }
-    $state.Calls.Add("save")
-    $directory = Join-Path $Path "$Name\$RequiredVersion"
-    New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    Set-Content -LiteralPath (Join-Path $directory "$Name.psd1") -Value "@{}"
-}
+$state.Failures = 1
 $installer = Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1"
+$module = Join-Path $PSScriptRoot ".dev-tools\PSScriptAnalyzer\1.25.0\PSScriptAnalyzer.psd1"
 & $installer
-function Get-PSRepository { throw "A cached analyzer must not contact PSGallery" }
-function Save-Module { throw "A cached analyzer must not be downloaded again" }
+if ($state.Calls -ne 2) { throw "Transient download was not retried" }
 & $installer
-$state.Calls -join ","
-""".replace("REGISTERED", "$true" if registered else "$false")
+if ($state.Calls -ne 2) { throw "Valid cached analyzer was downloaded again" }
+Remove-Item -LiteralPath ([IO.Path]::ChangeExtension($module, ".psm1"))
+& $installer
+if ($state.Calls -ne 3) { throw "Incomplete cache was accepted" }
+Import-Module $module -Force
+Invoke-ScriptAnalyzer
+"""
             }
         },
+        prelude=ANALYZER_DOWNLOAD_FAKE,
     )["install"]
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout == ("save" if registered else "register,save")
+    assert result.stdout.endswith("synthetic analyzer")
+    assert not list((tmp_path / ".dev-tools/PSScriptAnalyzer").glob(".download-*"))
+
+
+@pytest.mark.parametrize("failure", ["checksum", "module", "network"])
+def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(tmp_path, failure):
+    _prepare_analyzer_installer(tmp_path, failure)
+    previous = tmp_path / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
+    previous.parent.mkdir(parents=True)
+    previous.write_bytes(b"previous files")
+    result = run_powershell_cases(
+        tmp_path,
+        {
+            "install": {
+                "body": ('$state.Failures = 3\n' if failure == "network" else "")
+                + r'& (Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1")'
+            }
+        },
+        prelude=ANALYZER_DOWNLOAD_FAKE,
+    )["install"]
+
+    assert result.returncode != 0
+    assert {
+        "checksum": "archive checksum does not match",
+        "module": "archive does not contain a valid module",
+        "network": "after 3 attempts",
+    }[failure] in result.stderr
+    assert previous.read_bytes() == b"previous files"
+    assert list(previous.parent.iterdir()) == [previous]
+    assert not list(previous.parent.parent.glob(".download-*"))
 
 
 @pytest.mark.skipif(
