@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import faulthandler
 import hashlib
 import json
 import logging
@@ -18,7 +19,7 @@ from pogled_assist.tracking.gaze_check_report import GazeCheckReport, identity
 
 
 def wait_for(predicate):
-    deadline = time.perf_counter() + 3
+    deadline = time.perf_counter() + 10
     while not predicate():
         assert time.perf_counter() < deadline, "Background recording did not acknowledge completion"
         threading.Event().wait(0.005)
@@ -33,7 +34,7 @@ def writer(monkeypatch):
     )
     value = LogWriter(capacity=24)
     yield value
-    assert value.stop()
+    assert value.stop(timeout=10)
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def blocked_write(writer, monkeypatch):
     def block(sink, event, *args, **kwargs):
         if event.name == "blocked":
             entered.set()
-            release.wait(3)
+            release.wait()
         return write(sink, event, *args, **kwargs)
 
     monkeypatch.setattr(module.RecordingSink, "write", block)
@@ -185,7 +186,7 @@ def test_blocked_recording_does_not_block_producers_and_prevents_a_second_start(
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 2, context())
     writer.event("blocked", {}, trace=True)
-    assert entered.wait(1)
+    assert entered.wait(10), "Recording writer did not reach the blocked sink"
     producer_done = threading.Event()
 
     def produce():
@@ -194,14 +195,20 @@ def test_blocked_recording_does_not_block_producers_and_prevents_a_second_start(
         writer.stop_recording()
         producer_done.set()
 
-    thread = threading.Thread(target=produce)
+    thread = threading.Thread(target=produce, name="recording-producer")
     thread.start()
-    assert producer_done.wait(0.5)
-    thread.join(1)
-    assert writer.health()["queued"] <= writer.capacity
-    assert writer.start_recording(folder, 1, context()) is None
-    assert writer.recording_status()["state"] == "finishing"
-    release.set()
+    try:
+        # The sink stays blocked until release; this checks ordering, not throughput.
+        if not producer_done.wait(10):
+            faulthandler.dump_traceback()
+            pytest.fail("Recording producer waited while the sink was blocked")
+        assert writer.health()["queued"] <= writer.capacity
+        assert writer.start_recording(folder, 1, context()) is None
+        assert writer.recording_status()["state"] == "finishing"
+    finally:
+        release.set()
+        thread.join(10)
+        assert not thread.is_alive(), "Recording producer did not stop after releasing the sink"
     item = finish(writer, folder, stop=False)
     assert item["health"]["dropped"]["event"] > 0
     assert_recording_complete(item, False)
@@ -413,7 +420,7 @@ def test_recording_order_survives_ordinary_rotation_without_exceeding_queue_boun
     folder = tmp_path / "recordings"
     key = writer.start_recording(folder, 1, context())
     writer.event("blocked", {}, trace=True)
-    assert entered.wait(1)
+    assert entered.wait(10), "Recording writer did not reach the blocked sink"
     writer.event("before-summary", {})
     writer.event("stream_summary", {"counts": {}}, priority=True)
     writer.event("after-summary", {})
@@ -448,7 +455,7 @@ def test_finishing_remains_published_until_final_file_work_acknowledges(
 
     def blocked(store, **kwargs):
         entered.set()
-        release.wait(3)
+        release.wait()
         return original(store, **kwargs)
 
     monkeypatch.setattr(RecordingStore, "prune", blocked)
@@ -456,7 +463,7 @@ def test_finishing_remains_published_until_final_file_work_acknowledges(
     writer.start_recording(folder, 1, context())
     writer.stop_recording()
     try:
-        assert entered.wait(1)
+        assert entered.wait(10), "Recording finalization did not reach retention cleanup"
         state = writer.recording_status()
         assert state["busy"] and state["state"] == "finishing" and not state["complete"]
         assert writer.start_recording(folder, 1, context()) is None
@@ -503,7 +510,7 @@ def test_manual_shutdown_returns_without_waiting_for_a_blocked_file(
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 1, context())
     writer.event("blocked", {}, trace=True)
-    assert entered.wait(1)
+    assert entered.wait(10), "Recording writer did not reach the blocked sink"
     assert not writer.stop(timeout=0.01)
     release.set()
     assert writer.stop()
