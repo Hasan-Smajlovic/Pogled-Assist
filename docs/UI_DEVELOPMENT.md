@@ -68,9 +68,32 @@ Generate the gallery:
 .\dev.ps1 ui -Open
 ```
 
-The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The single 1280 × 720 gallery contains 116 surfaces; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
+The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The default 1280 × 720 gallery contains 61 representative screenshots; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
 
-The command renders:
+The local and published galleries share six review groups, a six-image Overview, thumbnail grids and full-size image links. Overview reuses existing PNGs. Groups show their screenshot counts and order representative states before extended variants; unknown images from older or newer CI artifacts appear under Other previews. Images load lazily. No application UI or interaction behavior changes when selecting a gallery profile.
+
+The default `core` profile renders:
+
+| Group (`-UiGroup`) | Screenshots | Representative coverage |
+| --- | --- | --- |
+| Speech (`speech`) | 13 | Main keyboard, categories, answers, phrases, editor, alarm/sleep/exit, Arabic letters/symbols/marks/editor |
+| Keyboard and Controller (`keyboards`) | 12 | All main tabs, narrow Latin pagination, Arabic keyboards and second symbols pages |
+| Settings (`settings`) | 10 | General, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
+| Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, active and frozen selection arcs |
+| Gaze check (`gaze-check`) | 9 | Position, fixation, detailed results, three trial sizes, held trial, wrong-neighbor feedback and free view |
+| Voice and account (`voice`) | 9 | Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
+
+The other 55 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:
+
+```powershell
+.\dev.ps1 ui -UiProfile full -Open
+.\dev.ps1 ui -UiProfile full -UiGroup voice -Open
+.\dev.ps1 ui -UiGroup settings,tracking -Open
+```
+
+`-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
+
+The full profile retains all 116 states:
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
 - General, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
@@ -91,7 +114,7 @@ PNG capture uses a fixed Qt quality of 80 for lossless compression with less enc
 
 The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check equal action cells, the single-cell calibration control, voice choices below keyboard script, and aligned adjustment columns. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
 
-The separate installation summary is documented in the HTML reference and covered by UI interaction tests; it is not part of the 116-surface gallery. Review it separately using `PogledAssist.exe --installation-check` after a build.
+The separate installation summary is documented in the HTML reference and covered by UI interaction tests; it is not part of either screenshot profile. Review it separately using `PogledAssist.exe --installation-check` after a build.
 
 Check the gallery at 100 percent and at the scale used by the target machine. Look for clipped labels, overlapping controls, inconsistent spacing, low contrast, missing icons, unexpected scrollbars, and controls that are too small for gaze.
 

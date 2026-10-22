@@ -35,7 +35,14 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     api.pulls.append(_pull(2, SECOND_SHA))
     api.runs[102] = _run(2, 102, SECOND_SHA)
     api.artifacts.append(_artifact(102, SECOND_SHA, 2))
-    api.archives[102] = _archive({"1280x720/speech.png": _png()})
+    api.archives[102] = _archive(
+        {
+            "1280x720/speech.png": _png(),
+            "1280x720/settings-gaze-one-eye.png": _png(),
+            "1280x720/settings-gaze.png": _png(),
+            "1280x720/speech-voice-timeout.png": _png(),
+        }
+    )
     api.pulls[0]["title"] = '<script>alert("PR title")</script>'
 
     comments = site.prepare_site(api, tmp_path / "site", BASE_URL)
@@ -48,6 +55,15 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
         assert "attacker.example" not in html
         assert "speech.png" in html
         assert "Hardware and Windows input are disabled" in html
+        assert 'id="overview"' in html
+        assert 'loading="lazy"' in html
+        if number == 2:
+            assert (
+                html.index('id="speech"') < html.index('id="settings"') < html.index('id="voice"')
+            )
+            assert html.index('href="settings-gaze.png"') < html.index(
+                'href="settings-gaze-one-eye.png"'
+            )
     root = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     assert '<script>alert("PR title")</script>' not in root
     assert "&lt;script&gt;" in root

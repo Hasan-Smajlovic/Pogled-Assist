@@ -4,6 +4,10 @@ param(
     [string]$Action = "help",
     [string]$BasePython,
     [switch]$Open,
+    [ValidateSet("core", "full")]
+    [string]$UiProfile = "core",
+    [ValidateSet("speech", "keyboards", "settings", "tracking", "gaze-check", "voice")]
+    [string[]]$UiGroup = @(),
     [ValidateSet(0, 1, 2)]
     [int]$Workers = 0,
     [string[]]$TestPaths = @(),
@@ -23,6 +27,9 @@ $StageTimings = [Collections.Generic.List[object]]::new()
 
 if ($TestPaths.Count -gt 0 -and $Action -notin @("test", "test-ui")) {
     throw "-TestPaths is supported only by test and test-ui; coverage and check always run the full suite."
+}
+if (($UiProfile -ne "core" -or $UiGroup.Count -gt 0) -and $Action -ne "ui") {
+    throw "-UiProfile and -UiGroup are supported only by ui."
 }
 
 function Invoke-CheckStage {
@@ -379,8 +386,10 @@ Pogled Assist development commands
   .\dev.ps1 setup -BasePython C:\Path\To\python.exe    Select an installed Python
   .\dev.ps1 run         Start the real application from source
   .\dev.ps1 simulate    Start with mouse-driven gaze and no Tobii discovery
-  .\dev.ps1 ui          Render deterministic UI screenshots under dist\ui-preview
+  .\dev.ps1 ui          Render representative UI screenshots under dist\ui-preview
   .\dev.ps1 ui -Open    Render UI screenshots and open the HTML gallery
+  .\dev.ps1 ui -UiProfile full    Render all screenshot variants
+  .\dev.ps1 ui -UiProfile full -UiGroup voice    Render only the extended voice group
   .\dev.ps1 test        Run the complete hardware-independent test suite
   .\dev.ps1 test -TestPaths tests/gaze    Run an explicitly focused selection
   .\dev.ps1 test-ui     Run only end-to-end UI workflow and rendering tests
@@ -419,9 +428,14 @@ try {
         "ui" {
             $python = Get-DevPython
             $outputRoot = Join-Path $RepoRoot "dist\ui-preview"
-            Invoke-ExternalCommand -FilePath $python -ArgumentList @(
-                "-B", "-m", "scripts.ui.capture_ui", "--output", $outputRoot
+            $uiArguments = @(
+                "-B", "-m", "scripts.ui.capture_ui", "--output", $outputRoot,
+                "--profile", $UiProfile
             )
+            foreach ($group in $UiGroup) {
+                $uiArguments += @("--group", $group)
+            }
+            Invoke-ExternalCommand -FilePath $python -ArgumentList $uiArguments
             if ($Open) {
                 Start-Process -FilePath (Join-Path $outputRoot "index.html")
             }

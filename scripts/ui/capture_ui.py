@@ -6,7 +6,6 @@ import argparse
 import os
 from contextlib import ExitStack
 from dataclasses import replace
-from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,6 +41,7 @@ from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
 from scripts.ui.capture_speech_voices import CaptureSpeechVoices
+from scripts.ui.gallery import GROUPS, gallery_content, group_for, page_html, select_names
 
 
 class PreviewAppBar:
@@ -259,49 +259,26 @@ def _capture_widget(
 
 
 def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
-    cards = "\n".join(
-        f'<article><h2>{escape(title)}</h2><a href="{path.name}">'
-        f'<img src="{path.name}" alt="{escape(title)}"></a></article>'
-        for title, path in snapshots
-    )
-    document = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pogled Assist UI preview</title>
-  <style>
-    body {{ margin: 0; padding: 32px; background: #0c0e12; color: #f6f7fb;
-      font-family: "Segoe UI", Arial, sans-serif; }}
-    header {{ max-width: 900px; margin: 0 auto 32px; }}
-    h1 {{ margin-bottom: 8px; }}
-    p {{ color: #aeb8c8; }}
-    main {{ display: grid; gap: 24px; }}
-    article {{ overflow: hidden; border: 1px solid #303746; border-radius: 12px;
-      background: #151923; }}
-    h2 {{ margin: 0; padding: 14px 18px; font-size: 16px; }}
-    a {{ display: block; overflow: auto; background: #08090c; }}
-    img {{ display: block; max-width: 100%; height: auto; margin: 0 auto; }}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Pogled Assist UI preview</h1>
-    <p>Generated from the real Qt widgets with hardware and Windows input disabled.</p>
-  </header>
-  <main>{cards}</main>
-</body>
-</html>
-"""
     gallery_path = output_dir / "index.html"
-    gallery_path.write_text(document, encoding="utf-8")
+    images = {path.stem: title for title, path in snapshots}
+    gallery_path.write_text(
+        page_html("Pogled Assist UI preview", gallery_content(images)), encoding="utf-8"
+    )
     return gallery_path
 
 
-def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> list[Path]:
+def capture_ui(
+    output_dir: Path,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    profile: str = "core",
+    groups: tuple[str, ...] = (),
+) -> list[Path]:
+    selected = select_names(profile, groups)
     output_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(["capture-ui"])
-    session = _CaptureSession(app, output_dir, (width, height))
+    session = _CaptureSession(app, output_dir, (width, height), selected, groups)
     with ExitStack() as stack:
         for active_patch in session.patches():
             stack.enter_context(active_patch)
@@ -315,6 +292,11 @@ def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> lis
             session.capture_arabic()
         finally:
             session.close()
+    # Remove only known screenshots omitted by this successful capture. Never
+    # recursively clean a caller-provided output directory or unrelated files.
+    retained = {path.stem for _, path in session.snapshots}
+    for name in session.encountered - retained:
+        (output_dir / f"{name}.png").unlink(missing_ok=True)
     _write_gallery(output_dir, session.snapshots)
     return [path for _, path in session.snapshots]
 
@@ -322,7 +304,14 @@ def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> lis
 class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
     """Keep preview windows alive until all states have been captured."""
 
-    def __init__(self, app: QApplication, output_dir: Path, size: tuple[int, int]) -> None:
+    def __init__(
+        self,
+        app: QApplication,
+        output_dir: Path,
+        size: tuple[int, int],
+        selected: frozenset[str] | None,
+        groups: tuple[str, ...],
+    ) -> None:
         self.app = app
         self.output_dir = output_dir
         self.size = size
@@ -330,6 +319,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.speech_settings = SpeechSettings()
         self.widgets: list[QWidget] = []
         self.snapshots: list[tuple[str, Path]] = []
+        self.selected = selected
+        self.groups = groups
+        self.encountered: set[str] = set()
+        self.prepared: set[QWidget] = set()
 
     def patches(self) -> tuple:
         return (
@@ -355,6 +348,21 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self, widget: QWidget, name: str, title: str, *, size: tuple[int, int] | None = None
     ) -> None:
         width, height = self.size if size is None else size
+        self.encountered.add(name)
+        if (self.selected is not None and name not in self.selected) or (
+            self.groups and group_for(name) not in self.groups
+        ):
+            # State setup later in the sequence can rely on this window's geometry.
+            # Do not grab or encode an image for omitted states.
+            if widget not in self.prepared:
+                widget.resize(width, height)
+                widget.show()
+                self.prepared.add(widget)
+            # Deferred state setup (for example fixation initialization) still
+            # needs Qt dispatch even when this particular image is not selected.
+            self.app.processEvents()
+            return
+        self.prepared.add(widget)
         path = _capture_widget(self.app, widget, self.output_dir, name, (width, height))
         self.snapshots.append((title, path))
 
@@ -717,10 +725,16 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=Path("dist/ui-preview"))
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--profile", choices=("core", "full"), default="core")
+    parser.add_argument("--group", choices=tuple(GROUPS), action="append", default=[])
     arguments = parser.parse_args()
 
     snapshots = capture_ui(
-        arguments.output.resolve(), width=arguments.width, height=arguments.height
+        arguments.output.resolve(),
+        width=arguments.width,
+        height=arguments.height,
+        profile=arguments.profile,
+        groups=tuple(arguments.group),
     )
     print(f"Rendered {len(snapshots)} UI snapshots: {arguments.output.resolve() / 'index.html'}")
     return 0

@@ -32,7 +32,8 @@ Run these commands in Windows PowerShell. The automated checks do not require a 
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 104 main UI surfaces at 1280 × 720 without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 61 representative UI screenshots at 1280 × 720 without external services |
+| `.\dev.ps1 ui -UiProfile full -UiGroup voice -Open` | Not required | Extended voice/account screenshots; [profiles and groups](UI_DEVELOPMENT.md#rendered-ui-gallery) |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
@@ -123,7 +124,7 @@ Coverage is a regression floor, not a quality score. The initial floor is 60 per
 
 The native API fakes check arguments, callback filtering, failure cleanup, and resource ownership. They do not load a real DLL, exercise a native streaming thread, reserve an actual Windows work area, or prove cross-application focus. Provider and bridge tests cover delivery gaps, terminal protocol failures, and reconnect decisions separately. Use the [manual checks](UI_DEVELOPMENT.md#manual-windows-checks) for the real Windows and Tobii boundaries.
 
-Pixel baselines are intentionally not enforced in CI. Qt rendering changes with Windows fonts, scaling, and GPU backends, which would make strict image diffs noisy. CI confirms that every surface renders. A human reviews the generated gallery for clipping, overlap, spacing, contrast, and consistency.
+Pixel baselines are intentionally not enforced in CI. Qt rendering changes with Windows fonts, scaling, and GPU backends, which would make strict image diffs noisy. CI confirms that the representative screenshot set renders. Extended variants remain available for targeted review through the [gallery profiles](UI_DEVELOPMENT.md#rendered-ui-gallery); functional UI tests continue to exercise their behavior. A human reviews the generated gallery for clipping, overlap, spacing, contrast, and consistency.
 
 ## Mouse gaze simulation
 
