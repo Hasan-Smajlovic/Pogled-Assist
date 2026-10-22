@@ -12,6 +12,8 @@ Rebuild the affected model and regenerate its reports following the [model comma
 
 Run `.\dev.ps1 test -Workers 1` to reproduce a failure in a single process. For a specific module, use `.\dev.ps1 test -Workers 1 -TestPaths tests/tooling/test_dev_environment.py`. After fixing the failure, run the complete `.\dev.ps1 check -Parallel`; use sequential `.\dev.ps1 check` when diagnosing stage contention or another parallel-only failure. If pytest reports an unrecognized `-n` argument, run `.\dev.ps1 setup` to install the declared development dependencies. Do not install plugins into another environment or remove coverage/packaging to make a final check pass.
 
+For a slow `check -Parallel`, inspect the paths printed when each stage starts. `application.log` and `infrastructure.log` include individual test names and the 30 slowest durations at completion. Their `.stderr.log` files contain process diagnostics. Read an active test log from another terminal with `Get-Content -LiteralPath '<printed-log-path>' -Tail 15 -Wait` (Ctrl+C stops the reader). Output may arrive in batches; a test name or elapsed-time status alone does not prove progress. Compare each test group with `package.log` and the final timing summary before increasing `-Workers`. The deferred installer tests and combined report are printed in the main terminal.
+
 ## Restricted Windows verification sessions
 
 A restricted agent session can run Python and collect tests while denying operations needed by the full check. Symptoms can include:

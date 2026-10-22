@@ -12,7 +12,8 @@ param(
     [int]$Workers = 0,
     [switch]$Parallel,
     [Parameter(DontShow)]
-    [switch]$ParallelCoverageSubset,
+    [ValidateSet("All", "Application", "Infrastructure")]
+    [string]$CoverageGroup = "All",
     [string[]]$TestPaths = @(),
     [string]$BaseRef = "origin/development"
 )
@@ -37,8 +38,8 @@ if (($UiProfile -ne "core" -or $UiGroup.Count -gt 0) -and $Action -ne "ui") {
 if ($Parallel -and $Action -ne "check") {
     throw "-Parallel is supported only by check."
 }
-if ($ParallelCoverageSubset -and $Action -ne "coverage") {
-    throw "-ParallelCoverageSubset is supported only by the internal coverage check."
+if ($CoverageGroup -ne "All" -and $Action -ne "coverage") {
+    throw "-CoverageGroup is supported only by the internal coverage check."
 }
 
 function Invoke-CheckStage {
@@ -321,11 +322,56 @@ function Invoke-TestSuite {
     }
     if ($WithCoverage) {
         $arguments += Get-CoverageArguments -Mode $Coverage
+        $arguments += "--durations=30"
+        if ($Coverage -eq "Collect") { $arguments += "-v" }
     }
     $arguments += @($IgnorePaths | ForEach-Object { "--ignore=$_" })
     $arguments += $Paths
 
     Invoke-Pytest -Python $python -Arguments $arguments -WithCoverage:$WithCoverage
+}
+
+function Invoke-CoverageGroup {
+    # The application group is the complement, so new test folders are included.
+    switch ($CoverageGroup) {
+        "Application" {
+            Invoke-TestSuite -Coverage Collect -IgnorePaths @("tests/release", "tests/tooling")
+        }
+        "Infrastructure" {
+            Invoke-TestSuite -Coverage Collect -Paths @("tests/release", "tests/tooling") `
+                -IgnorePaths @("tests/release/test_windows_installer.py")
+        }
+        default { Invoke-TestSuite -Coverage Full }
+    }
+}
+
+function Merge-CheckCoverage {
+    param([string[]]$Files)
+
+    foreach ($file in $Files) {
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "Missing coverage data: $file"
+        }
+    }
+    $python = Get-DevPython
+    # Reporting also auto-combines sibling shards in coverage.py. Keep its data
+    # inside this unique run directory, away from interrupted checkout runs.
+    $combined = Join-Path (Split-Path -Parent $Files[0]) "combined.coverage"
+    $dataArgument = "--data-file=$combined"
+    Invoke-ExternalCommand -FilePath $python -ArgumentList (@("-m", "coverage", "combine", "--keep", $dataArgument) + $Files)
+    try {
+        # Generate HTML even when the combined coverage is below the configured floor.
+        Invoke-ExternalCommand -FilePath $python -ArgumentList @(
+            "-m", "coverage", "html", $dataArgument, "--fail-under=0", "-d", (Join-Path $RepoRoot "dist\coverage-html")
+        )
+        Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "coverage", "report", $dataArgument)
+    } finally {
+        $destination = $env:COVERAGE_FILE
+        if ([string]::IsNullOrEmpty($destination)) { $destination = Join-Path $RepoRoot ".coverage" }
+        if ([IO.Path]::GetFullPath($destination) -ne [IO.Path]::GetFullPath($combined)) {
+            Copy-Item -LiteralPath $combined -Destination $destination -Force
+        }
+    }
 }
 
 function Get-CoverageArguments {
@@ -433,8 +479,11 @@ function New-CheckStage {
         ErrorFile = $null
         OutputTask = $null
         ErrorTask = $null
-        Log = Join-Path $logRoot ($definition.Action + ".log")
-        ErrorLog = Join-Path $logRoot ($definition.Action + ".stderr.log")
+        Log = Join-Path $logRoot ($definition.Id + ".log")
+        ErrorLog = Join-Path $logRoot ($definition.Id + ".stderr.log")
+        CoverageFile = if ($definition.CoverageGroup -ne "All") {
+            Join-Path $logRoot ($definition.Id + ".coverage")
+        } else { $null }
     }
     return $stage
 }
@@ -444,11 +493,12 @@ function Start-CheckStage {
 
     $process = $Stage.Process
     $shellName = if ($PSEdition -eq "Desktop") { "powershell.exe" } else { "pwsh.exe" }
-    $stage.OutputFile = [IO.File]::Create($stage.Log)
-    $stage.ErrorFile = [IO.File]::Create($stage.ErrorLog)
+    $stage.OutputFile = [IO.File]::Open($stage.Log, "Create", "Write", "Read")
+    $stage.ErrorFile = [IO.File]::Open($stage.ErrorLog, "Create", "Write", "Read")
     $stageArguments = "{0} -Workers {1}" -f $definition.Action, $Workers
-    if ($definition.ParallelCoverageSubset) {
-        $stageArguments += " -ParallelCoverageSubset"
+    if ($definition.CoverageGroup -ne "All") {
+        $stageArguments += " -CoverageGroup $($definition.CoverageGroup)"
+        $process.StartInfo.EnvironmentVariables["COVERAGE_FILE"] = $stage.CoverageFile
     }
     $command = "try {{ & '{0}' {1}; exit 0 }} catch {{ Write-Error `$_ -ErrorAction Continue; exit 1 }}" -f @(
         $ScriptPath.Replace("'", "''"), $stageArguments
@@ -490,6 +540,7 @@ function Complete-CheckStage {
         Status = $status
     })
     if ($status -ne "passed") { $failed.Add($stage.Name) }
+    foreach ($stream in @($stage.OutputFile, $stage.ErrorFile)) { $stream.Flush() }
     Write-Host ("Finished: {0} ({1}, {2:N1}s); logs: {3}, {4}" -f @(
         $stage.Name, $status, $stage.Timer.Elapsed.TotalSeconds, $stage.Log, $stage.ErrorLog
     ))
@@ -560,14 +611,22 @@ function Invoke-ParallelCheck {
     try {
         foreach ($definition in @(
             @{
+                Id = "application"
                 Action = "coverage"
-                Name = "Tests and coverage"
-                ParallelCoverageSubset = $true
+                Name = "Application tests and coverage"
+                CoverageGroup = "Application"
             },
             @{
+                Id = "infrastructure"
+                Action = "coverage"
+                Name = "Release and tooling tests and coverage"
+                CoverageGroup = "Infrastructure"
+            },
+            @{
+                Id = "package"
                 Action = "package"
                 Name = "Windows package and installer smoke tests"
-                ParallelCoverageSubset = $false
+                CoverageGroup = "All"
             }
         )) {
             $stage = New-CheckStage -Definition $definition -LogRoot $logRoot
@@ -575,14 +634,25 @@ function Invoke-ParallelCheck {
             Start-CheckStage -Stage $stage -Definition $definition -ScriptPath $ScriptPath
         }
         Wait-CheckStages -Stages $stages -Failed $failed -StatusIntervalMilliseconds $StatusIntervalMilliseconds
+        $installerCoverage = Join-Path $logRoot "installer.coverage"
+        $previousCoverageFile = $env:COVERAGE_FILE
         try {
+            $env:COVERAGE_FILE = $installerCoverage
             Invoke-CheckStage -Name "Installer integration tests and coverage" -Command {
-                Invoke-TestSuite `
-                    -Coverage Append `
-                    -Paths @("tests/release/test_windows_installer.py")
+                Invoke-TestSuite -Coverage Collect -Paths @("tests/release/test_windows_installer.py")
             }
         } catch {
             $failed.Add("Installer integration tests and coverage")
+        } finally {
+            $env:COVERAGE_FILE = $previousCoverageFile
+        }
+        try {
+            Invoke-CheckStage -Name "Combined coverage report" -Command {
+                $files = @($stages | Where-Object { $null -ne $_.CoverageFile } | ForEach-Object { $_.CoverageFile })
+                Merge-CheckCoverage -Files ($files + @($installerCoverage))
+            }
+        } catch {
+            $failed.Add("Combined coverage report")
         }
         if ($failed.Count -gt 0) { throw "Failed checks: $($failed -join ', '). See logs in $logRoot" }
     } finally {
@@ -612,13 +682,14 @@ Pogled Assist development commands
   .\dev.ps1 check-fast -BaseRef origin/development    Override the comparison ref
   .\dev.ps1 check-fast -Workers 2    Use two workers even for a small selection
   .\dev.ps1 check       Run all local checks sequentially, including the Windows package
-  .\dev.ps1 check -Parallel    After lint, run coverage and packaging with status every 5 seconds
+  .\dev.ps1 check -Parallel    After lint, overlap application tests, release/tooling tests and packaging
   .\dev.ps1 test -Workers 1    Run tests sequentially (default without coverage: two)
   .\dev.ps1 coverage -Workers 2    Opt in to parallel coverage (default: one process)
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
 
   coverage and check ignore PYTEST_ADDOPTS, then restore it after testing.
-  check -Parallel writes combined coverage reports once, after installer tests.
+  check -Parallel uses one process per test group by default and reports status every 5 seconds.
+  It writes combined coverage reports once, after installer tests; coverage lists the 30 slowest tests.
 "@
 }
 
@@ -661,15 +732,7 @@ try {
             Invoke-CheckStage -Name "UI tests" -Command { Invoke-TestSuite -UiOnly -Paths $TestPaths }
         }
         "coverage" {
-            if ($ParallelCoverageSubset) {
-                Invoke-CheckStage -Name "Tests and coverage" -Command {
-                    Invoke-TestSuite `
-                        -Coverage Collect `
-                        -IgnorePaths @("tests/release/test_windows_installer.py")
-                }
-            } else {
-                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -Coverage Full }
-            }
+            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-CoverageGroup }
         }
         "lint" {
             Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }

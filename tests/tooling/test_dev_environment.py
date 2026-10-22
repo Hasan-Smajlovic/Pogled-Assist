@@ -294,6 +294,50 @@ if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" 
     assert args[args.index("-n") + 1] == expected
     assert ("--dist=loadfile" in args) == (expected == "2")
     assert ("--cov=pogled_assist" in args) == coverage
+    assert ("--durations=30" in args) == coverage
+
+
+@pytest.fixture(scope="module")
+def coverage_group_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("coverage-groups")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    return run_powershell_cases(
+        root,
+        {
+            group: {
+                "body": f'$CoverageGroup = "{group}"\n'
+                + """
+function Invoke-TestSuite {
+    param([string]$Coverage, [string[]]$Paths = @(), [string[]]$IgnorePaths = @())
+    [pscustomobject]@{ coverage = $Coverage; paths = @($Paths); ignore = @($IgnorePaths) } |
+        ConvertTo-Json -Compress
+}
+Invoke-CoverageGroup
+"""
+            }
+            for group in ("All", "Application", "Infrastructure")
+        },
+        prelude=DEV_PRELUDE,
+    )
+
+
+@pytest.mark.parametrize(
+    "group,mode,paths,ignored",
+    [
+        ("All", "Full", [], []),
+        ("Application", "Collect", [], ["tests/release", "tests/tooling"]),
+        (
+            "Infrastructure",
+            "Collect",
+            ["tests/release", "tests/tooling"],
+            ["tests/release/test_windows_installer.py"],
+        ),
+    ],
+)
+def test_coverage_groups_partition_the_suite(coverage_group_results, group, mode, paths, ignored):
+    result = coverage_group_results[group]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {"coverage": mode, "paths": paths, "ignore": ignored}
 
 
 @pytest.mark.parametrize("defer_report", [False, True])
@@ -385,29 +429,44 @@ def test_full_check_rejects_manual_partial_test_selection(tmp_path):
     assert "coverage and check always run the full suite" in result.stderr
 
 
-@pytest.mark.parametrize("failed_action", ["none", "coverage", "package", "installer"])
+@pytest.mark.parametrize(
+    "failed_action", ["none", "application", "infrastructure", "package", "installer", "report"]
+)
 def test_parallel_check_defers_installer_tests_until_package_finishes(tmp_path, failed_action):
     if failed_action == "installer":
         (tmp_path / "fail-installer-tests").write_text("fail", encoding="utf-8")
     (tmp_path / "child.ps1").write_text(
         """
-param([string]$Action, [int]$Workers, [switch]$ParallelCoverageSubset)
+param([string]$Action, [int]$Workers, [string]$CoverageGroup = "All")
 if ($Workers -ne 2) { throw "Worker option was lost" }
-if (($Action -eq "coverage") -ne $ParallelCoverageSubset) {
-    throw "Only the coverage stage should defer installer integration tests"
+if (($Action -eq "coverage") -eq ($CoverageGroup -eq "All")) {
+    throw "Only coverage stages should select a test group"
 }
-Set-Content -LiteralPath (Join-Path $PSScriptRoot "$Action.started") -Value "started"
+$id = if ($Action -eq "coverage") { $CoverageGroup.ToLowerInvariant() } else { $Action }
+if ($Action -eq "coverage") {
+    if ([IO.Path]::GetFileName($env:COVERAGE_FILE) -ne "$id.coverage") {
+        throw "Coverage stages must use separate data files"
+    }
+    Set-Content -LiteralPath $env:COVERAGE_FILE -Value $id
+} elseif ($env:COVERAGE_FILE -ne "original-coverage") { throw "Coverage environment leaked" }
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$id.started") -Value "started"
 $deadline = [DateTime]::UtcNow.AddSeconds(10)
-while (-not ((Test-Path (Join-Path $PSScriptRoot "coverage.started")) -and
+while (-not ((Test-Path (Join-Path $PSScriptRoot "application.started")) -and
+             (Test-Path (Join-Path $PSScriptRoot "infrastructure.started")) -and
              (Test-Path (Join-Path $PSScriptRoot "package.started")))) {
     if ([DateTime]::UtcNow -gt $deadline) { throw "Stages did not overlap" }
     Start-Sleep -Milliseconds 20
 }
-[Console]::Out.WriteLine("$Action output " + ('x' * 131072))
-[Console]::Error.WriteLine("$Action diagnostic " + ('y' * 131072))
+[Console]::Out.WriteLine("$id output " + ('x' * 131072))
+[Console]::Error.WriteLine("$id diagnostic " + ('y' * 131072))
+$logRoot = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "dist") -Directory)[0].FullName
+foreach ($suffix in @("log", "stderr.log")) {
+    $reader = [IO.File]::Open((Join-Path $logRoot "$id.$suffix"), "Open", "Read", "ReadWrite")
+    $reader.Dispose()
+}
 Start-Sleep -Milliseconds 350
-Set-Content -LiteralPath (Join-Path $PSScriptRoot "$Action.finished") -Value "finished"
-if ($Action -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$id.finished") -Value "finished"
+if ($id -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
 """.replace("FAILED_ACTION", failed_action),
         encoding="utf-8",
     )
@@ -415,40 +474,61 @@ if ($Action -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
         tmp_path,
         """
 $Workers = 2
+$env:COVERAGE_FILE = "original-coverage"
 function Invoke-TestSuite {
     param([string]$Coverage, [string[]]$Paths)
-    if ($Coverage -ne "Append") { throw "Final coverage append/report options were lost" }
+    if ($Coverage -ne "Collect") { throw "Installer coverage must defer the report" }
     if ($Paths.Count -ne 1 -or $Paths[0] -ne "tests/release/test_windows_installer.py") {
         throw "Unexpected deferred test selection"
     }
-    foreach ($action in @("coverage", "package")) {
+    foreach ($action in @("application", "infrastructure", "package")) {
         if (-not (Test-Path (Join-Path $PSScriptRoot "$action.finished"))) {
             throw "Installer tests ran before $action finished"
         }
     }
+    if ([IO.Path]::GetFileName($env:COVERAGE_FILE) -ne "installer.coverage") {
+        throw "Installer coverage must use a separate data file"
+    }
+    Set-Content -LiteralPath $env:COVERAGE_FILE -Value "installer"
     Set-Content -LiteralPath (Join-Path $PSScriptRoot "installer-tests.finished") -Value "finished"
     if (Test-Path (Join-Path $PSScriptRoot "fail-installer-tests")) {
         throw "Synthetic installer test failure"
     }
+}
+function Merge-CheckCoverage {
+    param([string[]]$Files)
+    if ($env:COVERAGE_FILE -ne "original-coverage") { throw "Coverage environment leaked" }
+    $contents = @($Files | ForEach-Object { (Get-Content -LiteralPath $_ -Raw).Trim() })
+    if (($contents -join ',') -ne "application,infrastructure,installer") {
+        throw "Combined report omitted test coverage"
+    }
+    if (-not (Test-Path (Join-Path $PSScriptRoot "installer-tests.finished"))) {
+        throw "Report ran before installer tests"
+    }
+    if ("FAILED_ACTION" -eq "report") { throw "Synthetic report failure" }
 }
 try {
     Invoke-ParallelCheck -ScriptPath (Join-Path $PSScriptRoot "child.ps1") -StatusIntervalMilliseconds 100
 } finally {
     $StageTimings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot "timings.json")
 }
-""",
+""".replace("FAILED_ACTION", failed_action),
     )
     assert (result.returncode == 0) == (failed_action == "none"), result.stdout + result.stderr
     timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8-sig"))
     statuses = {entry["Name"]: entry["Status"] for entry in timings}
     assert statuses == {
-        "Tests and coverage": "FAILED" if failed_action == "coverage" else "passed",
+        "Application tests and coverage": "FAILED" if failed_action == "application" else "passed",
+        "Release and tooling tests and coverage": (
+            "FAILED" if failed_action == "infrastructure" else "passed"
+        ),
         "Windows package and installer smoke tests": (
             "FAILED" if failed_action == "package" else "passed"
         ),
         "Installer integration tests and coverage": (
             "FAILED" if failed_action == "installer" else "passed"
         ),
+        "Combined coverage report": "FAILED" if failed_action == "report" else "passed",
     }
     assert all(entry["Seconds"] > 0 for entry in timings)
     assert (tmp_path / "installer-tests.finished").exists()
@@ -457,16 +537,17 @@ try {
 
 def _assert_parallel_output(tmp_path, result):
     (log_root,) = (tmp_path / "dist").glob("check-*")
-    for action in ("coverage", "package"):
+    for action in ("application", "infrastructure", "package"):
         assert (tmp_path / f"{action}.finished").exists()
         assert f"{action} output " in (log_root / f"{action}.log").read_text()
         assert f"{action} diagnostic " in (log_root / f"{action}.stderr.log").read_text()
     assert "Stages did not overlap" not in result.stderr
     status_lines = [line for line in result.stdout.splitlines() if line.startswith("Running:")]
     assert len(status_lines) >= 2
-    assert any("Tests and coverage (" in line for line in status_lines)
+    assert any("Application tests and coverage (" in line for line in status_lines)
+    assert any("Release and tooling tests and coverage (" in line for line in status_lines)
     assert any("Windows package and installer smoke tests (" in line for line in status_lines)
-    assert all("elapsed)" in line and "/2 finished" in line for line in status_lines)
+    assert all("elapsed)" in line and "/3 finished" in line for line in status_lines)
 
 
 def test_parallel_option_is_rejected_outside_full_check(tmp_path):
