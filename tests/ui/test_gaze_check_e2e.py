@@ -448,6 +448,35 @@ def test_trial_edge_hold_matches_normal_control_bounds(gaze_check, scenario):
 
 
 @pytest.mark.parametrize(
+    "gaze_check",
+    [
+        GazeSettings(selection_pause_ms=500, dwell_ms=500, edge_hold_ms=duration)
+        for duration in (0, 120, 240)
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize("scenario", [0, 1, 2])
+def test_trial_uses_saved_edge_duration_even_when_gaze_enters_neighbor(gaze_check, scenario):
+    window, _now, _screen = gaze_check
+    window._start_trial()
+    window._target.target_index = scenario
+    first = window._target.button_rect(0)
+    second = window._target.button_rect(1)
+    a = first.center()
+    b = QPoint(second.left() + 1, second.center().y())
+    duration = window._settings.edge_hold_ms
+    window._advance_trial_selection(a, 10.0)
+    window._advance_trial_selection(a, 10.8)
+    window._advance_trial_selection(b, 10.82)
+    if duration:
+        assert window._selection.target == 0
+        assert window._selection.diagnostic_snapshot()["credited_ms"] == pytest.approx(800)
+        window._advance_trial_selection(b, 10.821 + duration / 1000)
+    assert window._selection.target == 1
+    assert window._selection.diagnostic_snapshot()["credited_ms"] == 0
+
+
+@pytest.mark.parametrize(
     "left,right,labels",
     [
         ((1.2, 0.5, 0.5), (1.1, 0.5, 0.5), {"L/D"}),

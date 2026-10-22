@@ -67,6 +67,14 @@ def edge_surface(hotbar_gaze, qtbot, request):
         window = hotbar
         action = QUICK_ACTIONS
         button = hotbar._buttons[action]
+    elif request.param == "speech":
+        hotbar._open_speech()
+        window = hotbar._speech_window
+        window.showNormal()
+        window.setGeometry(*controller._logical_screen_rect)
+        qtbot.wait(1)
+        action = window._action("group:0")
+        button = window._action_buttons[action]
     else:
         hotbar._show_keyboard_sidebar()
         window = hotbar._keyboard_window

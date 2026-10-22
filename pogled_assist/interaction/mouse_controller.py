@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, Signal
 from PySide6.QtGui import QGuiApplication
 
 from .. import diagnostics
+from ..settings_limits import EDGE_HOLD_MS_DEFAULT
 from ..windows.windows_input import WindowsInputController
 from .eye_tracking_policy import BOTH_EYES, EyeTrackingGate, eyes_usable
 from .gaze_selection import DEFAULT_SELECTION_PAUSE_MS, GazeSelectionTimer
@@ -41,14 +42,13 @@ NO_MODE_STATUS = "Nijedna radnja klika nije odabrana."
 MIN_CURSOR_MOVE_DISTANCE_PX = 1.0
 MOUSE_ERROR_LOG_INTERVAL_MS = 1000
 TOOLBAR_EDGE_MARGIN_PX = 24
-TOOLBAR_LEAVE_GRACE_MS = 120
 
 
 @dataclass
 class GazeSettings:
     smoothing: float = 1.0
     selection_pause_ms: int = DEFAULT_SELECTION_PAUSE_MS
-    dwell_ms: int = 500
+    dwell_ms: int = 850
     dwell_radius_px: int = 48
     click_cooldown_ms: int = 350
     move_mouse: bool = True
@@ -61,6 +61,7 @@ class GazeSettings:
     show_launcher_window: bool = False
     eye_tracking_policy: str = BOTH_EYES
     eye_tracking_hold_ms: int = 150
+    edge_hold_ms: int = EDGE_HOLD_MS_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -315,6 +316,8 @@ class GazeMouseController(QObject):
             self.status_changed.emit("Uvećani klik je otkazan.")
 
     def update_settings(self, settings: GazeSettings) -> None:
+        if settings.edge_hold_ms != self.settings.edge_hold_ms:
+            self.cancel_toolbar_interaction(require_leave=True)
         self.settings = settings
         self._eye_gate.configure(settings.eye_tracking_policy, settings.eye_tracking_hold_ms)
         self._smooth_physical_point = None
@@ -338,7 +341,7 @@ class GazeMouseController(QObject):
             use_precision_zoom=settings.use_precision_zoom,
             show_tracking_notifications=settings.show_tracking_notifications,
             edge_margin_logical_px=TOOLBAR_EDGE_MARGIN_PX,
-            leave_grace_ms=TOOLBAR_LEAVE_GRACE_MS,
+            leave_grace_ms=settings.edge_hold_ms,
         )
         self.status_changed.emit("Postavke su ažurirane.")
 
@@ -552,7 +555,7 @@ class GazeMouseController(QObject):
                 pause_ms=self.settings.selection_pause_ms,
                 dwell_ms=self.settings.dwell_ms,
                 can_hold=hit.can_hold,
-                hold_ms=TOOLBAR_LEAVE_GRACE_MS,
+                hold_ms=self.settings.edge_hold_ms,
             )
             if not self._toolbar_selection.is_blocked:
                 self._toolbar_selection.cancel()
@@ -632,7 +635,7 @@ class GazeMouseController(QObject):
             pause_ms=self.settings.selection_pause_ms,
             dwell_ms=self.settings.dwell_ms,
             can_hold=can_hold,
-            hold_ms=TOOLBAR_LEAVE_GRACE_MS if held_center is not None else 0,
+            hold_ms=self.settings.edge_hold_ms if held_center is not None else 0,
         )
         if update.progress is None:
             self._cancel_interaction("toolbar")

@@ -2,7 +2,9 @@ window.createReferenceGaze = () => {
   'use strict';
   const ring = document.getElementById('gaze-ring');
   const toggle = document.getElementById('gaze-demo');
-  const GAZE_PAUSE_MS = 500, GAZE_FILL_MS = 500, GAZE_LEAVE_GRACE_MS = 120, GAZE_EDGE_MARGIN = 24;
+  const GAZE_PAUSE_MS = 250, GAZE_FILL_MS = 850, GAZE_EDGE_MARGIN = 24;
+  const storedEdgeHold = Number(ReferenceDesign.readSession('edge-hold-ms', 120));
+  const GAZE_LEAVE_GRACE_MS = Number.isFinite(storedEdgeHold) ? Math.min(300, Math.max(0, Math.round(storedEdgeHold / 20) * 20)) : 120;
   let gazeTarget = null;
   let gazeStart = 0;
   let gazeFrame = 0;

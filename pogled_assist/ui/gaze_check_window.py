@@ -28,7 +28,6 @@ from ..interaction.eye_tracking_policy import (
 from ..interaction.gaze_selection import GazeSelectionTimer
 from ..interaction.mouse_controller import (
     TOOLBAR_EDGE_MARGIN_PX,
-    TOOLBAR_LEAVE_GRACE_MS,
     GazeSettings,
 )
 from ..tracking.gaze_check import (
@@ -857,16 +856,16 @@ class GazeCheckWindow(QWidget):
         previous = self._selection.target
         hold_rect = self._target.button_rect(previous) if previous is not None else rect
         margin = min(TOOLBAR_EDGE_MARGIN_PX, hold_rect.width() // 4, hold_rect.height() // 4)
-        hold = target is None and hold_rect.adjusted(-margin, -margin, margin, margin).contains(
-            point
-        )
+        hold = self._target.rect().contains(point) and hold_rect.adjusted(
+            -margin, -margin, margin, margin
+        ).contains(point)
         result = self._selection.update(
             target,
             at * 1000,
             pause_ms=self._settings.selection_pause_ms,
             dwell_ms=self._settings.dwell_ms,
             can_hold=hold,
-            hold_ms=TOOLBAR_LEAVE_GRACE_MS,
+            hold_ms=self._settings.edge_hold_ms,
         )
         if previous is not None and self._selection.target != previous:
             self._trial_departures += 1

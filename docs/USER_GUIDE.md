@@ -75,9 +75,9 @@ The left side of the hotbar contains:
 
 Hide removes the AppBar reservation and the entire hotbar, including its tracking status. It leaves a floating Show button near the top-left corner. Show restores the hotbar and its current status. The status is passive and has no dwell action, blinking animation, or sound during eye loss. Left, Right, and Double click arm one action. Keep your gaze on the target until the progress overlay completes. The mode resets after the click to reduce accidental repeats.
 
-Every gaze selection starts with a configurable pause without a progress ring. The default pause is 500 ms and can be adjusted between 100 and 2000 ms. The ring then fills for the configured stare time, so the two default 500 ms values take one second in total. After a control activates, look away from it before returning to select it again. A mouse click remains immediate and cancels any pending gaze selection.
+Every gaze selection starts with a configurable pause without a progress ring. The default pause is 250 ms and can be adjusted between 100 and 2000 ms. The ring then fills for the configured stare time, which defaults to 850 ms; together the defaults take 1100 ms. Existing saved timing values stay unchanged. After a control activates, look away from it before returning to select it again. A mouse click remains immediate and cancels any pending gaze selection.
 
-The top edge directly above each hotbar button also selects that button. Gaps between buttons remain neutral. A brief movement near a button edge freezes selection for up to 120 ms, as described under [Speech](#speech); it cannot fire an action outside the target or unlock a completed action for a repeat.
+The top edge directly above each hotbar button also selects that button. Gaps between buttons remain neutral. A brief movement near a button edge freezes selection for the configured [edge duration](#selection-stability-near-edges); it cannot fire an action outside the target or unlock a completed action for a repeat.
 
 A gaze-driven right click arms one direct left click for selecting a context-menu item. That follow-up click skips precision zoom so the menu stays open.
 
@@ -100,7 +100,7 @@ If a library file cannot be read, **Kategorije** and **Fraze** show **Biblioteka
 
 Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter. The message field is ready for typing when Speech opens, after its controls or dialogs are used, and when returning to Speech with Alt+Tab. Returning focus preserves the caret and any selected text. While adding a category, answer, or phrase, typing belongs to that new entry. Modal dialogs and **Odmor** block typing into the message until closed; Settings and other Windows applications keep their focus until you return to Speech. Launch still opens the hotbar. Space and Backspace stay on the bottom row. `Izgovori` sends the current text to the selected speech engine without clearing it. `Kategorije` contains saved groups of answers, while `Fraze` contains standalone reusable text. Both lists support adding and deleting entries with the same grouped keyboard. The conversation message and all category, answer, and phrase content appear and are entered in uppercase. Text typed or pasted with lowercase letters is converted immediately. Settings can show 1 to 12 letters per group. When a group contains 12 letters, the letter dialog uses four columns and a shorter `Nazad` button so all choices fit at 1920×1080 with Windows scaling set to 150%. Selecting a letter returns to the groups as before.
 
-On Speech controls, a brief gaze movement just beyond a button edge freezes the pause or ring instead of clearing it. Returning within 120 ms resumes that progress. The button cannot activate while gaze is outside it. Moving farther away or staying outside longer starts a new selection. This applies to letter groups, letters, word suggestions, and `Izgovori`, as well as the other Speech controls. A brief edge movement does not unlock a button for repeat selection. Returning after the edge tolerance expires permits a repeat with a full new pause and dwell, even if no further gaze sample arrived while outside. Eye loss, mouse actions, changed views, and window resizing still cancel pending progress. A changed word suggestion requires looking away before selecting it.
+On Speech controls, a brief gaze movement just beyond a button edge freezes the pause or ring instead of clearing it. Returning before the configured [edge duration](#selection-stability-near-edges) expires resumes that progress. The button cannot activate while gaze is outside it. Moving farther away or staying outside longer starts a new selection. This applies to letter groups, letters, word suggestions, and `Izgovori`, as well as the other Speech controls. A brief edge movement does not unlock a button for repeat selection. Returning after the edge tolerance expires permits a repeat with a full new pause and dwell, even if no further gaze sample arrived while outside. Mouse actions, changed views, and window resizing cancel pending progress. Eye loss follows the [selected policy](#eye-tracking-policy) and cannot extend an already running edge deadline. A changed word suggestion requires looking away before selecting it.
 
 `Brzi izbor` shows up to five uppercase Bosnian suggestions. It completes the word at the end of the input or adds a next word followed by one space. The suggestions work without internet access, preserve the rest of the message, and never speak automatically. They are inactive while text is selected, the cursor is away from the end, or a category name is being entered.
 
@@ -176,14 +176,23 @@ Gaze settings uses these values:
 
 | Setting | Default | Range |
 | --- | --- | --- |
-| Pause before gaze selection | 500 ms | 100 to 2000 ms |
-| Progress-ring fill time after the pause | 500 ms | 150 to 5000 ms |
+| Pause before gaze selection | 250 ms | 100 to 2000 ms |
+| Progress-ring fill time after the pause | 850 ms | 150 to 5000 ms |
 | Short eye-tracking interruption | 150 ms | 50 to 500 ms, step 50 ms |
+| Edge selection hold | 120 ms | 0 to 300 ms, step 20 ms; 0 disables it |
 | Stable target radius | 48 px | 10 to 160 px |
 | Delay between actions | 350 ms | 100 to 5000 ms |
 | Pointer smoothing | 1.00 | 0.05 to 1.00 |
 
-**Postavke pogleda** has two tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. Pointer actions use three equal columns with 58-pixel controls. Existing saved timing values remain unchanged when installing a version with new defaults.
+**Postavke pogleda** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Pointer actions use three equal columns with 58-pixel controls. Existing saved timing values remain unchanged when installing a version with new defaults.
+
+### Selection stability near edges
+
+Use **Postavke > Postavke pogleda > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's local button trial copies this setting when opened.
+
+While gaze is briefly outside A but still near its edge, the pause or ring freezes. Only returning inside the same unchanged A before expiry can resume it; outside time, including the interval up to the first returning point, earns no progress. If gaze stays on a nearby B until expiry, A is discarded and B starts its full pause and dwell from the first eligible sample after expiry. B earns no time while A is frozen. Moving farther away switches immediately. Changing the duration cancels an unfinished selection; completed buttons still require departure before repetition. A tracking interruption cannot extend an already running edge deadline.
+
+Longer retention can preserve progress through longer small departures, but it also delays deliberate moves to a neighbor. The adjustment range is for trials, not a proven optimum or a calibration correction. Compare unintended selections and switching delay on the tracker before choosing a value for daily use.
 
 ### Eye-tracking policy
 

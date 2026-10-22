@@ -87,6 +87,20 @@
       $('settings-status').textContent = 'Čuvanje napretka: ' + ReferenceEyePolicy.holdMs() + ' ms.';
     });
   }
+  const storedEdgeHold = Number(ReferenceDesign.readSession('edge-hold-ms', 120));
+  let edgeHoldMs = Number.isFinite(storedEdgeHold) ? Math.min(300, Math.max(0, Math.round(storedEdgeHold / 20) * 20)) : 120;
+  function renderEdgeHold() {
+    $('edge-hold-value').textContent = edgeHoldMs === 0 ? 'Isključeno' : edgeHoldMs + ' ms';
+  }
+  for (const [id, delta] of [['edge-hold-less', -20], ['edge-hold-more', 20]]) {
+    $(id).addEventListener('click', () => {
+      edgeHoldMs = Math.min(300, Math.max(0, edgeHoldMs + delta));
+      ReferenceDesign.writeSession('edge-hold-ms', edgeHoldMs);
+      renderEdgeHold();
+      $('settings-status').textContent = 'Čuvanje odabira uz rub je ažurirano. Odabir počinje ispočetka.';
+    });
+  }
+  renderEdgeHold();
   function showGazeTab(name) {
     for (const button of document.querySelectorAll('[data-gaze-tab]')) {
       const selected = button.dataset.gazeTab === name;
@@ -107,7 +121,7 @@
       tabs[index].focus();
     });
   }
-  showGazeTab(query.get('gaze-tab') === 'pointer' ? 'pointer' : 'selection');
+  showGazeTab(['pointer', 'stability'].includes(query.get('gaze-tab')) ? query.get('gaze-tab') : 'selection');
   renderEyePolicy();
   for (const button of document.querySelectorAll('[data-voice]')) button.addEventListener('click', () => {
     selectedVoice = button.dataset.voice;

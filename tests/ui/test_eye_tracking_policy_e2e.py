@@ -38,7 +38,7 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
     assert page._hold_row.isEnabled()
     window._adjust_eye_tracking_hold(50)
     assert updates[-1].eye_tracking_hold_ms == 200
-    for tab in (0, 1):
+    for tab in (0, 1, 2):
         page.show_tab(tab)
         qtbot.wait(1)
         visible = [control for control in window._controls._actions if control.isVisible()]

@@ -443,6 +443,15 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             combo.setCurrentIndex(combo.findData(policy))
             self.capture(self.settings, name, title, size=size)
         combo.setCurrentIndex(combo.findData("both"))
+        self.settings._gaze_page.show_tab(2)
+        self.capture(
+            self.settings, "settings-gaze-stability", "Settings: edge stability", size=size
+        )
+        self.settings._adjust_edge_hold(-120)
+        self.capture(
+            self.settings, "settings-gaze-stability-off", "Settings: edge tolerance off", size=size
+        )
+        self.settings._adjust_edge_hold(120)
         self.settings._gaze_page.show_tab(1)
         self.capture(
             self.settings, "settings-gaze-pointer", "Settings: pointer and check", size=size

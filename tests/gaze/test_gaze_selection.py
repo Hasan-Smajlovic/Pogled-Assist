@@ -144,6 +144,21 @@ def test_far_target_switch_skips_hold_and_starts_its_own_full_pause():
     assert timer.update("second", 1820, **timing).ready
 
 
+@pytest.mark.parametrize("returned_at,credit", [(900, 800), (940, 0), (980, 0)])
+def test_tracking_hold_cannot_extend_an_existing_edge_deadline(returned_at, credit):
+    timer = GazeSelectionTimer()
+    timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)
+    timer.update("button", 0, **timing)
+    timer.update("button", 800, **timing)
+    timer.update("neighbor", 820, can_hold=True, **timing)
+    timer.hold_tracking(1100)
+
+    result = timer.update("button", returned_at, **timing)
+
+    assert not result.ready
+    assert timer.diagnostic_snapshot()["credited_ms"] == credit
+
+
 def test_completed_target_stays_blocked_through_brief_excursions_and_eye_loss():
     timer = GazeSelectionTimer()
     timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)

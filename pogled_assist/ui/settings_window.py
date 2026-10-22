@@ -26,6 +26,7 @@ from ..settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
+    EDGE_HOLD_MS_RANGE,
     EYE_TRACKING_HOLD_MS_RANGE,
     LETTERS_PER_GROUP_RANGE,
     SMOOTHING_RANGE,
@@ -652,6 +653,12 @@ class SettingsWindow(QWidget):
         value = clamp(self._gaze_settings.dwell_ms + delta, DWELL_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, dwell_ms=value)
         self._emit_gaze_settings("Vrijeme zadržavanja pogleda je ažurirano.")
+
+    def _adjust_edge_hold(self, delta: int) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
+        value = clamp(self._gaze_settings.edge_hold_ms + delta, EDGE_HOLD_MS_RANGE)
+        self._gaze_settings = replace(self._gaze_settings, edge_hold_ms=value)
+        self._emit_gaze_settings("Čuvanje odabira uz rub je ažurirano.")
 
     def _adjust_selection_pause(self, delta: int) -> None:
         value = clamp(

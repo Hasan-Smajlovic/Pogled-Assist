@@ -99,6 +99,7 @@
 .setting-choice button { background: #0f1110; border-color: #4c534e; font-size: 20px; text-align: left; justify-content: flex-start; }
 .gaze-settings-tabs, .gaze-feedback-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .gaze-settings-tabs button { height: 58px; }
+.gaze-settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gaze-settings-tabs button[aria-selected="true"] { background: #1d6f68; border-color: #74d3c6; }
 .gaze-settings-content { display: flex; flex-direction: column; gap: 8px; }
 .eye-policy-row { grid-template-columns: minmax(0, 1fr) 360px; }

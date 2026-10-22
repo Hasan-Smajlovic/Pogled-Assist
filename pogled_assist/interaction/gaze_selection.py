@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .. import diagnostics
 
-DEFAULT_SELECTION_PAUSE_MS = 500
+DEFAULT_SELECTION_PAUSE_MS = 250
 MIN_SELECTION_PAUSE_MS = 100
 MAX_SELECTION_PAUSE_MS = 2000
 
@@ -133,6 +133,7 @@ class GazeSelectionTimer:
                 and target is not None
                 and target == self._target
                 and not restart
+                and (self._away_since_ms is None or now_ms - self._away_since_ms < hold_ms)
             )
             self._tracking_deadline_ms = None
             if resume:

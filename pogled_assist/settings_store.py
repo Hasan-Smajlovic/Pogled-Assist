@@ -17,6 +17,8 @@ from .settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
+    EDGE_HOLD_MS_RANGE,
+    EDGE_HOLD_MS_STEP,
     ELEVENLABS_PERCENT_RANGE,
     ELEVENLABS_STABILITY_STEPS,
     EYE_TRACKING_HOLD_MS_RANGE,
@@ -125,6 +127,7 @@ def _merge_settings(saved: Any, current: Any) -> Any:
 def _coerce_gaze_settings(value: Any) -> GazeSettings:
     settings = _dataclass_from_mapping(GazeSettings(), value)
     hold_ms = clamp(settings.eye_tracking_hold_ms, EYE_TRACKING_HOLD_MS_RANGE)
+    edge_ms = clamp(settings.edge_hold_ms, EDGE_HOLD_MS_RANGE)
     return replace(
         settings,
         smoothing=clamp(settings.smoothing, SMOOTHING_RANGE),
@@ -133,6 +136,7 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
             (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
         ),
         dwell_ms=clamp(settings.dwell_ms, DWELL_MS_RANGE),
+        edge_hold_ms=(edge_ms + EDGE_HOLD_MS_STEP // 2) // EDGE_HOLD_MS_STEP * EDGE_HOLD_MS_STEP,
         eye_tracking_policy=valid_policy(
             value.get("eye_tracking_policy") if isinstance(value, dict) else None
         ),

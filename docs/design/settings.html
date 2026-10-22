@@ -66,12 +66,13 @@
         <div class="gaze-settings-tabs" role="tablist" aria-label="Postavke pogleda">
           <button id="gaze-selection-tab" type="button" role="tab" aria-selected="true" aria-controls="gaze-selection-settings" data-gaze-tab="selection">Odabir pogledom</button>
           <button id="gaze-pointer-tab" type="button" role="tab" aria-selected="false" aria-controls="gaze-pointer-settings" data-gaze-tab="pointer">Pokazivač i provjera</button>
+          <button id="gaze-stability-tab" type="button" role="tab" aria-selected="false" aria-controls="gaze-stability-settings" data-gaze-tab="stability">Stabilnost uz rub</button>
         </div>
         <section id="gaze-selection-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-selection-tab">
         <div class="setting-row eye-policy-row"><div class="setting-copy"><h3><label for="eye-policy">Režim praćenja očiju</label></h3><p id="eye-policy-hint"></p></div><select id="eye-policy" aria-describedby="eye-policy-hint"></select></div>
         <div id="eye-hold-row" class="setting-row"><div class="setting-copy"><h3>Trajanje kratkog prekida</h3><p>Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.</p></div><button id="eye-hold-less" type="button" aria-label="Kraće čuvanje napretka">−&nbsp; Manje</button><strong id="eye-hold-value" class="setting-value">150 ms</strong><button id="eye-hold-more" type="button" aria-label="Duže čuvanje napretka">+&nbsp; Više</button></div>
-        <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
-        <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">500 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">250 ms</strong><button>+&nbsp; Više</button></div>
+        <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">850 ms</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Pauza između radnji</h3><p>Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">350 ms</strong><button>+&nbsp; Više</button></div>
         <div class="gaze-feedback-options">
           <label class="settings-checkbox"><input id="show-tracking-feedback" type="checkbox" checked>Obavijesti o praćenju pogleda</label>
@@ -91,6 +92,12 @@
           <button type="button" data-open-view="gaze-check">Provjera pogleda</button>
         </div>
         <p class="gaze-policy-scope">Pokazivač, Brze radnje i precizno uvećanje zahtijevaju oba oka u svakom režimu. Provjera pogleda koristi izabrani režim i ne šalje unos drugim programima.</p>
+        </section>
+        <section id="gaze-stability-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-stability-tab" hidden>
+          <div class="setting-row"><div class="setting-copy"><h3>Čuvanje odabira uz rub</h3><p>Govor, Tastatura i gornja traka. 0 isključuje čuvanje.</p></div><button id="edge-hold-less" type="button">−&nbsp; Manje</button><strong id="edge-hold-value" class="setting-value">120 ms</strong><button id="edge-hold-more" type="button">+&nbsp; Više</button></div>
+          <p class="gaze-policy-scope">Kratak izlazak blizu ruba zamrzava napredak. Nastavak traži povratak na isto dugme prije isteka. Izvan dugmeta nema napretka ni potvrde.</p>
+          <p class="gaze-policy-scope">Ako pogled ostane na susjednom dugmetu, ono nakon isteka počinje od nule. Duže čuvanje zato usporava prelazak na susjedno dugme. Udaljeniji odlazak odmah prekida čuvanje.</p>
+          <p class="gaze-policy-scope">Raspon za probu: 0 do 300 ms, korak 20 ms; zadano 120 ms. Prostorna tolerancija ostaje ista. Ovo ne mijenja režim praćenja očiju niti ispravlja kalibraciju.</p>
         </section>
       </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>

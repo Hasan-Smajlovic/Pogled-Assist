@@ -10,6 +10,7 @@ from ..interaction.eye_tracking_policy import (
     EYE_TRACKING_POLICY_CHOICES,
     policy_description,
 )
+from ..settings_limits import EDGE_HOLD_MS_STEP
 from .settings_controls import action_grid, content_layout, setting_row, styled_label
 
 
@@ -41,9 +42,11 @@ class GazeSettingsPage(QFrame):
 
         tabs = QHBoxLayout()
         self._tabs = []
-        for index, title in enumerate(("Odabir pogledom", "Pokazivač i provjera")):
+        for index, title in enumerate(
+            ("Odabir pogledom", "Pokazivač i provjera", "Stabilnost uz rub")
+        ):
             button = self._controls.toggle_button(
-                title, lambda index=index: self.show_tab(index), QSize(260, 58)
+                title, lambda index=index: self.show_tab(index), QSize(220, 58)
             )
             tabs.addWidget(button, 1)
             self._tabs.append(button)
@@ -149,6 +152,33 @@ class GazeSettingsPage(QFrame):
         note.setWordWrap(True)
         pointer.addWidget(note)
         pointer.addStretch(1)
+
+        stability_page = QFrame(self)
+        stability = QVBoxLayout(stability_page)
+        stability.setContentsMargins(0, 0, 0, 0)
+        stability.setSpacing(8)
+        self._stack.addWidget(stability_page)
+        row, self._edge_hold_value = self._controls.adjust_row(
+            "Čuvanje odabira uz rub",
+            "Govor, Tastatura i gornja traka. 0 isključuje čuvanje.",
+            self._owner._adjust_edge_hold,
+            EDGE_HOLD_MS_STEP,
+        )
+        stability.addWidget(row)
+        for text in (
+            "Kratak izlazak blizu ruba zamrzava napredak. Nastavak traži povratak "
+            "na isto dugme prije isteka. Izvan dugmeta nema napretka ni potvrde.",
+            "Ako pogled ostane na susjednom dugmetu, ono nakon isteka počinje od nule. "
+            "Duže čuvanje zato usporava prelazak na susjedno dugme. "
+            "Udaljeniji odlazak odmah prekida čuvanje.",
+            "Raspon za probu: 0 do 300 ms, korak 20 ms; zadano 120 ms. "
+            "Prostorna tolerancija ostaje ista. Ovo ne mijenja režim praćenja očiju "
+            "niti ispravlja kalibraciju.",
+        ):
+            note = styled_label(text, "settingHint", self)
+            note.setWordWrap(True)
+            stability.addWidget(note)
+        stability.addStretch(1)
         self.show_tab(0)
 
     def show_tab(self, index: int) -> None:
@@ -203,6 +233,9 @@ class GazeSettingsPage(QFrame):
         )
         self._hold_value.setText(f"{settings.eye_tracking_hold_ms} ms")
         self._hold_row.setEnabled(settings.eye_tracking_policy == BRIEF_INTERRUPTION)
+        self._edge_hold_value.setText(
+            f"{settings.edge_hold_ms} ms" if settings.edge_hold_ms else "Isključeno"
+        )
         self._selection_pause_value.setText(f"{settings.selection_pause_ms} ms")
         self._dwell_value.setText(f"{settings.dwell_ms} ms")
         self._radius_value.setText(f"{settings.dwell_radius_px} px")
