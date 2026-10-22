@@ -35,12 +35,14 @@ from .speech.speech_library import speech_library_store
 from .speech.speech_service import SpeechService
 from .suggestions.service import SuggestionService
 from .tracking.feedback import TrackingNotice
+from .tracking.gaze_check_store import GazeCheckStore
 from .tracking.gaze_provider import TobiiGazeProvider
 from .tracking.mouse_gaze_provider import MouseGazeProvider
 from .tracking.status import TrackingState, TrackingStatus
 from .tracking.tobii_calibration import launch_tobii_guest_calibration, launch_tobii_settings
 from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from .ui.gaze_bubble import GazeBubbleWindow
+from .ui.gaze_check_reports import GazeCheckReports
 from .ui.gaze_check_window import GazeCheckWindow
 from .ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .ui.hotbar_controls import HotbarControls, no_focus_tool_window_flags
@@ -93,6 +95,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._controller_window: ControllerWindow | None = None
         self._settings_window: SettingsWindow | None = None
         self._gaze_check_window: GazeCheckWindow | None = None
+        self._gaze_check_reports = GazeCheckReports(
+            GazeCheckStore(get_project_root() / "logs" / "gaze-check"), self
+        )
         self._check_status = TrackingStatus(TrackingState.STOPPED)
         self._restore_button: QToolButton | None = None
         self._zoom_context: str | None = None
@@ -160,6 +165,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._suggestions.close()
         self._gaze.stop()
         self._appbar.unregister()
+        self._gaze_check_reports.shutdown()
         super().closeEvent(event)
 
     def resizeEvent(self, event) -> None:
@@ -890,7 +896,13 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if self._settings_window is not None:
             self._settings_window.cancel_gaze_interaction()
             self._settings_window.hide()
-        window = GazeCheckWindow(self._mouse.settings, self, simulated=self._simulate_gaze)
+        window = GazeCheckWindow(
+            self._mouse.settings,
+            self,
+            simulated=self._simulate_gaze,
+            reports=self._gaze_check_reports,
+            environment=lambda: self._gaze.check_environment(),
+        )
         self._gaze_check_window = window
         window.closed.connect(self._gaze_check_closed)
         window.calibration_requested.connect(self._calibrate_from_gaze_check)

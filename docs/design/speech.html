@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="assets/speech.css">
   <link rel="stylesheet" href="assets/gaze-demo.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/gaze-demo.js" defer></script>
   <script src="assets/speech.js" defer></script>
@@ -59,7 +60,7 @@
         </nav>
       </section>
       <aside class="system-actions" aria-label="Kontrole aplikacije">
-        <h2 class="section-label">Kontrole</h2>
+        <h2 class="section-label speech-controls-heading">Kontrole<span class="recording-badge" data-recording-status hidden></span></h2>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
         <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
         <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
@@ -128,6 +129,7 @@
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
+    <p>Dok radi <a href="diagnostics.html">dijagnostičko snimanje</a>, mala nepulsirajuća oznaka s preostalim vremenom stoji uz naslov Kontrole. Koristi postojeći prostor naslova, bez pomjeranja dugmadi ili prekrivanja obavijesti o praćenju i glasu. Ne uzima fokus i nije novo dugme. Snimanje se može zaustaviti iz Postavki; primjer se otvara pomoću <code>?recording=demo</code>. Ovaj HTML ne snima poruku.</p>
     <p>izabrani Efendija prvo koristi važeći sačuvani snimak cijele spremljene fraze ili odgovora. Za ostale poruke pokušava ElevenLabs, pa Prirodni, pa Standardni. Izbor glasa ostaje sačuvan. Efendija ima najviše 30 sekundi za pripremu zvuka, Prirodni još najviše 3 sekunde; potvrđena greška pokreće zamjenu odmah. To su pragovi za pripremu, ne obećanje početka zvuka u 33 sekunde. Dostupni sačuvani zvuk se može koristiti i kada nema interneta ili kredita.</p>
     <p>Obavijest koristi postojeće zaglavlje poruke. Unutar gornjeg reda od 96 px zaglavlje se proširi sa 18 na 38 px, a polje poruke se smanji; dugmad i tastatura ostaju na istim mjestima. Razlog i dodatna poruka stoje jedan uz drugi, u dvije kolone koje po potrebi prelamaju tekst. Obavijest se ne zatvara potvrdom i ne uzima fokus. Obavijest o zamjenskom glasu ostaje nakon završetka izgovora dok se taj glas koristi. Tekst navodi stvarni korišteni glas i razlog zamjene. Izgovor sačuvanim Efendijinim glasom ne prikazuje da se koristi Prirodni. Obavijest o praćenju ima prednost; nakon nje vraća se aktuelno stanje govora.</p>
     <p>Kasni odgovor ne smije pokrenuti drugi zvuk nakon prelaska na zamjenski glas. Ako je reprodukcija već počela pa prekinula, poruka ostaje u polju i prikazuje se Izgovor nije završen. Cijela poruka se ne ponavlja automatski. Korisnik može odabrati Izgovori. Efendija se automatski vraća za naredne poruke nakon oporavka, bez prekidanja tekućeg zvuka. Nakon uspješnog izgovora Efendijom zelena potvrda povratka ostaje vidljiva 5 sekundi, zatim sama nestaje. Ako je zakloni obavijest o praćenju, po povratku dobija punih 5 sekundi. Nova greška odmah zamjenjuje potvrdu. Sama provjera dostupnosti još ne potvrđuje uspješan povratak. Greška ključa, nedovoljni krediti i privremena nedostupnost imaju različite provjere oporavka bez plaćenog probnog generisanja u pozadini.</p>

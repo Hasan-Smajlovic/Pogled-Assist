@@ -714,6 +714,25 @@ class TobiiGazeProvider(QObject):
             self._pending_eye_status_refresh = False
             self.continuity_lost.emit()
 
+    def check_environment(self) -> dict:
+        metadata = {}
+        if self._backend_name == "tobii-research" and self._tracker is not None:
+            metadata = {
+                "sdk_version": getattr(self._tr, "__version__", None),
+                "model": getattr(self._tracker, "model", None),
+                "firmware_version": getattr(self._tracker, "firmware_version", None),
+            }
+        elif self._stream_engine is not None:
+            metadata = getattr(self._stream_engine, "diagnostic_metadata", {})
+        return {
+            "backend": self._backend_name or None,
+            **{
+                key: str(metadata[key])[:256]
+                for key in ("sdk_version", "model", "firmware_version")
+                if metadata.get(key) is not None
+            },
+        }
+
     def _summarize_delivery(self) -> None:
         tick = time.monotonic()
         late_ms = (

@@ -11,7 +11,7 @@ from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
 
 @pytest.fixture
-def hotbar_gaze(qtbot, monkeypatch, request):
+def hotbar_gaze(qtbot, monkeypatch, request, tmp_path):
     from pogled_assist import toolbar
     from pogled_assist.ui import sidebar_panel
     from scripts.ui.capture_ui import PreviewSuggestionService
@@ -23,6 +23,7 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
     monkeypatch.setattr(toolbar, "SuggestionService", PreviewSuggestionService)
     monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
+    monkeypatch.setattr(toolbar, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(
         toolbar,
         "load_app_settings",

@@ -45,6 +45,11 @@
     }, 800);
   }
   $('startup-enabled').addEventListener('change', previewStartupChange);
+  $('logging-enabled').checked = ReferenceDesign.readSession('logging-enabled', false);
+  $('logging-enabled').addEventListener('change', event => {
+    ReferenceDesign.writeSession('logging-enabled', event.target.checked);
+    $('settings-status').textContent = event.target.checked ? 'Opće zapisivanje je uključeno.' : 'Opće zapisivanje je isključeno. Ručno pokrenuto dijagnostičko snimanje nastavlja do svog završetka.';
+  });
   $('startup-launcher').addEventListener('change', () => {
     if ($('startup-enabled').checked) previewStartupChange();
     else $('settings-status').textContent = $('startup-launcher').checked

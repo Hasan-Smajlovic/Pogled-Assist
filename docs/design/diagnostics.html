@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Dijagnostičko snimanje</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/diagnostics.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
+  <script src="assets/diagnostics.js" defer></script>
+</head>
+<body data-reference-page="diagnostics">
+  <main class="diagnostics-screen" aria-label="Dijagnostičko snimanje">
+    <header class="diagnostics-header">
+      <div><h1>Dijagnostičko snimanje</h1><p>Zabilježite kratak primjer problema s pogledom ili odabirom.</p></div>
+      <span class="recording-badge" data-recording-status hidden></span>
+      <button id="diagnostics-close" type="button">Zatvori · Esc</button>
+    </header>
+    <nav class="diagnostics-tabs" role="tablist" aria-label="Dijagnostika">
+      <button id="diagnostics-tab-new" type="button" role="tab" aria-selected="true" aria-controls="diagnostics-new">Novo snimanje</button>
+      <button id="diagnostics-tab-history" type="button" role="tab" aria-selected="false" aria-controls="diagnostics-history" tabindex="-1">Sačuvani snimci</button>
+    </nav>
+    <section id="diagnostics-new" class="diagnostics-new" role="tabpanel" aria-labelledby="diagnostics-tab-new">
+      <section class="diagnostics-card recording-controls" aria-labelledby="recording-title">
+        <div class="recording-heading"><h2 id="recording-title">Snimite problem tokom korištenja</h2><span class="diagnostics-tag">Simulacija</span></div>
+        <p class="diagnostics-muted">Pokrenite snimanje, vratite se u aplikaciju i pokušajte ponoviti problem.</p>
+        <fieldset class="recording-duration"><legend>Trajanje snimanja</legend><div>
+          <button type="button" data-duration="1" aria-pressed="false">1 min</button>
+          <button type="button" data-duration="2" aria-pressed="true">2 min</button>
+          <button type="button" data-duration="5" aria-pressed="false">5 min</button>
+          <button type="button" data-duration="10" aria-pressed="false">10 min</button>
+        </div></fieldset>
+        <div id="recording-state" class="recording-state" data-tone="ready" role="status" aria-live="polite"><span class="recording-state-mark" aria-hidden="true">○</span><div><strong id="recording-state-title">Spremno za snimanje</strong><p id="recording-state-copy">Snimanje završava samo po isteku vremena ili na 32 MiB.</p></div></div>
+        <div class="recording-metrics">
+          <div><span>Preostalo vrijeme</span><strong id="recording-remaining">02:00</strong></div>
+          <div><span>Zauzeti prostor</span><strong id="recording-size">0 / 32 MiB</strong></div>
+          <div><span>Opće zapisivanje</span><strong id="recording-logging">Isključeno</strong></div>
+        </div>
+        <progress id="recording-progress" max="120" value="0" aria-label="Proteklo vrijeme snimanja"></progress>
+        <p id="recording-logging-copy" class="diagnostics-muted">Ručno snimanje radi i kada je opće zapisivanje isključeno. Ta postavka ostaje isključena.</p>
+        <p id="recording-policy" class="recording-context"></p>
+      </section>
+      <aside class="diagnostics-card recording-guide" aria-labelledby="recording-guide-title">
+        <h2 id="recording-guide-title">Šta se bilježi</h2>
+        <ul><li>Položaj pogleda, stanje očiju i prekidi podataka.</li><li>Vrijeme odabira, poništavanja i geometrija kontrola.</li><li>Postavke pogleda i tehnički podaci o aplikaciji i prikazu.</li></ul>
+        <p class="recording-privacy">Nema snimanja ekrana ili zvuka. Poruke, izgovoreni tekst, lična biblioteka i ključevi nisu dio paketa.</p>
+        <h3>Dok ponavljate problem</h3>
+        <p>Koristite Govor, Tastaturu ili druge kontrole kao i inače. Snimanje ne mijenja režim očiju ni trajanje odabira.</p>
+        <p class="diagnostics-muted">Ako otvorite Provjeru pogleda, normalni unos ostaje pauziran tokom te provjere. Dijagnostičko snimanje nastavlja raditi.</p>
+        <p class="diagnostics-muted">Detaljne koordinate i raspored kontrola mogu otkriti aktivnost. Pregledajte sadržaj prije dijeljenja.</p>
+      </aside>
+    </section>
+    <section id="diagnostics-history" class="diagnostics-history" role="tabpanel" aria-labelledby="diagnostics-tab-history" hidden>
+      <aside class="diagnostics-card recording-history" aria-labelledby="recording-list-title"><h2 id="recording-list-title">Najnoviji snimci</h2><div id="recording-list" class="recording-list" role="group" aria-label="Izaberite dijagnostički snimak"></div><p id="recording-empty" class="diagnostics-muted" hidden>Još nema snimaka. Otvorite „Novo snimanje“ da zabilježite problem.</p><p class="diagnostics-muted recording-retention">Čuva se najnovijih 5, do 200 MiB. Ručno izvezeni ZIP-ovi ostaju sačuvani.</p></aside>
+      <section id="recording-detail" class="diagnostics-card recording-detail" aria-labelledby="recording-detail-title" hidden>
+        <div class="recording-heading"><div><h2 id="recording-detail-title"></h2><p id="recording-detail-date" class="diagnostics-muted"></p></div><span class="diagnostics-tag">Simulacija</span></div>
+        <div class="recording-metrics"><div><span>Trajanje</span><strong id="recording-detail-duration"></strong></div><div><span>Podaci</span><strong id="recording-detail-size"></strong></div><div><span>Početni režim očiju</span><strong id="recording-detail-policy" class="recording-policy-value"></strong></div></div>
+        <p id="recording-detail-health" class="recording-health" role="status"></p>
+        <p id="recording-detail-context" class="diagnostics-muted"></p>
+        <details class="recording-files"><summary>Postavke i okruženje snimka</summary><dl id="recording-context-details" class="recording-context-details"></dl></details>
+        <section class="recording-package" aria-labelledby="recording-package-title">
+          <h3 id="recording-package-title">Paket za podršku</h3>
+          <label for="recording-check-result">Dodaj rezultat Provjere pogleda · nije obavezno</label>
+          <select id="recording-check-result" aria-describedby="recording-check-copy"><option value="">Bez rezultata provjere</option><option value="provjera-015">22.10.2026. · 14:32 · Oba oka · Završeno</option><option value="provjera-014">21.10.2026. · 17:45 · Oba oka uz kratke prekide · Završeno</option><option value="provjera-013">21.10.2026. · 17:38 · Jedno oko je dovoljno (probno) · Prekinuto</option></select>
+          <p id="recording-check-copy" class="diagnostics-muted">Rezultat se ne dodaje automatski. Možete izabrati i prekinutu provjeru.</p>
+          <details class="recording-files"><summary>Sadržaj ZIP-a</summary><ul id="recording-files"><li>snimak.jsonl — detaljni tehnički događaji</li><li>kontekst.json — odabrane postavke, uređaj, prikaz i build</li><li>sazetak.txt — čitljiv izvještaj na bosanskom</li><li>manifest.json — popis datoteka i provjera cjelovitosti</li></ul></details>
+          <p class="diagnostics-muted">Paket sadrži izabrani snimak. Izvoz ne uzima cijeli folder logova niti automatski šalje podatke.</p>
+        </section>
+      </section>
+      <section id="recording-no-detail" class="diagnostics-card recording-no-detail"><h2>Izaberite snimak za pregled</h2><p class="diagnostics-muted">Ovdje će se prikazati trajanje, stanje podataka i sadržaj paketa.</p></section>
+    </section>
+    <footer class="diagnostics-footer"><p id="diagnostics-status" role="status" aria-live="polite">Izaberite trajanje, zatim pokrenite snimanje.</p><button id="diagnostics-return" type="button">Vrati se u Postavke</button><button id="diagnostics-primary" class="primary" type="button">Pokreni snimanje</button></footer>
+  </main>
+  <dialog id="recording-export-dialog" class="recording-export-dialog" aria-labelledby="recording-export-title"><h2 id="recording-export-title">Windows · Sačuvaj kao</h2><p id="recording-export-copy"></p><label for="recording-export-filename">Naziv datoteke</label><input id="recording-export-filename" readonly><p class="diagnostics-muted">Izaberite mjesto za ZIP. Poruke, lična biblioteka i ključevi nisu uključeni.</p><p class="prototype-note">Ilustracija sistemskog dijaloga. HTML ne pravi datoteke.</p><div class="recording-dialog-actions"><button id="recording-export-cancel" type="button">Odustani</button><button id="recording-export-save" class="primary" type="button">Sačuvaj</button></div></dialog>
+  <div class="diagnostics-preview-tools">
+    <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+    <details class="reference-tools"><summary>Opcije pregleda · izmišljeni podaci</summary><label>Primjer stanja <select id="diagnostics-preview"><option value="ready">Spremno za snimanje</option><option value="recording">Snimanje u toku</option><option value="finishing">Završavanje snimka</option><option value="completed">Završeno po isteku vremena</option><option value="size-limit">Dostignut limit 32 MiB</option><option value="dropped">Snimak s izostavljenim događajima</option><option value="interrupted">Prekid zatvaranjem aplikacije</option><option value="write-error">Greška zapisivanja</option><option value="unreadable">Nečitljiv raniji snimak</option><option value="empty">Bez sačuvanih snimaka</option><option value="export-error">Greška izvoza ZIP-a</option></select></label><label><input id="diagnostics-logging-preview" type="checkbox"> Opće zapisivanje uključeno</label><p class="prototype-note">Prikaz snimanja i vremena je simulacija. Ne prikuplja stvarni pogled, poruke, zvuk ili ekran.</p><a href="speech.html?recording=demo" data-recording-demo-link="speech">Status tokom Govora</a><a href="hotbar.html?recording=demo" data-recording-demo-link="hotbar">Status na početnoj traci</a></details>
+  </div>
+  <details class="design-notes"><summary>Dijagnostičko snimanje i paket za podršku · stavka 3 ticketa #92</summary>
+    <p>Ovo je interaktivni nacrt. Svi snimci, datumi, veličine, brojevi izostavljenih događaja i oznake builda su izmišljeni. HTML ne zapisuje logove, ne stvara ZIP i ništa ne šalje. Primjeri stanja biraju se ispod aplikacijskog prikaza ili pomoću <code>?view=recording</code>, <code>?view=dropped</code>, <code>?view=write-error</code> i <code>?view=export-error</code>.</p>
+    <p>Ulazi su Postavke → Opće i prečica iz Provjere pogleda. Oba otvaraju isti prozor. Iz Provjere se ulazi izvan aktivnog mjerenja; povratak zadržava rezultat i pauzu normalnog unosa. Zatvaranje dijagnostičkog prozora ne zaustavlja snimanje. Zatvaranje aplikacije završava snimak kao prekinut; nakon prinudnog prekida nedostajući završetak ostaje označen, bez tvrdnje da su svi podaci sačuvani.</p>
+    <p>Trajanje se bira prije početka: 1, 2, 5 ili 10 minuta, početno 2. Ručno zaustavljanje i dostignuto trajanje daju uredan završetak s navedenim razlogom. Limit od 32 MiB prekida detaljno snimanje i ostaje vidljiv u pregledu. Pokretanje uvijek otvara novi snimak, i ako je prethodna obična sesija već dostigla svoj limit. Jedno snimanje može biti aktivno; novi početak čeka potvrđeni završetak prethodnog.</p>
+    <p>Izričito pokrenuto dijagnostičko snimanje radi nezavisno od postavke „Uključi zapisivanje“ i ne mijenja je. Završetak ostavlja tu postavku na vrijednosti koju je korisnik izabrao. Podaci se čuvaju u pozadini, bez čekanja diska na putu pogleda i odabira. Zastoj ili greška diska i izostavljeni događaji imaju vidljiv status; datoteka bez greške zapisivanja još ne dokazuje potpun snimak.</p>
+    <p>Mala nepulsirajuća oznaka s preostalim vremenom nalazi se unutar postojećeg dugmeta Postavke na traci i unutar zaglavlja Govora. Oznaka ne mijenja položaje ili površine odabira, ne prekriva mete, ne uzima fokus i ne zamjenjuje obavijesti o praćenju. Sakrivena traka skriva i svoju oznaku; nema novog plutajućeg panela. Završetak ima kratku potvrdu, a stanje ostaje u listi snimaka. Kada je potrebno zaustaviti snimanje ranije, otvara se isti ekran iz Postavki.</p>
+    <p>Predviđeni zasebni folder je <code>logs/diagnostic-recordings/</code>. Čuva se najnovijih 5 snimaka, do 200 MiB; najstariji se uklanjaju nakon uspješnog čuvanja novog, bez diranja običnih logova, izvještaja Provjere pogleda ili ručnih ZIP-ova. Aktivni snimak nije kandidat za brisanje. Raniji snimci ostaju dostupni nakon ponovnog pokretanja. Nečitljiv snimak ostaje označen i ne izvozi se kao uspješan.</p>
+    <p>Izvoz bira jedan snimak i po želji jedan postojeći rezultat Provjere pogleda, uključujući prekinuti ili dostupan rezultat iz memorije. Provjera ima vlastite datume, režim i oznaku simulacije; izbor ne tvrdi da pripada istom pokušaju. U ZIP se dodaju <code>provjera/rezultat.json</code> i <code>provjera/izvjestaj.txt</code>. Rezultati provjere ne dodaju se automatski.</p>
+    <p>Paket sadrži strukturirane događaje izabranog snimka, dozvoljene postavke pogleda i njihove promjene, logičke i fizičke dimenzije prikaza, skaliranje, dostupni backend/SDK/model i oznaku aplikacije. Build treba označiti punom revizijom i stanjem lokalnih izmjena; nepoznata vrijednost ostaje nepoznata. Pakovanje treba ugraditi oznaku izvora u artefakt, umjesto da se instalirana aplikacija oslanja na lokalni Git. Postojeća <a href="../ARCHITECTURE.md#diagnostic-logging">pravila dijagnostike</a> i dalje određuju značenje događaja, satova i ograničenja.</p>
+    <p>Manifest navodi verziju formata, identitet i stanje snimka, razlog završetka, prisustvo početnog/završnog zapisa, gubitak događaja, greške, skraćivanje i SHA-256 svake datoteke. Sažetak ne pretvara broj tehničkih pokušaja u stopu uspješnosti korisnika i ne zaključuje šta je korisnik namjeravao izabrati. Paket ne sadrži cijeli tekstualni log, cijele postavke, tajne, serijski broj, sadržaj poruka ili biblioteke, audio ni snimke ekrana. Izvoz je lokalni, tek nakon izbora odredišta u Windows dijalogu; odustajanje ne mijenja snimak, a greška dopušta ponovni pokušaj.</p>
+    <p>Prikaz se pregleda na 1280 × 720 logičkih piksela. Alati pregleda su ispod prozora. Windows dijalog, mjerenje uticaja zapisivanja i stvarno ponašanje na Tobii 4C provjeravaju se odvojeno od ovog HTML nacrta.</p>
+  </details>
+</body>
+</html>

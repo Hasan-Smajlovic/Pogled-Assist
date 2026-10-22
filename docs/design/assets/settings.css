@@ -37,6 +37,8 @@
 .settings-nav button { justify-content: flex-start; min-height: 66px; text-align: left; }
 .settings-nav-note { margin: auto 8px 6px; color: #8fa099; font-size: 13px; line-height: 1.45; }
 .settings-page { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+#general-settings { min-height:0; overflow:auto; }
+#general-settings > * { flex-shrink:0; }
 .settings-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
 .settings-page-header h2 { margin: 0; color: #fff; font-size: 24px; font-weight: 650; }
 .settings-page-header p { margin: 0; color: #aeb9b3; font-size: 14px; }
@@ -44,6 +46,10 @@
 .settings-page-header > .settings-checkbox { grid-column: 2; grid-row: 1 / span 2; }
 .settings-group-label { margin: 4px 2px 0; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .settings-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-diagnostics-row { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:16px; align-items:center; padding:10px 14px; border:1px solid #3a403c; border-radius:10px; background:#222522; }
+.settings-diagnostics-row h3 { margin:0 0 5px; font-size:17px; }
+.settings-diagnostics-row p { margin:0; font-size:13px; line-height:1.4; color:#b9b2a5; }
+.settings-diagnostics-row .recording-badge { margin-left:6px; }
 .settings-checkbox {
   display: flex;
   align-items: center;

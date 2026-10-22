@@ -2,6 +2,9 @@
 .hotbar-reference button { flex: 0 0 104px; min-height: 58px; height: 58px; padding: 4px; font-size: 14px; }
 .hotbar-reference button:first-child { flex-basis: 58px; margin-right: 16px; }
 .hotbar-reference button:nth-child(2) { margin-right: 18px; }
+.hotbar-settings-recording { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px; }
+.hotbar-settings-recording .recording-badge { gap:4px; font-size:10px; }
+.hotbar-settings-recording .recording-badge::before { width:5px; height:5px; flex-basis:5px; }
 .hotbar-reference button:nth-child(3) { flex-basis: 112px; margin-right: 8px; }
 .hotbar-reference button:nth-child(6) { margin-right: 26px; }
 .hotbar-reference button::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 9px; }

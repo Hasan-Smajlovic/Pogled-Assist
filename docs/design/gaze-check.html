@@ -9,45 +9,75 @@
   <link rel="stylesheet" href="assets/gaze-check.css">
   <script src="assets/reference.js" defer></script>
   <script src="assets/eye-policy.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/gaze-check.js" defer></script>
 </head>
 <body data-reference-page="gaze-check">
-  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <main id="gaze-check-screen" class="gaze-check" aria-label="Provjera pogleda">
-    <header><div><h1>Provjera pogleda</h1><p id="check-policy-summary" class="muted"></p></div><button data-reference-return>Zatvori · Esc</button></header>
+    <header><div><h1 id="check-heading">Provjera pogleda</h1><p id="check-policy-summary" class="muted"></p></div><button id="check-diagnostics">Dijagnostičko snimanje</button><button id="check-history">Sačuvani rezultati</button><button id="check-close">Zatvori · Esc</button></header>
     <p id="check-step">1 · Položaj i praćenje</p>
     <div id="check-live" class="check-columns">
       <section class="check-card"><h2>Položaj očiju uživo</h2><p>Polako pomjerajte ekran s pričvršćenim Tobijem.</p><div class="eye-box"><span class="eye-dot"></span><span class="eye-dot"></span></div><div class="check-depth" title="Udaljenost unutar područja koje uređaj može pratiti; nije mjerenje u centimetrima."></div><div class="depth-labels"><span>Bliže uređaju</span><span>Dalje od uređaja</span></div><p class="muted">Okvir pokazuje položaj očiju, traka ispod udaljenost.</p><p class="check-line check-pass">✓ Položaj u području praćenja</p><p class="check-line check-pass">✓ Udaljenost u području praćenja</p></section>
       <section class="check-card"><h2>Šta uređaj trenutno vidi</h2><p id="check-left-eye" class="check-line check-pass">✓ Lijevo oko · prepoznato</p><p id="check-right-eye" class="check-line check-pass">✓ Desno oko · prepoznato</p><p id="check-gaze-state" class="check-line check-pass">✓ Pogled se prati</p><p id="check-both-continuity" class="check-line check-pass">✓ Oba oka · praćenje je uglavnom neprekinuto</p><p>Zadržite položaj i odaberite „Provjeri preciznost“.</p><p class="muted">Pokazatelji očiju ostaju stvarni. Odabir jednim okom ne potvrđuje preciznost pogleda.</p></section>
     </div>
-    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-policy" class="check-policy-label"></p><p id="check-test-copy">Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span></p><progress id="check-progress" value="1" max="5" aria-label="Napredak provjere"></progress><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini test · Esc zatvara</button></div></div>
-    <div id="check-results" class="check-card" hidden style="flex:1">
-      <h2 id="check-result-title">— Za 1 od 5 meta nema dovoljno podataka.</h2>
-      <p id="check-result-policy" class="muted"></p>
-      <div class="check-result-columns"><div><div class="check-map"><span style="left:50%;top:50%"></span><span style="left:4%;top:6%"></span><span style="left:96%;top:6%"></span><span style="left:4%;top:94%"></span><span style="left:96%;top:94%"></span><i style="left:92%;top:12%"></i></div><p class="muted">Krug = meta · tačka = pogled<br>Linija pokazuje koliko je pogled promašio.</p></div><table id="check-result-table" class="check-metrics"></table></div>
-      <p id="check-result-advice">Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru.</p>
-      <p id="check-trial-result" hidden></p>
-      <button id="check-details" style="align-self:flex-start;min-height:60px">Prikaži mjerenja</button>
-      <p id="check-metrics-help" class="muted" hidden>Podaci: dio vremena s važećim pogledom. Odstupanje: udaljenost od mete. Rasipanje: koliko se pogled pomjerao. Vrijednosti su u pikselima prikaza (px).</p>
-    </div>
+    <div id="check-test" class="check-stage fullscreen" hidden><div id="check-targets"><span class="check-target">+</span></div><span id="check-gaze" class="check-gaze" hidden></span><div class="check-controls"><p id="check-test-policy" class="check-policy-label"></p><p id="check-test-copy">Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span></p><progress id="check-progress" value="1" max="5" aria-label="Napredak provjere"></progress><button id="check-test-next">Prikaži primjer rezultata</button><button id="check-test-back">Prekini i prikaži rezultat</button></div></div>
+    <section id="check-results" class="check-card check-report" aria-label="Rezultat provjere" hidden>
+      <div class="check-report-heading"><div><h2 id="check-result-title"></h2><p id="check-result-meta" class="muted"></p></div><span class="check-badge">Simulacija</span></div>
+      <div class="check-tabs" role="tablist" aria-label="Podaci rezultata">
+        <button id="check-tab-precision" role="tab" aria-selected="true" aria-controls="check-panel-precision">Preciznost</button>
+        <button id="check-tab-trial" role="tab" aria-selected="false" aria-controls="check-panel-trial" tabindex="-1">Probni izbor</button>
+        <button id="check-tab-context" role="tab" aria-selected="false" aria-controls="check-panel-context" tabindex="-1">Postavke i uređaj</button>
+      </div>
+      <div id="check-panel-precision" class="check-report-panel" role="tabpanel" aria-labelledby="check-tab-precision" tabindex="0">
+        <div class="check-result-columns"><div><div id="check-result-map" class="check-map" aria-label="Položaj meta i izmjerenog pogleda"></div><p class="check-map-key muted">Krug = meta · tačka = pogled<br>Linija = odstupanje od mete</p><button id="check-details" aria-pressed="false">Prikaži mjerenja</button></div><div><table id="check-result-table" class="check-metrics"></table><p id="check-metrics-help" class="check-help muted" hidden>Podaci = dio vremena s važećim pogledom. Odstupanje i rasipanje su u logičkim pikselima prikaza (px).</p><p id="check-result-advice" class="check-help"></p></div></div>
+      </div>
+      <div id="check-panel-trial" class="check-report-panel" role="tabpanel" aria-labelledby="check-tab-trial" tabindex="0" hidden>
+        <div id="check-trial-empty" class="check-empty"><h3>Probni izbor još nije pokrenut</h3><p>Rezultat preciznosti je dostupan i bez probe dugmadi.</p><p class="muted">Proba ne šalje klikove Windowsu.</p></div>
+        <div id="check-trial-data" hidden><div class="check-trial-heading"><label for="check-trial-attempt">Pokušaj probnog izbora</label><select id="check-trial-attempt"></select></div><p id="check-trial-result"></p><table id="check-trial-table" class="check-metrics"></table><p class="check-help muted">„Podaci“ je dio vremena s važećim pogledom. „Poništeni“ broji prekinute odabire. Premalo podataka nije promašaj. Ponovljena proba ne mjeri preciznost ponovo.</p></div>
+      </div>
+      <div id="check-panel-context" class="check-report-panel" role="tabpanel" aria-labelledby="check-tab-context" tabindex="0" hidden>
+        <p class="check-help muted">Postavke korištene u ovom testu. Pregled rezultata ne mijenja trenutne postavke.</p>
+        <div class="check-context-columns"><section><h3>Odabir pogledom</h3><dl id="check-used-settings"></dl></section><section><h3>Uređaj i prikaz</h3><dl id="check-environment"></dl></section></div>
+      </div>
+      <div class="check-report-bottom"><div class="check-storage" role="status" aria-live="polite"><strong id="check-save-status"></strong><span id="check-save-help" class="muted"></span></div><button id="check-save-retry" hidden>Pokušaj ponovo</button><button id="check-export" class="primary">Izvezi ZIP</button></div>
+      <p id="check-export-status" class="check-help" role="status" aria-live="polite" hidden></p>
+    </section>
+    <section id="check-history-view" class="check-card check-history-view" aria-label="Sačuvani rezultati" hidden>
+      <p class="check-help muted">Automatsko čuvanje prati postavku „Uključi zapisivanje“. Ručni izvoz je uvijek dostupan.</p>
+      <div id="check-history-content" class="check-history-columns"><div id="check-history-list" class="check-history-list" role="group" aria-label="Rezultati po datumu"></div><section id="check-history-preview" class="check-history-preview" aria-live="polite"></section></div>
+      <div id="check-history-empty" class="check-empty" hidden><h2>Još nema sačuvanih rezultata</h2><p>Pokrenite provjeru preciznosti. Završeni i prekinuti pokušaji čuvaju se dok je zapisivanje uključeno.</p><p class="muted">Kada je zapisivanje isključeno, rezultat ostaje u memoriji do zatvaranja aplikacije i može se ručno izvesti.</p></div>
+      <p id="check-history-retention" class="check-help muted">Čuvaju se najnovijih 100 izvještaja, do ukupno 10 MiB. Najstariji se uklanjaju tek nakon uspješnog čuvanja novog. Ručno izvezeni ZIP-ovi ostaju sačuvani.</p>
+    </section>
     <p id="check-notice" class="muted">Upravljanje pogledom je pauzirano tokom provjere.</p>
-    <footer><button id="check-calibrate">Otvori Tobii postavke</button><button id="check-free">Slobodna provjera</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Ponovi provjeru</button></footer>
-    <!-- Synthetic preview: ?trial=no-gaze shows a completed trial with insufficient
-      gaze data, including a few isolated samples. Positioning is the next step.
-      Measurement rules and feedback priority: ../ARCHITECTURE.md#gaze-check-measurements
-      Caregiver flow and Tobii Core instructions: ../USER_GUIDE.md#gaze-check
-      Keep targets still; animate only progress, and pair colors with text. -->
+    <footer><button id="check-back" hidden>Nazad na provjeru</button><button id="check-calibrate">Otvori Tobii postavke</button><button id="check-free">Slobodna provjera</button><button id="check-next" class="primary">Provjeri preciznost</button><button id="check-reset" hidden>Podesi položaj</button><button id="check-repeat" hidden>Ponovi preciznost</button><button id="check-open-result" class="primary" hidden>Otvori rezultat</button></footer>
   </main>
+  <dialog id="check-export-dialog" class="check-export-dialog" aria-labelledby="check-export-title">
+    <h2 id="check-export-title">Windows · Sačuvaj kao</h2><p>Izaberite mjesto za ZIP s podacima JSON i čitljivim TXT izvještajem.</p><label for="check-export-filename">Naziv datoteke</label><input id="check-export-filename" readonly><p class="muted">Sadrži mjerenja, postavke testa i podatke o uređaju. Poruke i historija govora nisu uključene.</p><p class="check-prototype-note">Ilustracija sistemskog dijaloga. HTML ne pravi datoteke niti otvara foldere.</p><div class="check-dialog-actions"><button id="check-export-cancel">Odustani</button><button id="check-export-confirm" class="primary">Sačuvaj</button></div>
+  </dialog>
+  <div class="check-preview-tools">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <details class="reference-tools"><summary>Opcije pregleda · izmišljeni podaci</summary>
+    <label>Prikaz <select id="check-view-preview"><option value="position">Položaj uživo</option><option value="results">Završena preciznost</option><option value="interrupted">Prekinuta preciznost</option><option value="trial">Završena proba dugmadi</option><option value="trial-interrupted">Ponovljena, prekinuta proba</option><option value="history">Sačuvani rezultati</option><option value="empty">Prazna lista</option><option value="history-error">Nečitljiv sačuvani rezultat</option><option value="logging-off">Zapisivanje isključeno</option><option value="saving">Čuvanje u toku</option><option value="save-error">Neuspjelo čuvanje</option><option value="export-error">Neuspjeli izvoz</option></select></label>
     <label>Režim <select id="check-policy-preview"></select></label>
     <label>Trenutni podaci <select id="check-tracking-preview"><option value="both">Oba oka i svjež pogled</option><option value="left">Samo lijevo oko i svjež pogled</option><option value="right">Samo desno oko i svjež pogled</option><option value="held">Kratak prekid desnog oka</option><option value="no-gaze">Jedno oko, nema svježeg pogleda</option><option value="none">Oba oka izgubljena</option></select></label>
+  </details>
+  </div>
+  <details class="design-notes"><summary>Prečica za dijagnostičko snimanje · stavka 3 ticketa #92</summary><p>Prečica u zaglavlju otvara <a href="diagnostics.html?return=gaze-check">Dijagnostičko snimanje</a>, izvan aktivnog mjerenja. Povratak zadržava rezultat, izabranu karticu i listu. Snimanje može nastaviti kroz preciznost, probni izbor i slobodnu provjeru; samo njegovo pokretanje ne stvara novi rezultat provjere. Normalan unos ostaje pauziran dok je Provjera pogleda otvorena, uključujući povezani prozor za dijagnostiku.</p></details>
+  <details class="design-notes"><summary>Čuvanje, raniji rezultati i izvoz · stavka 2 ticketa #92</summary>
+    <p>Ovo je interaktivni dizajn s izmišljenim podacima. Opcije pregleda i URL <code>?view=history</code>, <code>?view=interrupted</code>, <code>?view=save-error</code> ili <code>?view=logging-off</code> otvaraju primjere stanja. Ni čuvanje ni izvoz u HTML-u ne pišu datoteke; dijalog „Sačuvaj kao“ samo predstavlja sljedeći sistemski korak.</p>
+    <p>Automatsko čuvanje prati postojeću postavku „Uključi zapisivanje“. Rezultat preciznosti čuva se odmah po završetku; probni izbor je opcionalan. Prekid čuva završene dijelove uz stanje „Prekinuto“ i razlog: zatvaranje, ponavljanje, promjena veličine, minimiziranje, prekid veze ili otvaranje Tobii postavki. Nezavršena meta ostaje neizmjerena. Završena meta s premalo podataka nije izmjereni promašaj.</p>
+    <p>Svaki pokušaj ima svoj identifikator i vrijeme. Ponovljene probe dugmadi ostaju povezane s istom provjerom preciznosti; lista pokušaja pokazuje završetak ili prekid svake probe. Preciznost se ne predstavlja kao ponovo izmjerena. Mjerenja, postavke i okruženje pripadaju trenutku testa; otvaranje starog rezultata ne primjenjuje njegove postavke.</p>
+    <p>Verzionirani JSON izvještaji planirani su u <code>logs/gaze-check/</code>, uz čuvanje u pozadini i atomsku zamjenu datoteke. Limit je najnovijih 100 izvještaja i ukupno 10 MiB u tom folderu; uklanjanje najstarijih slijedi samo nakon uspješnog čuvanja novog. Raniji i ručno izvezeni ZIP-ovi ne brišu se ovim pravilom. Nečitljiv ili nepodržan izvještaj ostaje netaknut i jasno označen.</p>
+    <p>Dok je zapisivanje isključeno, novi rezultati ostaju u memoriji aplikacije i mogu se izvesti. Lista može prikazati i te rezultate, uz oznaku „Samo u memoriji“, pored onih sačuvanih na disku. Neuspjelo čuvanje zadržava rezultat, prikazuje grešku i nudi ponovni pokušaj i izvoz. Uspjeh ručnog izvoza ne mijenja status automatskog čuvanja.</p>
+    <p>„Izvezi ZIP“ otvara Windows dijalog „Sačuvaj kao“. Jedan ZIP sadrži JSON i bosanski TXT s istim mjerenjima i kontekstom, uključujući simulaciju i nedostupne podatke. Izvoz obuhvata samo izvještaj provjere; širi paket logova pripada stavci 3. Ne uključuje privatne poruke, biblioteke govora, ključeve, cijele postavke ili sirovi tok pogleda. Odustajanje ništa ne mijenja, a neuspjeh ostavlja izvještaj dostupan za novi pokušaj.</p>
+    <p>Provjeru i historiju koristi njegovatelj mišem ili tastaturom. Normalan unos pogledom ostaje zaustavljen i tokom historije i sistemskog dijaloga. Referenca se pregleda na 1280 × 720; alati ovog HTML pregleda nalaze se ispod aplikacijskog prikaza.</p>
   </details>
   <details class="design-notes"><summary>Režim tokom provjere</summary>
     <p>Panel s nazivom režima ostavlja slobodna sva tri probna dugmeta. Donja grupa je 20 px više kako panel ne bi prekrio ni rub susjednog dugmeta.</p>
     <p>Probni izbor preuzima i trajanje čuvanja uz rub iz Postavki. Kratak prelazak na susjedno dugme unutar prostorne tolerancije zamrzava prethodni odabir; nakon isteka susjedno dugme počinje od nule. Nula isključuje čuvanje. Vrijeme izvan dugmeta ne donosi napredak. Promjene postavki važe nakon ponovnog otvaranja provjere.</p>
     <p>Preciznost, slobodni prikaz i probni izbor koriste izabrani režim. Naziv ostaje vidljiv i tokom prikaza preko cijelog ekrana te uz rezultate. Probni režim broji samo stvarne svježe, validne uzorke; ne pretpostavlja pogled iz položaja oka. U režimu kratkih prekida mjerenje ne dobija uzorke tokom prekida, a probni izbor može zamrznuti napredak. Vrijeme bez pogleda ne ulazi u pokrivenost podacima.</p>
     <p>Pokazatelji pojedinačnih očiju i dostupnosti oba oka ne mijenjaju značenje s režimom. Kada jedno oko daje upotrebljiv pogled, ukupna dostupnost oba oka i dalje može biti niska. Nepoznati položaj oka ostaje nepoznat. Mjerenja ne daju izmišljenu preciznost ili slaganje lijevog i desnog pogleda na 4C uređaju.</p>
-    <p>Normalan unos i pomjeranje pokazivača ostaju zaustavljeni tokom cijele provjere, i dok je minimizirana. Probni izbor ne šalje Windows klik. Promjena režima poništava prethodni test; različiti režimi se ne spajaju u jedan rezultat. Ovi prikazi i brojevi su primjeri dizajna, bez čuvanja rezultata ili izvoza dijagnostike.</p>
+    <p>Normalan unos i pomjeranje pokazivača ostaju zaustavljeni tokom cijele provjere, i dok je minimizirana. Probni izbor ne šalje Windows klik. Promjena režima prekida aktivni test; različiti režimi se ne spajaju u jedan rezultat. Pravila mjerenja ostaju u <a href="../ARCHITECTURE.md#gaze-check-measurements">arhitekturi</a>, a postojeći postupak provjere u <a href="../USER_GUIDE.md#gaze-check">korisničkom vodiču</a>.</p>
   </details>
 </body>
 </html>

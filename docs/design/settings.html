@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="assets/settings.css">
   <script src="assets/reference.js" defer></script>
   <script src="assets/eye-policy.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/settings.js" defer></script>
 </head>
@@ -38,9 +39,10 @@
         <p class="settings-group-label">Pokretanje i dijagnostika</p>
         <div class="settings-options">
           <label class="settings-checkbox"><input id="startup-enabled" type="checkbox">Pokreni uz Windows</label>
-          <label class="settings-checkbox"><input type="checkbox">Uključi zapisivanje</label>
+          <label class="settings-checkbox"><input id="logging-enabled" type="checkbox">Uključi zapisivanje</label>
           <label class="settings-checkbox"><input id="startup-launcher" type="checkbox">Prikaži PowerShell</label>
         </div>
+        <section class="settings-diagnostics-row" aria-labelledby="settings-diagnostics-title"><div><h3 id="settings-diagnostics-title">Snimite problem s pogledom</h3><p>Kratak dijagnostički snimak i paket za podršku. <span class="recording-badge" data-recording-status hidden></span></p></div><button type="button" data-open-view="diagnostics">Dijagnostičko snimanje</button></section>
         <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">
           <div class="update-copy">

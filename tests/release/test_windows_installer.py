@@ -188,6 +188,10 @@ def _existing_installation(tmp_path: Path) -> Path:
     (install_root / "logs" / "diagnostics" / "session.jsonl").write_bytes(
         b'{"keep":"diagnostics"}\n'
     )
+    (install_root / "logs" / "gaze-check").mkdir()
+    (install_root / "logs" / "gaze-check" / "synthetic-report.json").write_bytes(
+        b'{"keep":"gaze-check-report"}\n'
+    )
     (install_root / "install_info.json").write_bytes(b'{"keep":"metadata"}')
     (install_root / "setup_windows.log").write_bytes(b"existing setup log\r\n")
     (install_root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
@@ -541,6 +545,7 @@ def _persistent_snapshot(install_root: Path) -> dict[str, bytes]:
             "data/speech_learning.json",
             "logs/latest.txt",
             "logs/diagnostics/session.jsonl",
+            "logs/gaze-check/synthetic-report.json",
             "install_info.json",
             "setup_windows.log",
         )

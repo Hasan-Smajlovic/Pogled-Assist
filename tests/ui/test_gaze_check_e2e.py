@@ -102,7 +102,9 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
     assert "5 od 5" in window._result_summary.text()
     window._repeat_button.click()
     assert window._check is None
-    assert window._phase == "position"
+    assert window._phase == "precision"
+    qtbot.wait(1)
+    assert window._check is not None
 
 
 @pytest.mark.parametrize("missing", ["eyes", "gaze", "stale"])
@@ -113,6 +115,7 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     for _ in range(3):
         now[0] = window._trial_ready_at + 0.1
@@ -145,6 +148,7 @@ def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check,
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     interruptions = 0
     for _ in range(3):
@@ -176,6 +180,7 @@ def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(g
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     for _ in range(3):
         start = window._trial_ready_at
@@ -646,7 +651,7 @@ def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
 
 @pytest.mark.parametrize("simulated", [False, True])
 def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulated):
-    from PySide6.QtWidgets import QLabel, QPushButton
+    from PySide6.QtWidgets import QLabel, QPushButton, QScrollArea
 
     window, _now, _screen = gaze_check
     window._simulated = simulated
@@ -664,14 +669,22 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulate
         elif phase == "trial":
             window._start_trial()
         elif phase == "trial-no-gaze":
-            window._trial_results = [False] * 3
-            window._show_results()
+            for _index in range(3):
+                window._finish_trial_target(False, window._trial_deadline)
         elif phase == "free":
             window._start_free()
         qtbot.wait(1)
         assert (window.width(), window.height()) == (1280, 720)
         for child in window.findChildren(QWidget):
             if not child.isVisible() or not isinstance(child, (QLabel, QPushButton)):
+                continue
+            ancestor = child.parentWidget()
+            while ancestor is not None and not isinstance(ancestor, QScrollArea):
+                ancestor = ancestor.parentWidget()
+            if ancestor is not None:
+                viewport = ancestor.viewport()
+                bounds = QRect(viewport.mapTo(window, QPoint()), viewport.size())
+                assert window.rect().contains(bounds)
                 continue
             bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
             assert window.rect().contains(bounds), (phase, child.text(), bounds)
@@ -748,11 +761,13 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     ]
     window._show_results()
     window._start_trial()
-    window._trial_results = selected
-    window._trial_tracked_targets = {0, 1, 2}
     window._trial_wrong_selections = wrong
     window._trial_losses = loss
-    window._show_results()
+    for choice in selected:
+        start = window._trial_ready_at
+        for sample in range(100):
+            window._trial_coverage.add(start + sample * 0.02)
+        window._finish_trial_target(choice, start + 2)
     assert advice in window._result_advice.text()
     assert window._trial_summary.isVisible()
     assert f"pogrešni izbori: {wrong}" in window._trial_summary.text()
@@ -774,8 +789,13 @@ def test_gaze_check_feedback_successful_trial_never_overrides_precision_problem(
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, state, (x, y)) for name, x, y in window._check.targets
     ]
-    window._trial_results = [True] * 3
     window._show_results()
+    window._start_trial()
+    for _index in range(3):
+        start = window._trial_ready_at
+        for sample in range(100):
+            window._trial_coverage.add(start + sample * 0.02)
+        window._finish_trial_target(True, start + 2)
     assert "govornu tastaturu" not in window._result_advice.text()
     assert "Podesi položaj" in window._result_advice.text()
 

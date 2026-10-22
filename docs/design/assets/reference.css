@@ -89,3 +89,6 @@ button[aria-pressed="true"], .primary {
 }
 
 .prototype-note, .voice-prototype-note { margin: 12px; color: #bdc9dc; font-size: 12px; line-height: 1.5; }
+.recording-badge { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:#ffb4b4; font-size:13px; font-weight:600; line-height:18px; font-variant-numeric:tabular-nums; }
+.recording-badge::before { content:''; width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:currentColor; }
+.recording-badge[data-finished="true"] { color:#90e4b5; }

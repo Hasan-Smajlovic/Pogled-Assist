@@ -1,4 +1,4 @@
-"""Ephemeral gaze-check measurements; no calibration or input side effects."""
+"""Gaze-check measurements; no calibration or input side effects."""
 
 from __future__ import annotations
 
@@ -172,8 +172,11 @@ class TrialGazeCoverage:
         self._previous_at = None
 
     def sufficient(self, now: float) -> bool:
+        return self.fraction(now) >= MIN_COVERAGE
+
+    def fraction(self, now: float) -> float:
         elapsed = now - self.started_at
-        return elapsed > 0 and self._covered_seconds / elapsed >= MIN_COVERAGE
+        return min(1.0, self._covered_seconds / elapsed) if elapsed > 0 else 0.0
 
 
 class FixationCheck:

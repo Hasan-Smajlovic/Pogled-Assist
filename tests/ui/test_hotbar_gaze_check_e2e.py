@@ -130,3 +130,37 @@ def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
         assert "pored sata" in check._notice.text()
     else:
         assert check.isMinimized()
+
+
+@pytest.mark.e2e
+def test_history_and_native_export_keep_all_normal_gaze_input_suspended(
+    hotbar_gaze, qtbot, monkeypatch, tmp_path
+):
+    from pogled_assist.ui import gaze_check_history
+
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._open_gaze_check()
+    check = hotbar._gaze_check_window
+    check._start_trial()
+    check._test_back_button.click()
+    check._history_button.click()
+    qtbot.waitUntil(lambda: not check._reports.loading)
+    assert controller._input_suspended
+    check._primary_button.click()
+    assert check._archived
+    delivered = []
+    controller.gaze_position_changed.connect(delivered.append)
+
+    def save_dialog(*_args):
+        assert controller._input_suspended
+        for at in (100, 600, 1200, 3000):
+            feed(QPoint(500, 400), at)
+        assert delivered == actions == []
+        return str(tmp_path / "caregiver.zip"), ""
+
+    monkeypatch.setattr(gaze_check_history.QFileDialog, "getSaveFileName", save_dialog)
+    check._export_button.click()
+    qtbot.waitUntil(lambda: "ZIP je izvezen" in check._export_status.text())
+    assert controller._input_suspended
+    check.close()
+    assert not controller._input_suspended

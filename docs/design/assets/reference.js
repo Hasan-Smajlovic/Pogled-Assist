@@ -8,6 +8,7 @@
     ['settings', 'settings.html', 'Postavke'],
     ['installation', 'installation.html', 'Instalacija'],
     ['gaze-check', 'gaze-check.html', 'Provjera pogleda'],
+    ['diagnostics', 'diagnostics.html', 'Dijagnostičko snimanje'],
     ['tracking', 'tracking.html', 'Praćenje'],
     ['selection-progress', 'selection-progress.html', 'Napredak odabira'],
   ];

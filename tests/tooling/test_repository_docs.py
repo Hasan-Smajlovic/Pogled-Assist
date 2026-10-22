@@ -30,6 +30,7 @@ REQUIRED_FILES = (
     "docs/design/speech.html",
     "docs/design/settings.html",
     "docs/design/gaze-check.html",
+    "docs/design/diagnostics.html",
     "docs/design/tracking.html",
     "docs/design/hotbar.html",
     "docs/design/selection-progress.html",
