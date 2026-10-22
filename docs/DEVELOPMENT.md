@@ -22,6 +22,8 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 
 Setup creates `.venv`, installs the application, test and packaging dependencies, and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored `.dev-tools` directory. It does not install Tobii software or change the system-wide Python environment. The `.venv` always uses Python 3.10. If `.venv` points to a removed or unsupported interpreter, setup moves it to `.dev-tools\venv-backups` before creating a fresh one. To use a specific installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup. Interpreter probes start executables directly without the Windows shell, so a broken interpreter returns an error without an interactive security warning.
 
+Setup, PR CI and release verification share `scripts/checks/install_powershell_analyzer.ps1`. It reuses the pinned analyzer under `.dev-tools`; when a download is needed, it registers the default `PSGallery` repository for the current user if missing. Repository registration or download failures stop setup rather than skipping the analyzer.
+
 `tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same interpreter is used for development, Tobii Pro discovery, automated checks, and Windows packaging.
 
 ## Command reference
@@ -73,6 +75,8 @@ Selection rules live in `scripts/checks/select_tests.py`. Changes to gaze, speec
 Tests without coverage default to two pytest-xdist processes with `--dist=loadfile`, keeping each test file on one worker. Each worker has its own QApplication and temporary directories. With the default `-Workers 0`, fast selections of fewer than four test files use one process to avoid startup overhead. `-Workers 1` disables parallel execution for debugging; `-Workers 2` uses two processes even for a small selection.
 
 The full `coverage` and sequential `check` commands default to one test process because parallel coverage slowed repeated Qt sidebar interactions on Windows/Python 3.10. Each test group in `check -Parallel` also defaults to one process, keeping application/Qt tests together while release/tooling tests run separately. `-Workers 2` explicitly enables xdist within each test invocation; it can increase contention and should be measured before use. Coverage commands list the 30 slowest tests. PR CI still runs every test with coverage in two worker processes, grouped by file, and lists the 30 slowest tests so suite changes can be compared run to run. Its existing quality, test and packaging jobs continue to run independently.
+
+PR CI and release verification run Ruff and Python compilation before downloading PowerShell tools. Their tool caches cover only the analyzer and actionlint directories, with a key tied to the operating system, architecture and installer scripts containing their pinned versions. The `code-quality` job installs only Ruff from PyPI and does not restore the application dependency cache. Test and packaging jobs retain their pip caches; the already compressed Windows package is uploaded without additional artifact compression. Compare one and two test workers on the same commit over repeated Windows runs before changing CI's worker count.
 
 `check -Parallel` keeps lint first, then overlaps three stages:
 

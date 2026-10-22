@@ -107,6 +107,10 @@ def _prepare_setup_environment(tmp_path):
     check_script = tmp_path / "scripts" / "checks" / "check_github_actions.ps1"
     check_script.parent.mkdir(parents=True)
     check_script.write_text("", encoding="utf-8")
+    shutil.copy2(
+        DEV_SCRIPT.parent / "scripts" / "checks" / "install_powershell_analyzer.ps1",
+        check_script.parent,
+    )
     driver = tmp_path / "run-setup.ps1"
     return python_path, driver
 
@@ -175,6 +179,54 @@ Install-DevEnvironment
         assert python_path.read_bytes() == b"old environment"
         assert backups == []
     assert "-m pip install" in commands
+
+
+@pytest.mark.parametrize("registered", [False, True])
+def test_analyzer_setup_registers_missing_gallery_and_reuses_download(tmp_path, registered):
+    script = tmp_path / "scripts" / "checks" / "install_powershell_analyzer.ps1"
+    script.parent.mkdir(parents=True)
+    shutil.copy2(DEV_SCRIPT.parent / "scripts" / "checks" / script.name, script)
+    result = run_powershell_cases(
+        tmp_path,
+        {
+            "install": {
+                "body": r"""
+$script:Registered = REGISTERED
+$script:Calls = [System.Collections.Generic.List[string]]::new()
+function Get-PSRepository {
+    param($Name, $ErrorAction)
+    if ($script:Registered) { [pscustomobject]@{ Name = "PSGallery" } }
+}
+function Register-PSRepository {
+    param([switch]$Default, $ErrorAction)
+    if (-not $Default) { throw "Expected the default PowerShell repository" }
+    $script:Calls.Add("register")
+    $script:Registered = $true
+}
+function Save-Module {
+    param($Name, $RequiredVersion, $Path, $Repository, [switch]$Force, $ErrorAction)
+    if (-not $script:Registered) { throw "Unable to find repository 'PSGallery'" }
+    if ($Name -ne "PSScriptAnalyzer" -or $RequiredVersion -ne "1.25.0" -or $Repository -ne "PSGallery") {
+        throw "Unexpected analyzer source or version"
+    }
+    $script:Calls.Add("save")
+    $directory = Join-Path $Path "$Name\$RequiredVersion"
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $directory "$Name.psd1") -Value "@{}"
+}
+$installer = Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1"
+& $installer
+function Get-PSRepository { throw "A cached analyzer must not contact PSGallery" }
+function Save-Module { throw "A cached analyzer must not be downloaded again" }
+& $installer
+$script:Calls -join ","
+""".replace("REGISTERED", "$true" if registered else "$false")
+            }
+        },
+    )["install"]
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ("save" if registered else "register,save")
 
 
 @pytest.mark.skipif(

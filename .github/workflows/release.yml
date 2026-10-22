@@ -40,16 +40,6 @@ jobs:
       - name: Install verification and build dependencies
         run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt -r requirements-build.txt"
 
-      - name: Download PSScriptAnalyzer
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Path .\.dev-tools -Force | Out-Null
-          Save-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Path .\.dev-tools -Repository PSGallery -Force
-
-      - name: Check GitHub Actions workflows
-        shell: powershell
-        run: .\scripts\checks\check_github_actions.ps1 -Install
-
       - name: Check Python source
         run: python -m ruff check .
 
@@ -58,6 +48,22 @@ jobs:
 
       - name: Compile Python source
         run: python -B -m compileall -q pogled_assist scripts tests run_gaze_mouse.py
+
+      - name: Cache pinned PowerShell and workflow tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            .dev-tools/PSScriptAnalyzer
+            .dev-tools/actionlint
+          key: ${{ runner.os }}-${{ runner.arch }}-check-tools-${{ hashFiles('scripts/checks/install_powershell_analyzer.ps1', 'scripts/checks/check_github_actions.ps1') }}
+
+      - name: Ensure PSScriptAnalyzer is available
+        shell: powershell
+        run: .\scripts\checks\install_powershell_analyzer.ps1
+
+      - name: Check GitHub Actions workflows
+        shell: powershell
+        run: .\scripts\checks\check_github_actions.ps1 -Install
 
       - name: Check PowerShell source
         shell: powershell

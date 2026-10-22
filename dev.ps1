@@ -25,8 +25,6 @@ $RepoRoot = $PSScriptRoot
 $VenvRoot = Join-Path $RepoRoot ".venv"
 $PythonPath = Join-Path $VenvRoot "Scripts\python.exe"
 $RequiredPythonVersion = "3.10"
-$AnalyzerVersion = "1.25.0"
-$AnalyzerPath = Join-Path $RepoRoot ".dev-tools\PSScriptAnalyzer\$AnalyzerVersion\PSScriptAnalyzer.psd1"
 $StageTimings = [Collections.Generic.List[object]]::new()
 
 if ($TestPaths.Count -gt 0 -and $Action -notin @("test", "test-ui")) {
@@ -217,17 +215,7 @@ function Install-DevEnvironment {
         "-r", (Join-Path $RepoRoot "requirements-build.txt")
     )
 
-    if (-not (Test-Path -LiteralPath $AnalyzerPath -PathType Leaf)) {
-        $toolRoot = Join-Path $RepoRoot ".dev-tools"
-        New-Item -ItemType Directory -Path $toolRoot -Force | Out-Null
-        Save-Module `
-            -Name "PSScriptAnalyzer" `
-            -RequiredVersion $AnalyzerVersion `
-            -Path $toolRoot `
-            -Repository "PSGallery" `
-            -Force
-    }
-
+    & (Join-Path $RepoRoot "scripts\checks\install_powershell_analyzer.ps1")
     & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1") -Install
 
     Write-Output "Development environment is ready. Run .\dev.ps1 check -Parallel."
