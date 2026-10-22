@@ -39,6 +39,7 @@ from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
+from scripts.ui.capture_diagnostics import CaptureDiagnostics
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
 from scripts.ui.capture_speech_voices import CaptureSpeechVoices
 from scripts.ui.gallery import GROUPS, gallery_content, group_for, page_html, select_names
@@ -287,6 +288,7 @@ def capture_ui(
             session.capture_settings()
             session.capture_selection_progress()
             session.capture_gaze_check()
+            session.capture_diagnostics()
             session.capture_speech()
             session.capture_sidebars()
             session.capture_arabic()
@@ -301,7 +303,7 @@ def capture_ui(
     return [path for _, path in session.snapshots]
 
 
-class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
+class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics):
     """Keep preview windows alive until all states have been captured."""
 
     def __init__(
@@ -371,6 +373,11 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.widgets.append(hotbar)
         size = min(self.size[0], 1280), hotbar.BAR_HEIGHT
         self.capture(hotbar, "hotbar", "Hotbar", size=size)
+        hotbar._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
+        self.capture(hotbar, "hotbar-recording", "Hotbar: passive recording status", size=size)
+        hotbar._recording_badge.set_status(None)
         with patch.object(toolbar_module, "save_app_settings", return_value=False):
             hotbar._save_settings()
         self.capture(hotbar, "hotbar-unsaved-settings", "Hotbar: settings not saved", size=size)
@@ -520,6 +527,11 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.speech._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
+        self.capture(self.speech, "speech-recording", "Speech: passive recording status")
+        self.speech._recording_badge.set_status(None)
         self.capture_speech_voices()
         self.capture_tracking_feedback()
         self.speech._view_mode = "categories"

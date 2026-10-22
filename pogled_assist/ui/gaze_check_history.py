@@ -126,6 +126,7 @@ class GazeCheckHistory:
         self._finalize_attempt("Otvorena lista rezultata")
         self._target.hide()
         self._phase = "history"
+        self._diagnostics_button.setEnabled(True)
         self._title_label.setText("Sačuvani rezultati")
         self._policy_label.setText("Rezultati ovog uređaja · najnoviji su prvi")
         self._simulation_label.hide()
@@ -248,6 +249,7 @@ class GazeCheckHistory:
             "show_interaction_overlay": "Prikaz napretka",
             "app_version": "Verzija aplikacije",
             "build_revision": "Revizija",
+            "build_dirty": "Lokalne izmjene izvora",
             "backend": "Backend",
             "sdk_version": "SDK",
             "model": "Uređaj",
@@ -266,6 +268,8 @@ class GazeCheckHistory:
                 value = mapping.get(key)
                 if key == "eye_tracking_policy":
                     value = dict(EYE_TRACKING_POLICY_CHOICES).get(value, value)
+                elif type(value) is bool:
+                    value = "Da" if value else "Ne"
                 lines.append(f"{labels[key]}: {value if value is not None else 'Nije dostupno'}")
             lines.append("")
         self._context_detail.setText("\n".join(lines))
@@ -308,7 +312,7 @@ class GazeCheckHistory:
                 )
                 coverage = f"{row.coverage:.0%}" if row.coverage is not None else "—"
                 trials.append(
-                    f"<tr><td>{row.index + 1} · {row.size_logical_px[0]} × {row.size_logical_px[1]}</td><td>{status}</td><td>{coverage}</td><td>{row.wrong_selections} / {row.cancelled_selections} / {row.departures}</td></tr>"
+                    f"<tr><td>{row.index + 1} · {row.size_logical_px[0]} &times; {row.size_logical_px[1]}</td><td>{status}</td><td>{coverage}</td><td>{row.wrong_selections} / {row.cancelled_selections} / {row.departures}</td></tr>"
                 )
             trials.append("</table>")
         self._trial_detail.setText(

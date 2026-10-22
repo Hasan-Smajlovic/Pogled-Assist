@@ -22,6 +22,7 @@ SETTING_KEYS = (
 ENVIRONMENT_KEYS = (
     "app_version",
     "build_revision",
+    "build_dirty",
     "backend",
     "sdk_version",
     "model",
@@ -166,7 +167,7 @@ class GazeCheckReport:
                         raise ValueError("Invalid geometry")
                     if any(type(v) is not int for v in value) or min(value[2:]) <= 0:
                         raise ValueError("Invalid geometry")
-                elif key == "show_interaction_overlay":
+                elif key in ("show_interaction_overlay", "build_dirty"):
                     if type(value) is not bool:
                         raise ValueError("Invalid overlay setting")
                 elif key == "eye_tracking_policy":
@@ -229,6 +230,8 @@ def report_text(report: GazeCheckReport) -> str:
             return "Nije dostupno"
         if type(value) is bool:
             return "Da" if value else "Ne"
+        if isinstance(value, (tuple, list)):
+            return json.dumps(value, ensure_ascii=False, allow_nan=False)
         return str(value)
 
     lines = [
@@ -249,7 +252,7 @@ def report_text(report: GazeCheckReport) -> str:
             [
                 f"{row.name}: {rows[row.state]}",
                 f"  Meta: {show(row.target_normalized)}; sredina pogleda: {show(row.gaze_center_normalized)}",
-                f"  Uzorci: {show(row.samples)}; pokrivenost (0–1): {show(row.coverage)}",
+                f"  Uzorci: {show(row.samples)}; pokrivenost (0-1): {show(row.coverage)}",
                 f"  Odstupanje (medijan px): {show(row.median_error_logical_px)}; "
                 f"rasipanje (p90 px): {show(row.spread_logical_px)}; blizu: {show(row.near)}",
             ]
@@ -267,8 +270,8 @@ def report_text(report: GazeCheckReport) -> str:
         for row in trial.rows:
             lines.extend(
                 [
-                    f"  Grupa {row.index + 1}: {rows[row.state]}; veličina: {row.size_logical_px} logičkih px",
-                    f"  Odabrano: {show(row.selected)}; pokrivenost (0–1): {show(row.coverage)}; "
+                    f"  Grupa {row.index + 1}: {rows[row.state]}; veličina: {show(row.size_logical_px)} logičkih px",
+                    f"  Odabrano: {show(row.selected)}; pokrivenost (0-1): {show(row.coverage)}; "
                     f"trajanje: {show(row.duration_seconds)} s",
                     f"  Pogrešni: {row.wrong_selections}; poništeni: {row.cancelled_selections}; "
                     f"izlasci: {row.departures}",

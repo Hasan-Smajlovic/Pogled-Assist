@@ -192,6 +192,10 @@ def _existing_installation(tmp_path: Path) -> Path:
     (install_root / "logs" / "gaze-check" / "synthetic-report.json").write_bytes(
         b'{"keep":"gaze-check-report"}\n'
     )
+    recording = install_root / "logs" / "diagnostic-recordings" / ("a" * 32)
+    recording.mkdir(parents=True)
+    (recording / "recording.json").write_bytes(b'{"keep":"recording-metadata"}\n')
+    (recording / "snimak.jsonl").write_bytes(b'{"keep":"recorded-events"}\n')
     (install_root / "install_info.json").write_bytes(b'{"keep":"metadata"}')
     (install_root / "setup_windows.log").write_bytes(b"existing setup log\r\n")
     (install_root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
@@ -546,6 +550,8 @@ def _persistent_snapshot(install_root: Path) -> dict[str, bytes]:
             "logs/latest.txt",
             "logs/diagnostics/session.jsonl",
             "logs/gaze-check/synthetic-report.json",
+            "logs/diagnostic-recordings/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/recording.json",
+            "logs/diagnostic-recordings/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/snimak.jsonl",
             "install_info.json",
             "setup_windows.log",
         )

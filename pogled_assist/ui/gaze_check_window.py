@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import platform
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import replace
 from html import escape
-from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
@@ -24,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import diagnostics
+from ..build_info import build_identity
 from ..interaction.eye_tracking_policy import (
     EYE_TRACKING_POLICY_CHOICES,
     EyeTrackingGate,
@@ -97,6 +96,7 @@ def _label(text: str, parent: QWidget, name: str = "") -> QLabel:
 class GazeCheckWindow(GazeCheckHistory, QWidget):
     closed = Signal()
     calibration_requested = Signal()
+    diagnostics_requested = Signal()
 
     def __init__(
         self,
@@ -177,6 +177,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._simulation_label.setVisible(self._simulated)
         copy.addWidget(self._simulation_label)
         header.addLayout(copy, 1)
+        self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
+        header.addWidget(self._diagnostics_button)
         self._history_button = self._button("Sačuvani rezultati", self._open_history)
         header.addWidget(self._history_button)
         self._close_button = self._button("Zatvori · Esc", self.close)
@@ -370,6 +372,15 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._snapshot = CheckSnapshot()
         self.closed.emit()
         super().closeEvent(event)
+
+    def _request_diagnostics(self) -> None:
+        if self._phase in ("precision", "trial"):
+            return
+        self._timer.stop()
+        self._selection.cancel()
+        self._target.gaze_point = None
+        self._snapshot = CheckSnapshot()
+        self.diagnostics_requested.emit()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -600,6 +611,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         diagnostics.emit("gaze_check_phase", priority=True, phase="position", previous=self._phase)
         self._phase = "position"
         self._archived = False
+        self._diagnostics_button.setEnabled(True)
         self._title_label.setText("Provjera pogleda")
         self._simulation_label.setVisible(self._simulated)
         self._history_button.show()
@@ -633,6 +645,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         diagnostics.emit("gaze_check_phase", priority=True, phase=phase, previous=self._phase)
         self._pages.setCurrentIndex(1)
         self._phase = phase
+        self._diagnostics_button.setEnabled(phase not in ("precision", "trial"))
         self._target.trial = phase == "trial"
         self._target.free = phase == "free"
         self._target.target_index = 0
@@ -691,18 +704,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 else None,
             )
         self._environment["platform"] = platform.system()
-        version_path = (
-            Path(sys.executable).parent
-            if getattr(sys, "frozen", False)
-            else Path(__file__).resolve().parents[2]
-        ) / "VERSION"
-        try:
-            self._environment["app_version"] = version_path.read_text(encoding="utf-8").strip()[
-                :256
-            ]
-        except OSError:
-            self._environment["app_version"] = None
-        self._environment["build_revision"] = None
+        self._environment.update(build_identity())
 
     def _finalize_attempt(self, reason: str | None) -> None:
         if self._attempt_id is None or self._phase not in ("precision", "trial"):
@@ -903,6 +905,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             self._displayed_report_id = report_id
         self._target.hide()
         self._phase = "results"
+        self._diagnostics_button.setEnabled(True)
         self._pages.setCurrentIndex(2)
         self._step.setText("Rezultat provjere")
         results = self._fixations()

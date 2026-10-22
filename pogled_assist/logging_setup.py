@@ -215,6 +215,15 @@ def diagnostic_writer() -> LogWriter | None:
     return _writer if _writer is not None and _writer.enabled else None
 
 
+def recording_writer() -> LogWriter:
+    """Share the persistent transport without enabling normal logging or changing settings."""
+    global _writer, _queue_handler
+    if _writer is None or _writer.finished:
+        _writer = LogWriter()
+        _queue_handler = QueueLogHandler(_writer)
+    return _writer
+
+
 def shutdown_application_logging() -> None:
     global _writer, _queue_handler
     _flush_diagnostic_summaries()

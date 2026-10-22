@@ -76,7 +76,7 @@
     const recent = value.finished && Date.now() - value.finished < 5000;
     for (const badge of document.querySelectorAll('[data-recording-status]')) {
       badge.hidden = !value.active && !recent;
-      badge.textContent = value.active?.stoppingUntil ? 'Čuvam snimak…' : value.active ? 'Snimanje · ' + clock(value.active.minutes * 60 - (Date.now() - value.active.started) / 1000) : 'Snimak završen';
+      badge.textContent = value.active?.stoppingUntil ? '● …' : value.active ? '● ' + clock(value.active.minutes * 60 - (Date.now() - value.active.started) / 1000) : 'Snimak završen';
       badge.dataset.finished = String(!value.active);
       badge.title = 'Dijagnostičko snimanje. Za pregled ili ranije zaustavljanje otvorite Postavke → Dijagnostičko snimanje.';
     }

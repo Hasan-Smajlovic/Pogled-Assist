@@ -32,7 +32,7 @@ Run these commands in Windows PowerShell. The automated checks do not require a 
 | --- | --- | --- |
 | `.\dev.ps1 run` | Optional to start, required for real gaze checks | The real source application, tracker discovery, and Windows input |
 | `.\dev.ps1 simulate` | Not required | Mouse-driven gaze feedback, dwell timing, UI selection, and click flows |
-| `.\dev.ps1 ui` | Not required | Rendering of 61 representative UI screenshots at 1280 × 720 without external services |
+| `.\dev.ps1 ui` | Not required | Rendering of 69 representative UI screenshots at 1280 × 720 without external services |
 | `.\dev.ps1 ui -UiProfile full -UiGroup voice -Open` | Not required | Extended voice/account screenshots; [profiles and groups](UI_DEVELOPMENT.md#rendered-ui-gallery) |
 | `.\dev.ps1 test` | Not required | All unit, integration, and UI workflow tests in two worker processes, without coverage |
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
@@ -155,6 +155,8 @@ An offline reader imports neither Qt nor a Tobii backend:
 It counts provider rejection reasons from summaries, selection-end reasons from events, and reports process-cumulative writer health. Do not sum those cumulative loss counts repeatedly. Basic event counts can be lower than actual transitions; check suppressed counters in the summaries. Missing start/end, malformed or partial last lines, dropped records and size limits constrain the conclusion. Read the requested time range's raw events when explaining a specific attempt. Compare event timestamps with video time; file rotation names are not session start timestamps. Do not infer tracking accuracy without a known intended target.
 
 For changes to diagnostics, test the same provider/controller/Qt input sequence with logging off, basic, trace and a blocked writer. Include the existing gaze check and tracking-feedback suites: their snapshots, coverage, interruption counts and UI state must agree. Test actual blocked file/console sinks, overflow, runtime rotation, missing streams, exceptions and bounded shutdown. Keep stdout IPC atomic and independent of droppable logging. Use the existing pytest fakes and repository verification commands; Mac-only checks are not Windows or Tobii hardware verification. Measure producer/Qt latency, CPU, memory and output size on the same reference Windows device before release. A background thread still shares Python scheduling and the GIL, so asynchronous output alone does not establish zero overhead.
+
+The manual recording lifecycle and support ZIP use `tests/app/test_diagnostic_recording.py` and `tests/ui/test_diagnostics_e2e.py`; existing gaze-equivalence scenarios also run with manual recording. Durations and file caps use fake clocks/small limits rather than waiting minutes or creating 32 MiB test files. History reads only bounded metadata and lifecycle edges. Full JSONL analysis and compression run during export on a file worker. These checks protect behavior and bounded work; reference-device overhead remains a separate manual measurement.
 
 ## Lint and formatting
 

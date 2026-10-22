@@ -68,7 +68,7 @@ GROUPS = {
         ),
     ),
     "gaze-check": (
-        "Gaze check",
+        "Gaze check and diagnostics",
         (
             "gaze-check-position",
             "gaze-check-precision",
@@ -84,6 +84,9 @@ GROUPS = {
             "gaze-check-trial-held",
             "gaze-check-trial-wrong",
             "gaze-check-free",
+            "diagnostics-ready",
+            "diagnostics-recording",
+            "diagnostics-history",
         ),
     ),
     "voice": (
@@ -118,7 +121,7 @@ def group_for(name: str) -> str:
         return "keyboards"
     if name.startswith(("hotbar", "selection-", "speech-tracking-")):
         return "tracking"
-    if name.startswith("gaze-check-"):
+    if name.startswith(("gaze-check-", "diagnostics-")):
         return "gaze-check"
     if name.startswith(("settings-elevenlabs-", "speech-voice-")) or name in (
         "settings-efendija",

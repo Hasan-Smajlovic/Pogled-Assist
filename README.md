@@ -148,6 +148,8 @@ data\version-history\*\
 logs\latest.txt
 logs\diagnostics\*.jsonl
 logs\gaze-check\gaze-check-*.json
+logs\diagnostic-recordings\<recording-id>\recording.json
+logs\diagnostic-recordings\<recording-id>\snimak.jsonl
 ```
 
 For credentials and saved audio outside `data/`, see [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs).

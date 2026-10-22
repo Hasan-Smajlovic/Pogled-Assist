@@ -45,7 +45,7 @@ The [application design reference](design/speech-keyboard-reference.html) is the
 | Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
 | Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
-| Diagnostic recording (design; runtime pending) | [diagnostics.html](design/diagnostics.html) | `docs/design/assets/diagnostics.css`, `docs/design/assets/diagnostics.js` |
+| Diagnostic recording and support export | [diagnostics.html](design/diagnostics.html) | `docs/design/assets/diagnostics.css`, `docs/design/assets/diagnostics.js` |
 | Tracking notifications | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
 | Hotbar and gaze bubble | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
 | Selection progress overlay | [selection-progress.html](design/selection-progress.html) | `docs/design/assets/selection-progress.css`, `docs/design/assets/selection-progress.js` |
@@ -69,7 +69,7 @@ Generate the gallery:
 .\dev.ps1 ui -Open
 ```
 
-The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The default 1280 × 720 gallery contains 66 representative screenshots; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
+The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The default 1280 × 720 gallery contains 69 representative screenshots; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
 
 The local and published galleries share six review groups, a six-image Overview, thumbnail grids and full-size image links. Overview reuses existing PNGs. Groups show their screenshot counts and order representative states before extended variants; unknown images from older or newer CI artifacts appear under Other previews. Images load lazily. No application UI or interaction behavior changes when selecting a gallery profile.
 
@@ -81,10 +81,10 @@ The default `core` profile renders:
 | Keyboard and Controller (`keyboards`) | 12 | All main tabs, narrow Latin pagination, Arabic keyboards and second symbols pages |
 | Settings (`settings`) | 10 | General, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
 | Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, active and frozen selection arcs |
-| Gaze check (`gaze-check`) | 14 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback and free view |
+| Gaze check and diagnostics (`gaze-check`) | 17 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback free view, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 9 | Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
-The other 61 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:
+The other 67 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:
 
 ```powershell
 .\dev.ps1 ui -UiProfile full -Open
@@ -94,10 +94,11 @@ The other 61 screenshots remain available through the `full` profile. Use extend
 
 `-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
 
-The full profile retains all 127 states:
+The full profile retains all 136 states:
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
 - General, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
+- Diagnostic recording: ready, recording, finishing, saved history with optional report, incomplete with omitted events, write failure and export failure; passive badges in the hotbar and Speech
 - Selection progress: active and frozen arc with pause mark
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup (connected, replacing key, Nema glasova, missing key, invalid key, missing permission, credential save failure, quota, low/critical credits and preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device, live position, eye positions without valid gaze, too-close/too-far/outside-frame guidance without valid gaze, eye loss, fixation target with and without gaze, incomplete results, optional measurements, measured misses, passed targets, three local dwell trial sizes, cancelled selection and wrong-neighbor feedback, trial results needing adjustment, a trial without gaze data, completed check, free check with and without live gaze, experimental one-eye free view, held button trial, saved trial attempts, settings/device context, save pending/failure, logging off, export failure, interrupted precision, history, read-only archived result, empty history and history read error
@@ -146,7 +147,7 @@ On a normal development machine, verify:
 - Check quota/offline fallback, recovery after a top-up, saved-entry repetition offline, edit/deletion, tuning round trips and cache clearing. Free-form messages leave no cache. Record audible quality separately from process/network fakes.
 - Change the active Efendija voice/model/tuning while preparing and playing. Old audio must not start later. `test_stalled_decoder_fails_without_waiting_forever` covers the silent decoder watchdog; playback replacement tests cover stale native callbacks. Neither proves audible MP3 quality on the Windows machine.
 - Tracking notifications are initially enabled, can be disabled in Gaze Settings, leave targets fixed in Speech and its letter/deletion dialogs, and restore the message field after recovery. Check that Rest, Settings and Gaze check suppress them without changing policy eligibility or the desktop both-eye gate.
-- Logs appear under `logs` only when logging is enabled.
+- Ordinary logs follow the logging switch; explicit diagnostic recording also works with that switch off and leaves its saved value unchanged.
 - Closing the app removes AppBar reservations and child windows.
 - Bosnian suggestions complete a partial word and offer a next word offline.
 - Moving the caret or selecting text disables suggestions; returning to the end restores them without changing the message.
@@ -154,9 +155,13 @@ On a normal development machine, verify:
 - Closing and reopening preserves `data\speech_learning.json`; a forced write failure leaves the previous file intact and can be retried from Settings.
 - Switch Latin/Arabic from Settings and each keyboard, including an unfinished phrase or answer. The shared choice survives restart without changing existing text or entries. Review Arabic shaping, mixed text, both digit forms, mark entry/removal, and sidebar pagination at 1920 × 1080 with 150% scaling (1280 × 720 logical pixels). Arabic has no suggestions; returning to Latin restores them. Test Hamed playback and unavailable/offline errors separately.
 
+For short diagnostic recordings, verify the Settings and gaze-check entry points, default 2-minute and manual stops, continued recording after closing its window, and the unchanged logging switch. Review a local ZIP's source identity, hashes and optional report. Check incomplete results after forced termination, slow/full/unwritable disk and export failure, then restart and verify retention. Normal input must remain paused throughout a check/diagnostics handoff and resume after leaving it. Record these Windows results separately from fake-input tests.
+
 ### Manual Tobii checks
 
 On the Tobii machine, additionally verify:
+
+- Repeat the same intended-target task with manual recording off and on, including one-eye loss, a hold, an edge departure and reconnect. Compare selections, tracking continuity, UI latency, CPU, memory and output size on the reference machine. Badges must not obscure existing labels or notices. Background writes and passing fakes do not establish zero performance cost or improved accuracy.
 
 - In Gaze check, confirm the actual runtime supplies normalized positions before accepting movement guidance. Move the attached display nearer/further and sideways, verify both eye markers and depth, and confirm unavailable data has no checkmark. Test five fixations near the screen edges, the nine-point free check and all three local dwell trials, including wrong-neighbor selection, a blink, sustained one-eye loss, disconnect/reconnect and normal control after closing. Record OS, tracker, installed Tobii app/driver versions and selected application backend. Test the user's existing Tobii Core installation, including calibration settings launch, named-profile recalibration and return. Confirm that this settings action never starts Guest calibration. Verify Display setup uses the primary display and tracker alignment; this feature must not require a switch to Tobii Experience.
 - The hotbar status distinguishes connecting, unavailable device, waiting for fresh data, a held selection, normal readiness and experimental one-eye selection. Actual eye indicators remain truthful. Readiness follows the selected policy and fresh gaze; it does not certify calibration accuracy.

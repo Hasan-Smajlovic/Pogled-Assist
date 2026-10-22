@@ -232,7 +232,7 @@ def test_finalized_trial_summary_survives_reset_history_return_and_archived_deta
     window, reports, now = check
     complete_precision(window, qtbot)
     window._start_trial()
-    for index in range(3):
+    for _index in range(3):
         start = window._trial_ready_at
         for sample in range(100):
             window._trial_coverage.add(start + sample * 0.02)

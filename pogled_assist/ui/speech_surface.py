@@ -25,6 +25,7 @@ from ..keyboard_layouts import switch_label
 from ..speech.voice_state import RECOVERY_NOTICE_MS, VoiceState
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
+from .recording_badge import RecordingBadge
 from .settings_controls import busy_indicator
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
@@ -309,6 +310,7 @@ class SpeechSurface(QWidget):
         system_layout.setSpacing(8)
         controls_label = QLabel("Kontrole", system_panel)
         controls_label.setObjectName("sectionLabel")
+        self._recording_badge = RecordingBadge(controls_label)
         system_layout.addWidget(controls_label)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),

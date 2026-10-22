@@ -277,6 +277,7 @@ class SettingsWindow(QWidget):
     save_retry_requested = Signal()
     calibration_requested = Signal()
     gaze_check_requested = Signal()
+    diagnostics_requested = Signal()
     speech_test_requested = Signal()
     speech_stop_requested = Signal()
     efendija_test_requested = Signal()

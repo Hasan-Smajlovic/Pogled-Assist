@@ -12,6 +12,7 @@ from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget
 
 from . import diagnostics
+from .diagnostic_recording import GAZE_KEYS, RecordingStore, recording_context
 from .hotbar_speech import HotbarSpeech
 from .interaction.eye_tracking_policy import EyeState, eyes_usable
 from .interaction.mouse_controller import (
@@ -41,6 +42,8 @@ from .tracking.mouse_gaze_provider import MouseGazeProvider
 from .tracking.status import TrackingState, TrackingStatus
 from .tracking.tobii_calibration import launch_tobii_guest_calibration, launch_tobii_settings
 from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
+from .ui.diagnostic_recordings import DiagnosticRecordings
+from .ui.diagnostics_window import DiagnosticsWindow
 from .ui.gaze_bubble import GazeBubbleWindow
 from .ui.gaze_check_reports import GazeCheckReports
 from .ui.gaze_check_window import GazeCheckWindow
@@ -50,6 +53,7 @@ from .ui.interaction_overlay import InteractionOverlayWindow
 from .ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
 from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
+from .ui.recording_badge import RecordingBadge
 from .ui.settings_window import SettingsServices, SettingsWindow
 from .ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX, SpeechWindow
 from .ui.tracking_feedback import TrackingFeedback
@@ -95,6 +99,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._controller_window: ControllerWindow | None = None
         self._settings_window: SettingsWindow | None = None
         self._gaze_check_window: GazeCheckWindow | None = None
+        self._diagnostics_window: DiagnosticsWindow | None = None
+        self._diagnostic_recordings = DiagnosticRecordings(
+            RecordingStore(get_project_root() / "logs" / "diagnostic-recordings"), self
+        )
         self._gaze_check_reports = GazeCheckReports(
             GazeCheckStore(get_project_root() / "logs" / "gaze-check"), self
         )
@@ -121,6 +129,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         )
 
         self._build_ui()
+        self._recording_badge = RecordingBadge(self._buttons[SETTINGS])
+        self._diagnostic_recordings.changed.connect(self._recording_changed)
         self._build_restore_button()
         self._connect_signals()
         self._configure_eye_tracking()
@@ -141,6 +151,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if not self._restarting_for_update:
             self._release_update_manager.finish_cancel()
         self._closing = True
+        if self._diagnostics_window is not None:
+            self._diagnostics_window.close()
+        self._diagnostic_recordings.shutdown()
         self._tracking_feedback.stop()
         if self._gaze_check_window is not None:
             self._gaze_check_window.close()
@@ -786,6 +799,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._speech_window.update_settings(self._speech.settings)
 
         self._speech_window.show_full_screen()
+        self._speech_window._recording_badge.set_status(self._diagnostic_recordings.status)
         self._tracking_feedback.refresh()
         self._show_tracking_notice(self._tracking_feedback.notice)
         self._set_status("Prozor za govor je otvoren.")
@@ -816,6 +830,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
             )
 
     def _open_settings(self) -> None:
+        if self._diagnostics_window is not None:
+            self._diagnostics_window.raise_()
+            self._diagnostics_window.activateWindow()
+            return
         if self._gaze_check_window is not None:
             self._gaze_check_window.showNormal()
             self._gaze_check_window.raise_()
@@ -857,6 +875,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         window.save_retry_requested.connect(self._save_settings)
         window.calibration_requested.connect(self._launch_tobii_calibration)
         window.gaze_check_requested.connect(self._open_gaze_check)
+        window.diagnostics_requested.connect(self._open_diagnostics)
         window.speech_test_requested.connect(self._test_current_speech_settings)
         window.efendija_test_requested.connect(self._test_efendija)
         window.speech_stop_requested.connect(self._speech.stop)
@@ -906,11 +925,82 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._gaze_check_window = window
         window.closed.connect(self._gaze_check_closed)
         window.calibration_requested.connect(self._calibrate_from_gaze_check)
+        window.diagnostics_requested.connect(self._open_diagnostics)
         self._gaze.diagnostics_updated.connect(window.handle_snapshot)
         window.handle_eye_status(*self._mouse._eye_gate.eyes)
         window.handle_tracking_status(self._check_status)
         window.handle_snapshot(self._gaze.check_snapshot())
         window.show_fullscreen_on_primary()
+
+    def _recording_context(self) -> dict:
+        environment = self._gaze.check_environment()
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            geometry = screen.geometry()
+            environment.update(
+                logical_screen=[geometry.x(), geometry.y(), geometry.width(), geometry.height()],
+                device_pixel_ratio=screen.devicePixelRatio(),
+                logical_dpi=screen.logicalDotsPerInch(),
+            )
+        environment["physical_screen"] = self._mouse._physical_screen_rect
+        return recording_context(
+            {key: getattr(self._mouse.settings, key, None) for key in GAZE_KEYS},
+            environment,
+            simulated=self._simulate_gaze,
+        )
+
+    def _open_diagnostics(self) -> None:
+        if self._diagnostics_window is not None:
+            self._diagnostics_window.raise_()
+            return
+        check = self._gaze_check_window
+        if check is not None and check._phase in ("precision", "trial"):
+            return
+        self._mouse.set_input_suspended(True)
+        self._quick_zoom.close_zoom()
+        self._quick_menu.close_menu()
+        self._interaction_overlay.clear()
+        self._gaze_bubble.set_enabled(False)
+        if check is not None:
+            check._timer.stop()
+            check.hide()
+            self._gaze.set_check_active(False)
+        if self._settings_window is not None:
+            self._settings_window.cancel_gaze_interaction()
+            self._settings_window.hide()
+        window = DiagnosticsWindow(
+            self._diagnostic_recordings,
+            self._gaze_check_reports,
+            self._recording_context,
+            logging_enabled=lambda: self._mouse.settings.logging_enabled,
+            origin="Provjeru pogleda" if check else "Postavke",
+            parent=self,
+        )
+        self._diagnostics_window = window
+        window.closed.connect(self._diagnostics_closed)
+        window.show_fullscreen_on_primary()
+
+    def _diagnostics_closed(self) -> None:
+        window = self._diagnostics_window
+        self._diagnostics_window = None
+        if window is not None:
+            window.deleteLater()
+        if self._closing:
+            return
+        if self._gaze_check_window is not None:
+            self._gaze.set_check_active(True)
+            self._gaze_check_window.show_fullscreen_on_primary()
+        else:
+            self._mouse.set_input_suspended(False)
+            self._gaze_bubble.set_enabled(self._mouse.settings.show_gaze_bubble)
+            if self._settings_window is not None:
+                self._settings_window.show_fullscreen_on_primary()
+
+    def _recording_changed(self) -> None:
+        status = self._diagnostic_recordings.status
+        self._recording_badge.set_status(status)
+        if self._speech_window is not None:
+            self._speech_window._recording_badge.set_status(status)
 
     def _gaze_check_closed(self) -> None:
         window = self._gaze_check_window
