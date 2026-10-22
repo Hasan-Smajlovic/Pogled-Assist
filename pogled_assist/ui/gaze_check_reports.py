@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
-from queue import Empty, Full, Queue
+from queue import Full, Queue
 from threading import Event, Thread
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
@@ -32,7 +33,16 @@ class GazeCheckReports(QObject):
         self._worker: Thread | None = None
         self._stopped = Event()
         stopped = self._stopped
-        self.destroyed.connect(stopped.set)
+        queue = self._queue
+
+        def stop_worker():
+            stopped.set()
+            # A full queue already wakes the worker; it drains before stopping.
+            with suppress(Full):
+                queue.put_nowait(None)
+
+        self._stop_worker = stop_worker
+        self.destroyed.connect(stop_worker)
 
     def record(self, report: GazeCheckReport, *, auto_save: bool) -> None:
         self.reports[report.id] = deepcopy(report)
@@ -45,7 +55,7 @@ class GazeCheckReports(QObject):
         self.changed.emit()
 
     def shutdown(self) -> None:
-        self._stopped.set()
+        self._stop_worker()
         if self._worker is not None:
             self._worker.join(timeout=2)
 
@@ -69,6 +79,8 @@ class GazeCheckReports(QObject):
         return token
 
     def _submit(self, action, key, revision, value) -> bool:
+        if self._stopped.is_set():
+            return False
         try:
             self._queue.put_nowait((action, key, revision, value))
         except Full:
@@ -80,12 +92,9 @@ class GazeCheckReports(QObject):
 
     def _run(self) -> None:
         while True:
-            try:
-                task = self._queue.get(timeout=0.2)
-            except Empty:
-                if self._stopped.is_set():
-                    return
-                continue
+            task = self._queue.get()
+            if task is None:
+                return
             action, key, revision, value = task
             try:
                 result = self._execute_task(action, value)
@@ -96,6 +105,8 @@ class GazeCheckReports(QObject):
                 self._finished.emit((action, key, revision, success, result))
             except RuntimeError:
                 self._stopped.set()
+            if self._stopped.is_set() and self._queue.empty():
+                return
 
     def _execute_task(self, action, value):
         if action == "save":

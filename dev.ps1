@@ -299,14 +299,15 @@ function Resolve-TestWorkerCount {
 function Invoke-TestSuite {
     param(
         [switch]$UiOnly,
-        [switch]$WithCoverage,
-        [switch]$AppendCoverage,
+        [ValidateSet("None", "Full", "Collect", "Append")]
+        [string]$Coverage = "None",
         [string[]]$Paths = @(),
         [string[]]$IgnorePaths = @(),
         [int]$WorkerCount = $Workers
     )
 
     $python = Get-DevPython
+    $withCoverage = $Coverage -ne "None"
     $arguments = @("-B", "-m", "pytest", "-p", "no:cacheprovider")
     $WorkerCount = Resolve-TestWorkerCount -WorkerCount $WorkerCount -WithCoverage:$WithCoverage
     if ($WorkerCount -gt 1) {
@@ -319,22 +320,32 @@ function Invoke-TestSuite {
         $arguments += @("-m", "e2e")
     }
     if ($WithCoverage) {
-        $coverageHtml = Join-Path $RepoRoot "dist\coverage-html"
-        $arguments += @(
-            "--cov=pogled_assist",
-            "--cov-report=term-missing:skip-covered",
-            "--cov-report=html:$coverageHtml"
-        )
-        if ($AppendCoverage) {
-            $arguments += "--cov-append"
-        }
+        $arguments += Get-CoverageArguments -Mode $Coverage
     }
-    foreach ($path in $IgnorePaths) {
-        $arguments += "--ignore=$path"
-    }
+    $arguments += @($IgnorePaths | ForEach-Object { "--ignore=$_" })
     $arguments += $Paths
 
     Invoke-Pytest -Python $python -Arguments $arguments -WithCoverage:$WithCoverage
+}
+
+function Get-CoverageArguments {
+    param([ValidateSet("Full", "Collect", "Append")][string]$Mode)
+
+    $arguments = @("--cov=pogled_assist")
+    if ($Mode -eq "Collect") {
+        # Enforce the floor on the combined data after the installer phase.
+        $arguments += @("--cov-report=", "--cov-fail-under=0")
+    } else {
+        $coverageHtml = Join-Path $RepoRoot "dist\coverage-html"
+        $arguments += @(
+            "--cov-report=term-missing:skip-covered",
+            "--cov-report=html:$coverageHtml"
+        )
+    }
+    if ($Mode -eq "Append") {
+        $arguments += "--cov-append"
+    }
+    return $arguments
 }
 
 function Invoke-Pytest {
@@ -567,8 +578,7 @@ function Invoke-ParallelCheck {
         try {
             Invoke-CheckStage -Name "Installer integration tests and coverage" -Command {
                 Invoke-TestSuite `
-                    -WithCoverage `
-                    -AppendCoverage `
+                    -Coverage Append `
                     -Paths @("tests/release/test_windows_installer.py")
             }
         } catch {
@@ -608,6 +618,7 @@ Pogled Assist development commands
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
 
   coverage and check ignore PYTEST_ADDOPTS, then restore it after testing.
+  check -Parallel writes combined coverage reports once, after installer tests.
 "@
 }
 
@@ -653,11 +664,11 @@ try {
             if ($ParallelCoverageSubset) {
                 Invoke-CheckStage -Name "Tests and coverage" -Command {
                     Invoke-TestSuite `
-                        -WithCoverage `
+                        -Coverage Collect `
                         -IgnorePaths @("tests/release/test_windows_installer.py")
                 }
             } else {
-                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -Coverage Full }
             }
         }
         "lint" {
@@ -673,7 +684,7 @@ try {
             if ($Parallel) {
                 Invoke-ParallelCheck
             } else {
-                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -Coverage Full }
                 Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
             }
         }

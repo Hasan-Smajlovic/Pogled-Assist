@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
-from queue import Empty, Full, Queue
+from queue import Full, Queue
 from threading import Event, Thread
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
@@ -29,6 +30,7 @@ class DiagnosticRecordings(QObject):
         self.indicator = RecordingIndicator(self)
         self.entries: list[dict] = []
         self.loading = False
+        self._reload_pending = False
         self.history_error = False
         self._exporting = False
         self._queue: Queue = Queue(maxsize=4)
@@ -72,7 +74,10 @@ class DiagnosticRecordings(QObject):
             self.load()
 
     def load(self) -> None:
-        if self.loading or self._stopped.is_set():
+        if self._stopped.is_set():
+            return
+        if self.loading:
+            self._reload_pending = True
             return
         self.loading = True
         active_id = self.status.get("id") if self.busy else None
@@ -103,10 +108,10 @@ class DiagnosticRecordings(QObject):
 
     def _run(self) -> None:
         while not self._stopped.is_set():
-            try:
-                action, key, value = self._queue.get(timeout=0.2)
-            except Empty:
-                continue
+            task = self._queue.get()
+            if task is None or self._stopped.is_set():
+                return
+            action, key, value = task
             try:
                 result = (
                     self.store.recover_and_load(active_id=value)
@@ -132,6 +137,9 @@ class DiagnosticRecordings(QObject):
             self.history_error = not success
             if success:
                 self.entries = result
+            if self._reload_pending:
+                self._reload_pending = False
+                self.load()
             self.changed.emit()
         else:
             self._exporting = False
@@ -148,6 +156,9 @@ class DiagnosticRecordings(QObject):
     def shutdown(self) -> None:
         self._timer.stop()
         self._stopped.set()
+        # A busy worker observes the stop before taking another queued job.
+        with suppress(Full):
+            self._queue.put_nowait(None)
         if self._writer is not None:
             diagnostics.flush_summaries()
             self._writer.stop_recording("shutdown")

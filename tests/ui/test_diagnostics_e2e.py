@@ -6,6 +6,7 @@ from zipfile import ZipFile
 
 import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
+from PySide6.QtWidgets import QApplication
 
 from pogled_assist import build_info
 from pogled_assist.diagnostic_recording import RecordingStore, recording_context
@@ -20,16 +21,19 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.fixture
-def recording_ui(qtbot, qapp, tmp_path, monkeypatch):
+def recording_ui(qtbot, tmp_path, monkeypatch, request):
     monkeypatch.setattr(
         build_info,
         "_identity",
         {"app_version": "0.1.0", "build_revision": "d" * 40, "build_dirty": True},
     )
     writer = LogWriter()
+    qapp = QApplication.instance()
     recordings = DiagnosticRecordings(
         RecordingStore(tmp_path / "recordings"), qapp, writer=lambda: writer
     )
+    if not getattr(request, "param", False):
+        recordings._timer.setInterval(1)
     reports = GazeCheckReports(GazeCheckStore(tmp_path / "results"), qapp)
     context = recording_context(
         {"eye_tracking_policy": "both", "selection_pause_ms": 250, "dwell_ms": 850},
@@ -47,6 +51,65 @@ def recording_ui(qtbot, qapp, tmp_path, monkeypatch):
     reports.shutdown()
     reports.deleteLater()
     assert writer.stop()
+
+
+@pytest.mark.parametrize("recording_ui", [True], indirect=True, ids=["default-polling"])
+def test_default_timer_observes_completed_recording(recording_ui, qtbot, monkeypatch):
+    from pogled_assist.diagnostic_recording import RecordingSink
+
+    window, recordings, _reports, _writer, context = recording_ui
+    assert recordings._timer.interval() == 250 and recordings._timer.isActive()
+    entered, release = Event(), Event()
+    write = RecordingSink.write
+
+    def blocked_footer(self, *args, **kwargs):
+        if kwargs.get("footer"):
+            entered.set()
+            assert release.wait(3)
+        return write(self, *args, **kwargs)
+
+    monkeypatch.setattr(RecordingSink, "write", blocked_footer)
+    try:
+        assert recordings.start(1, context)
+        recordings.stop()
+        assert entered.wait(1)
+        assert recordings.busy
+        release.set()
+        qtbot.waitUntil(lambda: not recordings.busy and bool(recordings.entries))
+    finally:
+        release.set()
+    assert recordings.entries[0]["complete"]
+    assert "Snimak je sačuvan" in window._recording_badge.text()
+
+
+def test_recording_completion_reloads_history_after_inflight_load(recording_ui, qtbot, monkeypatch):
+    window, recordings, _reports, _writer, context = recording_ui
+    assert recordings.start(1, context)
+    key = recordings.status["id"]
+    load = recordings.store.recover_and_load
+    entered, release = Event(), Event()
+
+    def blocked(**kwargs):
+        entries = load(**kwargs)
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(3)
+        return entries
+
+    monkeypatch.setattr(recordings.store, "recover_and_load", blocked)
+    try:
+        recordings.load()
+        assert entered.wait(1)
+        window._primary.click()
+        qtbot.waitUntil(lambda: not recordings.busy)
+        assert recordings.loading
+        release.set()
+        qtbot.waitUntil(lambda: not recordings.loading and bool(recordings.entries))
+        assert recordings.entries[0]["id"] == key
+        assert recordings.entries[0]["complete"]
+        assert window._list.count() == 1
+    finally:
+        release.set()
 
 
 def dispose_recordings(recordings, qtbot):

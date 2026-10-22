@@ -656,8 +656,7 @@ def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
 
 def _pass_precision(window):
     window._check.results = [
-        FixationResult(name, 90, 0.9, 12, 8, True, (x, y))
-        for name, x, y in window._check.targets
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
     window._show_results()
 

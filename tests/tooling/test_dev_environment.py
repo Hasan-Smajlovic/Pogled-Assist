@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _powershell import run_dev_driver as _run_dev_driver
 from _powershell import run_powershell_cases
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="dev.ps1 uses Windows PowerShell")
@@ -239,23 +240,6 @@ def test_package_rejects_newer_python_before_using_output_directory(tmp_path: Pa
     assert sentinel.read_bytes() == b"existing output"
 
 
-def _run_dev_driver(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
-    shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
-    driver = tmp_path / "driver.ps1"
-    driver.write_text(
-        '. (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null\n' + body,
-        encoding="utf-8",
-    )
-    return subprocess.run(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=20,
-    )
-
-
 @pytest.mark.parametrize(
     "case,expected", [("probe0", "quoted value"), ("probe1", "ok"), ("probe2", "<missing>")]
 )
@@ -293,11 +277,11 @@ function Invoke-ExternalCommand {
 }
 $env:QT_QPA_PLATFORM = "original-platform"
 $env:PYTEST_ADDOPTS = PYTEST_OPTIONS
-Invoke-TestSuite -WorkerCount WORKERS -WithCoverage:$COVERAGE
+Invoke-TestSuite -WorkerCount WORKERS -Coverage "$COVERAGE"
 if ($env:QT_QPA_PLATFORM -ne "original-platform") { throw "Qt environment leaked" }
 if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" }
 """.replace("WORKERS", str(workers))
-        .replace("$COVERAGE", "$true" if coverage else "$false")
+        .replace("$COVERAGE", "Full" if coverage else "None")
         .replace("PYTEST_OPTIONS", f'"{pytest_options}"' if pytest_options else "$null"),
     )
 
@@ -312,7 +296,8 @@ if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" 
     assert ("--cov=pogled_assist" in args) == coverage
 
 
-def test_coverage_can_append_a_deferred_test_file(tmp_path):
+@pytest.mark.parametrize("defer_report", [False, True])
+def test_coverage_can_append_a_deferred_test_file(tmp_path, defer_report):
     result = _run_dev_driver(
         tmp_path,
         """
@@ -323,19 +308,22 @@ function Invoke-ExternalCommand {
         Set-Content -LiteralPath (Join-Path $PSScriptRoot "arguments.json")
 }
 Invoke-TestSuite `
-    -WithCoverage `
-    -AppendCoverage `
+    -Coverage MODE `
     -IgnorePaths @("tests/release/test_windows_installer.py") `
     -Paths @("tests/release/test_windows_installer.py") `
     -WorkerCount 1
-""",
+""".replace("MODE", "Collect" if defer_report else "Append"),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     arguments = json.loads((tmp_path / "arguments.json").read_text(encoding="utf-8-sig"))
-    assert "--cov-append" in arguments
+    assert ("--cov-append" in arguments) != defer_report
     assert "--ignore=tests/release/test_windows_installer.py" in arguments
     assert arguments[-1] == "tests/release/test_windows_installer.py"
+    assert ("--cov-report=" in arguments) == defer_report
+    assert ("--cov-fail-under=0" in arguments) == defer_report
+    assert any(arg.startswith("--cov-report=html:") for arg in arguments) != defer_report
+    assert ("--cov-report=term-missing:skip-covered" in arguments) != defer_report
 
 
 @pytest.mark.parametrize("coverage", [False, True])
@@ -352,7 +340,7 @@ function Invoke-ExternalCommand {
 $env:QT_QPA_PLATFORM = "original-platform"
 $env:PYTEST_ADDOPTS = "--ignore=tests/tooling --cov-fail-under=0"
 try {
-    Invoke-CheckStage -Name "Regression tests" -Command { Invoke-TestSuite -WithCoverage:$COVERAGE }
+    Invoke-CheckStage -Name "Regression tests" -Command { Invoke-TestSuite -Coverage "$COVERAGE" }
 }
 catch {
     if ($env:QT_QPA_PLATFORM -ne "original-platform") { throw "Qt environment leaked" }
@@ -362,7 +350,7 @@ catch {
     if ($StageTimings[0].Status -ne "FAILED") { throw "Failure timing missing" }
     throw
 }
-""".replace("$COVERAGE", "$true" if coverage else "$false"),
+""".replace("$COVERAGE", "Full" if coverage else "None"),
     )
 
     assert result.returncode != 0
@@ -428,8 +416,8 @@ if ($Action -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
         """
 $Workers = 2
 function Invoke-TestSuite {
-    param([switch]$WithCoverage, [switch]$AppendCoverage, [string[]]$Paths)
-    if (-not $WithCoverage -or -not $AppendCoverage) { throw "Coverage append options were lost" }
+    param([string]$Coverage, [string[]]$Paths)
+    if ($Coverage -ne "Append") { throw "Final coverage append/report options were lost" }
     if ($Paths.Count -ne 1 -or $Paths[0] -ne "tests/release/test_windows_installer.py") {
         throw "Unexpected deferred test selection"
     }
@@ -610,8 +598,8 @@ function Get-FastCheckPlan {
 }
 function Invoke-LintChecks { param($Plan); Write-Host "FAST-LINT" }
 function Invoke-TestSuite {
-    param([string[]]$Paths, [int]$WorkerCount, [switch]$WithCoverage)
-    if ($WithCoverage) { throw "Unexpected coverage" }
+    param([string[]]$Paths, [int]$WorkerCount, [string]$Coverage = "None")
+    if ($Coverage -ne "None") { throw "Unexpected coverage" }
     Write-Host "TEST-WORKERS:$WorkerCount PATH-COUNT:$($Paths.Count)"
 }
 function Invoke-PackageBuild { throw "Unexpected package" }

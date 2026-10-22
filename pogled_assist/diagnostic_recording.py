@@ -352,9 +352,7 @@ def _recording_retention_candidate(
 
 def _recording_files(folder: Path) -> tuple[Path, ...]:
     return tuple(
-        path
-        for path in (folder / "snimak.jsonl", folder / "recording.json")
-        if path.exists()
+        path for path in (folder / "snimak.jsonl", folder / "recording.json") if path.exists()
     )
 
 
@@ -379,9 +377,7 @@ def _is_recording_folder(folder: Path, directory: Path, active_id: str | None) -
         return False
     if folder.is_symlink() or not folder.is_dir():
         return False
-    if folder.name == active_id or _is_active(directory, folder.name):
-        return False
-    return True
+    return folder.name != active_id and not _is_active(directory, folder.name)
 
 
 def _recording_paths(directory: Path, recording_id: str) -> tuple[Path, Path]:

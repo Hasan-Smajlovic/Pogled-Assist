@@ -38,7 +38,7 @@ def check(qtbot, monkeypatch, tmp_path, request):
 
 def complete_precision(window, qtbot):
     window._start_precision()
-    qtbot.wait(1)
+    qtbot.waitUntil(lambda: window._check is not None)
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
@@ -78,7 +78,7 @@ def test_completion_saves_only_with_logging_and_keeps_memory_on_reopen(check, qt
 def test_interruption_finalizes_once_without_fabricating_misses(check, qtbot, trigger):
     window, reports, now = check
     window._start_precision()
-    qtbot.wait(1)
+    qtbot.waitUntil(lambda: window._check is not None)
     name, x, y = window._check.targets[0]
     window._check.results = [FixationResult(name, 90, 0.9, 12, 8, True, (x, y))]
     now[0] += 4
@@ -94,7 +94,7 @@ def test_interruption_finalizes_once_without_fabricating_misses(check, qtbot, tr
         window.tracking_unavailable()
     else:
         window._test_back_button.click()
-    qtbot.wait(1)
+    qtbot.waitUntil(lambda: bool(reports.reports))
     stored = next(iter(reports.reports.values()))
     assert stored.state == "interrupted" and stored.reason
     assert stored.precision[0].near is True

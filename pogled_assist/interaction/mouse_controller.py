@@ -442,9 +442,9 @@ class GazeMouseController(QObject):
         if self._toolbar_selection.tracking_held:
             getter = getattr(self._target, "selection_bounds", self._target.action_bounds)
             bounds = getter(self._toolbar_selection.target)
-            if bounds is None or bounds != self._tracking_hold_bounds:
-                self._pause_toolbar_dwell()
-            elif hit.action != self._toolbar_selection.target or not bounds.contains(point):
+            same_bounds = bounds is not None and bounds == self._tracking_hold_bounds
+            inside = bounds is not None and bounds.contains(point)
+            if not all((same_bounds, hit.action == self._toolbar_selection.target, inside)):
                 self._pause_toolbar_dwell()
 
     def _handle_hit(

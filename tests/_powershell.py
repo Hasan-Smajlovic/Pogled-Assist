@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -64,6 +65,30 @@ ConvertTo-Json -InputObject @($results) -Depth 5 -Compress
 """,
         encoding="utf-8-sig",
     )
+    process = _run_powershell(root, driver, timeout)
+    stdout, stderr = process.stdout, process.stderr
+    assert process.returncode == 0, stdout + stderr
+    results = json.loads(stdout.strip().splitlines()[-1])
+    assert [item["name"] for item in results] == list(cases), stdout + stderr
+    return {
+        item["name"]: subprocess.CompletedProcess(
+            process.args, int(bool(item["error"])), item["output"], item["error"]
+        )
+        for item in results
+    }
+
+
+def run_dev_driver(root: Path, body: str, *, timeout: int = 20):
+    script = Path(__file__).resolve().parents[1] / "dev.ps1"
+    shutil.copy2(script, root / "dev.ps1")
+    driver = root / "driver.ps1"
+    driver.write_text(
+        '. (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null\n' + body, encoding="utf-8"
+    )
+    return _run_powershell(root, driver, timeout)
+
+
+def _run_powershell(root: Path, driver: Path, timeout: int):
     command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)]
     environment = os.environ.copy()
     environment.pop("PSMODULEPATH", None)
@@ -90,15 +115,7 @@ ConvertTo-Json -InputObject @($results) -Depth 5 -Compress
         )
         process.communicate(timeout=5)
         raise
-    assert process.returncode == 0, stdout + stderr
-    results = json.loads(stdout.strip().splitlines()[-1])
-    assert [item["name"] for item in results] == list(cases), stdout + stderr
-    return {
-        item["name"]: subprocess.CompletedProcess(
-            command, int(bool(item["error"])), item["output"], item["error"]
-        )
-        for item in results
-    }
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def function_definitions(script: Path) -> str:

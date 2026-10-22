@@ -85,9 +85,8 @@ def conversation_model() -> dict[tuple[str, ...], int]:
 @pytest.mark.e2e
 @pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
 @pytest.mark.parametrize("letters_per_group", [1, 5, 12])
-@pytest.mark.parametrize("use_gaze", [False, True])
 def test_larger_suggestions_fit_wrap_and_preserve_selection_and_undo(
-    qtbot, size, letters_per_group, use_gaze
+    qtbot, size, letters_per_group
 ):
     speech = FakeSpeech()
     service = ManualSuggestionService()
@@ -129,14 +128,21 @@ def test_larger_suggestions_fit_wrap_and_preserve_selection_and_undo(
         action = f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:{index}"
         assert window.action_at_global_point(point) == action
 
-    if use_gaze:
-        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:0")
-    else:
-        window._prediction_buttons[0].click()
-    assert window._input.text() == "RAZUMIJEVANJE "
-    assert speech.requests == []
-    window._undo_word_button.click()
-    assert window._input.text() == "R"
+    activations = {
+        "mouse": window._prediction_buttons[0].click,
+        "gaze": lambda: window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}suggestion:0"),
+    }
+    for route, activate in activations.items():
+        window._input.clear()
+        window._input.setText("R")
+        owner, revision, text = service.requests[-1]
+        assert text == "R"
+        service.predictions_ready.emit(owner, revision, words)
+        activate()
+        assert window._input.text() == "RAZUMIJEVANJE ", route
+        assert speech.requests == [], route
+        window._undo_word_button.click()
+        assert window._input.text() == "R", route
 
 
 @pytest.mark.e2e
@@ -449,8 +455,10 @@ def test_unreadable_personal_file_is_preserved_while_base_suggestions_work(qtbot
                 and window._prediction_buttons[0].text() == "ŽELIM"
             )
         )
-        window._prediction_buttons[0].click()
-        qtbot.wait(200)
+        service._save_timer.setInterval(1)
+        with qtbot.waitSignal(service.storage_finished) as finished:
+            window._prediction_buttons[0].click()
+        assert finished.args == [False]
         assert path.read_text(encoding="utf-8") == unreadable
         assert "nisu učitane" in service.status
     finally:

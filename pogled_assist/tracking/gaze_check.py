@@ -113,10 +113,7 @@ class CheckTelemetry:
             # A valid eye origin does not require a valid gaze point.
             left_position, right_position = self.positions[:2]
         gaze = gaze_at = None
-        if (
-            eyes_usable(self.policy, left, right)
-            and _fresh(self.gaze, now)
-        ):
+        if eyes_usable(self.policy, left, right) and _fresh(self.gaze, now):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
         observed, fraction, longest = self._availability(now)
         return CheckSnapshot(
