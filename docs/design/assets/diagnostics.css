@@ -5,7 +5,7 @@
 .diagnostics-screen p { margin:0; font-size:15px; line-height:1.45; }
 .diagnostics-screen button { min-height:58px; padding:10px 18px; font-size:18px; }
 .diagnostics-header { display:flex; align-items:center; gap:18px; }
-.diagnostics-header > div { flex:1; }
+.diagnostics-header > div:first-child { flex:1; }
 .diagnostics-header p, .diagnostics-muted { color:#bac5d4; }
 .diagnostics-tabs { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .diagnostics-tabs [aria-selected="true"] { background:#245f9f; border-color:#8bd5f5; }

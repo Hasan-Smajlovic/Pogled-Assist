@@ -65,6 +65,7 @@ from .gaze_check_text import (
     visible_eyes,
 )
 from .gaze_check_views import COLORS, TARGETS, CheckTargetView, EyePositionView, ResultMapView
+from .recording_badge import RecordingBadge
 
 STYLESHEET = """
 QWidget#gazeCheck { background: #111318; color: #eef2f8; font-family: Segoe UI; }
@@ -176,6 +177,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._simulation_label = _label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint")
         self._simulation_label.setVisible(self._simulated)
         copy.addWidget(self._simulation_label)
+        self._recording_badge = RecordingBadge(self)
+        copy.addWidget(self._recording_badge)
         header.addLayout(copy, 1)
         self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
         header.addWidget(self._diagnostics_button)
@@ -282,8 +285,15 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._test_controls.setObjectName("checkCard")
         layout = QVBoxLayout(self._test_controls)
         layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(6)
-        layout.addWidget(_label(f"Režim: {self._policy_text}", self._test_controls, "checkHint"))
+        layout.setSpacing(4)
+        metadata = QHBoxLayout()
+        metadata.addWidget(
+            _label(f"Režim: {self._policy_text}", self._test_controls, "checkHint"), 1
+        )
+        self._test_recording_badge = RecordingBadge(self._test_controls)
+        self._test_recording_badge.setFixedHeight(26)
+        metadata.addWidget(self._test_recording_badge)
+        layout.addLayout(metadata)
         self._test_hint = _label("", self._test_controls)
         self._test_hint.setTextFormat(Qt.RichText)
         layout.addWidget(self._test_hint, 1)

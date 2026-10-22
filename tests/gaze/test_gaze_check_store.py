@@ -12,7 +12,6 @@ from pogled_assist.tracking.gaze_check_report import (
     TrialAttempt,
     TrialRow,
     identity,
-    report_text,
 )
 from pogled_assist.tracking.gaze_check_store import GazeCheckStore
 
@@ -67,9 +66,22 @@ def test_report_survives_restart_and_zip_matches_saved_aggregates(tmp_path):
         assert set(archive.namelist()) == {"rezultat.json", "izvjestaj.txt"}
         assert archive.read("rezultat.json") == original.to_json()
         text = archive.read("izvjestaj.txt").decode("utf-8")
-    assert text == report_text(original)
-    assert "Prekinuto" in text and "Nije izmjereno" in text and "Premalo podataka" in text
-    assert "250" in text and "850" in text and "Simulacija: Da" in text
+    for expected in (
+        f"ID: {original.id}",
+        "Stanje: Završeno",
+        "Simulacija: Da",
+        "Sredina: Izmjereno",
+        "Uzorci: 90; pokrivenost (0-1): 0.9",
+        "Odstupanje (medijan px): 12; rasipanje (p90 px): 8; blizu: Da",
+        "Gore lijevo: Nije izmjereno",
+        f"PROBNI IZBOR · {original.trials[0].id} · Prekinuto",
+        "Grupa 1: Premalo podataka",
+        "Pogrešni: 1; poništeni: 2; izlasci: 3",
+        "selection_pause_ms: 250",
+        "dwell_ms: 850",
+        "backend: mouse-simulation",
+    ):
+        assert expected in text
 
 
 def test_failed_atomic_save_and_export_keep_existing_files_and_clean_temp(tmp_path, monkeypatch):
@@ -130,7 +142,7 @@ def test_retention_removes_oldest_only_after_success_and_preserves_other_files(
     "mutation",
     ["version", "private", "nonfinite", "shape", "trial-private", "policy-list", "model-list"],
 )
-def test_unreadable_reports_stay_visible_but_are_never_exportable(tmp_path, mutation):
+def test_unreadable_reports_stay_on_disk_and_load_as_errors(tmp_path, mutation):
     value = report()
     data = json.loads(value.to_json())
     if mutation == "version":

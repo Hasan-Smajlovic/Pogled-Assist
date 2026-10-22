@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import diagnostics
+from .recording_badge import RecordingBadge
 from .tracking_feedback import dialog_tracking_header
 
 DIALOG_ACTION_MIN_HEIGHT = 128
@@ -40,6 +41,7 @@ class SpeechDialogs(QObject):
         self.active: QDialog | None = None
         self.actions: set[str] = set()
         self.letter_actions: set[str] = set()
+        self.recording_badges: list[RecordingBadge] = []
         self.backdrop = QFrame(parent)
         self.backdrop.setObjectName("modalBackdrop")
         self.backdrop.hide()
@@ -138,7 +140,7 @@ class SpeechDialogs(QObject):
         self.letter_grid.setHorizontalSpacing(16)
         self.letter_grid.setVerticalSpacing(16)
         header, self.letter_notice = dialog_tracking_header(self.letter_title, self.letter)
-        letter_layout.addWidget(header)
+        letter_layout.addWidget(self._recording_header(header, self.letter))
         letter_layout.addWidget(self.letter_grid_host, 1)
         self.letter.finished.connect(
             lambda _result, dialog=self.letter: self._dialog_finished(dialog)
@@ -174,7 +176,7 @@ class SpeechDialogs(QObject):
         confirm_actions.addWidget(cancel, 1)
         confirm_actions.addWidget(self.confirm_button, 1)
         header, self.confirm_notice = dialog_tracking_header(self.confirm_title, self.confirm)
-        confirm_layout.addWidget(header)
+        confirm_layout.addWidget(self._recording_header(header, self.confirm))
         confirm_layout.addWidget(self.confirm_copy)
         confirm_layout.addStretch(1)
         confirm_layout.addLayout(confirm_actions)
@@ -222,7 +224,7 @@ class SpeechDialogs(QObject):
         exit_actions.addWidget(cancel_exit, 1)
         exit_actions.addWidget(leave_speech, 1)
         exit_actions.addWidget(quit_app, 1)
-        exit_layout.addWidget(exit_title)
+        exit_layout.addWidget(self._recording_header(exit_title, self.exit))
         exit_layout.addWidget(exit_copy)
         exit_layout.addStretch(1)
         exit_layout.addLayout(exit_actions)
@@ -245,7 +247,7 @@ class SpeechDialogs(QObject):
             parent=self.alarm,
             minimum_height=140,
         )
-        alarm_layout.addWidget(alarm_title)
+        alarm_layout.addWidget(self._recording_header(alarm_title, self.alarm))
         alarm_layout.addWidget(self.alarm_copy)
         alarm_layout.addStretch(1)
         alarm_layout.addWidget(stop_alarm)
@@ -271,6 +273,17 @@ class SpeechDialogs(QObject):
         self.sleep.finished.connect(
             lambda _result, dialog=self.sleep: self._dialog_finished(dialog)
         )
+
+    def _recording_header(self, title: QWidget, parent: QWidget) -> QWidget:
+        header = QWidget(parent)
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        layout.addWidget(title, 1)
+        badge = RecordingBadge(header)
+        self.recording_badges.append(badge)
+        layout.addWidget(badge)
+        return header
 
     def _new_dialog(self, *, object_name: str = "speechDialog") -> QDialog:
         dialog = QDialog(self._parent)

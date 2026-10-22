@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="assets/keyboard.css">
   <link rel="stylesheet" href="assets/gaze-demo.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/gaze-demo.js" defer></script>
   <script src="assets/keyboard.js" defer></script>
@@ -18,6 +19,7 @@
   <main id="sidebar-screen">
     <label>Pregled broja slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label>
     <section class="sidebar-reference" aria-label="Samostalna tastatura">
+      <div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div>
       <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
       <button type="button" data-script-toggle data-edge-control>Arapski</button>
       <div class="sidebar-reference-grid">

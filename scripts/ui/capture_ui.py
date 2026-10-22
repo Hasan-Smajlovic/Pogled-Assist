@@ -37,6 +37,7 @@ from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
+from pogled_assist.ui.recording_badge import RecordingIndicator
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
 from scripts.ui.capture_diagnostics import CaptureDiagnostics
@@ -450,6 +451,11 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
         self.settings._select_tab(1)
+        self.settings._recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(self.settings, "settings-recording", "Settings: recording status", size=size)
+        self.settings._recording_badge.set_status(None)
         for policy, name, title in (
             ("hold", "settings-gaze-hold", "Settings: brief interruption"),
             ("any", "settings-gaze-one-eye", "Settings: one-eye selection"),
@@ -527,10 +533,28 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.speech.bind_recording_indicator(RecordingIndicator(self.speech))
         self.speech._recording_badge.set_status(
             {"busy": True, "remaining_seconds": 83, "state": "recording"}
         )
         self.capture(self.speech, "speech-recording", "Speech: passive recording status")
+        self.speech._open_letter_dialog(0)
+        self.capture_dialog(
+            self.speech._dialogs.letter, "speech-recording-letters", "Speech letters: recording"
+        )
+        self.speech._close_dialog()
+        for state, busy, complete in (
+            ("finishing", True, False),
+            ("completed", False, True),
+            ("interrupted", False, False),
+            ("error", False, False),
+        ):
+            self.speech._recording_badge.set_status(
+                {"id": "preview", "busy": busy, "state": state, "complete": complete}
+            )
+            self.capture(
+                self.speech, f"speech-recording-{state}", f"Speech recording: {state}"
+            )
         self.speech._recording_badge.set_status(None)
         self.capture_speech_voices()
         self.capture_tracking_feedback()
@@ -660,6 +684,12 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             ),
         ):
             self.capture(widget, name, title, size=(380, 640))
+        for widget, name in ((self.keyboard, "keyboard"), (self.controller, "controller")):
+            widget._recording_badge.set_status(
+                {"busy": True, "state": "recording", "remaining_seconds": 83}
+            )
+            self.capture(widget, f"{name}-recording", f"{name}: recording status", size=(380, 640))
+            widget._recording_badge.set_status(None)
 
     def capture_arabic(self) -> None:
         # Arabic uses the same services and storage fakes, with original Unicode.

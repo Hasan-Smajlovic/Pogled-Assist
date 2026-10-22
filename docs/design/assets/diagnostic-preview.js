@@ -67,24 +67,79 @@
     if (kind === 'recording' || kind === 'finishing') {
       value.active = { id: 'snimak-proba', started: Date.now() - 18000, minutes: 2, policy: ReferenceDesign.readSession('eye-policy', 'both') };
       if (kind === 'finishing') { value.active.stopped = Date.now(); value.active.stoppingUntil = Date.now() + 15000; }
-    } else if (!['ready', 'empty'].includes(kind)) value.items = [sample(kind === 'export-error' ? 'completed' : kind)];
+    } else if (!['ready', 'empty'].includes(kind)) {
+      value.items = [sample(kind === 'export-error' ? 'completed' : kind)];
+      value.finished = Date.now();
+    }
     if (kind !== 'empty') value.items.push({ ...sample('completed'), id: 'snimak-raniji', started: Date.parse('2026-10-21T17:45:00+02:00') });
     write(value);
   }
+  function badgeState(value) {
+    if (value.active?.stoppingUntil) return { kind: 'finishing', text: 'Završavam snimak…', compact: 'Čuvam…' };
+    if (value.active) {
+      const remaining = clock(Math.ceil(value.active.minutes * 60 - (Date.now() - value.active.started) / 1000));
+      return { kind: 'recording', text: 'Snimanje dijagnostike · ' + remaining, compact: remaining };
+    }
+    if (!value.finished) return null;
+    const item = value.items[0];
+    if (!item) return null;
+    if (item.reason === 'write-error') return { kind: 'error', text: 'Greška čuvanja snimka', compact: 'Greška' };
+    if (!item.readable) return { kind: 'error', text: 'Snimak nije čitljiv', compact: 'Nečitljivo' };
+    if (!['manual', 'completed'].includes(item.reason)) return { kind: 'incomplete', text: 'Snimak nije potpun', compact: 'Nepotpuno' };
+    if (Date.now() - value.finished < 5000) return { kind: 'saved', text: 'Snimak je sačuvan', compact: 'Sačuvano' };
+    return null;
+  }
+  const announcement = document.createElement('p');
+  announcement.className = 'recording-announcement';
+  announcement.setAttribute('role', 'status');
+  announcement.setAttribute('aria-live', 'polite');
+  document.body.append(announcement);
+  let announced = '';
   function renderBadges() {
     const value = state();
-    const recent = value.finished && Date.now() - value.finished < 5000;
+    const status = badgeState(value);
     for (const badge of document.querySelectorAll('[data-recording-status]')) {
-      badge.hidden = !value.active && !recent;
-      badge.textContent = value.active?.stoppingUntil ? '● …' : value.active ? '● ' + clock(value.active.minutes * 60 - (Date.now() - value.active.started) / 1000) : 'Snimak završen';
-      badge.dataset.finished = String(!value.active);
-      badge.title = 'Dijagnostičko snimanje. Za pregled ili ranije zaustavljanje otvorite Postavke → Dijagnostičko snimanje.';
+      badge.hidden = !status;
+      if (!status) continue;
+      const text = badge.hasAttribute('data-recording-compact') ? status.compact : status.text;
+      if (badge.textContent !== text) badge.textContent = text;
+      badge.dataset.state = status.kind;
+      badge.setAttribute('aria-label', status.text);
+      badge.title = status.text + '. Za pregled ili ranije zaustavljanje otvorite Postavke → Dijagnostičko snimanje.';
     }
+    const transition = (value.active?.id || value.items[0]?.id || '') + ':' + (status?.kind || 'idle');
+    if (transition !== announced) {
+      announced = transition;
+      announcement.textContent = status?.kind === 'recording' ? 'Snimanje dijagnostike je u toku.' : status?.text || '';
+    }
+  }
+  function addPreviewControl() {
+    const tools = document.querySelector('.reference-tools');
+    if (!tools || document.body.dataset.referencePage === 'diagnostics') return;
+    const label = document.createElement('label');
+    label.textContent = 'Dijagnostičko snimanje ';
+    const select = document.createElement('select');
+    for (const [value, text] of [
+      ['ready', 'Bez snimanja'], ['recording', 'Snimanje u toku'], ['finishing', 'Završavanje snimka'],
+      ['completed', 'Snimak je sačuvan'], ['size-limit', 'Dostignut limit prostora'],
+      ['dropped', 'Snimak nije potpun'], ['write-error', 'Greška čuvanja'],
+    ]) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = text; select.append(option);
+    }
+    const current = state();
+    const reason = current.items[0]?.reason;
+    select.value = current.active ? current.active.stoppingUntil ? 'finishing' : 'recording'
+      : current.finished ? reason === 'manual' ? 'completed' : reason : 'ready';
+    if (!select.value) select.value = 'ready';
+    select.addEventListener('change', () => preview(select.value));
+    label.append(select); tools.append(label);
   }
   const query = new URLSearchParams(location.search);
   if (query.get('recording') === 'demo' && !state().active) preview('recording');
   window.ReferenceRecording = Object.freeze({ state, start, stop, preview, clock, date, policy: value => policyNames[value] || 'Nepoznato' });
   window.addEventListener('reference-recording-change', renderBadges);
   window.setInterval(renderBadges, 1000);
+  addPreviewControl();
   renderBadges();
 })();

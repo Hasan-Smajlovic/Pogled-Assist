@@ -31,7 +31,7 @@
         </div>
         <input id="message" type="text" aria-labelledby="message-label" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
       </div>
-      <div class="speech-playback"><button id="speak-button" class="primary" type="button" data-action="speak">Izgovori</button><progress id="speech-progress" aria-label="Govor je aktivan" hidden></progress></div>
+      <div class="speech-playback"><button id="speak-button" class="primary" type="button" data-action="speak">Izgovori</button><span id="speech-progress" class="speech-activity" aria-hidden="true" hidden></span></div>
       <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
@@ -60,7 +60,7 @@
         </nav>
       </section>
       <aside class="system-actions" aria-label="Kontrole aplikacije">
-        <h2 class="section-label speech-controls-heading">Kontrole<span class="recording-badge" data-recording-status hidden></span></h2>
+        <div class="speech-controls-heading"><h2 class="section-label">Kontrole</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
         <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
         <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
@@ -84,11 +84,11 @@
     <p class="voice-prototype-note">ElevenLabs stanja su vizuelna simulacija, bez zvuka i potrošnje kredita.</p>
     <a href="settings.html?voice=efendija#speech-settings">Postavke Efendijinog glasa</a>
   </details>  <dialog id="letters-dialog" aria-labelledby="letters-title">
-    <h2 id="letters-title">Odaberite slovo</h2>
+    <div class="recording-dialog-header"><h2 id="letters-title">Odaberite slovo</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
     <div id="letters" class="letter-grid"></div>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-copy">
-    <h2 id="confirm-title"></h2>
+    <div class="recording-dialog-header"><h2 id="confirm-title"></h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
     <p id="confirm-copy" class="dialog-copy"></p>
     <div class="confirm-actions">
       <button type="button" data-action="cancel-confirm" autofocus>Odustani</button>
@@ -96,7 +96,7 @@
     </div>
   </dialog>
   <dialog id="exit-dialog" aria-labelledby="exit-title" aria-describedby="exit-copy">
-    <h2 id="exit-title">Izaći iz govornog načina?</h2>
+    <div class="recording-dialog-header"><h2 id="exit-title">Izaći iz govornog načina?</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
     <p id="exit-copy" class="dialog-copy">Možete se vratiti na razgovor, izaći iz govornog načina ili ugasiti cijelu aplikaciju.</p>
     <div class="confirm-actions exit-actions">
       <button type="button" data-action="cancel-exit" autofocus>Odustani</button>
@@ -105,7 +105,7 @@
     </div>
   </dialog>
   <dialog id="alarm-dialog" aria-labelledby="alarm-title" aria-describedby="alarm-copy">
-    <h2 id="alarm-title">Alarm je uključen</h2>
+    <div class="recording-dialog-header"><h2 id="alarm-title">Alarm je uključen</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
     <p id="alarm-copy" class="dialog-copy">Zvučni signal se ponavlja dok ga ne zaustavite.</p>
     <button class="danger" type="button" data-action="stop-alarm">Zaustavi alarm</button>
   </dialog>
@@ -145,11 +145,12 @@
 <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
 <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
 <li>Tačka, zarez, upitnik i uzvičnik uklanjaju samo razmak koji je upravo umetnuo prijedlog. Tačka i upitnik zatim automatski dodaju jedan razmak, bez dupliranja. Tačka, upitnik i uzvičnik počinju novi kontekst. HTML koristi male demonstracijske liste; Python koristi pripremljeni offline model sa općim i islamskim rječnikom.</li>
-<li>Status se prikazuje uz naslov Vaša poruka. Tokom pripreme i izgovora isto dugme Izgovori postaje Zaustavi, uz animirani indikator. Identitet cilja ostaje isti, pa zadržavanje pogleda ne zaustavlja govor bez odlaska s cilja. Poruka i tastatura ostaju dostupne. Završetak, greška i prekid vraćaju Izgovori. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
+<li>Status se prikazuje uz naslov Vaša poruka. Tokom pripreme i izgovora isto dugme Izgovori postaje Zaustavi. Tanka animirana traka nalazi se unutar donjeg dijela dugmeta, bez prekrivanja centriranog teksta. Pokazuje aktivnost, bez procenta završenosti. Dugme je cijelom visinom poravnato s dugmetom Fraze; prikazivanje i skrivanje trake ne mijenja njegove granice ni položaj teksta. Traka ne preuzima klik ni pogled. Uz smanjeno kretanje prikazuje se mirna oznaka aktivnosti. Identitet cilja ostaje isti, pa zadržavanje pogleda ne zaustavlja govor bez odlaska s cilja. Poruka i tastatura ostaju dostupne. Završetak, greška i prekid uklanjaju traku i vraćaju Izgovori. Izlaz nudi Odustani, Izađi iz govornog načina i Ugasi aplikaciju.</li>
 <li>Pogled prvo miruje tokom podešene pauze, zadano <strong>250 ms</strong>, bez kruga. Zatim se krug puni tokom podešenog vremena zadržavanja pogleda, zadano <strong>850 ms</strong>. U Govoru kratak izlazak blizu ruba dugmeta zamrzava napredak. Povratak prije isteka podešenog trajanja nastavlja odabir; izvan dugmeta nema potvrde. Tolerancija je do 24 logička piksela, najviše četvrtina kraće stranice dugmeta. Duži ili udaljeniji odlazak započinje novi odabir. Ovo vrijedi i za slova, Brzi izbor i Izgovori. Za ponavljanje istog dugmeta potrebno je skloniti pogled i vratiti ga; kratak izlazak uz rub ne omogućava ponavljanje.</li>
 <li>Trajanje čuvanja uz rub podešava se u Postavkama pogleda, na kartici Stabilnost uz rub: 0 do 300 ms, korak 20 ms, zadano 120 ms. Nula isključuje čuvanje. Dok je A zamrznut, ni A ni susjedni B ne skupljaju vrijeme. Nakon isteka B počinje punu novu pauzu i zadržavanje. Promjena trajanja poništava tekući odabir. Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta. Prekid praćenja ne produžava rok već započetog čuvanja uz rub.</li>
 <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. Gubitak praćenja oka prati izabrani režim, bez produžavanja već započetog roka čuvanja uz rub; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
 <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
+<li>Indikator dijagnostičkog snimanja ima rezervisan red ispod naslova Kontrole i mjesto u zaglavljima dijaloga za slova, brisanje, izlaz i alarm. Odbrojavanje ne mijenja položaje dugmadi. Stanja i izgled definiše <a href="diagnostics.html">nacrt dijagnostike</a>; primjeri se biraju u Opcijama pregleda.</li>
 <li>Odmor zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
 <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
 <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno čuvanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li></ul>

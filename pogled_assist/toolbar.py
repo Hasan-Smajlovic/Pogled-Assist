@@ -129,7 +129,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         )
 
         self._build_ui()
-        self._recording_badge = RecordingBadge(self._buttons[SETTINGS])
+        self._recording_badge = RecordingBadge(self._buttons[SETTINGS], compact=True)
+        self._recording_badge.bind_indicator(self._diagnostic_recordings.indicator)
         self._diagnostic_recordings.changed.connect(self._recording_changed)
         self._build_restore_button()
         self._connect_signals()
@@ -697,6 +698,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._keyboard_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._keyboard_window.update_settings(self._speech.settings)
         self._keyboard_window.show_sidebar(full_height=not self.isVisible())
+        self._recording_changed()
         self._set_keyboard_button_checked(True)
         self._set_status("Tastatura je otvorena.")
 
@@ -754,6 +756,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._controller_window.update_gaze_settings(self._mouse.settings)
         self._controller_window.update_speech_settings(self._speech.settings)
         self._controller_window.show_sidebar(full_height=not self.isVisible())
+        self._recording_changed()
         self._set_controller_button_checked(True)
         self._set_status("Upravljač je otvoren.")
 
@@ -799,7 +802,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._speech_window.update_settings(self._speech.settings)
 
         self._speech_window.show_full_screen()
-        self._speech_window._recording_badge.set_status(self._diagnostic_recordings.status)
+        self._recording_changed()
         self._tracking_feedback.refresh()
         self._show_tracking_notice(self._tracking_feedback.notice)
         self._set_status("Prozor za govor je otvoren.")
@@ -892,6 +895,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         window.handle_eye_status(*self._mouse._eye_gate.eyes)
 
         self._settings_window = window
+        self._recording_changed()
         window.set_speech_playback_state(self._speech.playback_state)
         window.set_save_error(self._settings_save_failed)
         window.show_fullscreen_on_primary()
@@ -923,6 +927,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             environment=lambda: self._gaze.check_environment(),
         )
         self._gaze_check_window = window
+        self._recording_changed()
         window.closed.connect(self._gaze_check_closed)
         window.calibration_requested.connect(self._calibrate_from_gaze_check)
         window.diagnostics_requested.connect(self._open_diagnostics)
@@ -997,10 +1002,20 @@ class HotbarWindow(HotbarSpeech, QWidget):
                 self._settings_window.show_fullscreen_on_primary()
 
     def _recording_changed(self) -> None:
-        status = self._diagnostic_recordings.status
-        self._recording_badge.set_status(status)
+        indicator = self._diagnostic_recordings.indicator
+        indicator.set_status(self._diagnostic_recordings.status)
+        for window in (
+            self._settings_window,
+            self._keyboard_window,
+            self._controller_window,
+            self._gaze_check_window,
+        ):
+            if window is not None:
+                window._recording_badge.bind_indicator(indicator)
         if self._speech_window is not None:
-            self._speech_window._recording_badge.set_status(status)
+            self._speech_window.bind_recording_indicator(indicator)
+        if self._gaze_check_window is not None:
+            self._gaze_check_window._test_recording_badge.bind_indicator(indicator)
 
     def _gaze_check_closed(self) -> None:
         window = self._gaze_check_window

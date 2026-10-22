@@ -217,9 +217,14 @@ def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaz
     from PySide6.QtCore import Qt
 
     for badge in (hotbar._recording_badge, speech._recording_badge):
+        assert badge.isVisible()
         assert badge.testAttribute(Qt.WA_TransparentForMouseEvents)
         assert badge.focusPolicy() == Qt.NoFocus
         assert badge.parentWidget().rect().contains(badge.geometry())
+    assert speech._recording_badge.text() == "● Snimanje dijagnostike · 01:59"
+    assert speech._recording_badge.fontMetrics().horizontalAdvance(
+        speech._recording_badge.text()
+    ) <= speech._recording_badge.contentsRect().width()
     assert button.geometry() == geometry
     assert targets == {
         action: widget.geometry() for action, widget in speech._action_buttons.items()
@@ -227,3 +232,150 @@ def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaz
     hotbar._diagnostic_recordings.status = None
     hotbar._recording_changed()
     assert hotbar._recording_badge.isHidden() and speech._recording_badge.isHidden()
+
+
+def test_recording_indicator_waits_for_writer_and_shares_confirmation_deadline(
+    recording_ui, qtbot, monkeypatch
+):
+    window, recordings, reports, writer, context = recording_ui
+    entered, release = Event(), Event()
+    finish = writer._finish_recording
+
+    def blocked_finish():
+        entered.set()
+        release.wait(3)
+        finish()
+
+    monkeypatch.setattr(writer, "_finish_recording", blocked_finish)
+    assert recordings.indicator._confirmation.interval() == 5000
+    window._primary.click()
+    qtbot.waitUntil(lambda: "Snimanje dijagnostike" in window._recording_badge.text())
+    window.close()
+    assert recordings.busy
+    reopened = DiagnosticsWindow(
+        recordings, reports, lambda: context, logging_enabled=lambda: False
+    )
+    qtbot.addWidget(reopened)
+    reopened.show()
+    assert reopened._recording_badge.text() == window._recording_badge.text()
+    try:
+        recordings.stop()
+        qtbot.waitUntil(entered.is_set)
+        recordings.poll()
+        assert recordings.busy
+        assert "Završavam snimak…" in reopened._recording_badge.text()
+        assert "sačuvan" not in reopened._recording_badge.text()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: "Snimak je sačuvan" in reopened._recording_badge.text())
+    from pogled_assist.ui.recording_badge import RecordingBadge
+
+    remaining = recordings.indicator._confirmation.remainingTime()
+    late = RecordingBadge(reopened)
+    late.bind_indicator(recordings.indicator)
+    assert late.text() == reopened._recording_badge.text()
+    assert 0 < recordings.indicator._confirmation.remainingTime() <= remaining
+    recordings.indicator._confirmation.setInterval(10)
+    qtbot.waitUntil(late.isHidden)
+    assert reopened._recording_badge.isHidden() and window._recording_badge.isHidden()
+    recordings.changed.emit()
+    recordings.indicator.set_status(recordings.status)
+    assert late.isHidden()
+
+
+@pytest.mark.parametrize("reason", ["size", "shutdown"])
+def test_partial_recording_never_shows_saved_confirmation(recording_ui, qtbot, reason):
+    window, recordings, _reports, writer, context = recording_ui
+    recordings.start(1, context)
+    writer.stop_recording(reason)
+    qtbot.waitUntil(lambda: not recordings.busy and not recordings.loading)
+    assert "Snimak nije potpun" in window._recording_badge.text()
+    assert not recordings.indicator._confirmation.isActive()
+    assert recordings.start(1, context)
+    assert "Snimanje dijagnostike" in window._recording_badge.text()
+    recordings.stop()
+    qtbot.waitUntil(lambda: not recordings.busy)
+
+
+def test_recording_save_failure_keeps_warning_instead_of_success(recording_ui, qtbot, monkeypatch):
+    from pogled_assist.diagnostic_recording import RecordingSink
+
+    window, recordings, _reports, _writer, context = recording_ui
+    write = RecordingSink.write
+
+    def fail_footer(self, *args, **kwargs):
+        if kwargs.get("footer"):
+            raise OSError("Synthetic footer write failure")
+        return write(self, *args, **kwargs)
+
+    monkeypatch.setattr(RecordingSink, "write", fail_footer)
+    recordings.start(1, context)
+    recordings.stop()
+    qtbot.waitUntil(lambda: not recordings.busy)
+    assert "Greška čuvanja snimka" in window._recording_badge.text()
+    assert not recordings.indicator._confirmation.isActive()
+    recordings.changed.emit()
+    assert "Greška čuvanja snimka" in window._recording_badge.text()
+
+
+def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbot, monkeypatch):
+    from PySide6.QtCore import Qt
+
+    from pogled_assist import toolbar
+
+    hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
+    hotbar._diagnostic_recordings.status = {
+        "id": "synthetic-recording",
+        "busy": True,
+        "state": "recording",
+        "remaining_seconds": 101.2,
+    }
+    hotbar._recording_changed()
+    hotbar._show_keyboard_sidebar()
+    hotbar._show_controller_sidebar()
+    hotbar._open_speech()
+    speech = hotbar._speech_window
+    speech._open_letter_dialog(0)
+    qtbot.wait(1)
+    letter_targets = {
+        action: speech._action_buttons[action].geometry() for action in speech._dialogs.letter_actions
+    }
+    badges = [
+        hotbar._keyboard_window._recording_badge,
+        hotbar._controller_window._recording_badge,
+        speech._recording_badge,
+        *speech._dialogs.recording_badges,
+    ]
+    for badge in badges:
+        assert "Snimanje dijagnostike · 01:42" in badge.text()
+        assert badge.testAttribute(Qt.WA_TransparentForMouseEvents)
+        assert badge.focusPolicy() == Qt.NoFocus
+    hotbar._diagnostic_recordings.status["state"] = "finishing"
+    hotbar._recording_changed()
+    qtbot.wait(1)
+    assert letter_targets == {
+        action: speech._action_buttons[action].geometry() for action in speech._dialogs.letter_actions
+    }
+    speech._close_dialog()
+    monkeypatch.setattr(toolbar.SettingsWindow, "_sync_startup_setting_from_windows", lambda _: None)
+    hotbar._open_settings()
+    assert "Završavam snimak…" in hotbar._settings_window._recording_badge.text()
+    hotbar._open_gaze_check()
+    check = hotbar._gaze_check_window
+    assert "Završavam snimak…" in check._recording_badge.text()
+    check._start_free()
+    qtbot.wait(1)
+    assert check._test_recording_badge.isVisible()
+    geometry = check._test_controls.geometry()
+    hotbar._diagnostic_recordings.status = {
+        "id": "synthetic-recording",
+        "busy": False,
+        "state": "error",
+        "complete": False,
+    }
+    hotbar._recording_changed()
+    qtbot.wait(1)
+    assert "Greška čuvanja snimka" in check._test_recording_badge.text()
+    assert check._test_controls.geometry() == geometry
+    assert check._test_controls.height() == 168
+    assert not hotbar._diagnostic_recordings.indicator._confirmation.isActive()

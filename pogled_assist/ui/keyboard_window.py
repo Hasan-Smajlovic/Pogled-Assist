@@ -27,6 +27,7 @@ from ..keyboard_layouts import (
 )
 from ..speech.speech_service import SpeechSettings
 from .keyboard_grid import KeyboardGrid
+from .recording_badge import RecordingBadge
 from .sidebar_panel import SidebarPanel
 
 logger = logging.getLogger(__name__)
@@ -247,6 +248,8 @@ class KeyboardWindow(SidebarPanel):
         utility_row.addWidget(self._space_button, 2)
         utility_row.addWidget(self._backspace_button, 2)
 
+        self._recording_badge = RecordingBadge(self)
+        root.addWidget(self._recording_badge)
         root.addLayout(tab_row)
         self._script_button = self._make_button(
             switch_label(self._settings.keyboard_script),

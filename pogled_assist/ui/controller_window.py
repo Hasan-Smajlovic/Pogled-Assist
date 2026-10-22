@@ -30,6 +30,7 @@ from ..speech.speech_service import SpeechSettings
 from ..windows.windows_input import WindowsInputController
 from .icons import themed_icon
 from .keyboard_grid import KeyboardGrid
+from .recording_badge import RecordingBadge
 from .sidebar_panel import SidebarPanel
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,8 @@ class ControllerWindow(SidebarPanel):
         self._content_layout.setVerticalSpacing(8)
         self._keys = KeyboardGrid(self._content_layout, self._make_button, self._action)
 
+        self._recording_badge = RecordingBadge(self)
+        root.addWidget(self._recording_badge)
         root.addLayout(tab_row)
         self._script_button = self._make_button(
             switch_label(self._speech_settings.keyboard_script),

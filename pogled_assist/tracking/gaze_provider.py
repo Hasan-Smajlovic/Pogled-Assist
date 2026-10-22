@@ -925,9 +925,10 @@ class TobiiGazeProvider(QObject):
                 if refresh or item != self._delivered_eye_status:
                     refresh = False
                     self._delivered_eye_status = item
+                    gate_open = eyes_usable(self._eye_tracking_policy, *item)
                     self._metrics.eyes(
                         "application_gate",
-                        "open" if eyes_usable(self._eye_tracking_policy, *item) else "closed",
+                        "open" if gate_open else "closed",
                         sampled=True,
                         stale_after=None,
                     )
@@ -936,6 +937,8 @@ class TobiiGazeProvider(QObject):
                         stream_generation=generation,
                         left_valid=item[0],
                         right_valid=item[1],
+                        eye_tracking_policy=self._eye_tracking_policy,
+                        application_gate_open=gate_open,
                     )
                     self.eye_status_changed.emit(*item)
 

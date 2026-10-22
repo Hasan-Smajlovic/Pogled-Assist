@@ -27,6 +27,7 @@ from ..diagnostic_recording import DURATIONS
 from ..interaction.eye_tracking_policy import EYE_TRACKING_POLICY_CHOICES
 from .gaze_check_history import scroll_content
 from .gaze_check_window import STYLESHEET
+from .recording_badge import RecordingBadge
 
 REASONS = {
     "manual": "Ručno zaustavljeno",
@@ -84,6 +85,9 @@ class DiagnosticsWindow(QWidget):
         copy.addWidget(self._title)
         copy.addWidget(text_label("Zabilježite kratak primjer problema s pogledom ili odabirom."))
         header.addLayout(copy, 1)
+        self._recording_badge = RecordingBadge(self)
+        self._recording_badge.bind_indicator(recordings.indicator)
+        header.addWidget(self._recording_badge)
         header.addWidget(self._button("Zatvori · Esc", self.close))
         root.addLayout(header)
         self._tabs = QTabWidget(self)

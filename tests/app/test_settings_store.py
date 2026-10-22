@@ -99,89 +99,59 @@ def point_settings_at(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "value,expected",
+    "field,value,expected",
     [
-        (None, "both"),
-        ([], "both"),
-        ({}, "both"),
-        (True, "both"),
-        ("unknown", "both"),
-        ("both", "both"),
-        ("hold", "hold"),
-        ("any", "any"),
+        ("eye_tracking_policy", None, "both"),
+        ("eye_tracking_policy", [], "both"),
+        ("eye_tracking_policy", {}, "both"),
+        ("eye_tracking_policy", True, "both"),
+        ("eye_tracking_policy", "unknown", "both"),
+        ("eye_tracking_policy", "both", "both"),
+        ("eye_tracking_policy", "hold", "hold"),
+        ("eye_tracking_policy", "any", "any"),
+        ("eye_tracking_hold_ms", None, 150),
+        ("eye_tracking_hold_ms", "bad", 150),
+        ("eye_tracking_hold_ms", -100, 50),
+        ("eye_tracking_hold_ms", 1000, 500),
+        ("eye_tracking_hold_ms", "200", 200),
+        ("eye_tracking_hold_ms", 171, 150),
+        ("eye_tracking_hold_ms", 10**400, 500),
+        ("eye_tracking_hold_ms", -(10**400), 50),
+        ("eye_tracking_hold_ms", 125, 150),
+        ("edge_hold_ms", None, 120),
+        ("edge_hold_ms", "bad", 120),
+        ("edge_hold_ms", -20, 0),
+        ("edge_hold_ms", 0, 0),
+        ("edge_hold_ms", 1000, 300),
+        ("edge_hold_ms", "240", 240),
+        ("edge_hold_ms", 131, 140),
     ],
 )
-def test_eye_policy_is_validated_without_stringifying_invalid_values(
-    monkeypatch, tmp_path, value, expected
+def test_eye_and_edge_settings_validate_types_clamp_and_snap_to_steps(
+    monkeypatch, tmp_path, field, value, expected
 ):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
-    path.write_text(json.dumps({"gaze": {"eye_tracking_policy": value}}), encoding="utf-8")
-    assert load_app_settings()[0].eye_tracking_policy == expected
+    path.write_text(json.dumps({"gaze": {field: value}}), encoding="utf-8")
+    assert getattr(load_app_settings()[0], field) == expected
 
 
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        (None, 150),
-        ("bad", 150),
-        (-100, 50),
-        (1000, 500),
-        ("200", 200),
-        (171, 150),
-        (10**400, 500),
-        (-(10**400), 50),
-        (125, 150),
-    ],
-)
-def test_eye_tracking_hold_is_bounded_and_uses_fifty_ms_steps(
-    monkeypatch, tmp_path, value, expected
-):
-    path = point_settings_at(monkeypatch, tmp_path)
-    path.parent.mkdir()
-    path.write_text(json.dumps({"gaze": {"eye_tracking_hold_ms": value}}), encoding="utf-8")
-    assert load_app_settings()[0].eye_tracking_hold_ms == expected
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [(None, 120), ("bad", 120), (-20, 0), (0, 0), (1000, 300), ("240", 240), (131, 140)],
-)
-def test_edge_hold_setting_coerces_clamps_and_uses_twenty_ms_steps(
-    monkeypatch, tmp_path, value, expected
-):
-    path = point_settings_at(monkeypatch, tmp_path)
-    path.parent.mkdir()
-    path.write_text(json.dumps({"gaze": {"edge_hold_ms": value}}), encoding="utf-8")
-    assert load_app_settings()[0].edge_hold_ms == expected
-
-
-def test_edge_hold_defaults_in_old_settings_and_survives_restart(monkeypatch, tmp_path):
-    path = point_settings_at(monkeypatch, tmp_path)
-    path.parent.mkdir()
-    path.write_text('{"gaze":{"dwell_ms":700}}', encoding="utf-8")
-    gaze, speech = load_app_settings()
-    assert gaze.edge_hold_ms == 120
-    for duration in (0, 240):
-        gaze.edge_hold_ms = duration
-        assert save_app_settings(gaze, speech)
-        assert load_app_settings()[0] == gaze
-        assert gaze.dwell_ms == 700
-
-
-def test_eye_policy_defaults_and_timing_do_not_replace_saved_values(monkeypatch, tmp_path):
+def test_new_gaze_settings_default_in_old_files_and_survive_restart(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
     gaze, speech = load_app_settings()
     assert (gaze.selection_pause_ms, gaze.dwell_ms) == (250, 850)
     assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms) == ("both", 150)
+    assert gaze.edge_hold_ms == 120
     path.parent.mkdir()
     path.write_text('{"gaze":{"selection_pause_ms":500,"dwell_ms":700}}', encoding="utf-8")
     gaze, speech = load_app_settings()
     assert (gaze.selection_pause_ms, gaze.dwell_ms) == (500, 700)
-    assert gaze.eye_tracking_policy == "both"
+    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms, gaze.edge_hold_ms) == ("both", 150, 120)
     gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms = "hold", 400
-    assert save_app_settings(gaze, speech)
-    assert load_app_settings() == (gaze, speech)
+    for duration in (0, 240):
+        gaze.edge_hold_ms = duration
+        assert save_app_settings(gaze, speech)
+        assert load_app_settings() == (gaze, speech)
 
 
 def test_older_writer_preserves_eye_policy_from_installation_snapshot(monkeypatch, tmp_path):

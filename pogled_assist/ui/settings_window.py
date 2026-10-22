@@ -47,6 +47,7 @@ from .gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .gaze_settings_page import GazeSettingsPage
 from .general_settings_page import GeneralSettingsPage
 from .learned_words_page import LearnedWordsPage
+from .recording_badge import RecordingBadge
 from .settings_controls import GazeCallback, SettingsControls, global_rect, styled_label
 from .speech_settings_page import SpeechSettingsPage
 
@@ -444,7 +445,12 @@ class SettingsWindow(QWidget):
 
         title = styled_label("Postavke", "titleLabel", self)
         title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        top_bar.addWidget(title, 1)
+        heading = QVBoxLayout()
+        heading.setSpacing(4)
+        heading.addWidget(title)
+        self._recording_badge = RecordingBadge(self)
+        heading.addWidget(self._recording_badge)
+        top_bar.addLayout(heading, 1)
 
         self._status_label = styled_label("Spremno", "statusLabel", self)
         self._status_label.setAlignment(Qt.AlignVCenter | Qt.AlignRight)

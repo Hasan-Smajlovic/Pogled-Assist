@@ -118,6 +118,8 @@ class HotbarControls:
         self.settings_button = self._make_button(
             _Button(SETTINGS, "Postavke", "fa5s.cog"), self.window
         )
+        self.settings_button.setIconSize(QSize(16, 16))
+        self.settings_button.setStyleSheet("QToolButton { padding: 0 5px 18px; }")
         self.quick_actions_button = self._make_button(
             _Button(QUICK_ACTIONS, "Brze radnje", "fa5s.bolt", 112, checkable=True),
             self.window,

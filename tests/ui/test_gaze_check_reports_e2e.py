@@ -101,12 +101,16 @@ def test_interruption_finalizes_once_without_fabricating_misses(check, qtbot, tr
     assert [row.state for row in stored.precision[1:]] == ["unmeasured"] * 4
     assert all(row.near is None and row.samples is None for row in stored.precision[1:])
     assert len(reports.reports) == 1
+    if trigger == "cancel":
+        assert not window._primary_button.isEnabled()
+        assert "Ponovi preciznost" in window._result_advice.text()
+        assert "govornu tastaturu" not in window._result_advice.text()
+        assert len(window._result_map.targets) == 5
 
 
 def test_repeated_trials_keep_attempt_ids_and_per_group_counts(check, qtbot):
     window, reports, now = check
     complete_precision(window, qtbot)
-    original = window._report.to_json()
     report_id = window._report.id
     for _attempt in range(2):
         window._start_trial()
@@ -123,7 +127,6 @@ def test_repeated_trials_keep_attempt_ids_and_per_group_counts(check, qtbot):
     assert [row.state for row in saved.trials[-1].rows] == ["insufficient"] * 3
     assert window._trial_attempts.count() == 2
     assert saved.id == report_id
-    assert saved.to_json() != original
 
 
 def test_save_failure_is_visible_retry_works_and_export_does_not_change_storage(
@@ -162,31 +165,43 @@ def test_blocked_disk_worker_keeps_qt_responsive_and_older_save_cannot_mark_new_
 ):
     window, reports, _now = check
     entered, release = Event(), Event()
+    newer_entered, newer_release = Event(), Event()
     save = reports.store.save
 
     def block(value):
-        entered.set()
-        if not release.wait(2):
+        waiting, allowed = (newer_entered, newer_release) if value.trials else (entered, release)
+        waiting.set()
+        if not allowed.wait(3):
             raise OSError("Synthetic timeout")
         save(value)
 
     monkeypatch.setattr(reports.store, "save", block)
-    complete_precision(window, qtbot)
-    qtbot.waitUntil(entered.is_set)
-    window._history_button.click()
-    assert window._phase == "history"
-    assert reports.loading
-    window._repeat_button.click()
-    window._start_trial()
-    window._test_back_button.click()
-    key = window._report.id
-    assert reports.states[key] == "saving"
-    release.set()
+    try:
+        complete_precision(window, qtbot)
+        qtbot.waitUntil(entered.is_set)
+        window._history_button.click()
+        assert window._phase == "history"
+        assert reports.loading
+        window._repeat_button.click()
+        window._start_trial()
+        window._test_back_button.click()
+        key = window._report.id
+        release.set()
+        qtbot.waitUntil(newer_entered.is_set)
+        qtbot.waitUntil(lambda: not reports.loading)
+        # The first save has reached Qt, but the newer trial is still blocked on disk.
+        assert reports.states[key] == "saving"
+        assert "Čuvam rezultat" in window._storage_label.text()
+    finally:
+        release.set()
+        newer_release.set()
     qtbot.waitUntil(lambda: reports.states[key] == "saved")
     assert reports.store.load()[0].report.trials[-1].state == "interrupted"
 
 
-def test_export_cancel_and_failure_keep_result_and_allow_retry(check, qtbot, monkeypatch, tmp_path):
+def test_export_cancel_failure_and_retry_preserve_result_and_exact_path(
+    check, qtbot, monkeypatch, tmp_path
+):
     from pogled_assist.ui import gaze_check_history
 
     window, reports, _now = check
@@ -196,7 +211,9 @@ def test_export_cancel_and_failure_keep_result_and_allow_retry(check, qtbot, mon
     monkeypatch.setattr(gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: ("", ""))
     window._export_button.click()
     assert window._export_token is None
-    destination = tmp_path / "report.zip"
+    destination = tmp_path / "report.txt"
+    other = tmp_path / "report.txt.zip"
+    other.write_bytes(b"Do not overwrite")
     monkeypatch.setattr(
         gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: (str(destination), "")
     )
@@ -212,20 +229,9 @@ def test_export_cancel_and_failure_keep_result_and_allow_retry(check, qtbot, mon
     monkeypatch.setattr(reports.store, "export", export)
     window._export_button.click()
     qtbot.waitUntil(lambda: "ZIP je izvezen" in window._export_status.text())
-    assert destination.is_file()
-
-
-def test_interrupted_precision_cannot_offer_trial_or_success_advice(check, qtbot):
-    window, _reports, _now = check
-    window._start_precision()
-    qtbot.wait(1)
-    name, x, y = window._check.targets[0]
-    window._check.results = [FixationResult(name, 90, 0.9, 12, 8, True, (x, y))]
-    window._test_back_button.click()
-    assert not window._primary_button.isEnabled()
-    assert "Ponovi preciznost" in window._result_advice.text()
-    assert "govornu tastaturu" not in window._result_advice.text()
-    assert len(window._result_map.targets) == 5
+    with ZipFile(destination) as archive:
+        assert archive.read("rezultat.json") == reports.reports[key].to_json()
+    assert other.read_bytes() == b"Do not overwrite"
 
 
 def test_finalized_trial_summary_survives_reset_history_return_and_archived_details(check, qtbot):
@@ -260,29 +266,17 @@ def test_finalized_trial_summary_survives_reset_history_return_and_archived_deta
     assert all(row.departures == 1 for row in window._view_report.trials[-1].rows)
 
 
-def test_export_uses_exact_native_dialog_destination(check, qtbot, monkeypatch, tmp_path):
+def test_late_export_status_does_not_attach_to_a_new_report(check, qtbot, monkeypatch, tmp_path):
     from pogled_assist.ui import gaze_check_history
 
-    window, _reports, _now = check
+    window, reports, _now = check
     complete_precision(window, qtbot)
-    chosen = tmp_path / "report.txt"
-    other = tmp_path / "report.txt.zip"
-    other.write_bytes(b"Do not overwrite")
     monkeypatch.setattr(
-        gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: (str(chosen), "")
+        gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: (str(tmp_path / "old.zip"), "")
     )
+    monkeypatch.setattr(reports, "export", lambda *_args: "previous-report-export")
     window._export_button.click()
-    qtbot.waitUntil(lambda: "ZIP je izvezen" in window._export_status.text())
-    assert chosen.is_file()
-    assert other.read_bytes() == b"Do not overwrite"
-
-
-def test_late_export_status_does_not_attach_to_a_new_report(check, qtbot):
-    window, _reports, _now = check
+    assert window._export_status.isVisible()
     complete_precision(window, qtbot)
-    window._export_token = "previous-report-export"
-    window._export_status.setText("Izvozim prethodni rezultat…")
-    window._export_status.show()
-    complete_precision(window, qtbot)
-    window._export_finished("previous-report-export", True)
+    reports.exported.emit("previous-report-export", True)
     assert not window._export_status.isVisible()

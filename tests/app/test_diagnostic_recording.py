@@ -36,6 +36,25 @@ def writer(monkeypatch):
     assert value.stop()
 
 
+@pytest.fixture
+def blocked_write(writer, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    write = module.RecordingSink.write
+
+    def block(sink, name, *args, **kwargs):
+        if name == "blocked":
+            entered.set()
+            release.wait(3)
+        return write(sink, name, *args, **kwargs)
+
+    monkeypatch.setattr(module.RecordingSink, "write", block)
+    try:
+        yield entered, release
+    finally:
+        # Unblock the sink before the writer fixture joins its thread.
+        release.set()
+
+
 def context():
     return recording_context(
         {
@@ -62,6 +81,14 @@ def finish(writer, folder, *, stop=True):
     return store.inspect(writer.recording_status()["id"])
 
 
+def assert_recording_complete(item, expected):
+    assert item["complete"] is expected
+    assert item["analysis"]["complete"] is expected
+    assert item["analysis"]["analysis"]["evidence_incomplete"] is (not expected)
+    assert item["analysis"]["recording_health"] == item["health"]
+    assert item["analysis"]["session_end_reason"] == item["reason"]
+
+
 @pytest.mark.parametrize("normal", [False, True])
 def test_manual_capture_is_independent_of_normal_logging_and_survives_toggles(
     writer, tmp_path, normal
@@ -77,7 +104,8 @@ def test_manual_capture_is_independent_of_normal_logging_and_survives_toggles(
     writer.start_segment(tmp_path / "logs/latest.txt", None, trace=False)
     writer.event("after_enable", {}, trace=True)
     item = finish(writer, folder)
-    assert item["id"] == key and item["complete"]
+    assert item["id"] == key
+    assert_recording_complete(item, True)
     assert item["reason"] == "manual" and item["context"]["build"]["build_dirty"]
     events = item["analysis"]["events"]
     assert all(events.get(name) == 1 for name in ("native_gaze", "after_disable", "after_enable"))
@@ -116,12 +144,14 @@ def test_deadline_finishes_without_another_event_and_shutdown_is_interrupted(
     with writer._condition:
         writer._condition.notify()
     item = finish(writer, folder, stop=False)
-    assert item["complete"] and item["reason"] == "time"
+    assert item["reason"] == "time"
+    assert_recording_complete(item, True)
     writer.start_recording(folder, 2, context())
     writer.stop_recording("shutdown")
     interrupted = finish(writer, folder, stop=False)
-    assert interrupted["reason"] == "shutdown" and not interrupted["complete"]
+    assert interrupted["reason"] == "shutdown"
     assert interrupted["session_end_present"]
+    assert_recording_complete(interrupted, False)
 
 
 def test_recording_limit_is_separate_from_an_exhausted_normal_session(
@@ -143,50 +173,42 @@ def test_recording_limit_is_separate_from_an_exhausted_normal_session(
     for _ in range(5):
         writer.event("large", {"payload": "x" * 2000}, trace=True)
     item = finish(writer, folder, stop=False)
-    assert item["reason"] == "size" and not item["complete"]
+    assert item["reason"] == "size"
     assert item["bytes"] <= 10000 and item["session_end_present"]
+    assert_recording_complete(item, False)
 
 
 def test_blocked_recording_does_not_block_producers_and_prevents_a_second_start(
-    writer, tmp_path, monkeypatch
+    writer, tmp_path, blocked_write
 ):
-    entered, release = threading.Event(), threading.Event()
-    actual = module.RecordingSink.write
-
-    def blocked(sink, name, *args, **kwargs):
-        if name == "blocking":
-            entered.set()
-            release.wait(3)
-        return actual(sink, name, *args, **kwargs)
-
-    monkeypatch.setattr(module.RecordingSink, "write", blocked)
+    entered, release = blocked_write
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 2, context())
-    writer.event("blocking", {}, trace=True)
-    try:
-        assert entered.wait(1)
-        producer_done = threading.Event()
+    writer.event("blocked", {}, trace=True)
+    assert entered.wait(1)
+    producer_done = threading.Event()
 
-        def produce():
-            for index in range(100):
-                writer.event("native_gaze", {"index": index}, trace=True)
-            writer.stop_recording()
-            producer_done.set()
+    def produce():
+        for index in range(100):
+            writer.event("native_gaze", {"index": index}, trace=True)
+        writer.stop_recording()
+        producer_done.set()
 
-        thread = threading.Thread(target=produce)
-        thread.start()
-        assert producer_done.wait(0.5)
-        thread.join(1)
-        assert writer.health()["queued"] <= writer.capacity
-        assert writer.start_recording(folder, 1, context()) is None
-        assert writer.recording_status()["state"] == "finishing"
-    finally:
-        release.set()
+    thread = threading.Thread(target=produce)
+    thread.start()
+    assert producer_done.wait(0.5)
+    thread.join(1)
+    assert writer.health()["queued"] <= writer.capacity
+    assert writer.start_recording(folder, 1, context()) is None
+    assert writer.recording_status()["state"] == "finishing"
+    release.set()
     item = finish(writer, folder, stop=False)
-    assert not item["complete"] and item["health"]["dropped"]["event"] > 0
+    assert item["health"]["dropped"]["event"] > 0
+    assert_recording_complete(item, False)
     writer.start_recording(folder, 1, context())
     fresh = finish(writer, folder)
-    assert fresh["complete"] and fresh["health"]["dropped"] == {}
+    assert fresh["health"]["dropped"] == {}
+    assert_recording_complete(fresh, True)
 
 
 def test_write_error_and_bounded_snapshot_remain_explicit(writer, tmp_path, monkeypatch):
@@ -203,11 +225,12 @@ def test_write_error_and_bounded_snapshot_remain_explicit(writer, tmp_path, monk
     writer.event("disk-error", {}, trace=True)
     item = finish(writer, folder, stop=False)
     assert item["reason"] == "writer_error" and item["health"]["writer_errors"] == 1
-    assert not item["complete"]
+    assert_recording_complete(item, False)
     writer.start_recording(folder, 1, context())
     writer.event("oversized", {"values": "x" * 100000}, trace=True)
     item = finish(writer, folder)
-    assert item["health"]["bounded_snapshots"] == 1 and not item["complete"]
+    assert item["health"]["bounded_snapshots"] == 1
+    assert_recording_complete(item, False)
 
 
 def test_retention_restart_and_partial_recordings_do_not_touch_other_files(
@@ -358,32 +381,21 @@ def test_manual_trace_preserves_ordinary_basic_accounting(writer, tmp_path, monk
 
 
 def test_recording_order_survives_ordinary_rotation_without_exceeding_queue_bound(
-    writer, tmp_path, monkeypatch
+    writer, tmp_path, blocked_write
 ):
-    entered, release = threading.Event(), threading.Event()
-    actual = module.RecordingSink.write
-
-    def blocked(sink, name, *args, **kwargs):
-        if name == "block-order":
-            entered.set()
-            release.wait(3)
-        return actual(sink, name, *args, **kwargs)
-
-    monkeypatch.setattr(module.RecordingSink, "write", blocked)
+    entered, release = blocked_write
     latest = tmp_path / "logs/latest.txt"
     writer.start_segment(latest, None, trace=False)
     folder = tmp_path / "recordings"
     key = writer.start_recording(folder, 1, context())
-    writer.event("block-order", {}, trace=True)
-    try:
-        assert entered.wait(1)
-        writer.event("before-summary", {})
-        writer.event("stream_summary", {"counts": {}}, priority=True)
-        writer.event("after-summary", {})
-        writer.disable()
-        assert writer.health()["queued"] <= writer.capacity
-    finally:
-        release.set()
+    writer.event("blocked", {}, trace=True)
+    assert entered.wait(1)
+    writer.event("before-summary", {})
+    writer.event("stream_summary", {"counts": {}}, priority=True)
+    writer.event("after-summary", {})
+    writer.disable()
+    assert writer.health()["queued"] <= writer.capacity
+    release.set()
     finish(writer, folder)
     rows = [
         json.loads(line)
@@ -460,25 +472,16 @@ def test_restart_recovers_over_budget_crash_remnants_without_touching_active_cap
     finish(writer, folder)
 
 
-def test_manual_shutdown_returns_without_waiting_for_a_blocked_file(writer, tmp_path, monkeypatch):
-    entered, release = threading.Event(), threading.Event()
-    actual = module.RecordingSink.write
-
-    def blocked(sink, name, *args, **kwargs):
-        if name == "shutdown-block":
-            entered.set()
-            release.wait(3)
-        return actual(sink, name, *args, **kwargs)
-
-    monkeypatch.setattr(module.RecordingSink, "write", blocked)
+def test_manual_shutdown_returns_without_waiting_for_a_blocked_file(
+    writer, tmp_path, blocked_write
+):
+    entered, release = blocked_write
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 1, context())
-    writer.event("shutdown-block", {}, trace=True)
-    try:
-        assert entered.wait(1)
-        assert not writer.stop(timeout=0.01)
-    finally:
-        release.set()
+    writer.event("blocked", {}, trace=True)
+    assert entered.wait(1)
+    assert not writer.stop(timeout=0.01)
+    release.set()
     assert writer.stop()
     item = finish(writer, folder, stop=False)
     assert item["reason"] == "shutdown" and not item["complete"]

@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from .. import diagnostics
 from ..diagnostic_recording import RecordingReadError, RecordingStore
 from ..logging_setup import recording_writer
+from .recording_badge import RecordingIndicator
 
 
 class DiagnosticRecordings(QObject):
@@ -25,6 +26,7 @@ class DiagnosticRecordings(QObject):
         self._writer_source = writer or recording_writer
         self._writer = None
         self.status: dict | None = None
+        self.indicator = RecordingIndicator(self)
         self.entries: list[dict] = []
         self.loading = False
         self.history_error = False
@@ -64,6 +66,7 @@ class DiagnosticRecordings(QObject):
         was_busy = self.busy
         if status != self.status:
             self.status = status
+            self.indicator.set_status(status)
             self.changed.emit()
         if was_busy and not self.busy:
             self.load()

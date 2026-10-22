@@ -27,7 +27,8 @@
   color: #fff;
 }
 .settings-topbar { display: flex; align-items: center; gap: 16px; }
-.settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
+.settings-heading { flex:1; min-width:264px; }
+.settings-topbar h1 { margin: 0 0 4px; font-size: 25px; font-weight: 650; }
 .settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
 .settings-danger { background: #492326 !important; border-color: #804047 !important; }
 .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0; }
@@ -49,7 +50,6 @@
 .settings-diagnostics-row { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:16px; align-items:center; padding:10px 14px; border:1px solid #3a403c; border-radius:10px; background:#222522; }
 .settings-diagnostics-row h3 { margin:0 0 5px; font-size:17px; }
 .settings-diagnostics-row p { margin:0; font-size:13px; line-height:1.4; color:#b9b2a5; }
-.settings-diagnostics-row .recording-badge { margin-left:6px; }
 .settings-checkbox {
   display: flex;
   align-items: center;
@@ -214,7 +214,7 @@
 }
 @media (max-width: 560px) {
   .settings-topbar { flex-wrap: wrap; }
-  .settings-topbar h1 { order: -1; flex-basis: 100%; }
+  .settings-heading { order: -1; flex-basis: 100%; }
   .settings-status { flex: 1; text-align: left; }
   .settings-body { display: flex; flex-direction: column; }
   .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }

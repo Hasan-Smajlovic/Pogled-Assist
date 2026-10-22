@@ -8,6 +8,7 @@ from pogled_assist.diagnostic_recording import recording_context
 from pogled_assist.tracking.gaze_check_store import GazeCheckStore
 from pogled_assist.ui.diagnostics_window import DiagnosticsWindow
 from pogled_assist.ui.gaze_check_reports import GazeCheckReports
+from pogled_assist.ui.recording_badge import RecordingIndicator
 
 
 class PreviewRecordings(QObject):
@@ -18,6 +19,14 @@ class PreviewRecordings(QObject):
     loading = False
     history_error = False
     _exporting = False
+
+    def __init__(self):
+        super().__init__()
+        self.indicator = RecordingIndicator(self)
+        self.changed.connect(self._update_indicator)
+
+    def _update_indicator(self):
+        self.indicator.set_status(self.status)
 
     @property
     def busy(self):
@@ -72,7 +81,7 @@ class CaptureDiagnostics:
             "health": {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0},
         }
         service.entries = [entry]
-        service.status = None
+        service.status = {**entry, "busy": False}
         service.changed.emit()
         window._tabs.setCurrentIndex(1)
         self.capture(
@@ -96,6 +105,7 @@ class CaptureDiagnostics:
                     "health": health,
                 }
             ]
+            service.status = {**service.entries[0], "busy": False}
             service.changed.emit()
             self.capture(window, "diagnostics-" + name, "Diagnostics: " + name)
         window._status.setText("Izvoz ZIP-a nije uspio. Snimak ostaje dostupan; pokušajte ponovo.")

@@ -40,6 +40,11 @@ class CaptureGazeCheck:
         )
         window._render_position()
         self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
+        window._recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(window, "gaze-check-recording", "Gaze check: recording status", size=size)
+        window._recording_badge.set_status(None)
         window._snapshot = replace(
             window._snapshot,
             left=False,
@@ -219,6 +224,13 @@ class CaptureGazeCheck:
         )
         window._render_free()
         self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
+        window._test_recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(
+            window, "gaze-check-free-recording", "Gaze check: recording in free view", size=size
+        )
+        window._test_recording_badge.set_status(None)
         window._snapshot = CheckSnapshot()
         window._render_free()
         self.capture(
