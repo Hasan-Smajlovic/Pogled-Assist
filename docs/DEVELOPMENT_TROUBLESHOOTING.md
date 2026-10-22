@@ -6,11 +6,11 @@ This guide covers common problems when running the checks in the [development gu
 
 If `tests/suggestions/test_suggestion_text.py` fails on `preparation_sha256` or `tokenizer_sha256`, compare the recorded hash in the corresponding model metadata with the source file. Refactoring or formatting changes the hash even when the intended model behavior is unchanged. A model copied from another checkout can also have metadata for different source files.
 
-Rebuild the affected model and regenerate its reports following the [model command reference](../language/bs/README.md#preparation-and-evaluation), then run `.\dev.ps1 check` again. The general model needs the verified local CLASSLA archive; the Islamic layer uses the reviewed TSV already in the repository. Do not edit metadata hashes by hand or weaken the checksum assertions.
+Rebuild the affected model and regenerate its reports following the [model command reference](../language/bs/README.md#preparation-and-evaluation), then run `.\dev.ps1 check -Parallel` again. The general model needs the verified local CLASSLA archive; the Islamic layer uses the reviewed TSV already in the repository. Do not edit metadata hashes by hand or weaken the checksum assertions.
 
 ## Debugging parallel test failures
 
-Run `.\dev.ps1 test -Workers 1` to reproduce a failure in a single process. For a specific module, use `.\dev.ps1 test -Workers 1 -TestPaths tests/tooling/test_dev_environment.py`. The final `.\dev.ps1 check -Workers 1` still performs the complete verification. If pytest reports an unrecognized `-n` argument, run `.\dev.ps1 setup` to install the declared development dependencies. Do not install plugins into another environment or remove coverage/packaging to make a final check pass.
+Run `.\dev.ps1 test -Workers 1` to reproduce a failure in a single process. For a specific module, use `.\dev.ps1 test -Workers 1 -TestPaths tests/tooling/test_dev_environment.py`. After fixing the failure, run the complete `.\dev.ps1 check -Parallel`; use sequential `.\dev.ps1 check` when diagnosing stage contention or another parallel-only failure. If pytest reports an unrecognized `-n` argument, run `.\dev.ps1 setup` to install the declared development dependencies. Do not install plugins into another environment or remove coverage/packaging to make a final check pass.
 
 ## Pytest cannot access `pytest-of-<username>`
 
@@ -30,7 +30,7 @@ $pytestTemp = Join-Path $env:LOCALAPPDATA "Temp\pytest-of-$env:USERNAME"
 Remove-Item -LiteralPath $pytestTemp -Recurse -Force
 ```
 
-Run `.\dev.ps1 check` again from a normal PowerShell window. Pytest recreates the directory with permissions for the account running the check. The directory contains test scratch data, not Pogled Assist settings or user data. Do not remove the parent `%LOCALAPPDATA%\Temp` directory.
+Run `.\dev.ps1 check -Parallel` again from a normal PowerShell window. Pytest recreates the directory with permissions for the account running the check. The directory contains test scratch data, not Pogled Assist settings or user data. Do not remove the parent `%LOCALAPPDATA%\Temp` directory.
 
 ## Smart App Control blocks generated test executables
 

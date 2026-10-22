@@ -85,16 +85,16 @@ Standard lint, test, and package verification runs through `dev.ps1` in its Wind
 
 ```powershell
 .\dev.ps1 setup
-.\dev.ps1 check
+.\dev.ps1 check -Parallel
 ```
 
-Use `.\dev.ps1 check-fast` while iterating. Run the complete `.\dev.ps1 check` on the final diff before marking a pull request ready for review, then follow the applicable [manual checks](docs/UI_DEVELOPMENT.md#manual-windows-checks) for runtime changes. Fast checks do not satisfy final verification.
+Use `.\dev.ps1 check-fast` while iterating. Prefer `.\dev.ps1 check -Parallel` for complete verification on the final diff before marking a pull request ready for review. Use sequential `.\dev.ps1 check` when resource contention makes parallel stages slower or when diagnosing a failure; record the reason and timings. Both modes run the complete checks. See the [development guide](docs/DEVELOPMENT.md#verification-before-a-pull-request) for execution details, then follow the applicable [manual checks](docs/UI_DEVELOPMENT.md#manual-windows-checks) for runtime changes. Fast checks do not satisfy final verification.
 
 If the user defers execution or the required environment is unavailable, finish the authorized implementation and report "Implemented; verification not run" with the outstanding checks and limits. A handoff or [draft pull request](CONTRIBUTING.md#issue-linking-and-pull-request-contents) may precede verification; neither establishes readiness for review.
 
 ## Done means
 
-- `.\dev.ps1 check` exits with code 0 on the final diff before review, and the required `code-quality`, `tests`, and `windows-package` checks pass before merge.
+- The complete `.\dev.ps1 check -Parallel` (or sequential fallback) exits with code 0 on the final diff before review, and the required `code-quality`, `tests`, and `windows-package` checks pass before merge.
 - Every behavior change includes a pytest test that fails without the change.
 - Every maintenance matrix row that matches a changed path is updated in the same diff.
 - The final report and pull request name checks actually run, their results and limits; every applicable manual Windows/Tobii check is passed, failed, or Not run.

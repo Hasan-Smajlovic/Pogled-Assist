@@ -76,7 +76,7 @@ The repository uses one PowerShell entry point for setup and verification:
 
 ```powershell
 .\dev.ps1 setup
-.\dev.ps1 check
+.\dev.ps1 check -Parallel
 ```
 
 Development uses Python 3.10 for the application, Tobii Pro SDK, automated checks, and Windows packaging. See the [development guide](docs/DEVELOPMENT.md) for repair of a stale `.venv` and interpreter selection.

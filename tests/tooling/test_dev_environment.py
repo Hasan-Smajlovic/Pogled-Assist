@@ -307,6 +307,32 @@ if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" 
     assert ("--cov=pogled_assist" in args) == coverage
 
 
+def test_coverage_can_append_a_deferred_test_file(tmp_path):
+    result = _run_dev_driver(
+        tmp_path,
+        """
+function Get-DevPython { return "python-from-venv.exe" }
+function Invoke-ExternalCommand {
+    param([string]$FilePath, [string[]]$ArgumentList)
+    $ArgumentList | ConvertTo-Json -Compress |
+        Set-Content -LiteralPath (Join-Path $PSScriptRoot "arguments.json")
+}
+Invoke-TestSuite `
+    -WithCoverage `
+    -AppendCoverage `
+    -IgnorePaths @("tests/release/test_windows_installer.py") `
+    -Paths @("tests/release/test_windows_installer.py") `
+    -WorkerCount 1
+""",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = json.loads((tmp_path / "arguments.json").read_text(encoding="utf-8-sig"))
+    assert "--cov-append" in arguments
+    assert "--ignore=tests/release/test_windows_installer.py" in arguments
+    assert arguments[-1] == "tests/release/test_windows_installer.py"
+
+
 @pytest.mark.parametrize("coverage", [False, True])
 def test_test_failure_restores_environment_and_reports_failed_stage(tmp_path, coverage):
     result = _run_dev_driver(
@@ -364,6 +390,93 @@ def test_full_check_rejects_manual_partial_test_selection(tmp_path):
 
     assert result.returncode != 0
     assert "coverage and check always run the full suite" in result.stderr
+
+
+@pytest.mark.parametrize("failed_action", ["none", "coverage", "package", "installer"])
+def test_parallel_check_defers_installer_tests_until_package_finishes(tmp_path, failed_action):
+    if failed_action == "installer":
+        (tmp_path / "fail-installer-tests").write_text("fail", encoding="utf-8")
+    (tmp_path / "child.ps1").write_text(
+        """
+param([string]$Action, [int]$Workers, [switch]$ParallelCoverageSubset)
+if ($Workers -ne 2) { throw "Worker option was lost" }
+if (($Action -eq "coverage") -ne $ParallelCoverageSubset) {
+    throw "Only the coverage stage should defer installer integration tests"
+}
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$Action.started") -Value "started"
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while (-not ((Test-Path (Join-Path $PSScriptRoot "coverage.started")) -and
+             (Test-Path (Join-Path $PSScriptRoot "package.started")))) {
+    if ([DateTime]::UtcNow -gt $deadline) { throw "Stages did not overlap" }
+    Start-Sleep -Milliseconds 20
+}
+[Console]::Out.WriteLine("$Action output " + ('x' * 131072))
+[Console]::Error.WriteLine("$Action diagnostic " + ('y' * 131072))
+Start-Sleep -Milliseconds 350
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$Action.finished") -Value "finished"
+if ($Action -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
+""".replace("FAILED_ACTION", failed_action),
+        encoding="utf-8",
+    )
+    result = _run_dev_driver(
+        tmp_path,
+        """
+$Workers = 2
+function Invoke-TestSuite {
+    param([switch]$WithCoverage, [switch]$AppendCoverage, [string[]]$Paths)
+    if (-not $WithCoverage -or -not $AppendCoverage) { throw "Coverage append options were lost" }
+    if ($Paths.Count -ne 1 -or $Paths[0] -ne "tests/release/test_windows_installer.py") {
+        throw "Unexpected deferred test selection"
+    }
+    foreach ($action in @("coverage", "package")) {
+        if (-not (Test-Path (Join-Path $PSScriptRoot "$action.finished"))) {
+            throw "Installer tests ran before $action finished"
+        }
+    }
+    Set-Content -LiteralPath (Join-Path $PSScriptRoot "installer-tests.finished") -Value "finished"
+    if (Test-Path (Join-Path $PSScriptRoot "fail-installer-tests")) {
+        throw "Synthetic installer test failure"
+    }
+}
+try {
+    Invoke-ParallelCheck -ScriptPath (Join-Path $PSScriptRoot "child.ps1") -StatusIntervalMilliseconds 100
+} finally {
+    $StageTimings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot "timings.json")
+}
+""",
+    )
+    assert (result.returncode == 0) == (failed_action == "none"), result.stdout + result.stderr
+    timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8-sig"))
+    statuses = {entry["Name"]: entry["Status"] for entry in timings}
+    assert statuses == {
+        "Tests and coverage": "FAILED" if failed_action == "coverage" else "passed",
+        "Windows package and installer smoke tests": (
+            "FAILED" if failed_action == "package" else "passed"
+        ),
+        "Installer integration tests and coverage": (
+            "FAILED" if failed_action == "installer" else "passed"
+        ),
+    }
+    assert all(entry["Seconds"] > 0 for entry in timings)
+    assert (tmp_path / "installer-tests.finished").exists()
+    (log_root,) = (tmp_path / "dist").glob("check-*")
+    for action in ("coverage", "package"):
+        assert (tmp_path / f"{action}.finished").exists()
+        assert f"{action} output " in (log_root / f"{action}.log").read_text()
+        assert f"{action} diagnostic " in (log_root / f"{action}.stderr.log").read_text()
+    assert "Stages did not overlap" not in result.stderr
+    status_lines = [line for line in result.stdout.splitlines() if line.startswith("Running:")]
+    assert len(status_lines) >= 2
+    assert any("Tests and coverage (" in line for line in status_lines)
+    assert any("Windows package and installer smoke tests (" in line for line in status_lines)
+    assert all("elapsed)" in line and "/2 finished" in line for line in status_lines)
+
+
+def test_parallel_option_is_rejected_outside_full_check(tmp_path):
+    result = _run_dev_script(tmp_path, "test", "-Parallel")
+
+    assert result.returncode != 0
+    assert "-Parallel is supported only by check" in result.stderr
 
 
 @pytest.mark.parametrize("selected", ["valid.ps1", "broken.ps1", "../outside.ps1"])

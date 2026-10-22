@@ -10,6 +10,9 @@ param(
     [string[]]$UiGroup = @(),
     [ValidateSet(0, 1, 2)]
     [int]$Workers = 0,
+    [switch]$Parallel,
+    [Parameter(DontShow)]
+    [switch]$ParallelCoverageSubset,
     [string[]]$TestPaths = @(),
     [string]$BaseRef = "origin/development"
 )
@@ -30,6 +33,12 @@ if ($TestPaths.Count -gt 0 -and $Action -notin @("test", "test-ui")) {
 }
 if (($UiProfile -ne "core" -or $UiGroup.Count -gt 0) -and $Action -ne "ui") {
     throw "-UiProfile and -UiGroup are supported only by ui."
+}
+if ($Parallel -and $Action -ne "check") {
+    throw "-Parallel is supported only by check."
+}
+if ($ParallelCoverageSubset -and $Action -ne "coverage") {
+    throw "-ParallelCoverageSubset is supported only by the internal coverage check."
 }
 
 function Invoke-CheckStage {
@@ -220,7 +229,7 @@ function Install-DevEnvironment {
 
     & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1") -Install
 
-    Write-Output "Development environment is ready. Run .\dev.ps1 check."
+    Write-Output "Development environment is ready. Run .\dev.ps1 check -Parallel."
 }
 
 function Test-DevEnvironmentMatches {
@@ -279,7 +288,9 @@ function Invoke-TestSuite {
     param(
         [switch]$UiOnly,
         [switch]$WithCoverage,
+        [switch]$AppendCoverage,
         [string[]]$Paths = @(),
+        [string[]]$IgnorePaths = @(),
         [int]$WorkerCount = $Workers
     )
 
@@ -307,6 +318,12 @@ function Invoke-TestSuite {
             "--cov-report=term-missing:skip-covered",
             "--cov-report=html:$coverageHtml"
         )
+        if ($AppendCoverage) {
+            $arguments += "--cov-append"
+        }
+    }
+    foreach ($path in $IgnorePaths) {
+        $arguments += "--ignore=$path"
     }
     $arguments += $Paths
 
@@ -370,12 +387,143 @@ function Invoke-FastCheck {
     } else {
         Write-Host "No changed paths require tests."
     }
-    Write-Host "Coverage and Windows package: skipped by check-fast. Run .\dev.ps1 check before a PR."
+    Write-Host "Coverage and Windows package: skipped by check-fast. Run .\dev.ps1 check -Parallel before a PR."
 }
 
 function Invoke-PackageBuild {
     $python = Get-DevPython
     & (Join-Path $RepoRoot "scripts\release\build_windows_package.ps1") -PythonPath $python
+}
+
+function Invoke-ParallelCheck {
+    param(
+        [string]$ScriptPath = (Join-Path $RepoRoot "dev.ps1"),
+        [ValidateRange(100, 60000)]
+        [int]$StatusIntervalMilliseconds = 5000
+    )
+
+    $logRoot = Join-Path $RepoRoot ("dist\check-{0}" -f [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+    $shellName = if ($PSEdition -eq "Desktop") { "powershell.exe" } else { "pwsh.exe" }
+    $stages = [Collections.Generic.List[object]]::new()
+    $failed = [Collections.Generic.List[string]]::new()
+    try {
+        foreach ($definition in @(
+            @{
+                Action = "coverage"
+                Name = "Tests and coverage"
+                ParallelCoverageSubset = $true
+            },
+            @{
+                Action = "package"
+                Name = "Windows package and installer smoke tests"
+                ParallelCoverageSubset = $false
+            }
+        )) {
+            $process = [Diagnostics.Process]::new()
+            $stage = [PSCustomObject]@{
+                Name = $definition.Name
+                Process = $process
+                Timer = [Diagnostics.Stopwatch]::new()
+                Started = $false
+                Finished = $false
+                OutputFile = $null
+                ErrorFile = $null
+                OutputTask = $null
+                ErrorTask = $null
+                Log = Join-Path $logRoot ($definition.Action + ".log")
+                ErrorLog = Join-Path $logRoot ($definition.Action + ".stderr.log")
+            }
+            $stages.Add($stage)
+            $stage.OutputFile = [IO.File]::Create($stage.Log)
+            $stage.ErrorFile = [IO.File]::Create($stage.ErrorLog)
+            $stageArguments = "{0} -Workers {1}" -f $definition.Action, $Workers
+            if ($definition.ParallelCoverageSubset) {
+                $stageArguments += " -ParallelCoverageSubset"
+            }
+            $command = "try {{ & '{0}' {1}; exit 0 }} catch {{ Write-Error `$_ -ErrorAction Continue; exit 1 }}" -f @(
+                $ScriptPath.Replace("'", "''"), $stageArguments
+            )
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+            $process.StartInfo.FileName = Join-Path $PSHOME $shellName
+            $process.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand $encoded"
+            $process.StartInfo.WorkingDirectory = $RepoRoot
+            $process.StartInfo.UseShellExecute = $false
+            $process.StartInfo.CreateNoWindow = $true
+            $process.StartInfo.RedirectStandardOutput = $true
+            $process.StartInfo.RedirectStandardError = $true
+            Write-Host "Starting: $($stage.Name); logs: $($stage.Log), $($stage.ErrorLog)"
+            $stage.Timer.Start()
+            if (-not $process.Start()) { throw "Could not start $($stage.Name)." }
+            $stage.Started = $true
+            $stage.OutputTask = $process.StandardOutput.BaseStream.CopyToAsync($stage.OutputFile)
+            $stage.ErrorTask = $process.StandardError.BaseStream.CopyToAsync($stage.ErrorFile)
+        }
+        $statusTimer = [Diagnostics.Stopwatch]::StartNew()
+        $nextStatusMilliseconds = 0
+        while (@($stages | Where-Object { -not $_.Finished }).Count -gt 0) {
+            foreach ($stage in $stages) {
+                if ($stage.Finished -or -not $stage.Process.HasExited) { continue }
+                $stage.Timer.Stop()
+                $status = "passed"
+                try {
+                    foreach ($task in @($stage.OutputTask, $stage.ErrorTask)) {
+                        if (-not $task.Wait(10000)) { throw "Timed out draining check output." }
+                    }
+                    if ($stage.Process.ExitCode -ne 0) { $status = "FAILED" }
+                } catch {
+                    $status = "FAILED"
+                    Write-Warning "$($stage.Name): $_"
+                }
+                $stage.Finished = $true
+                $StageTimings.Add([PSCustomObject]@{
+                    Name = $stage.Name
+                    Seconds = $stage.Timer.Elapsed.TotalSeconds
+                    Status = $status
+                })
+                if ($status -ne "passed") { $failed.Add($stage.Name) }
+                Write-Host ("Finished: {0} ({1}, {2:N1}s); logs: {3}, {4}" -f @(
+                    $stage.Name, $status, $stage.Timer.Elapsed.TotalSeconds, $stage.Log, $stage.ErrorLog
+                ))
+            }
+            $active = @($stages | Where-Object { -not $_.Finished })
+            if ($active.Count -gt 0) {
+                if ($statusTimer.Elapsed.TotalMilliseconds -ge $nextStatusMilliseconds) {
+                    $details = foreach ($stage in $active) {
+                        "{0} ({1:mm\:ss} elapsed)" -f $stage.Name, $stage.Timer.Elapsed
+                    }
+                    # Plain lines remain visible in captured agent output as well as terminals.
+                    Write-Host ("Running: {0} | {1}/{2} finished" -f @(
+                        ($details -join "; "), ($stages.Count - $active.Count), $stages.Count
+                    ))
+                    $nextStatusMilliseconds = $statusTimer.Elapsed.TotalMilliseconds + $StatusIntervalMilliseconds
+                }
+                Start-Sleep -Milliseconds 200
+            }
+        }
+        try {
+            Invoke-CheckStage -Name "Installer integration tests and coverage" -Command {
+                Invoke-TestSuite `
+                    -WithCoverage `
+                    -AppendCoverage `
+                    -Paths @("tests/release/test_windows_installer.py")
+            }
+        } catch {
+            $failed.Add("Installer integration tests and coverage")
+        }
+        if ($failed.Count -gt 0) { throw "Failed checks: $($failed -join ', '). See logs in $logRoot" }
+    } finally {
+        foreach ($stage in $stages) {
+            if ($stage.Started -and -not $stage.Process.HasExited) {
+                & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $stage.Process.Id /T /F | Out-Null
+                $null = $stage.Process.WaitForExit(5000)
+            }
+            foreach ($stream in @($stage.OutputFile, $stage.ErrorFile)) {
+                if ($null -ne $stream) { $stream.Dispose() }
+            }
+            $stage.Process.Dispose()
+        }
+    }
 }
 
 function Write-Help {
@@ -399,7 +547,8 @@ Pogled Assist development commands
   .\dev.ps1 check-fast  Lint and relevant changed tests, without coverage or package
   .\dev.ps1 check-fast -BaseRef origin/development    Override the comparison ref
   .\dev.ps1 check-fast -Workers 2    Use two workers even for a small selection
-  .\dev.ps1 check       Run all local checks, including the Windows package
+  .\dev.ps1 check       Run all local checks sequentially, including the Windows package
+  .\dev.ps1 check -Parallel    After lint, run coverage and packaging with status every 5 seconds
   .\dev.ps1 test -Workers 1    Run tests sequentially (default without coverage: two)
   .\dev.ps1 coverage -Workers 2    Opt in to parallel coverage (default: one process)
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
@@ -447,7 +596,15 @@ try {
             Invoke-CheckStage -Name "UI tests" -Command { Invoke-TestSuite -UiOnly -Paths $TestPaths }
         }
         "coverage" {
-            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+            if ($ParallelCoverageSubset) {
+                Invoke-CheckStage -Name "Tests and coverage" -Command {
+                    Invoke-TestSuite `
+                        -WithCoverage `
+                        -IgnorePaths @("tests/release/test_windows_installer.py")
+                }
+            } else {
+                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+            }
         }
         "lint" {
             Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
@@ -459,8 +616,12 @@ try {
         }
         "check" {
             Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
-            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
-            Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
+            if ($Parallel) {
+                Invoke-ParallelCheck
+            } else {
+                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+                Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
+            }
         }
         "check-fast" {
             Invoke-FastCheck

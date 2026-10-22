@@ -43,8 +43,8 @@ Run these commands in Windows PowerShell. The automated checks do not require a 
 | `.\dev.ps1 check-fast` | Not required | Complete Python lint/format/compilation and relevant changed tests; no coverage or package |
 | `.\dev.ps1 check-fast -BaseRef origin/development` | Not required | Fast checks using an explicit Git comparison ref |
 | `.\dev.ps1 check-fast -Workers 2` | Not required | Fast checks with two workers even for a small selection |
-| `.\dev.ps1 check` | Not required | Lint, tests, coverage, package build, and frozen executable smoke test |
-| `.\dev.ps1 check -Workers 1` | Not required | The same complete verification with sequential tests |
+| `.\dev.ps1 check` | Not required | The same complete checks as `check -Parallel`, with stages run sequentially |
+| `.\dev.ps1 check -Parallel` | Not required | Lint, then parallel coverage and packaging, followed by the installer integration tests |
 | `.\dev.ps1 coverage -Workers 2` | Not required | Explicit parallel coverage measurement; slower Qt runs are possible |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
 
@@ -56,7 +56,7 @@ Model preparation, provenance, benchmarks, and evaluation commands are maintaine
 
 ## Verification before a pull request
 
-During development, run `.\dev.ps1 check-fast` after each meaningful change and repeat it after fixes. Run `.\dev.ps1 check` against the final diff before marking a pull request ready for review; rerun it after subsequent changes. It uses Python 3.10 and covers the same three categories enforced by the required `code-quality`, `tests`, and `windows-package` pull request checks.
+During development, run `.\dev.ps1 check-fast` after each meaningful change and repeat it after fixes. Prefer `.\dev.ps1 check -Parallel` against the final diff before marking a pull request ready for review; rerun it after subsequent changes. It uses Python 3.10 and covers the same three categories enforced by the required `code-quality`, `tests`, and `windows-package` pull request checks.
 
 An implementation handoff or draft pull request can precede complete verification. Record unfinished work and skipped checks as Not run with a reason; neither handoff nor draft status establishes readiness for review. When the user defers execution, finish the implementation and documentation, inspect the diff, and report "Implemented; verification not run" with the outstanding checks. Required CI checks and human review remain prerequisites for merge, as defined in [CONTRIBUTING.md](../CONTRIBUTING.md#review-and-merge-responsibility).
 
@@ -69,6 +69,8 @@ Selection rules live in `scripts/checks/select_tests.py`. Changes to gaze, speec
 Tests without coverage default to two pytest-xdist processes with `--dist=loadfile`, keeping each test file on one worker. Each worker has its own QApplication and temporary directories. With the default `-Workers 0`, fast selections of fewer than four test files use one process to avoid startup overhead. `-Workers 1` disables parallel execution for debugging; `-Workers 2` uses two processes even for a small selection.
 
 The full `coverage` and `check` commands default to one test process because parallel coverage slowed repeated Qt sidebar interactions on Windows/Python 3.10. `-Workers 2` explicitly enables parallel coverage; worker results are combined before enforcing the same 60 percent floor and writing the HTML report. PR CI runs every test with coverage in two worker processes, grouped by file, and lists the 30 slowest tests so suite changes can be compared run to run. Its existing quality, test and packaging jobs continue to run independently.
+
+`check -Parallel` keeps lint first, then overlaps coverage for the suite except `tests/release/test_windows_installer.py` with Windows packaging. Those installer tests run after packaging and append their coverage to the same report. The installer tests and package smoke checks both inspect running application processes and use the installer lock, so they must not overlap. All tests and packaging still have to pass; a failure waits for the other running stage and the deferred installer tests. Test workers retain the same default and `-Workers` override. Each overlapping stage writes separate stdout and stderr logs under a unique `dist/check-<id>/` directory and prints their paths, stage durations and total elapsed time. While either parallel stage runs, a status line every five seconds lists the active stages, their elapsed times and the number of finished stages. These lines also appear in captured agent output; elapsed time indicates a running process, not a guarantee of progress. The stages share CPU, memory and disk, so parallel execution is not guaranteed to be faster on every machine. Prefer this mode first and compare stage and total timings; use plain sequential `check` if resource contention slows the run or to diagnose a failure, and record the reason. `-Parallel` overlaps stages; it does not enable extra pytest workers. Keep the default test worker count unless measurements justify an override. Run only one check or package command per checkout at a time, and keep source files unchanged during verification.
 
 For manual focused work, `test` and `test-ui` accept `-TestPaths` (one or more pytest paths); add `-Workers 1` for a small selection. `coverage`, `check` and `check-fast` reject `-TestPaths` so a partial selection cannot be mistaken for their documented checks.
 
