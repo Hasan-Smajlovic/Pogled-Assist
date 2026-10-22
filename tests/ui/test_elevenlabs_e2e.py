@@ -213,7 +213,9 @@ def test_speech_activity_stays_inside_aligned_button_without_moving_targets(spee
         qtbot.wait(1)
         assert button.geometry().top() == window._phrases_button.geometry().top()
         assert button.geometry().bottom() == window._phrases_button.geometry().bottom()
-        assert targets == {action: item.geometry() for action, item in window._action_buttons.items()}
+        assert targets == {
+            action: item.geometry() for action, item in window._action_buttons.items()
+        }
         assert button.rect().contains(activity.geometry())
         assert activity.isVisible() == (state in ("preparing", "speaking"))
         point = activity.mapTo(window, activity.rect().center())

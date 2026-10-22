@@ -98,7 +98,7 @@ class CaptureDiagnostics:
             service.entries = [
                 {
                     **deepcopy(entry),
-                    "state": "interrupted",
+                    "state": "error" if reason == "writer_error" else "interrupted",
                     "complete": False,
                     "reason": reason,
                     "session_end_present": False,

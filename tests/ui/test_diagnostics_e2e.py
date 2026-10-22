@@ -20,7 +20,7 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.fixture
-def recording_ui(qtbot, tmp_path, monkeypatch):
+def recording_ui(qtbot, qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(
         build_info,
         "_identity",
@@ -28,9 +28,9 @@ def recording_ui(qtbot, tmp_path, monkeypatch):
     )
     writer = LogWriter()
     recordings = DiagnosticRecordings(
-        RecordingStore(tmp_path / "recordings"), writer=lambda: writer
+        RecordingStore(tmp_path / "recordings"), qapp, writer=lambda: writer
     )
-    reports = GazeCheckReports(GazeCheckStore(tmp_path / "results"))
+    reports = GazeCheckReports(GazeCheckStore(tmp_path / "results"), qapp)
     context = recording_context(
         {"eye_tracking_policy": "both", "selection_pause_ms": 250, "dwell_ms": 850},
         {},
@@ -43,9 +43,19 @@ def recording_ui(qtbot, tmp_path, monkeypatch):
     qtbot.waitUntil(lambda: not recordings.loading)
     yield window, recordings, reports, writer, context
     window.close()
-    recordings.shutdown()
+    dispose_recordings(recordings, qtbot)
     reports.shutdown()
+    reports.deleteLater()
     assert writer.stop()
+
+
+def dispose_recordings(recordings, qtbot):
+    recordings.shutdown()
+    # Production services have a Qt owner. Keep that ownership until a blocked
+    # file worker exits, so its last Python reference cannot delete Qt on disk's thread.
+    if recordings._worker is not None:
+        qtbot.waitUntil(lambda: not recordings._worker.is_alive(), timeout=1000)
+    recordings.deleteLater()
 
 
 def test_window_close_keeps_recording_active_and_history_survives_restart(recording_ui, qtbot):
@@ -69,11 +79,13 @@ def test_window_close_keeps_recording_active_and_history_survives_restart(record
     assert reopened._tabs.currentIndex() == 1
     assert recordings.entries[0]["id"] == key
     assert recordings.store.inspect(key)["analysis"]["events"]["after_window_closed"] == 1
-    restarted = DiagnosticRecordings(RecordingStore(recordings.store.directory))
+    restarted = DiagnosticRecordings(
+        RecordingStore(recordings.store.directory), recordings.parent()
+    )
     restarted.load()
     qtbot.waitUntil(lambda: not restarted.loading)
     assert restarted.entries[0]["complete"]
-    restarted.shutdown()
+    dispose_recordings(restarted, qtbot)
 
 
 def test_optional_report_export_exact_path_cancel_failure_and_retry(
@@ -222,9 +234,10 @@ def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaz
         assert badge.focusPolicy() == Qt.NoFocus
         assert badge.parentWidget().rect().contains(badge.geometry())
     assert speech._recording_badge.text() == "● Snimanje dijagnostike · 01:59"
-    assert speech._recording_badge.fontMetrics().horizontalAdvance(
-        speech._recording_badge.text()
-    ) <= speech._recording_badge.contentsRect().width()
+    assert (
+        speech._recording_badge.fontMetrics().horizontalAdvance(speech._recording_badge.text())
+        <= speech._recording_badge.contentsRect().width()
+    )
     assert button.geometry() == geometry
     assert targets == {
         action: widget.geometry() for action, widget in speech._action_buttons.items()
@@ -338,7 +351,8 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     speech._open_letter_dialog(0)
     qtbot.wait(1)
     letter_targets = {
-        action: speech._action_buttons[action].geometry() for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry()
+        for action in speech._dialogs.letter_actions
     }
     badges = [
         hotbar._keyboard_window._recording_badge,
@@ -354,10 +368,13 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     hotbar._recording_changed()
     qtbot.wait(1)
     assert letter_targets == {
-        action: speech._action_buttons[action].geometry() for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry()
+        for action in speech._dialogs.letter_actions
     }
     speech._close_dialog()
-    monkeypatch.setattr(toolbar.SettingsWindow, "_sync_startup_setting_from_windows", lambda _: None)
+    monkeypatch.setattr(
+        toolbar.SettingsWindow, "_sync_startup_setting_from_windows", lambda _: None
+    )
     hotbar._open_settings()
     assert "Završavam snimak…" in hotbar._settings_window._recording_badge.text()
     hotbar._open_gaze_check()

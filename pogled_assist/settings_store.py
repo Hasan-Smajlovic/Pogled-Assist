@@ -242,7 +242,7 @@ def _coerce_bool(value: Any, default: bool) -> bool:
 def _coerce_int(value: Any, default: int) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 

@@ -264,7 +264,7 @@ class MessageTrackingHeader(QWidget):
         self.notice.setGeometry(0, 0, self.width(), 38)
 
 
-def dialog_tracking_header(title: QLabel, parent: QWidget) -> tuple[QWidget, TrackingNoticeWidget]:
+def dialog_tracking_header(title: QWidget, parent: QWidget) -> tuple[QWidget, TrackingNoticeWidget]:
     header = QWidget(parent)
     header.setFixedHeight(60)
     layout = QHBoxLayout(header)

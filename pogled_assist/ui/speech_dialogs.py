@@ -139,8 +139,10 @@ class SpeechDialogs(QObject):
         self.letter_grid.setContentsMargins(0, 0, 0, 0)
         self.letter_grid.setHorizontalSpacing(16)
         self.letter_grid.setVerticalSpacing(16)
-        header, self.letter_notice = dialog_tracking_header(self.letter_title, self.letter)
-        letter_layout.addWidget(self._recording_header(header, self.letter))
+        header, self.letter_notice = dialog_tracking_header(
+            self._recording_title(self.letter_title, self.letter), self.letter
+        )
+        letter_layout.addWidget(header)
         letter_layout.addWidget(self.letter_grid_host, 1)
         self.letter.finished.connect(
             lambda _result, dialog=self.letter: self._dialog_finished(dialog)
@@ -175,8 +177,10 @@ class SpeechDialogs(QObject):
         )
         confirm_actions.addWidget(cancel, 1)
         confirm_actions.addWidget(self.confirm_button, 1)
-        header, self.confirm_notice = dialog_tracking_header(self.confirm_title, self.confirm)
-        confirm_layout.addWidget(self._recording_header(header, self.confirm))
+        header, self.confirm_notice = dialog_tracking_header(
+            self._recording_title(self.confirm_title, self.confirm), self.confirm
+        )
+        confirm_layout.addWidget(header)
         confirm_layout.addWidget(self.confirm_copy)
         confirm_layout.addStretch(1)
         confirm_layout.addLayout(confirm_actions)
@@ -273,6 +277,19 @@ class SpeechDialogs(QObject):
         self.sleep.finished.connect(
             lambda _result, dialog=self.sleep: self._dialog_finished(dialog)
         )
+
+    def _recording_title(self, title: QLabel, parent: QWidget) -> QWidget:
+        heading = QWidget(parent)
+        heading.setFixedHeight(60)
+        layout = QVBoxLayout(heading)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(title, 1)
+        badge = RecordingBadge(heading)
+        badge.setFixedHeight(24)
+        self.recording_badges.append(badge)
+        layout.addWidget(badge)
+        return heading
 
     def _recording_header(self, title: QWidget, parent: QWidget) -> QWidget:
         header = QWidget(parent)

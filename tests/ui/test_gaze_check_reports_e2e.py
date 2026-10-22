@@ -272,7 +272,9 @@ def test_late_export_status_does_not_attach_to_a_new_report(check, qtbot, monkey
     window, reports, _now = check
     complete_precision(window, qtbot)
     monkeypatch.setattr(
-        gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: (str(tmp_path / "old.zip"), "")
+        gaze_check_history.QFileDialog,
+        "getSaveFileName",
+        lambda *_a: (str(tmp_path / "old.zip"), ""),
     )
     monkeypatch.setattr(reports, "export", lambda *_args: "previous-report-export")
     window._export_button.click()

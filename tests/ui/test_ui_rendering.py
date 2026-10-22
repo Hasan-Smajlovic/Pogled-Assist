@@ -21,6 +21,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     def check_state(session, widget, name, title, **kwargs):
         encountered.add(name)
+        if name == "diagnostics-error":
+            assert "Razlog: Greška zapisivanja" in widget._detail.text()
+            assert "Greške: 1" in widget._detail.text()
         if name == "gaze-check-one-eye-free":
             assert widget._phase == "free"
             assert widget._target.gaze_point is not None

@@ -136,6 +136,15 @@ def test_eye_and_edge_settings_validate_types_clamp_and_snap_to_steps(
     assert getattr(load_app_settings()[0], field) == expected
 
 
+@pytest.mark.parametrize("field,expected", [("eye_tracking_hold_ms", 150), ("edge_hold_ms", 120)])
+@pytest.mark.parametrize("literal", ["1e309", "-1e309"])
+def test_overflowing_timing_numbers_load_defaults(monkeypatch, tmp_path, field, expected, literal):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(f'{{"gaze":{{"{field}":{literal}}}}}', encoding="utf-8")
+    assert getattr(load_app_settings()[0], field) == expected
+
+
 def test_new_gaze_settings_default_in_old_files_and_survive_restart(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
     gaze, speech = load_app_settings()
@@ -146,7 +155,11 @@ def test_new_gaze_settings_default_in_old_files_and_survive_restart(monkeypatch,
     path.write_text('{"gaze":{"selection_pause_ms":500,"dwell_ms":700}}', encoding="utf-8")
     gaze, speech = load_app_settings()
     assert (gaze.selection_pause_ms, gaze.dwell_ms) == (500, 700)
-    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms, gaze.edge_hold_ms) == ("both", 150, 120)
+    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms, gaze.edge_hold_ms) == (
+        "both",
+        150,
+        120,
+    )
     gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms = "hold", 400
     for duration in (0, 240):
         gaze.edge_hold_ms = duration

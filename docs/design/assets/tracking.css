@@ -47,6 +47,9 @@
 .tracking-modal { width: 1000px; height: 420px; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; border: 2px solid #67b7dc; border-radius: 12px; background: #111318; box-shadow: 0 18px 80px #0009; }
 .tracking-modal-heading { flex: 0 0 60px; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 16px; align-items: center; }
 .tracking-modal h2 { margin: 0; font-size: 26px; font-weight: 500; }
+.tracking-dialog-title { display:grid; grid-template-rows:36px 24px; height:60px; }
+.tracking-dialog-title .recording-slot { min-height:24px; }
+.tracking-dialog-title .recording-badge { padding:1px 4px; line-height:20px; }
 #tracking-dialog-feedback { height: 60px; overflow: hidden; }
 .tracking-modal .tracking-eye { padding: 6px 4px; }
 .tracking-modal .letter-grid { flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(120px, 1fr)); gap: 14px; }

@@ -552,9 +552,7 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             self.speech._recording_badge.set_status(
                 {"id": "preview", "busy": busy, "state": state, "complete": complete}
             )
-            self.capture(
-                self.speech, f"speech-recording-{state}", f"Speech recording: {state}"
-            )
+            self.capture(self.speech, f"speech-recording-{state}", f"Speech recording: {state}")
         self.speech._recording_badge.set_status(None)
         self.capture_speech_voices()
         self.capture_tracking_feedback()
@@ -622,6 +620,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             "Speech letters: tracking interrupted",
         )
         self.speech._close_dialog()
+        self.speech._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
         self.speech._open_clear_dialog()
         self.speech.set_tracking_notice(
             TrackingNotice(
@@ -632,9 +633,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.capture_dialog(
             self.speech._dialogs.confirm,
             "speech-tracking-confirm",
-            "Clear message: tracking interrupted",
+            "Clear message: recording and tracking interrupted",
         )
         self.speech._close_dialog()
+        self.speech._recording_badge.set_status(None)
         self.speech.set_tracking_notice(None, immediate=True)
         self.speech._input.clear()
 
