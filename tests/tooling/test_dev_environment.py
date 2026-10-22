@@ -191,25 +191,27 @@ def test_analyzer_setup_registers_missing_gallery_and_reuses_download(tmp_path, 
         {
             "install": {
                 "body": r"""
-$script:Registered = REGISTERED
-$script:Calls = [System.Collections.Generic.List[string]]::new()
+$state = @{
+    Registered = REGISTERED
+    Calls = [System.Collections.Generic.List[string]]::new()
+}
 function Get-PSRepository {
     param($Name, $ErrorAction)
-    if ($script:Registered) { [pscustomobject]@{ Name = "PSGallery" } }
+    if ($state.Registered) { [pscustomobject]@{ Name = "PSGallery" } }
 }
 function Register-PSRepository {
     param([switch]$Default, $ErrorAction)
     if (-not $Default) { throw "Expected the default PowerShell repository" }
-    $script:Calls.Add("register")
-    $script:Registered = $true
+    $state.Calls.Add("register")
+    $state.Registered = $true
 }
 function Save-Module {
     param($Name, $RequiredVersion, $Path, $Repository, [switch]$Force, $ErrorAction)
-    if (-not $script:Registered) { throw "Unable to find repository 'PSGallery'" }
+    if (-not $state.Registered) { throw "Unable to find repository 'PSGallery'" }
     if ($Name -ne "PSScriptAnalyzer" -or $RequiredVersion -ne "1.25.0" -or $Repository -ne "PSGallery") {
         throw "Unexpected analyzer source or version"
     }
-    $script:Calls.Add("save")
+    $state.Calls.Add("save")
     $directory = Join-Path $Path "$Name\$RequiredVersion"
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $directory "$Name.psd1") -Value "@{}"
@@ -219,7 +221,7 @@ $installer = Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer
 function Get-PSRepository { throw "A cached analyzer must not contact PSGallery" }
 function Save-Module { throw "A cached analyzer must not be downloaded again" }
 & $installer
-$script:Calls -join ","
+$state.Calls -join ","
 """.replace("REGISTERED", "$true" if registered else "$false")
             }
         },
