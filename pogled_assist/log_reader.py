@@ -99,6 +99,20 @@ class _SessionReader:
             isinstance(count, int) and count > 0 for count in loss.values()
         )
 
+    def _manual_footer_valid(self) -> bool:
+        health = self.recording_health
+        if not isinstance(health, dict) or set(health) != {
+            "dropped",
+            "writer_errors",
+            "bounded_snapshots",
+        }:
+            return False
+        dropped = health["dropped"]
+        if not isinstance(dropped, dict):
+            return False
+        counts = (*dropped.values(), health["writer_errors"], health["bounded_snapshots"])
+        return all(type(count) is int and count >= 0 for count in counts)
+
     def result(self) -> dict:
         started = "session_start" in self.counts
         ended = "session_end" in self.counts
@@ -113,7 +127,7 @@ class _SessionReader:
                 not health.get("writer_errors"),
                 not health.get("bounded_snapshots"),
                 not self.manual_trace
-                or (self.end_reason in {"manual", "time"} and self.recording_health is not None),
+                or (self.end_reason in {"manual", "time"} and self._manual_footer_valid()),
             )
         )
         return {

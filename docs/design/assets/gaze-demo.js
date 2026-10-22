@@ -15,67 +15,94 @@ window.createReferenceGaze = () => {
   let clickFromGaze = false;
   let lastGazeClick = { target: null, time: 0 };
   let blockedGaze = null;
-  function updateGazeTarget(now) {
-    const candidate = gazeTarget || blockedGaze;
-    if (candidate?.isConnected && !candidate.disabled && candidate.getClientRects().length && gazePoint) {
-      const rect = candidate.getBoundingClientRect();
-      const margin = Math.min(GAZE_EDGE_MARGIN, rect.width / 4, rect.height / 4);
-      const near = gazePoint.x >= rect.left - margin && gazePoint.x <= rect.right + margin && gazePoint.y >= rect.top - margin && gazePoint.y <= rect.bottom + margin;
-      const speechControl = candidate.hasAttribute('data-action') || candidate.hasAttribute('data-edge-control');
-      if (gazeButton !== candidate && speechControl && near) {
-        gazeAwayStart ??= now;
-        if (now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) return;
-      } else if (gazeButton === candidate && gazeAwayStart !== null && now - gazeAwayStart < GAZE_LEAVE_GRACE_MS) {
-        gazeStart += now - gazeLastSeen;
-        gazeAwayStart = null;
-        gazeLastSeen = now;
-        return;
-      }
+  function enabledButton(button) {
+    return button?.isConnected && !button.disabled;
+  }
+  function usableButton(button) {
+    return enabledButton(button) && button.getClientRects().length;
+  }
+  function nearButton(button) {
+    const rect = button.getBoundingClientRect();
+    const margin = Math.min(GAZE_EDGE_MARGIN, rect.width / 4, rect.height / 4);
+    return gazePoint.x >= rect.left - margin && gazePoint.x <= rect.right + margin
+      && gazePoint.y >= rect.top - margin && gazePoint.y <= rect.bottom + margin;
+  }
+  function resumeNearTarget(candidate, now) {
+    if (gazeButton !== candidate || gazeAwayStart === null) return false;
+    if (edgeExpired(now)) return false;
+    gazeStart += now - gazeLastSeen;
+    gazeAwayStart = null;
+    gazeLastSeen = now;
+    return true;
+  }
+  function holdNearTarget(candidate, now) {
+    if (!usableButton(candidate) || !gazePoint) return false;
+    const speechControl = candidate.hasAttribute('data-action') || candidate.hasAttribute('data-edge-control');
+    const leaving = gazeButton !== candidate && speechControl;
+    if (leaving && nearButton(candidate)) {
+      gazeAwayStart ??= now;
+      return now - gazeAwayStart < GAZE_LEAVE_GRACE_MS;
     }
+    return resumeNearTarget(candidate, now);
+  }
+  function edgeExpired(now) {
+    return gazeAwayStart !== null && now - gazeAwayStart >= GAZE_LEAVE_GRACE_MS;
+  }
+  function updateGazeTarget(now) {
+    if (holdNearTarget(gazeTarget || blockedGaze, now)) return;
     if (gazeButton === gazeTarget && gazeAwayStart === null) return;
-    if (gazeAwayStart !== null && now - gazeAwayStart >= GAZE_LEAVE_GRACE_MS) blockedGaze = null;
+    if (edgeExpired(now)) blockedGaze = null;
     resetGaze();
     if (gazeButton === blockedGaze) return;
     blockedGaze = null;
-    if (!gazeButton?.isConnected || gazeButton.disabled || !gazeButton.getClientRects().length) return;
+    if (!usableButton(gazeButton)) return;
     gazeTarget = gazeButton;
     gazeStart = gazeLastSeen = now;
   }
 
-  function tickGaze(now) {
-    gazeFrame = 0;
-    updateGazeTarget(now);
-    if (gazeTarget === blockedGaze && gazeAwayStart === null) return;
+  function canTickGaze() {
+    if (gazeTarget === blockedGaze && gazeAwayStart === null) return false;
     // A completed button still needs departure checks while its ring is hidden.
     if (!gazeTarget && gazeAwayStart !== null) {
       gazeFrame = requestAnimationFrame(tickGaze);
-      return;
+      return false;
     }
-    if (!gazeTarget?.isConnected || gazeTarget.disabled || document.hidden) { resetGaze(); return; }
+    if (!enabledButton(gazeTarget) || document.hidden) { resetGaze(); return false; }
+    return true;
+  }
+  function tickGaze(now) {
+    gazeFrame = 0;
+    updateGazeTarget(now);
+    if (!canTickGaze()) return;
     const held = gazeAwayStart !== null;
     if (!held) gazeLastSeen = now;
     const elapsed = gazeLastSeen - gazeStart;
-    if (elapsed >= GAZE_PAUSE_MS) {
-      const rect = gazeTarget.getBoundingClientRect();
-      (gazeTarget.closest('dialog') || document.body).append(ring);
-      ring.style.left = `${rect.left + rect.width / 2}px`;
-      ring.style.top = `${rect.top + rect.height / 2}px`;
-      ring.style.setProperty('--progress', `${Math.min(1, (elapsed - GAZE_PAUSE_MS) / GAZE_FILL_MS) * 360}deg`);
-      ring.hidden = false;
-      gazeTarget.classList.add('gaze-target');
-    }
+    if (elapsed >= GAZE_PAUSE_MS) renderGazeRing(elapsed);
     if (!held && elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
-      const target = gazeTarget;
-      blockedGaze = target;
-      lastGazeClick = { target, time: now };
-      clickFromGaze = true;
-      target.click();
-      clickFromGaze = false;
-      // Require leaving the target before another dwell can start.
-      gazeTarget = target;
+      activateGaze(now);
       return;
     }
     gazeFrame = requestAnimationFrame(tickGaze);
+  }
+
+  function renderGazeRing(elapsed) {
+    const rect = gazeTarget.getBoundingClientRect();
+    (gazeTarget.closest('dialog') || document.body).append(ring);
+    ring.style.left = `${rect.left + rect.width / 2}px`;
+    ring.style.top = `${rect.top + rect.height / 2}px`;
+    ring.style.setProperty('--progress', `${Math.min(1, (elapsed - GAZE_PAUSE_MS) / GAZE_FILL_MS) * 360}deg`);
+    ring.hidden = false;
+    gazeTarget.classList.add('gaze-target');
+  }
+  function activateGaze(now) {
+    const target = gazeTarget;
+    blockedGaze = target;
+    lastGazeClick = { target, time: now };
+    clickFromGaze = true;
+    target.click();
+    clickFromGaze = false;
+    // Require leaving the target before another dwell can start.
+    gazeTarget = target;
   }
 
   function resetGaze() {
@@ -87,13 +114,17 @@ window.createReferenceGaze = () => {
     ring.hidden = true;
   }
 
+  function ensureGazeFrame() {
+    if (gazeFrame) return;
+    if (gazeTarget || gazeAwayStart !== null) gazeFrame = requestAnimationFrame(tickGaze);
+  }
   document.addEventListener('pointermove', event => {
     if (event.pointerType === 'touch' || !toggle.checked) return;
     const button = event.target.closest('button[data-action], button[data-edge-control]');
     gazeButton = button && !button.disabled ? button : null;
     gazePoint = { x: event.clientX, y: event.clientY };
     updateGazeTarget(performance.now());
-    if (!gazeFrame && (gazeTarget || gazeAwayStart !== null)) gazeFrame = requestAnimationFrame(tickGaze);
+    ensureGazeFrame();
   });
   document.documentElement.addEventListener('pointerleave', resetGaze);
   document.addEventListener('pointerdown', resetGaze);

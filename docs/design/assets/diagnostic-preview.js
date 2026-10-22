@@ -81,12 +81,14 @@
       return { kind: 'recording', text: 'Snimanje dijagnostike · ' + remaining, compact: remaining };
     }
     if (!value.finished) return null;
-    const item = value.items[0];
+    return finishedBadge(value.items[0], value.finished);
+  }
+  function finishedBadge(item, finished) {
     if (!item) return null;
     if (item.reason === 'write-error') return { kind: 'error', text: 'Greška čuvanja snimka', compact: 'Greška' };
     if (!item.readable) return { kind: 'error', text: 'Snimak nije čitljiv', compact: 'Nečitljivo' };
     if (!['manual', 'completed'].includes(item.reason)) return { kind: 'incomplete', text: 'Snimak nije potpun', compact: 'Nepotpuno' };
-    if (Date.now() - value.finished < 5000) return { kind: 'saved', text: 'Snimak je sačuvan', compact: 'Sačuvano' };
+    if (Date.now() - finished < 5000) return { kind: 'saved', text: 'Snimak je sačuvan', compact: 'Sačuvano' };
     return null;
   }
   const announcement = document.createElement('p');
@@ -99,15 +101,21 @@
     const value = state();
     const status = badgeState(value);
     for (const badge of document.querySelectorAll('[data-recording-status]')) {
-      badge.hidden = !status;
-      if (!status) continue;
-      const text = badge.hasAttribute('data-recording-compact') ? status.compact : status.text;
-      if (badge.textContent !== text) badge.textContent = text;
-      badge.dataset.state = status.kind;
-      badge.setAttribute('aria-label', status.text);
-      badge.title = status.text + '. Za pregled ili ranije zaustavljanje otvorite Postavke → Dijagnostičko snimanje.';
+      renderBadge(badge, status);
     }
     const transition = (value.active?.id || value.items[0]?.id || '') + ':' + (status?.kind || 'idle');
+    announceBadge(transition, status);
+  }
+  function renderBadge(badge, status) {
+    badge.hidden = !status;
+    if (!status) return;
+    const text = badge.hasAttribute('data-recording-compact') ? status.compact : status.text;
+    if (badge.textContent !== text) badge.textContent = text;
+    badge.dataset.state = status.kind;
+    badge.setAttribute('aria-label', status.text);
+    badge.title = status.text + '. Za pregled ili ranije zaustavljanje otvorite Postavke → Dijagnostičko snimanje.';
+  }
+  function announceBadge(transition, status) {
     if (transition !== announced) {
       announced = transition;
       announcement.textContent = status?.kind === 'recording' ? 'Snimanje dijagnostike je u toku.' : status?.text || '';
@@ -127,13 +135,16 @@
       const option = document.createElement('option');
       option.value = value; option.textContent = text; select.append(option);
     }
-    const current = state();
-    const reason = current.items[0]?.reason;
-    select.value = current.active ? current.active.stoppingUntil ? 'finishing' : 'recording'
-      : current.finished ? reason === 'manual' ? 'completed' : reason : 'ready';
+    select.value = previewKind(state());
     if (!select.value) select.value = 'ready';
     select.addEventListener('change', () => preview(select.value));
     label.append(select); tools.append(label);
+  }
+  function previewKind(current) {
+    if (current.active) return current.active.stoppingUntil ? 'finishing' : 'recording';
+    if (!current.finished) return 'ready';
+    const reason = current.items[0]?.reason;
+    return reason === 'manual' ? 'completed' : reason;
   }
   const query = new URLSearchParams(location.search);
   if (query.get('recording') === 'demo' && !state().active) preview('recording');

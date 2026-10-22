@@ -41,11 +41,11 @@ def blocked_write(writer, monkeypatch):
     entered, release = threading.Event(), threading.Event()
     write = module.RecordingSink.write
 
-    def block(sink, name, *args, **kwargs):
-        if name == "blocked":
+    def block(sink, event, *args, **kwargs):
+        if event.name == "blocked":
             entered.set()
             release.wait(3)
-        return write(sink, name, *args, **kwargs)
+        return write(sink, event, *args, **kwargs)
 
     monkeypatch.setattr(module.RecordingSink, "write", block)
     try:
@@ -215,10 +215,10 @@ def test_write_error_and_bounded_snapshot_remain_explicit(writer, tmp_path, monk
     folder = tmp_path / "recordings"
     original = module.RecordingSink.write
 
-    def fail(sink, name, *args, **kwargs):
-        if name == "disk-error":
+    def fail(sink, event, *args, **kwargs):
+        if event.name == "disk-error":
             raise OSError("Synthetic private exception text")
-        return original(sink, name, *args, **kwargs)
+        return original(sink, event, *args, **kwargs)
 
     monkeypatch.setattr(module.RecordingSink, "write", fail)
     writer.start_recording(folder, 1, context())
@@ -264,6 +264,30 @@ def test_retention_restart_and_partial_recordings_do_not_touch_other_files(
     other.mkdir()
     (other / "recording.json").write_text("unsupported")
     assert any(item["state"] == "unreadable" for item in store.load())
+
+
+@pytest.mark.parametrize("measurement", ["bytes", "duration_seconds"])
+def test_overflowing_metadata_is_isolated_from_readable_history(writer, tmp_path, measurement):
+    folder = tmp_path / "recordings"
+    corrupt_id = writer.start_recording(folder, 1, context())
+    finish(writer, folder)
+    valid_id = writer.start_recording(folder, 1, context())
+    finish(writer, folder)
+    metadata_path = folder / corrupt_id / "recording.json"
+    metadata = json.loads(metadata_path.read_bytes())
+    metadata[measurement] = 10**400
+    module.atomic_bytes(metadata_path, module.json_bytes(metadata))
+
+    store = RecordingStore(folder)
+    entries = {item["id"]: item for item in store.recover_and_load()}
+    assert entries[corrupt_id]["state"] == "unreadable"
+    assert not entries[corrupt_id]["complete"]
+    assert entries[valid_id]["complete"]
+    destination = tmp_path / "existing.zip"
+    destination.write_bytes(b"existing export")
+    with pytest.raises(module.RecordingReadError):
+        store.export(corrupt_id, destination)
+    assert destination.read_bytes() == b"existing export"
 
 
 @pytest.mark.parametrize("with_report", [False, True])

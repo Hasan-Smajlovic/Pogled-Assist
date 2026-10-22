@@ -397,12 +397,7 @@ class GazeMouseController(QObject):
         received_at: float | None = None,
     ) -> None:
         received_at = time.monotonic() if received_at is None else received_at
-        if (
-            self._input_suspended
-            or not math.isfinite(normalized_x)
-            or not math.isfinite(normalized_y)
-            or not self._eye_gate.sample(received_at)
-        ):
+        if not self._accept_gaze(normalized_x, normalized_y, received_at):
             diagnostics.emit(
                 "controller_rejected",
                 trace=True,
@@ -434,18 +429,23 @@ class GazeMouseController(QObject):
             return
 
         hit = self._toolbar_hit(point.logical)
+        self._check_tracking_hold(hit, point.logical)
+        self._observe_target_hit(hit, point, (normalized_x, normalized_y), now_ms)
+        self._handle_hit(hit, point, cursor_point, now_ms)
+
+    def _accept_gaze(self, x: float, y: float, received_at: float) -> bool:
+        if self._input_suspended or not all(map(math.isfinite, (x, y))):
+            return False
+        return self._eye_gate.sample(received_at)
+
+    def _check_tracking_hold(self, hit: _ToolbarHit, point: QPoint) -> None:
         if self._toolbar_selection.tracking_held:
             getter = getattr(self._target, "selection_bounds", self._target.action_bounds)
             bounds = getter(self._toolbar_selection.target)
-            if (
-                bounds is None
-                or bounds != self._tracking_hold_bounds
-                or hit.action != self._toolbar_selection.target
-                or not bounds.contains(point.logical)
-            ):
+            if bounds is None or bounds != self._tracking_hold_bounds:
                 self._pause_toolbar_dwell()
-        self._observe_target_hit(hit, point, (normalized_x, normalized_y), now_ms)
-        self._handle_hit(hit, point, cursor_point, now_ms)
+            elif hit.action != self._toolbar_selection.target or not bounds.contains(point):
+                self._pause_toolbar_dwell()
 
     def _handle_hit(
         self, hit: _ToolbarHit, point: GazeScreenPoint, cursor_point: QPoint, now_ms: float
@@ -787,14 +787,7 @@ class GazeMouseController(QObject):
                 point.logical.x(),
                 point.logical.y(),
             )
-            if mode == LEFT_CLICK:
-                self._input.click(point.physical.x(), point.physical.y(), button="left")
-            elif mode == RIGHT_CLICK:
-                self._input.click(point.physical.x(), point.physical.y(), button="right")
-            elif mode == DOUBLE_LEFT_CLICK:
-                self._input.click(
-                    point.physical.x(), point.physical.y(), button="left", clicks=2, interval=0.04
-                )
+            self._click_input(mode, point.physical)
         except Exception:
             logger.exception("Click action failed.")
             self.status_changed.emit("Klik nije uspio.")
@@ -814,6 +807,14 @@ class GazeMouseController(QObject):
         self._native_menu_click_pending = False
         if reset_mode:
             self.set_mode(None)
+
+    def _click_input(self, mode: str, point: QPoint) -> None:
+        if mode == LEFT_CLICK:
+            self._input.click(point.x(), point.y(), button="left")
+        elif mode == RIGHT_CLICK:
+            self._input.click(point.x(), point.y(), button="right")
+        elif mode == DOUBLE_LEFT_CLICK:
+            self._input.click(point.x(), point.y(), button="left", clicks=2, interval=0.04)
 
     def _reset_toolbar_dwell(self) -> None:
         self._toolbar_selection.cancel()

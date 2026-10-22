@@ -103,7 +103,7 @@ class EyeTrackingGate(QObject):
         at = now if received_at is None else received_at
         previous = self.eyes
         self.eyes = (bool(left), bool(right))
-        if not any(self.eyes) or not math.isfinite(at) or now - at >= GAZE_FRESH_SECONDS:
+        if not any(self.eyes) or not self._eyes_are_fresh(at, now):
             self.cancel()
             return
         if all(self.eyes):
@@ -113,22 +113,30 @@ class EyeTrackingGate(QObject):
         self._sole_eye = self.eyes
         if self.policy == ANY_EYE:
             return
-        if (
-            self.policy == BRIEF_INTERRUPTION
-            and all(previous)
-            and self._last_gaze_at is not None
-            and at - self._last_gaze_at < GAZE_FRESH_SECONDS
-            and not self.holding
-        ):
-            self._hold_until = at + self.hold_ms / 1000
-            if now >= self._hold_until:
-                self.cancel()
-            else:
-                self._freshness.stop()
-                self._deadline.start(max(1, math.ceil((self._hold_until - now) * 1000)))
-                self.hold_started.emit(self._hold_until * 1000)
+        if self._can_hold(previous, at):
+            self._start_hold(at, now)
         elif not self.holding:
             self.cancel()
+
+    @staticmethod
+    def _eyes_are_fresh(at: float, now: float) -> bool:
+        return math.isfinite(at) and now - at < GAZE_FRESH_SECONDS
+
+    def _can_hold(self, previous: tuple[bool, bool], at: float) -> bool:
+        if self.policy != BRIEF_INTERRUPTION or self.holding:
+            return False
+        if not all(previous) or self._last_gaze_at is None:
+            return False
+        return at - self._last_gaze_at < GAZE_FRESH_SECONDS
+
+    def _start_hold(self, at: float, now: float) -> None:
+        self._hold_until = at + self.hold_ms / 1000
+        if now >= self._hold_until:
+            self.cancel()
+            return
+        self._freshness.stop()
+        self._deadline.start(max(1, math.ceil((self._hold_until - now) * 1000)))
+        self.hold_started.emit(self._hold_until * 1000)
 
     def sample(self, received_at: float | None = None) -> bool:
         now = time.monotonic()

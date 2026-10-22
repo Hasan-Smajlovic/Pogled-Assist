@@ -106,8 +106,9 @@ def test_report_uses_recorded_application_eligibility(tmp_path, gate_open):
 @pytest.mark.parametrize(
     "reason,health,complete",
     [
-        ("manual", {}, True),
-        ("time", {}, True),
+        ("manual", {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}, True),
+        ("time", {"dropped": {"event": 0}, "writer_errors": 0, "bounded_snapshots": 0}, True),
+        ("manual", {}, False),
         ("size", {}, False),
         ("shutdown", {}, False),
         ("writer_error", {}, False),
@@ -148,6 +149,40 @@ def test_manual_report_keeps_recording_health_separate_from_process_loss(tmp_pat
     assert not result["analysis"]["evidence_incomplete"]
     assert result["logging_health_process_cumulative"] == process_health
     assert result["recording_health"] == recording_health
+
+
+@pytest.mark.parametrize("field", ["dropped", "writer_errors", "bounded_snapshots"])
+@pytest.mark.parametrize("invalid", [-1, 0.5, True, "2", None])
+def test_manual_report_rejects_invalid_health_counters(tmp_path, field, invalid):
+    health = {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}
+    health[field] = {"event": invalid} if field == "dropped" else invalid
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0, mode="manual_trace"),
+            record("session_end", 1, reason="manual", recording_health=health),
+        ],
+    )
+    assert not result["complete"]
+    assert result["analysis"]["evidence_incomplete"]
+
+
+@pytest.mark.parametrize("dropped", [None, "lost records", [], 0])
+def test_manual_report_rejects_invalid_loss_mapping(tmp_path, dropped):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0, mode="manual_trace"),
+            record(
+                "session_end",
+                1,
+                reason="manual",
+                recording_health={"dropped": dropped, "writer_errors": 0, "bounded_snapshots": 0},
+            ),
+        ],
+    )
+    assert not result["complete"]
+    assert result["analysis"]["evidence_incomplete"]
 
 
 def test_report_does_not_mix_sessions_or_process_clocks(tmp_path):

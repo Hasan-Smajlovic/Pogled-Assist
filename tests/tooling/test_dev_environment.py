@@ -91,13 +91,7 @@ def test_base_python_probe_resolves_the_interpreter_behind_a_venv(python_probe_r
     assert Path(result.stdout.strip()).resolve() == Path(sys._base_executable).resolve()
 
 
-@pytest.mark.parametrize(
-    ("current_version", "same_base", "should_recreate"),
-    [("3.10", True, False), ("3.10", False, True), ("3.12", True, True)],
-)
-def test_setup_uses_the_requested_base_interpreter(
-    tmp_path: Path, current_version: str, same_base: bool, should_recreate: bool
-) -> None:
+def _prepare_setup_environment(tmp_path):
     shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
     python_path = tmp_path / ".venv" / "Scripts" / "python.exe"
     python_path.parent.mkdir(parents=True)
@@ -113,6 +107,17 @@ def test_setup_uses_the_requested_base_interpreter(
     check_script.parent.mkdir(parents=True)
     check_script.write_text("", encoding="utf-8")
     driver = tmp_path / "run-setup.ps1"
+    return python_path, driver
+
+
+@pytest.mark.parametrize(
+    ("current_version", "same_base", "should_recreate"),
+    [("3.10", True, False), ("3.10", False, True), ("3.12", True, True)],
+)
+def test_setup_uses_the_requested_base_interpreter(
+    tmp_path: Path, current_version: str, same_base: bool, should_recreate: bool
+) -> None:
+    python_path, driver = _prepare_setup_environment(tmp_path)
     driver.write_text(
         """
 . (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null
@@ -459,6 +464,10 @@ try {
     }
     assert all(entry["Seconds"] > 0 for entry in timings)
     assert (tmp_path / "installer-tests.finished").exists()
+    _assert_parallel_output(tmp_path, result)
+
+
+def _assert_parallel_output(tmp_path, result):
     (log_root,) = (tmp_path / "dist").glob("check-*")
     for action in ("coverage", "package"):
         assert (tmp_path / f"{action}.finished").exists()

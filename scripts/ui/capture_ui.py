@@ -352,9 +352,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
     ) -> None:
         width, height = self.size if size is None else size
         self.encountered.add(name)
-        if (self.selected is not None and name not in self.selected) or (
-            self.groups and group_for(name) not in self.groups
-        ):
+        selected_name = self.selected is None or name in self.selected
+        selected_group = not self.groups or group_for(name) in self.groups
+        if not (selected_name and selected_group):
             # State setup later in the sequence can rely on this window's geometry.
             # Do not grab or encode an image for omitted states.
             if widget not in self.prepared:
@@ -492,6 +492,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.settings.set_save_error(True)
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
+        self.capture_release_settings(size)
+
+    def capture_release_settings(self, size: tuple[int, int]) -> None:
         self.settings._select_tab(0)
         row = self.settings._general_page._update_row
         row._version_combo.setCurrentIndex(3)
@@ -651,28 +654,36 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.capture_dialog(self.speech._dialogs.exit, "speech-exit", "Speech exit confirmation")
         self.speech._close_dialog()
 
+    def _capture_sidebar_modes(self, widget, size, modes) -> None:
+        for show, name, title in modes:
+            if show is not None:
+                show()
+            self.capture(widget, name, title, size=size)
+
     def capture_sidebars(self) -> None:
         size = 380, self.size[1]
         self.keyboard = KeyboardWindow(self.speech_settings)
         self.widgets.append(self.keyboard)
-        for show, name, title in (
-            (None, "keyboard-letters", "Keyboard: letters"),
-            (self.keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
-            (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
-        ):
-            if show is not None:
-                show()
-            self.capture(self.keyboard, name, title, size=size)
+        self._capture_sidebar_modes(
+            self.keyboard,
+            size,
+            (
+                (None, "keyboard-letters", "Keyboard: letters"),
+                (self.keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
+                (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
+            ),
+        )
         self.controller = ControllerWindow(self.gaze_settings, self.speech_settings)
         self.widgets.append(self.controller)
-        for show, name, title in (
-            (None, "controller-general", "Controller: general"),
-            (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
-            (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
-        ):
-            if show is not None:
-                show()
-            self.capture(self.controller, name, title, size=size)
+        self._capture_sidebar_modes(
+            self.controller,
+            size,
+            (
+                (None, "controller-general", "Controller: general"),
+                (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
+                (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
+            ),
+        )
         small_groups = replace(self.speech_settings, letters_per_group=2)
         self.keyboard.update_settings(small_groups)
         self.controller.update_speech_settings(small_groups)

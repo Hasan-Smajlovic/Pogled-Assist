@@ -671,11 +671,8 @@ class TobiiGazeProvider(QObject):
         previous = self._last_gaze_emitted_at
         self._last_gaze_emitted_at = now
         gap_s = max(native_gap_s, now - previous if previous is not None else 0.0)
-        if (
-            gap_s >= GAZE_DELIVERY_GAP_SECONDS
-            and self._last_eye_status is not None
-            and any(self._last_eye_status)
-        ):
+        eyes_open = any(self._last_eye_status or ())
+        if gap_s >= GAZE_DELIVERY_GAP_SECONDS and eyes_open:
             # A resumed callback can beat the watchdog after a stall or sleep.
             # Cancel pending dwell before forwarding it, retaining repeat locks.
             logger.info("Gaze delivery resumed after gap_ms=%s.", round(gap_s * 1000))
@@ -826,10 +823,9 @@ class TobiiGazeProvider(QObject):
     def _mark_invalid_gaze(self) -> None:
         with self._sample_lock:
             self._clear_pending_gaze_sample()
-            if (
-                self._pending_gaze_invalid_at is None
-                and self._last_eye_status is not None
-                and eyes_usable(self._eye_tracking_policy, *self._last_eye_status)
+            status = self._last_eye_status or (False, False)
+            if self._pending_gaze_invalid_at is None and eyes_usable(
+                self._eye_tracking_policy, *status
             ):
                 self._pending_gaze_invalid_at = time.monotonic()
 
@@ -872,13 +868,7 @@ class TobiiGazeProvider(QObject):
             notify = self._pending_eye_status is None
             self._pending_eye_status = status
             event = EyeState(*status, time.monotonic())
-            if len(self._eye_events) >= 64:
-                # Overflow loses ordering: force cancellation before the final state.
-                first_at = self._eye_events[0].received_at
-                self._eye_events.clear()
-                self._eye_events.append(EyeState(False, False, first_at))
-                self._clear_pending_gaze_sample()
-            self._eye_events.append(event)
+            self._queue_eye_event(event)
             if not all(status):
                 self._pending_eye_loss = status
             logger.info(
@@ -893,6 +883,15 @@ class TobiiGazeProvider(QObject):
             # Only wake the Qt thread; never queue a public status that can
             # outlive stop/reconnect or arrive after the gaze it should gate.
             self._eye_status_pending.emit()
+
+    def _queue_eye_event(self, event: EyeState) -> None:
+        if len(self._eye_events) >= 64:
+            # Overflow loses ordering: cancel before delivering the final state.
+            first_at = self._eye_events[0].received_at
+            self._eye_events.clear()
+            self._eye_events.append(EyeState(False, False, first_at))
+            self._clear_pending_gaze_sample()
+        self._eye_events.append(event)
 
     def _record_eye_sample(self, status: tuple[bool, bool]) -> None:
         if self._check_active:
@@ -911,10 +910,8 @@ class TobiiGazeProvider(QObject):
             generation = self._stream_generation
             events = tuple(self._eye_events)
             self._eye_events.clear()
-            for event in events:
-                if generation != self._stream_generation:
-                    return
-                self.eye_state_changed.emit(event)
+            if not self._deliver_eye_events(events, generation):
+                return
             # Coalesce a backlog, but a blink must not disappear between two
             # valid samples. Public signals are delivered only on the Qt thread.
             for item in (loss, status):
@@ -924,23 +921,33 @@ class TobiiGazeProvider(QObject):
                     continue
                 if refresh or item != self._delivered_eye_status:
                     refresh = False
-                    self._delivered_eye_status = item
-                    gate_open = eyes_usable(self._eye_tracking_policy, *item)
-                    self._metrics.eyes(
-                        "application_gate",
-                        "open" if gate_open else "closed",
-                        sampled=True,
-                        stale_after=None,
-                    )
-                    self._metrics.event(
-                        "eye_gate_applied",
-                        stream_generation=generation,
-                        left_valid=item[0],
-                        right_valid=item[1],
-                        eye_tracking_policy=self._eye_tracking_policy,
-                        application_gate_open=gate_open,
-                    )
-                    self.eye_status_changed.emit(*item)
+                    self._deliver_eye_status(item, generation)
+
+    def _deliver_eye_events(self, events: tuple[EyeState, ...], generation: int) -> bool:
+        for event in events:
+            if generation != self._stream_generation:
+                return False
+            self.eye_state_changed.emit(event)
+        return True
+
+    def _deliver_eye_status(self, item: tuple[bool, bool], generation: int) -> None:
+        self._delivered_eye_status = item
+        gate_open = eyes_usable(self._eye_tracking_policy, *item)
+        self._metrics.eyes(
+            "application_gate",
+            "open" if gate_open else "closed",
+            sampled=True,
+            stale_after=None,
+        )
+        self._metrics.event(
+            "eye_gate_applied",
+            stream_generation=generation,
+            left_valid=item[0],
+            right_valid=item[1],
+            eye_tracking_policy=self._eye_tracking_policy,
+            application_gate_open=gate_open,
+        )
+        self.eye_status_changed.emit(*item)
 
 
 def _valid_gaze_point(

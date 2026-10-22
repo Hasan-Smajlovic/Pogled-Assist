@@ -52,22 +52,7 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
     assert updates[-1].eye_tracking_policy == "any"
 
 
-@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
-@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
-@pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
-def test_one_eye_selects_app_controls_including_controller_clicks(
-    hotbar_gaze, qtbot, monkeypatch, surface, eyes
-):
-    hotbar, controller, _feed, actions, _progress = hotbar_gaze
-    now = freeze_monotonic(monkeypatch, 10.0)
-    hotbar._update_gaze_settings(
-        replace(
-            controller.settings,
-            eye_tracking_policy="any",
-            selection_pause_ms=250,
-            dwell_ms=850,
-        )
-    )
+def _app_control(hotbar, surface):
     if surface == "hotbar":
         action = QUICK_ACTIONS
         button = hotbar._buttons[action]
@@ -89,6 +74,26 @@ def test_one_eye_selects_app_controls_including_controller_clicks(
         window = hotbar._controller_window
         action = next(key for key in window._action_buttons if key.endswith("left_click"))
         button = window._action_buttons[action]
+    return action, button
+
+
+@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
+def test_one_eye_selects_app_controls_including_controller_clicks(
+    hotbar_gaze, qtbot, monkeypatch, surface, eyes
+):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 10.0)
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings,
+            eye_tracking_policy="any",
+            selection_pause_ms=250,
+            dwell_ms=850,
+        )
+    )
+    action, button = _app_control(hotbar, surface)
     qtbot.wait(1)
     point = button.mapToGlobal(button.rect().center())
     provider = hotbar._gaze
@@ -104,7 +109,7 @@ def test_one_eye_selects_app_controls_including_controller_clicks(
         sample(10.0 + index * 0.05)
     assert actions == [action]
     if surface == "controller":
-        assert len(window._input.clicks) == 1
+        assert len(hotbar._controller_window._input.clicks) == 1
     sample(12.5)
     assert actions == [action]
 
@@ -132,7 +137,8 @@ def test_hold_freezes_feedback_and_first_return_cannot_activate(hotbar_gaze):
     assert not button.property("gazePaused")
 
 
-def test_settings_hold_expires_without_another_gaze_sample(qtbot, monkeypatch):
+@pytest.fixture
+def settings_with_pending_hold(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
     monkeypatch.setattr(
         "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
@@ -149,6 +155,11 @@ def test_settings_hold_expires_without_another_gaze_sample(qtbot, monkeypatch):
     window.handle_gaze(point)
     now[0] += 0.8
     window.handle_gaze(point)
+    return window, now, button
+
+
+def test_settings_hold_expires_without_another_gaze_sample(settings_with_pending_hold):
+    window, now, button = settings_with_pending_hold
     window.handle_eye_status(True, False)
     assert window._gaze_selection.tracking_held
     now[0] += 0.151
@@ -185,23 +196,8 @@ def test_one_eye_check_free_view_and_fixation_keep_real_eye_indicators(qtbot, mo
     assert "Jedno oko je dovoljno" in window._policy_text
 
 
-def test_changed_settings_target_geometry_does_not_resume_a_hold(qtbot, monkeypatch):
-    now = freeze_monotonic(monkeypatch, 10.0)
-    monkeypatch.setattr(
-        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
-    )
-    window = SettingsWindow(GazeSettings(eye_tracking_policy="hold"), SpeechSettings())
-    qtbot.addWidget(window)
-    window.resize(1280, 720)
-    window._select_tab(1)
-    window.show()
-    qtbot.wait(1)
-    window.handle_eye_status(True, True)
-    button = window._gaze_page._interaction_overlay_button
-    point = button.mapToGlobal(button.rect().center())
-    window.handle_gaze(point)
-    now[0] += 0.8
-    window.handle_gaze(point)
+def test_changed_settings_target_geometry_does_not_resume_a_hold(settings_with_pending_hold):
+    window, now, button = settings_with_pending_hold
     window.handle_eye_status(True, False)
     button.move(button.x() + 10, button.y())
     now[0] += 0.05

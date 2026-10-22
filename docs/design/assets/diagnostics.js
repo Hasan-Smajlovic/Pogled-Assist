@@ -50,12 +50,26 @@
     renderNew(value);
     renderHistory(value);
     const primary = diagEl('diagnostics-primary');
-    primary.className = value.active && tab === 'new' ? 'danger' : 'primary';
-    primary.disabled = finishing || (tab === 'history' && !selectedItem()?.readable);
-    primary.textContent = finishing ? 'Završavam snimak…' : tab === 'history' ? 'Izvezi ZIP' : value.active ? 'Zaustavi snimanje' : 'Pokreni snimanje';
+    const button = primaryState(value, finishing);
+    primary.className = button.className;
+    primary.disabled = button.disabled;
+    primary.textContent = button.text;
     diagEl('diagnostics-return').textContent = origin === 'gaze-check' ? 'Nazad na provjeru' : 'Vrati se u Postavke';
-    setText('diagnostics-status', status || (finishing ? 'Čekam potvrdu čuvanja. Novi snimak još nije dostupan.' : value.active
-      ? 'Možete zatvoriti ovaj prozor; snimanje nastavlja raditi.' : tab === 'history' ? 'Izvoz pravi lokalni ZIP. Podaci se ne šalju automatski.' : 'Izaberite trajanje, zatim pokrenite snimanje.'));
+    setText('diagnostics-status', status || defaultStatus(value, finishing));
+  }
+
+  function primaryState(value, finishing) {
+    const className = value.active && tab === 'new' ? 'danger' : 'primary';
+    const disabled = finishing || (tab === 'history' && !selectedItem()?.readable);
+    if (finishing) return { className, disabled, text: 'Završavam snimak…' };
+    if (tab === 'history') return { className, disabled, text: 'Izvezi ZIP' };
+    return { className, disabled, text: value.active ? 'Zaustavi snimanje' : 'Pokreni snimanje' };
+  }
+  function defaultStatus(value, finishing) {
+    if (finishing) return 'Čekam potvrdu čuvanja. Novi snimak još nije dostupan.';
+    if (value.active) return 'Možete zatvoriti ovaj prozor; snimanje nastavlja raditi.';
+    if (tab === 'history') return 'Izvoz pravi lokalni ZIP. Podaci se ne šalju automatski.';
+    return 'Izaberite trajanje, zatim pokrenite snimanje.';
   }
 
   function renderNew(value) {
@@ -63,6 +77,11 @@
     const finishing = Boolean(active?.stoppingUntil);
     const elapsed = active ? Math.max(0, ((active.stopped || Date.now()) - active.started) / 1000) : 0;
     const duration = (active ? active.minutes : minutes) * 60;
+    renderDuration(active, elapsed, duration, finishing);
+    renderLogging();
+    renderRecordingState(active, finishing);
+  }
+  function renderDuration(active, elapsed, duration, finishing) {
     for (const button of document.querySelectorAll('[data-duration]')) {
       button.disabled = Boolean(active) || finishing;
       button.setAttribute('aria-pressed', String(Number(button.dataset.duration) === (active ? active.minutes : minutes)));
@@ -71,24 +90,46 @@
     diagEl('recording-size').textContent = (active ? Math.min(32, elapsed * .085).toFixed(1).replace('.', ',') : '0') + ' / 32 MiB';
     diagEl('recording-progress').max = duration;
     diagEl('recording-progress').value = elapsed;
+  }
+  function renderLogging() {
     const logging = diagEl('diagnostics-logging-preview').checked;
     diagEl('recording-logging').textContent = logging ? 'Uključeno' : 'Isključeno';
     diagEl('recording-logging-copy').textContent = logging ? 'Obično zapisivanje ostaje uključeno i nakon završetka ovog snimka.' : 'Ručno snimanje radi i kada je opće zapisivanje isključeno. Ta postavka ostaje isključena.';
     diagEl('recording-policy').textContent = 'Trenutni režim: ' + ReferenceEyePolicy.label() + ' · Pauza 250 ms · Zadržavanje 850 ms';
+  }
+  function renderRecordingState(active, finishing) {
+    const phase = finishing ? 'finishing' : active ? 'recording' : 'ready';
+    const display = {
+      finishing: { tone: 'ready', mark: '◷', title: 'Završavam i čuvam snimak', copy: 'Izvoz će biti dostupan nakon potvrde čuvanja.' },
+      recording: { tone: 'recording', mark: '●', title: 'Snimanje je u toku', copy: 'Vratite se u aplikaciju i ponovite problem. Ovaj prozor možete zatvoriti.' },
+      ready: { tone: 'ready', mark: '○', title: 'Spremno za snimanje', copy: 'Kraj po isteku vremena ili na 32 MiB. Možete zaustaviti i ranije.' },
+    }[phase];
     const box = diagEl('recording-state');
-    box.dataset.tone = finishing ? 'ready' : active ? 'recording' : 'ready';
-    box.querySelector('.recording-state-mark').textContent = finishing ? '◷' : active ? '●' : '○';
-    setText('recording-state-title', finishing ? 'Završavam i čuvam snimak' : active ? 'Snimanje je u toku' : 'Spremno za snimanje');
-    setText('recording-state-copy', finishing ? 'Izvoz će biti dostupan nakon potvrde čuvanja.' : active ? 'Vratite se u aplikaciju i ponovite problem. Ovaj prozor možete zatvoriti.' : 'Kraj po isteku vremena ili na 32 MiB. Možete zaustaviti i ranije.');
+    box.dataset.tone = display.tone;
+    box.querySelector('.recording-state-mark').textContent = display.mark;
+    setText('recording-state-title', display.title);
+    setText('recording-state-copy', display.copy);
   }
 
   function renderHistory(value) {
     if (!value.items.some(item => item.id === selectedId)) selectedId = value.items[0]?.id || null;
+    renderRecordingList(value.items);
+    diagEl('recording-empty').hidden = value.items.length > 0;
+    const item = value.items.find(entry => entry.id === selectedId);
+    diagEl('recording-detail').hidden = !item;
+    diagEl('recording-no-detail').hidden = Boolean(item);
+    if (!item) return;
+    renderRecordingDetail(item);
+    renderRecordingContext(item);
+    diagEl('recording-check-result').disabled = !item.readable;
+    renderPackage();
+  }
+  function renderRecordingList(items) {
     const list = diagEl('recording-list');
-    const ids = value.items.map(item => item.id).join('|');
+    const ids = items.map(item => item.id).join('|');
     if (list.dataset.ids !== ids) {
       list.replaceChildren();
-      for (const item of value.items) {
+      for (const item of items) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.recording = item.id;
@@ -108,20 +149,22 @@
       list.dataset.ids = ids;
     }
     for (const button of list.children) button.setAttribute('aria-pressed', String(button.dataset.recording === selectedId));
-    diagEl('recording-empty').hidden = value.items.length > 0;
-    const item = value.items.find(entry => entry.id === selectedId);
-    diagEl('recording-detail').hidden = !item;
-    diagEl('recording-no-detail').hidden = Boolean(item);
-    if (!item) return;
+  }
+  function renderRecordingDetail(item) {
     diagEl('recording-detail-title').textContent = reasons[item.reason][0];
     diagEl('recording-detail-date').textContent = ReferenceRecording.date(item.started) + ' · ' + item.id;
     diagEl('recording-detail-duration').textContent = item.readable ? ReferenceRecording.clock(item.seconds) : 'Nedostupno';
     diagEl('recording-detail-size').textContent = item.size.toFixed(1).replace('.', ',') + ' MiB';
     diagEl('recording-detail-policy').textContent = item.readable ? ReferenceRecording.policy(item.policy) : 'Nepoznato';
+    renderRecordingHealth(item);
+    diagEl('recording-detail-context').textContent = item.readable ? 'Primjer okruženja: v0.5.0 · revizija 7f3a2c1… · Windows paket · Stream Engine x86 · 1280 × 720 logički / 1920 × 1080 fizički · 150%' : 'Tehnički kontekst nije dostupan. Snimak ostaje sačuvan i označen kao nečitljiv.';
+  }
+  function renderRecordingHealth(item) {
     const health = diagEl('recording-detail-health');
     health.dataset.tone = !item.readable || item.reason === 'write-error' ? 'error' : ['size-limit', 'dropped', 'interrupted'].includes(item.reason) ? 'warning' : 'normal';
     setText('recording-detail-health', reasons[item.reason][1] + (['completed', 'manual'].includes(item.reason) ? ' Početak i kraj su prisutni; nisu prijavljeni izostavljeni događaji ili greške zapisivanja.' : ' Potpunost podataka nije potvrđena.'));
-    diagEl('recording-detail-context').textContent = item.readable ? 'Primjer okruženja: v0.5.0 · revizija 7f3a2c1… · Windows paket · Stream Engine x86 · 1280 × 720 logički / 1920 × 1080 fizički · 150%' : 'Tehnički kontekst nije dostupan. Snimak ostaje sačuvan i označen kao nečitljiv.';
+  }
+  function renderRecordingContext(item) {
     const context = diagEl('recording-context-details');
     context.replaceChildren();
     if (item.readable) {
@@ -145,8 +188,6 @@
         context.append(label, detail);
       }
     }
-    diagEl('recording-check-result').disabled = !item.readable;
-    renderPackage();
   }
 
   function renderPackage() {

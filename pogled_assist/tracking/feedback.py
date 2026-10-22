@@ -42,16 +42,18 @@ def _problem(
     if status.state == TrackingState.WAITING or eyes is None:
         return TrackingNotice("Čekam podatke o pogledu", "odabir je zaustavljen", "quiet")
     if not eyes_usable(policy, *eyes):
-        if eyes == (False, False):
-            return TrackingNotice(
-                "Praćenje oba oka je prekinuto", "pogledajte prema ekranu", eyes=eyes
-            )
-        eye = "Lijevo" if not eyes[0] else "Desno"
-        return TrackingNotice(f"{eye} oko se trenutno ne prati", "odabir je zaustavljen", eyes=eyes)
+        return _eye_problem(eyes)
     if gaze_at is None or now - gaze_at >= GAZE_DELIVERY_GAP_SECONDS:
         # Known eye validity is not evidence that new gaze coordinates are arriving.
         return TrackingNotice("Čekam podatke o pogledu", "odabir je zaustavljen", "quiet", eyes)
     return None
+
+
+def _eye_problem(eyes: tuple[bool, bool]) -> TrackingNotice:
+    if eyes == (False, False):
+        return TrackingNotice("Praćenje oba oka je prekinuto", "pogledajte prema ekranu", eyes=eyes)
+    eye = "Lijevo" if not eyes[0] else "Desno"
+    return TrackingNotice(f"{eye} oko se trenutno ne prati", "odabir je zaustavljen", eyes=eyes)
 
 
 class TrackingFeedbackState:
@@ -88,27 +90,28 @@ class TrackingFeedbackState:
             self._gaps.popleft()
         problem = _problem(status, eyes, gaze_at, now, policy)
         if problem is not None:
-            self._healthy_since = None
-            if self._problem_since is None:
-                self._problem_since = now
-                self._eye_gap = (
-                    status.state == TrackingState.CONNECTED
-                    and eyes is not None
-                    and not eyes_usable(policy, *eyes)
-                )
-            if status.state != TrackingState.CONNECTED:
-                self._eye_gap = False
-                self._gaps.clear()
-            if now - self._problem_since >= NOTICE_DELAY_SECONDS:
-                self._notice_open = True
+            self._track_problem(status, eyes, now, policy=policy)
             return problem if self._notice_open else None
 
-        if self._problem_since is not None:
-            if self._eye_gap and now - self._problem_since >= REPEATED_MIN_GAP_SECONDS:
-                self._gaps.append(now)
-                if len(self._gaps) >= REPEATED_GAPS:
-                    self._notice_open = True
-            self._problem_since = None
+        return self._recovery_notice(eyes, now)
+
+    def _track_problem(self, status, eyes, now, *, policy):
+        self._healthy_since = None
+        if self._problem_since is None:
+            self._problem_since = now
+            self._eye_gap = (
+                status.state == TrackingState.CONNECTED
+                and eyes is not None
+                and not eyes_usable(policy, *eyes)
+            )
+        if status.state != TrackingState.CONNECTED:
+            self._eye_gap = False
+            self._gaps.clear()
+        if now - self._problem_since >= NOTICE_DELAY_SECONDS:
+            self._notice_open = True
+
+    def _recovery_notice(self, eyes, now):
+        self._finish_problem(now)
         if self._healthy_since is None:
             self._healthy_since = now
         if not self._notice_open:
@@ -124,3 +127,11 @@ class TrackingFeedbackState:
             return TrackingNotice("Možete nastaviti", tone="ready", eyes=eyes)
         self._notice_open = False
         return None
+
+    def _finish_problem(self, now):
+        if self._problem_since is not None:
+            if self._eye_gap and now - self._problem_since >= REPEATED_MIN_GAP_SECONDS:
+                self._gaps.append(now)
+                if len(self._gaps) >= REPEATED_GAPS:
+                    self._notice_open = True
+            self._problem_since = None

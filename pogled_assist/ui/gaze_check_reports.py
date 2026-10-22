@@ -88,14 +88,7 @@ class GazeCheckReports(QObject):
                 continue
             action, key, revision, value = task
             try:
-                result = None
-                if action == "save":
-                    self.store.save(value)
-                    result = self.store.load()
-                elif action == "load":
-                    result = self.store.load()
-                else:
-                    self.store.export(*value)
+                result = self._execute_task(action, value)
                 success = True
             except Exception:
                 result, success = None, False
@@ -103,6 +96,15 @@ class GazeCheckReports(QObject):
                 self._finished.emit((action, key, revision, success, result))
             except RuntimeError:
                 self._stopped.set()
+
+    def _execute_task(self, action, value):
+        if action == "save":
+            self.store.save(value)
+            return self.store.load()
+        if action == "load":
+            return self.store.load()
+        self.store.export(*value)
+        return None
 
     def _apply(self, outcome) -> None:
         action, key, revision, success, entries = outcome
@@ -115,13 +117,16 @@ class GazeCheckReports(QObject):
             self.loading = False
             self.history_error = not success
         if entries is not None:
-            disk_ids = {entry.key for entry in entries if entry.report is not None}
-            for report_id, state in list(self.states.items()):
-                if state == "saved" and report_id not in disk_ids:
-                    self.states[report_id] = "memory"
-            for entry in entries:
-                if entry.report is not None and entry.key not in self.reports:
-                    self.reports[entry.key] = entry.report
-                    self.states[entry.key] = "saved"
-            self.unreadable = [entry for entry in entries if entry.report is None]
+            self._merge_entries(entries)
         self.changed.emit()
+
+    def _merge_entries(self, entries) -> None:
+        disk_ids = {entry.key for entry in entries if entry.report is not None}
+        for report_id, state in list(self.states.items()):
+            if state == "saved" and report_id not in disk_ids:
+                self.states[report_id] = "memory"
+        for entry in entries:
+            if entry.report is not None and entry.key not in self.reports:
+                self.reports[entry.key] = entry.report
+                self.states[entry.key] = "saved"
+        self.unreadable = [entry for entry in entries if entry.report is None]

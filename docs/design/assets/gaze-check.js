@@ -31,12 +31,7 @@
       duration: interrupted ? '7 s' : '15 s',
       storage: 'saved', state: interrupted ? 'interrupted' : 'completed',
       reason: interrupted ? 'Provjera je prekinuta tokom treće mete.' : '',
-      results: names.map((name, index) => interrupted && index >= 2 ? { name, state: 'unmeasured' } : ({
-        name, coverage: [90, 90, 90, 90, 20][index], samples: [108, 108, 108, 108, 8][index],
-        error: [12, 14, 48, 18, null][index], spread: [8, 10, 12, 9, null][index],
-        state: index === 4 ? 'insufficient' : 'measured',
-        near: index !== 2, center: [[.509, .504], [.05, .069], [.925, .095], [.052, .93], null][index],
-      })),
+      results: names.map((name, index) => samplePrecisionRow(name, index, interrupted)),
       trials: [],
     };
     if (noGazeExample && !interrupted) report.results.forEach((row, index) => {
@@ -45,18 +40,33 @@
     return report;
   }
 
+  function samplePrecisionRow(name, index, interrupted) {
+    if (interrupted && index >= 2) return { name, state: 'unmeasured' };
+    return {
+      name, coverage: [90, 90, 90, 90, 20][index], samples: [108, 108, 108, 108, 8][index],
+      error: [12, 14, 48, 18, null][index], spread: [8, 10, 12, 9, null][index],
+      state: index === 4 ? 'insufficient' : 'measured',
+      near: index !== 2, center: [[.509, .504], [.05, .069], [.925, .095], [.052, .93], null][index],
+    };
+  }
+
   function makeTrial(id, interrupted = false) {
     return {
       id, date: '22.10.2026. · 14:33', state: interrupted ? 'interrupted' : 'completed',
       duration: interrupted ? '4,2 s' : '8,6 s',
       reason: interrupted ? 'Prekinuto: proba je zaustavljena tokom druge grupe.' : '',
-      rows: [0, 1, 2].map(index => ({
-        size: ['136 × 64', '96 × 88', '180 × 72'][index],
-        state: interrupted && index > 0 ? 'unmeasured' : noGazeExample ? 'insufficient' : 'measured',
-        coverage: noGazeExample ? [0, 12, 20][index] : [92, 85, 90][index],
-        correct: !noGazeExample, wrong: !noGazeExample && index === 1 ? 1 : 0,
-        losses: !noGazeExample && index === 0 ? 1 : 0, departures: !noGazeExample ? index + 1 : 0,
-      })),
+      rows: [0, 1, 2].map(index => sampleTrialRow(index, interrupted)),
+    };
+  }
+
+  function sampleTrialRow(index, interrupted) {
+    let state = noGazeExample ? 'insufficient' : 'measured';
+    if (interrupted && index > 0) state = 'unmeasured';
+    return {
+      size: ['136 × 64', '96 × 88', '180 × 72'][index], state,
+      coverage: noGazeExample ? [0, 12, 20][index] : [92, 85, 90][index],
+      correct: !noGazeExample, wrong: Number(!noGazeExample && index === 1),
+      losses: Number(!noGazeExample && index === 0), departures: !noGazeExample ? index + 1 : 0,
     };
   }
 
@@ -85,16 +95,21 @@
     checkEl('check-results').hidden = !results;
     checkEl('check-history-view').hidden = !history;
     checkEl('check-test').hidden = !stage;
+    renderCheckHeading(results, history);
+    renderCheckActions(results, history, position);
+  }
+  function renderCheckHeading(results, history) {
     checkEl('check-heading').textContent = history ? 'Sačuvani rezultati' : viewingArchive ? 'Raniji rezultat provjere' : 'Provjera pogleda';
     checkEl('check-policy-summary').textContent = history ? 'Rezultati ovog uređaja · najnoviji su prvi'
       : 'Režim: ' + (results ? policyLabel(displayedReport.policy, displayedReport.holdMs) : policyLabel());
+  }
+  function renderCheckActions(results, history, position) {
     checkEl('check-history').hidden = history || viewingArchive;
     checkEl('check-step').hidden = !position;
     checkEl('check-calibrate').hidden = !position;
     checkEl('check-free').hidden = !position;
     checkEl('check-next').hidden = history || viewingArchive;
-    checkEl('check-next').textContent = results
-      ? displayedReport.trials.length ? 'Ponovi probu dugmadi' : 'Probaj izbor dugmeta' : 'Provjeri preciznost';
+    checkEl('check-next').textContent = nextCheckLabel(results);
     checkEl('check-next').disabled = results && displayedReport.state === 'interrupted';
     checkEl('check-reset').hidden = !results || viewingArchive;
     checkEl('check-repeat').hidden = !results || viewingArchive;
@@ -104,15 +119,17 @@
     checkEl('check-notice').textContent = 'Upravljanje pogledom je pauzirano. Ovim prozorom upravljajte mišem ili tastaturom.';
   }
 
+  function nextCheckLabel(results) {
+    if (!results) return 'Provjeri preciznost';
+    return displayedReport.trials.length ? 'Ponovi probu dugmadi' : 'Probaj izbor dugmeta';
+  }
+
   function renderCheckTracking() {
     const state = checkEl('check-tracking-preview').value;
     const eyes = { both: [true, true], left: [true, false], right: [false, true], held: [true, false], 'no-gaze': [true, false], none: [false, false] }[state];
     const usable = ReferenceEyePolicy.usable(eyes, !['no-gaze', 'none'].includes(state));
     const held = state === 'held' && ReferenceEyePolicy.read() === 'hold';
-    for (const [id, label, valid] of [['check-left-eye', 'Lijevo', eyes[0]], ['check-right-eye', 'Desno', eyes[1]]]) {
-      checkEl(id).textContent = (valid ? '✓ ' : '— ') + label + ' oko · ' + (valid ? 'prepoznato' : 'trenutno se ne prati');
-      checkEl(id).className = 'check-line ' + (valid ? 'check-pass' : 'check-attention');
-    }
+    renderCheckEyes(eyes);
     checkEl('check-gaze-state').textContent = usable ? '✓ Pogled je dostupan u ovom režimu' : '— Čekam pogled dopušten u ovom režimu';
     checkEl('check-gaze-state').className = 'check-line ' + (usable ? 'check-pass' : 'check-attention');
     const stableExample = state === 'both' || state === 'held';
@@ -121,6 +138,15 @@
     checkEl('check-both-continuity').title = 'Izmišljeni primjer kontinuiteta oba oka kroz vrijeme; ovo nije ocjena izabranog režima niti mjerenje preciznosti.';
     checkEl('check-test-policy').textContent = 'Režim: ' + policyLabel();
     checkEl('check-gaze').hidden = checkMode !== 'free' || !usable;
+    renderTrialTracking(usable, held);
+  }
+  function renderCheckEyes(eyes) {
+    for (const [id, label, valid] of [['check-left-eye', 'Lijevo', eyes[0]], ['check-right-eye', 'Desno', eyes[1]]]) {
+      checkEl(id).textContent = (valid ? '✓ ' : '— ') + label + ' oko · ' + (valid ? 'prepoznato' : 'trenutno se ne prati');
+      checkEl(id).className = 'check-line ' + (valid ? 'check-pass' : 'check-attention');
+    }
+  }
+  function renderTrialTracking(usable, held) {
     for (const bar of document.querySelectorAll('.check-trial-progress')) {
       bar.hidden = !usable && !held;
       bar.classList.toggle('held', held);
@@ -140,25 +166,38 @@
   function renderPrecision() {
     const report = displayedReport;
     const headings = checkDetails ? ['Meta', 'Uzorci', 'Podaci', 'Odstupanje', 'Rasipanje'] : ['Meta', 'Rezultat'];
-    const rows = report.results.map(result => {
-      const unmeasured = result.state === 'unmeasured';
-      const status = unmeasured ? '— Nije izmjereno' : result.state === 'insufficient' ? '— Premalo podataka'
-        : result.near ? '✓ Pogled blizu mete' : '! Pogled izvan mete';
-      const tone = result.state !== 'measured' ? 'muted' : result.near ? 'check-pass' : 'check-attention';
-      const values = unmeasured ? ['—', '—', '—', '—']
-        : [result.samples, result.coverage + '%', result.error === null ? '—' : result.error + ' px', result.spread === null ? '—' : result.spread + ' px'];
-      return `<tr><th scope="row">${result.name}</th>` + (checkDetails ? values.map(value => `<td>${value}</td>`).join('') : `<td class="${tone}">${status}</td>`) + '</tr>';
-    });
+    const rows = report.results.map(precisionRow);
     checkEl('check-result-table').innerHTML = '<thead><tr>' + headings.map(heading => `<th scope="col">${heading}</th>`).join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody>';
     checkEl('check-details').textContent = checkDetails ? 'Sakrij mjerenja' : 'Prikaži mjerenja';
     checkEl('check-details').setAttribute('aria-pressed', String(checkDetails));
     checkEl('check-metrics-help').hidden = !checkDetails;
+    checkEl('check-result-advice').textContent = precisionAdvice(report);
+    renderPrecisionMap(report);
+  }
+  function precisionRow(result) {
+    const tone = result.state !== 'measured' ? 'muted' : result.near ? 'check-pass' : 'check-attention';
+    const values = precisionValues(result);
+    const cells = checkDetails ? values.map(value => `<td>${value}</td>`).join('') : `<td class="${tone}">${precisionStatus(result)}</td>`;
+    return `<tr><th scope="row">${result.name}</th>` + cells + '</tr>';
+  }
+  function precisionStatus(result) {
+    if (result.state === 'unmeasured') return '— Nije izmjereno';
+    if (result.state === 'insufficient') return '— Premalo podataka';
+    return result.near ? '✓ Pogled blizu mete' : '! Pogled izvan mete';
+  }
+  function precisionValues(result) {
+    if (result.state === 'unmeasured') return ['—', '—', '—', '—'];
+    return [result.samples, result.coverage + '%', result.error === null ? '—' : result.error + ' px', result.spread === null ? '—' : result.spread + ' px'];
+  }
+  function precisionAdvice(report) {
     const count = state => report.results.filter(result => result.state === state).length;
-    checkEl('check-result-advice').textContent = report.state === 'interrupted'
+    return report.state === 'interrupted'
       ? 'Provjera je prekinuta. Završene mete su sačuvane; izaberite „Ponovi preciznost“ za cijeli test.'
       : 'Blizu mete: ' + report.results.filter(result => result.state === 'measured' && result.near).length
         + ' · Izvan mete: ' + report.results.filter(result => result.state === 'measured' && !result.near).length
         + ' · Premalo podataka: ' + count('insufficient') + '. Podesite položaj pa ponovite provjeru.';
+  }
+  function renderPrecisionMap(report) {
     const map = checkEl('check-result-map');
     map.replaceChildren();
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -275,23 +314,27 @@
     const list = checkEl('check-history-list');
     list.replaceChildren();
     for (const report of historyItems) {
-      const button = document.createElement('button');
-      button.dataset.reportId = report.id;
-      const title = document.createElement('strong'); title.textContent = report.date;
-      const detail = document.createElement('small');
-      detail.textContent = report.unreadable ? '! Nečitljiv rezultat' : policyNames[report.policy] + ' · Preciznost: ' + (report.state === 'interrupted' ? 'Prekinuto' : 'Završeno');
-      const saved = document.createElement('small');
-      saved.textContent = report.unreadable ? 'Datoteka je zadržana' : report.storage === 'saved' ? 'Sačuvano na uređaju · Simulacija' : 'Samo u memoriji · Simulacija';
-      button.append(title, detail, saved);
-      if (report.trials?.length) { const trial = document.createElement('small'); trial.textContent = 'Probe: ' + trialSummary(report); button.append(trial); }
-      button.addEventListener('click', () => { selectedHistoryId = report.id; renderHistorySelection(); });
-      list.append(button);
+      list.append(historyButton(report));
     }
     if (!historyItems.some(item => item.id === selectedHistoryId)) selectedHistoryId = historyItems[0]?.id;
     checkEl('check-history-content').hidden = historyItems.length === 0;
     checkEl('check-history-empty').hidden = historyItems.length !== 0;
     renderHistorySelection();
     renderFrame();
+  }
+
+  function historyButton(report) {
+    const button = document.createElement('button');
+    button.dataset.reportId = report.id;
+    const title = document.createElement('strong'); title.textContent = report.date;
+    const detail = document.createElement('small');
+    detail.textContent = report.unreadable ? '! Nečitljiv rezultat' : policyNames[report.policy] + ' · Preciznost: ' + (report.state === 'interrupted' ? 'Prekinuto' : 'Završeno');
+    const saved = document.createElement('small');
+    saved.textContent = report.unreadable ? 'Datoteka je zadržana' : report.storage === 'saved' ? 'Sačuvano na uređaju · Simulacija' : 'Samo u memoriji · Simulacija';
+    button.append(title, detail, saved);
+    if (report.trials?.length) { const trial = document.createElement('small'); trial.textContent = 'Probe: ' + trialSummary(report); button.append(trial); }
+    button.addEventListener('click', () => { selectedHistoryId = report.id; renderHistorySelection(); });
+    return button;
   }
 
   function checkReset() {
@@ -317,40 +360,47 @@
     const targets = checkEl('check-targets');
     targets.replaceChildren();
     if (mode === 'trial') {
-      const [width, height, gap, left, top] = [
-        [136, 64, 12, 64, 14],
-        [96, 88, 10, 64, window.innerHeight - 290],
-        [180, 72, 12, Math.floor(window.innerWidth / 2) - 282, Math.floor(window.innerHeight / 2) - 36],
-      ][checkTrialIndex];
-      const expected = [1, 0, 2][checkTrialIndex];
-      for (let i = 0; i < 3; i++) {
-        const button = document.createElement('span');
-        button.className = 'check-target';
-        button.style.cssText = `left:${left + i * (width + gap)}px;top:${top}px;`
-          + `width:${width}px;height:${height}px;border-radius:10px;font-size:24px;`
-          + `border-color:${i === expected ? '#8bd5f5' : '#58647a'}`;
-        button.textContent = i === expected ? 'Pogledaj' : 'Drugo';
-        if (i === expected) {
-          const progress = document.createElement('i'); progress.className = 'check-trial-progress'; button.append(progress);
-        }
-        targets.append(button);
-      }
-      checkEl('check-test-next').textContent = checkTrialIndex < 2 ? 'Sljedeća probna grupa' : 'Prikaži primjer rezultata';
+      renderTrialTargets(targets);
     } else {
-      checkEl('check-test-next').textContent = 'Prikaži primjer rezultata';
-      const rows = mode === 'free' ? [.06, .5, .94] : [.5];
-      const columns = mode === 'free' ? [.04, .5, .96] : [.5];
-      for (const y of rows) for (const x of columns) {
-        const dot = document.createElement('span'); dot.className = 'check-target';
-        dot.style.left = `calc(${x * 100}% - 36px)`; dot.style.top = `calc(${y * 100}% - 36px)`; dot.textContent = '+';
-        targets.append(dot);
-      }
+      renderFreeTargets(targets, mode);
     }
     checkEl('check-progress').hidden = mode !== 'precision';
     checkEl('check-test-copy').innerHTML = mode === 'free' ? 'Gledajte križiće redom. Zelena oznaka pokazuje vaš pogled.'
       : mode === 'trial' ? 'Gledajte „Pogledaj“. Zadržite pogled dok se traka ne popuni.'
         : 'Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span>';
     renderCheckTracking();
+  }
+
+  function renderTrialTargets(targets) {
+    const [width, height, gap, left, top] = [
+      [136, 64, 12, 64, 14],
+      [96, 88, 10, 64, window.innerHeight - 290],
+      [180, 72, 12, Math.floor(window.innerWidth / 2) - 282, Math.floor(window.innerHeight / 2) - 36],
+    ][checkTrialIndex];
+    const expected = [1, 0, 2][checkTrialIndex];
+    for (let i = 0; i < 3; i++) {
+      const button = document.createElement('span');
+      button.className = 'check-target';
+      button.style.cssText = `left:${left + i * (width + gap)}px;top:${top}px;`
+        + `width:${width}px;height:${height}px;border-radius:10px;font-size:24px;`
+        + `border-color:${i === expected ? '#8bd5f5' : '#58647a'}`;
+      button.textContent = i === expected ? 'Pogledaj' : 'Drugo';
+      if (i === expected) {
+        const progress = document.createElement('i'); progress.className = 'check-trial-progress'; button.append(progress);
+      }
+      targets.append(button);
+    }
+    checkEl('check-test-next').textContent = checkTrialIndex < 2 ? 'Sljedeća probna grupa' : 'Prikaži primjer rezultata';
+  }
+  function renderFreeTargets(targets, mode) {
+    checkEl('check-test-next').textContent = 'Prikaži primjer rezultata';
+    const rows = mode === 'free' ? [.06, .5, .94] : [.5];
+    const columns = mode === 'free' ? [.04, .5, .96] : [.5];
+    for (const y of rows) for (const x of columns) {
+      const dot = document.createElement('span'); dot.className = 'check-target';
+      dot.style.left = `calc(${x * 100}% - 36px)`; dot.style.top = `calc(${y * 100}% - 36px)`; dot.textContent = '+';
+      targets.append(dot);
+    }
   }
 
   function finishAttempt(interrupted = false) {
@@ -378,15 +428,20 @@
     historyItems = [makeReport('provjera-014', '21.10.2026. · 17:45', 'hold'), makeReport('provjera-013', '21.10.2026. · 17:38', 'any', true)];
     if (view === 'empty') historyItems = [];
     else if (view !== 'position') {
-      currentReport = makeReport('provjera-015', '22.10.2026. · 14:32', ReferenceEyePolicy.read(), view === 'interrupted');
-      currentReport.storage = storageForPreview();
-      if (view === 'trial' || view === 'trial-interrupted' || noGazeExample) currentReport.trials.push(makeTrial('proba-021'));
-      if (view === 'trial-interrupted') currentReport.trials.push(makeTrial('proba-022', true));
+      currentReport = previewReport(view);
       rememberReport(currentReport);
     }
     if (view === 'history-error') historyItems.unshift({ id: 'provjera-016', date: '22.10.2026. · 14:40', unreadable: true });
     if (['history', 'empty', 'history-error'].includes(view)) showHistory();
     else if (currentReport) { reportTab = view.startsWith('trial') ? 'trial' : 'precision'; showReport(currentReport); }
+  }
+
+  function previewReport(view) {
+    const report = makeReport('provjera-015', '22.10.2026. · 14:32', ReferenceEyePolicy.read(), view === 'interrupted');
+    report.storage = storageForPreview();
+    if (['trial', 'trial-interrupted'].includes(view) || noGazeExample) report.trials.push(makeTrial('proba-021'));
+    if (view === 'trial-interrupted') report.trials.push(makeTrial('proba-022', true));
+    return report;
   }
 
   checkEl('check-next').addEventListener('click', () => checkStage(checkMode === 'results' ? 'trial' : 'precision'));

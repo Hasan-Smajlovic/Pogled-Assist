@@ -31,6 +31,21 @@ class RecordingIndicator(QObject):
             self._confirmation.stop()
             self._clear()
             return
+        tone, text, compact = self._status_text(status)
+        key = status.get("id"), tone, "" if tone == "recording" else text
+        if key != self._key:
+            self._confirmation.stop()
+            self._key = key
+            if tone == "saved":
+                self._confirmation.start()
+        elif tone == "saved" and not self._confirmation.isActive():
+            return
+        if (self.tone, self.text, self.compact_text) != (tone, text, compact):
+            self.tone, self.text, self.compact_text = tone, text, compact
+            self.changed.emit()
+
+    @staticmethod
+    def _status_text(status):
         if status.get("busy"):
             if status.get("state") == "finishing":
                 tone, text, compact = "finishing", "Završavam snimak…", "Čuvam…"
@@ -46,17 +61,7 @@ class RecordingIndicator(QObject):
             tone, text, compact = "incomplete", "Snimak nije potpun", "Nepotpuno"
         else:
             tone, text, compact = "saved", "Snimak je sačuvan", "Sačuvano"
-        key = status.get("id"), tone, "" if tone == "recording" else text
-        if key != self._key:
-            self._confirmation.stop()
-            self._key = key
-            if tone == "saved":
-                self._confirmation.start()
-        elif tone == "saved" and not self._confirmation.isActive():
-            return
-        if (self.tone, self.text, self.compact_text) != (tone, text, compact):
-            self.tone, self.text, self.compact_text = tone, text, compact
-            self.changed.emit()
+        return tone, text, compact
 
     def _clear(self):
         self.text = self.compact_text = ""

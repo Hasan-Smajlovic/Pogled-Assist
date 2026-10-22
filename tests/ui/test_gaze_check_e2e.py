@@ -140,6 +140,24 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     assert not window._trial_tracked_targets
 
 
+def _feed_isolated_trial(window, now, samples, interruptions):
+    start = window._trial_ready_at
+    count = 1 if samples == "single" else 90
+    for index in range(count):
+        now[0] = start + 0.1 + index * 0.1
+        at = start + 0.1 if samples == "repeated" else now[0]
+        if samples == "sparse" and index % 10:
+            continue
+        if samples == "interrupted":
+            interruptions += 1
+        window.handle_snapshot(
+            CheckSnapshot(
+                True, True, gaze=(0.99, 0.5), gaze_at=at, gaze_interruptions=interruptions
+            )
+        )
+    return interruptions
+
+
 @pytest.mark.parametrize("samples", ["single", "repeated", "sparse", "interrupted"])
 def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check, qtbot, samples):
     window, now, _screen = gaze_check
@@ -152,20 +170,7 @@ def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check,
     window._start_trial()
     interruptions = 0
     for _ in range(3):
-        start = window._trial_ready_at
-        count = 1 if samples == "single" else 90
-        for index in range(count):
-            now[0] = start + 0.1 + index * 0.1
-            at = start + 0.1 if samples == "repeated" else now[0]
-            if samples == "sparse" and index % 10:
-                continue
-            if samples == "interrupted":
-                interruptions += 1
-            window.handle_snapshot(
-                CheckSnapshot(
-                    True, True, gaze=(0.99, 0.5), gaze_at=at, gaze_interruptions=interruptions
-                )
-            )
+        interruptions = _feed_isolated_trial(window, now, samples, interruptions)
         now[0] = window._trial_deadline + 0.01
         window._tick()
     assert window._trial_losses == 0  # No pending dwell to cancel outside the buttons.
@@ -649,50 +654,63 @@ def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
     assert window._selection.target is None
 
 
+def _pass_precision(window):
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y))
+        for name, x, y in window._check.targets
+    ]
+    window._show_results()
+
+
+def _show_fit_phase(window, phase):
+    if phase == "precision":
+        window._start_precision()
+    elif phase == "results":
+        _pass_precision(window)
+    elif phase == "details":
+        window._details_button.click()
+    elif phase == "trial":
+        window._start_trial()
+    elif phase == "trial-no-gaze":
+        for _index in range(3):
+            window._finish_trial_target(False, window._trial_deadline)
+    elif phase == "free":
+        window._start_free()
+
+
+def _assert_fit_child(window, child, phase):
+    from PySide6.QtWidgets import QPushButton, QScrollArea
+
+    ancestor = child.parentWidget()
+    while ancestor is not None and not isinstance(ancestor, QScrollArea):
+        ancestor = ancestor.parentWidget()
+    if ancestor is not None:
+        viewport = ancestor.viewport()
+        bounds = QRect(viewport.mapTo(window, QPoint()), viewport.size())
+        assert window.rect().contains(bounds)
+        return
+    bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
+    assert window.rect().contains(bounds), (phase, child.text(), bounds)
+    if isinstance(child, QPushButton):
+        assert child.height() >= 60
+        assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
+    elif child.hasHeightForWidth():
+        assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
+
+
 @pytest.mark.parametrize("simulated", [False, True])
 def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulated):
-    from PySide6.QtWidgets import QLabel, QPushButton, QScrollArea
+    from PySide6.QtWidgets import QLabel, QPushButton
 
     window, _now, _screen = gaze_check
     window._simulated = simulated
     for phase in ("position", "precision", "results", "details", "trial", "trial-no-gaze", "free"):
-        if phase == "precision":
-            window._start_precision()
-        elif phase == "results":
-            window._check.results = [
-                FixationResult(name, 90, 0.9, 12, 8, True, (x, y))
-                for name, x, y in window._check.targets
-            ]
-            window._show_results()
-        elif phase == "details":
-            window._details_button.click()
-        elif phase == "trial":
-            window._start_trial()
-        elif phase == "trial-no-gaze":
-            for _index in range(3):
-                window._finish_trial_target(False, window._trial_deadline)
-        elif phase == "free":
-            window._start_free()
+        _show_fit_phase(window, phase)
         qtbot.wait(1)
         assert (window.width(), window.height()) == (1280, 720)
         for child in window.findChildren(QWidget):
-            if not child.isVisible() or not isinstance(child, (QLabel, QPushButton)):
-                continue
-            ancestor = child.parentWidget()
-            while ancestor is not None and not isinstance(ancestor, QScrollArea):
-                ancestor = ancestor.parentWidget()
-            if ancestor is not None:
-                viewport = ancestor.viewport()
-                bounds = QRect(viewport.mapTo(window, QPoint()), viewport.size())
-                assert window.rect().contains(bounds)
-                continue
-            bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
-            assert window.rect().contains(bounds), (phase, child.text(), bounds)
-            if isinstance(child, QPushButton):
-                assert child.height() >= 60
-                assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
-            elif child.hasHeightForWidth():
-                assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
+            if child.isVisible() and isinstance(child, (QLabel, QPushButton)):
+                _assert_fit_child(window, child, phase)
 
 
 @pytest.mark.parametrize(

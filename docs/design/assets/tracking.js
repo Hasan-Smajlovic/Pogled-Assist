@@ -64,8 +64,15 @@
     const held = stateKey === 'brief' && ReferenceEyePolicy.read() === 'hold';
     if (usable && ['brief', 'left', 'right'].includes(stateKey)) trackingNoticeOpen = false;
     trackingPreviewProgress = usable || held ? progress : 0;
-    $('tracking-stage').dataset.context = context;
     const showFeedback = $('show-tracking-feedback').checked;
+    const host = renderTrackingContext(context, showFeedback);
+    const noticeVisible = showFeedback && trackingNoticeOpen;
+    document.querySelector('.tracking-app .message-box').dataset.notice = String(noticeVisible && context === 'message');
+    renderTrackingNotice(host, state, stateKey, noticeVisible);
+    renderTrackingTarget(context, usable, held);
+  }
+  function renderTrackingContext(context, showFeedback) {
+    $('tracking-stage').dataset.context = context;
     $('tracking-stage').dataset.feedback = showFeedback ? 'on' : 'off';
     document.querySelector('.tracking-app').inert = context !== 'message';
     document.querySelector('.tracking-modal-layer').hidden = context === 'message';
@@ -74,12 +81,13 @@
     const foreground = $('tracking-dialog-feedback');
     const host = context === 'message' ? background : foreground;
     (context === 'message' ? foreground : background).replaceChildren();
+    return host;
+  }
+  function renderTrackingNotice(host, state, stateKey, noticeVisible) {
     if (!host.firstElementChild) {
       host.innerHTML = '<div class="tracking-feedback" aria-hidden="true" inert><div class="tracking-eyes"></div><p class="tracking-feedback-copy" role="status" aria-live="polite" aria-atomic="true"><span class="tracking-feedback-title"></span><span class="tracking-feedback-detail" hidden></span></p></div>';
     }
     const feedback = host.firstElementChild;
-    const noticeVisible = showFeedback && trackingNoticeOpen;
-    document.querySelector('.tracking-app .message-box').dataset.notice = String(noticeVisible && context === 'message');
     feedback.dataset.visible = String(noticeVisible);
     feedback.inert = !noticeVisible;
     feedback.setAttribute('aria-hidden', String(!noticeVisible));
@@ -99,6 +107,8 @@
       if (detail.textContent !== detailText) detail.textContent = detailText;
       detail.hidden = !state.detail;
     }
+  }
+  function renderTrackingTarget(context, usable, held) {
     document.querySelectorAll('.tracking-demo-target').forEach(button => {
       button.classList.remove('tracking-demo-target');
       button.style.removeProperty('--demo-progress');

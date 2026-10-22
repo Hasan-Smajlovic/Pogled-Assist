@@ -156,16 +156,16 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._diagnostics_window.close()
         self._diagnostic_recordings.shutdown()
         self._tracking_feedback.stop()
-        if self._gaze_check_window is not None:
-            self._gaze_check_window.close()
-        if self._speech_window is not None:
-            self._speech_window.close()
-        if self._keyboard_window is not None:
-            self._keyboard_window.close()
-        if self._controller_window is not None:
-            self._controller_window.close()
-        if self._settings_window is not None:
-            self._settings_window.close()
+        for name in (
+            "_gaze_check_window",
+            "_speech_window",
+            "_keyboard_window",
+            "_controller_window",
+            "_settings_window",
+        ):
+            window = getattr(self, name)
+            if window is not None:
+                window.close()
         self._quick_zoom.close_zoom()
         self._quick_menu.close_menu()
         self._gaze_bubble.set_enabled(False)
@@ -235,11 +235,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
         return self._hotbar_action_bounds(action)
 
     def selection_bounds(self, action: str) -> QRect | None:
-        if (
-            isinstance(action, str)
-            and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
-            and _is_visible(self._controller_window)
-        ):
+        controller_action = isinstance(action, str) and action.startswith(
+            CONTROLLER_WINDOW_ACTION_PREFIX
+        )
+        if controller_action and _is_visible(self._controller_window):
             return self._controller_window.action_bounds(action)
         return self.action_bounds(action)
 
@@ -1201,13 +1200,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
             if window is not None:
                 window._eye_gate.invalidate_gaze(received_at)
         self._close_tracking_overlays()
-        if not (
-            self._mouse._toolbar_selection.tracking_held
-            or (
-                self._settings_window is not None
-                and self._settings_window._gaze_selection.tracking_held
-            )
-        ):
+        held = self._mouse._toolbar_selection.tracking_held
+        if self._settings_window is not None:
+            held |= self._settings_window._gaze_selection.tracking_held
+        if not held:
             self._interaction_overlay.clear()
 
     def _close_tracking_overlays(self) -> None:

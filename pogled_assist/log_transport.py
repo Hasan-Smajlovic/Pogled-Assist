@@ -119,7 +119,8 @@ class LogWriter:
     def recording_status(self) -> dict | None:
         with self._condition:
             item = self._recording
-            if item is not None and item.accepting and time.monotonic() >= item.deadline:
+            accepting = item is not None and item.accepting
+            if accepting and time.monotonic() >= item.deadline:
                 self.stop_recording("time")
             result = item.snapshot() if item else self._recording_result
             if result is None:
@@ -269,37 +270,60 @@ class LogWriter:
         with self._condition:
             if not self.enabled:
                 return False
-            item = self._recording
-            recordable = item is not None and item.id == recording_id and item.accepting
-            if recordable and time.monotonic() >= item.deadline:
-                self.stop_recording("time")
-                recordable = False
-            if generation is None and not recordable:
+            item = self._recordable(recording_id)
+            if not self._accept_generation(generation, item):
                 return False
-            if generation is not None and generation != self._generation and not recordable:
-                self._drop("old_segment")
+            if not self._queue_has_room(priority, kind, item):
                 return False
-            reserve = min(PRIORITY_RESERVE, self.capacity // 4)
-            limit = self.capacity if priority else self.capacity - reserve
-            if len(self._queue) + self._closing_records >= limit:
-                self._drop(kind)
-                if recordable:
-                    item.dropped[kind] = item.dropped.get(kind, 0) + 1
-                return False
+            self._count_snapshot(kind, payload, item)
             self._sequence += 1
-            copied = payload[1] if kind == "event" else payload
-            if isinstance(copied, dict) and copied.get("_snapshot_truncated"):
-                self._truncated += 1
-                if recordable:
-                    item.bounded_snapshots += 1
-            if recordable:
+            if item is not None:
                 item.pending += 1
             self._queue.append(
-                (generation, self._sequence, kind, payload, item.id if recordable else None)
+                (generation, self._sequence, kind, payload, item.id if item is not None else None)
             )
             self._high_water = max(self._high_water, len(self._queue) + self._closing_records)
             self._condition.notify()
             return True
+
+    def _recordable(self, recording_id):
+        item = self._recording
+        if item is None:
+            return None
+        if item.id != recording_id or not item.accepting:
+            return None
+        if time.monotonic() >= item.deadline:
+            self.stop_recording("time")
+            return None
+        return item
+
+    def _accept_generation(self, generation, recording) -> bool:
+        if recording is not None:
+            return True
+        if generation is None:
+            return False
+        if generation != self._generation:
+            self._drop("old_segment")
+            return False
+        return True
+
+    def _queue_has_room(self, priority, kind, recording) -> bool:
+        reserve = min(PRIORITY_RESERVE, self.capacity // 4)
+        limit = self.capacity if priority else self.capacity - reserve
+        if len(self._queue) + self._closing_records < limit:
+            return True
+        self._drop(kind)
+        if recording is not None:
+            recording.dropped[kind] = recording.dropped.get(kind, 0) + 1
+        return False
+
+    def _count_snapshot(self, kind, payload, recording) -> None:
+        copied = payload[1] if kind == "event" else payload
+        if not isinstance(copied, dict) or not copied.get("_snapshot_truncated"):
+            return
+        self._truncated += 1
+        if recording is not None:
+            recording.bounded_snapshots += 1
 
     def _drop(self, category: str, count: int = 1) -> None:
         self._dropped[category] += count
@@ -326,7 +350,7 @@ class LogWriter:
         """Retain bounded technical footers for the writer, never wait for I/O."""
         if self._desired is None:
             return
-        if not any(item[0] is not None and _event_in(item, SUMMARY_EVENTS) for item in self._queue):
+        if not any(_ordinary_event_in(item, SUMMARY_EVENTS) for item in self._queue):
             return
         # If the writer has not opened this segment, retain its lifecycle start
         # too. Ordinary backlog still follows the existing discard policy.
@@ -334,18 +358,8 @@ class LogWriter:
         available = self.capacity - len(self._queue) - self._closing_records
         footer_events = SUMMARY_EVENTS | {"session_start"}
         for item in self._queue:
-            if item[0] is not None and _event_in(item, footer_events):
-                if item[4] is None:
-                    retained.append(item)
-                else:
-                    # Ordinary footers may jump ahead during rotation; the
-                    # recording leg must retain its original event order.
-                    pending.append((None, *item[1:]))
-                    if available > 0:
-                        retained.append((*item[:4], None))
-                        available -= 1
-                    else:
-                        self._drop("segment_footer")
+            if _ordinary_event_in(item, footer_events):
+                available = self._retain_footer(item, retained, pending, available)
             else:
                 pending.append(item)
         self._queue = pending
@@ -353,6 +367,18 @@ class LogWriter:
         self._closing_segments.append(
             (self._desired, (time.monotonic(), time.time()), reason, retained)
         )
+
+    def _retain_footer(self, item, retained, pending, available):
+        if item[4] is None:
+            retained.append(item)
+            return available
+        # Ordinary footers can jump ahead; recording keeps its queue order.
+        pending.append((None, *item[1:]))
+        if available > 0:
+            retained.append((*item[:4], None))
+            return available - 1
+        self._drop("segment_footer")
+        return available
 
     def _run(self) -> None:
         end_reason = "shutdown"
@@ -612,33 +638,26 @@ class LogWriter:
             self._drop("writer_error")
 
     def _flush(self) -> None:
-        if self._recording_sink is not None:
-            try:
-                self._recording_sink.flush()
-            except Exception:
-                self._recording_failure()
+        self._flush_stream(self._recording_sink, recording=True)
         for stream in (self._file, self._json, self._console):
-            if stream is not None:
-                try:
-                    stream.flush()
-                except Exception:
-                    self._failure()
+            self._flush_stream(stream)
+
+    def _flush_stream(self, stream, *, recording=False) -> None:
+        if stream is None:
+            return
+        try:
+            stream.flush()
+        except Exception:
+            if recording:
+                self._recording_failure()
+            else:
+                self._failure()
 
     def _consume(self, queued: tuple) -> None:
         item = self._recording
         if item is not None and queued[4] == item.id:
             try:
-                if queued[2] == "event" and self._recording_sink is not None:
-                    name, fields, at, wall, _ = queued[3]
-                    if name not in {
-                        "session_start",
-                        "session_end",
-                        "runtime",
-                        "trace_limit",
-                        "session_limit",
-                    } and not self._recording_sink.write(name, fields, at, wall):
-                        self.stop_recording("size")
-                        item.reason = "size"
+                self._consume_recording(queued, item)
             except Exception:
                 self._recording_failure()
             finally:
@@ -646,6 +665,18 @@ class LogWriter:
                     item.pending -= 1
         if self._belongs_to_active(queued):
             self._write(queued)
+
+    def _consume_recording(self, queued, item) -> None:
+        if queued[2] != "event" or self._recording_sink is None:
+            return
+        from .diagnostic_recording import RecordingEvent
+
+        name, fields, at, wall, _ = queued[3]
+        if name in {"session_start", "session_end", "runtime", "trace_limit", "session_limit"}:
+            return
+        if not self._recording_sink.write(RecordingEvent(name, fields, at, wall)):
+            self.stop_recording("size")
+            item.reason = "size"
 
     def _recording_failure(self) -> None:
         with self._condition:
@@ -678,6 +709,7 @@ class LogWriter:
         if item is None:
             return
         from .diagnostic_recording import (
+            RecordingEvent,
             RecordingStore,
             atomic_bytes,
             json_bytes,
@@ -688,10 +720,12 @@ class LogWriter:
         try:
             if sink is not None:
                 item.end_present = sink.write(
-                    "session_end",
-                    {"reason": item.reason, "recording_health": item.health()},
-                    item.ended_mono or time.monotonic(),
-                    item.ended_wall or time.time(),
+                    RecordingEvent(
+                        "session_end",
+                        {"reason": item.reason, "recording_health": item.health()},
+                        item.ended_mono or time.monotonic(),
+                        item.ended_wall or time.time(),
+                    ),
                     footer=True,
                 )
                 sink.close()
@@ -701,12 +735,14 @@ class LogWriter:
             if sink is not None:
                 with suppress(Exception):
                     sink.close()
-        item.complete = bool(
-            item.end_present
-            and item.reason in {"manual", "time"}
-            and not item.writer_errors
-            and not item.dropped
-            and not item.bounded_snapshots
+        item.complete = all(
+            (
+                item.end_present,
+                item.reason in {"manual", "time"},
+                not item.writer_errors,
+                not item.dropped,
+                not item.bounded_snapshots,
+            )
         )
         item.state = (
             "error" if item.writer_errors else "completed" if item.complete else "interrupted"
@@ -760,6 +796,10 @@ def bounded_copy(value: object) -> object:
 
 def _event_in(item: tuple, names: frozenset) -> bool:
     return item[2] == "event" and item[3][0] in names
+
+
+def _ordinary_event_in(item: tuple, names: frozenset) -> bool:
+    return item[0] is not None and _event_in(item, names)
 
 
 def _format_record(data: dict) -> str:
