@@ -4,7 +4,7 @@
   const gazeDemo = createReferenceGaze();
   if (ReferenceDesign.readSession('settings-save-error', false)) {
     const settingsButton = document.querySelector('[data-open-view="settings"]');
-    settingsButton.querySelector('span').textContent = 'Postavke *';
+    settingsButton.querySelector('[data-settings-label]').textContent = 'Postavke *';
     settingsButton.title = 'Postavke nisu sačuvane. Otvorite Postavke za ponovni pokušaj.';
   }
   const hotbarStatuses = {

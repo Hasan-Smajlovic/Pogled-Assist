@@ -84,7 +84,7 @@ class RecordingBadge(QLabel):
         self.setFocusPolicy(Qt.NoFocus)
         self.setTextFormat(Qt.PlainText)
         self.setAlignment(Qt.AlignCenter if compact else Qt.AlignLeft | Qt.AlignVCenter)
-        self.setFixedSize(parent.width() - 8 if compact else 264, 18 if compact else 30)
+        self.setFixedSize(parent.width() - 8 if compact else 264, 22 if compact else 30)
         retain_size_when_hidden(self)
         if compact:
             parent.installEventFilter(self)
@@ -132,7 +132,7 @@ class RecordingBadge(QLabel):
     def _position(self):
         parent = self.parentWidget()
         self.setFixedWidth(max(0, parent.width() - 8))
-        self.move(4, parent.height() - self.height() - 2)
+        self.move(4, 8)
         self.raise_()
 
     def eventFilter(self, watched, event):

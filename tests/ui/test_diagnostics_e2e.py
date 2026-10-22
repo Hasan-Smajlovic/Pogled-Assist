@@ -214,13 +214,18 @@ def test_settings_and_check_shortcuts_preserve_input_suspension_and_result(
 
 
 def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaze, qtbot):
-    from pogled_assist.interaction.mouse_controller import SETTINGS
+    from pogled_assist.interaction.mouse_controller import QUICK_ACTIONS, SETTINGS
 
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._open_speech()
     qtbot.wait(1)
     speech = hotbar._speech_window
     button = hotbar._buttons[SETTINGS]
+    neighbor = hotbar._buttons[QUICK_ACTIONS]
+    assert button.iconSize() == neighbor.iconSize()
+    assert button.contentsRect() == neighbor.contentsRect().adjusted(
+        0, 0, button.width() - neighbor.width(), 0
+    )
     geometry = button.geometry()
     targets = {action: widget.geometry() for action, widget in speech._action_buttons.items()}
     status = {"busy": True, "remaining_seconds": 119, "state": "recording"}
@@ -239,6 +244,9 @@ def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaz
         <= speech._recording_badge.contentsRect().width()
     )
     assert button.geometry() == geometry
+    assert hotbar._recording_badge.geometry().bottom() < (
+        button.height() - button.fontMetrics().height() - 5
+    )
     assert targets == {
         action: widget.geometry() for action, widget in speech._action_buttons.items()
     }
