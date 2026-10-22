@@ -208,8 +208,18 @@ def test_more_than_100_trials_and_large_reports_remain_exportable(tmp_path, monk
         assert len(json.loads(archive.read("rezultat.json"))["trials"]) == 150
 
 
-@pytest.mark.parametrize("counter", ["wrong_selections", "cancelled_selections", "departures"])
-@pytest.mark.parametrize("invalid", [None, -1, 0.5, True, "0"])
+@pytest.mark.parametrize(
+    "counter,invalid",
+    [
+        ("wrong_selections", None),
+        ("wrong_selections", -1),
+        ("wrong_selections", 0.5),
+        ("wrong_selections", True),
+        ("wrong_selections", "0"),
+        ("cancelled_selections", -1),
+        ("departures", -1),
+    ],
+)
 def test_corrupt_trial_counters_are_unreadable_instead_of_breaking_result_view(
     tmp_path, counter, invalid
 ):

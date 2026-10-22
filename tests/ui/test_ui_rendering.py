@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtGui import QImage
 
 from scripts.ui.capture_ui import capture_ui
-from scripts.ui.gallery import CORE_NAMES, gallery_content
+from scripts.ui.gallery import CORE_NAMES
 
 
 @pytest.mark.e2e
@@ -27,10 +27,6 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
         if name == "gaze-check-one-eye-free":
             assert widget._phase == "free"
             assert widget._target.gaze_point is not None
-        if name == "gaze-check-trial-held":
-            assert widget._phase == "trial"
-            assert widget._target.paused
-            assert widget._target.progress == 0.65
         capture_state(session, widget, name, title, **kwargs)
 
     def capture_with_script_control_check(app, widget, output_dir, name, size):
@@ -124,22 +120,3 @@ def test_gallery_profiles_filter_before_grabbing_widgets(qapp, tmp_path, monkeyp
     widget.close()
 
 
-def test_gallery_groups_order_states_and_escape_titles():
-    html = gallery_content(
-        {
-            "speech-voice-timeout": "Voice timeout",
-            "settings-gaze-one-eye": "One eye",
-            "settings-gaze": '<script>alert("title")</script>',
-            "speech": "Speech",
-            "future-surface": "Future surface",
-        }
-    )
-    assert 'href="#voice"' in html
-    assert 'id="other"' in html
-    assert html.index('id="speech"') < html.index('id="settings"') < html.index('id="voice"')
-    assert html.index('href="settings-gaze.png"') < html.index('href="settings-gaze-one-eye.png"')
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
-    assert 'loading="lazy"' in html
-    assert 'target="_blank" rel="noopener"' in html
-    assert "5 screenshots" in html

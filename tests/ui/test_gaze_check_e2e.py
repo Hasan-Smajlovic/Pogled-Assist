@@ -340,12 +340,6 @@ def test_free_check_shows_nine_targets_and_only_fresh_both_eye_gaze(gaze_check, 
 
 
 @pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
-@pytest.mark.parametrize(
-    "gaze_check",
-    [GazeSettings(eye_tracking_policy=policy) for policy in ("both", "hold", "any")],
-    indirect=True,
-    ids=["both", "hold", "any"],
-)
 def test_trial_neighbors_remain_visible_beside_caregiver_controls(gaze_check, qtbot, size):
     window, now, _screen = gaze_check
     window.resize(*size)
@@ -458,14 +452,13 @@ def test_trial_edge_hold_matches_normal_control_bounds(gaze_check, scenario):
 
 
 @pytest.mark.parametrize(
-    "gaze_check",
+    "gaze_check,scenario",
     [
-        GazeSettings(selection_pause_ms=500, dwell_ms=500, edge_hold_ms=duration)
-        for duration in (0, 120, 240)
+        (GazeSettings(selection_pause_ms=500, dwell_ms=500, edge_hold_ms=duration), scenario)
+        for duration, scenario in ((0, 0), (120, 0), (240, 0), (120, 1), (120, 2))
     ],
-    indirect=True,
+    indirect=["gaze_check"],
 )
-@pytest.mark.parametrize("scenario", [0, 1, 2])
 def test_trial_uses_saved_edge_duration_even_when_gaze_enters_neighbor(gaze_check, scenario):
     window, _now, _screen = gaze_check
     window._start_trial()

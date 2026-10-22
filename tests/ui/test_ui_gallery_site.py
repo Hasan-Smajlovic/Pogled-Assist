@@ -41,6 +41,7 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
             "1280x720/settings-gaze-one-eye.png": _png(),
             "1280x720/settings-gaze.png": _png(),
             "1280x720/speech-voice-timeout.png": _png(),
+            "1280x720/future-surface.png": _png(),
         }
     )
     api.pulls[0]["title"] = '<script>alert("PR title")</script>'
@@ -57,7 +58,12 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
         assert "Hardware and Windows input are disabled" in html
         assert 'id="overview"' in html
         assert 'loading="lazy"' in html
+        assert 'target="_blank" rel="noopener"' in html
+        assert "<script>" not in html
         if number == 2:
+            assert 'href="#voice"' in html
+            assert 'id="other"' in html
+            assert "5 screenshots" in html
             assert (
                 html.index('id="speech"') < html.index('id="settings"') < html.index('id="voice"')
             )
@@ -67,6 +73,7 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     root = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     assert '<script>alert("PR title")</script>' not in root
     assert "&lt;script&gt;" in root
+    assert "&lt;script&gt;" in site.gallery_content({"speech": '<script>alert("title")</script>'})
     assert api.writes == []
     assert comments[0]["body"].startswith(site.COMMENT_MARKER)
     assert f"{BASE_URL}/pr-1/artifact-101/1280x720/speech.png" in comments[0]["body"]

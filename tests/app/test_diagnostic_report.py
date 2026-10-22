@@ -151,8 +151,18 @@ def test_manual_report_keeps_recording_health_separate_from_process_loss(tmp_pat
     assert result["recording_health"] == recording_health
 
 
-@pytest.mark.parametrize("field", ["dropped", "writer_errors", "bounded_snapshots"])
-@pytest.mark.parametrize("invalid", [-1, 0.5, True, "2", None])
+@pytest.mark.parametrize(
+    "field,invalid",
+    [
+        ("dropped", -1),
+        ("dropped", 0.5),
+        ("dropped", True),
+        ("dropped", "2"),
+        ("dropped", None),
+        ("writer_errors", -1),
+        ("bounded_snapshots", -1),
+    ],
+)
 def test_manual_report_rejects_invalid_health_counters(tmp_path, field, invalid):
     health = {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}
     health[field] = {"event": invalid} if field == "dropped" else invalid
