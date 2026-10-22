@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .. import diagnostics
 
-DEFAULT_SELECTION_PAUSE_MS = 250
+DEFAULT_SELECTION_PAUSE_MS = 500
 MIN_SELECTION_PAUSE_MS = 100
 MAX_SELECTION_PAUSE_MS = 2000
 

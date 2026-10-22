@@ -19,6 +19,7 @@ def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot,
     hotbar._open_settings()
     settings = hotbar._settings_window
     settings._select_tab(1)
+    settings._gaze_page.show_tab(1)
     qtbot.wait(1)
     button = settings._gaze_page._gaze_check_button
     point = button.mapToGlobal(button.rect().center())

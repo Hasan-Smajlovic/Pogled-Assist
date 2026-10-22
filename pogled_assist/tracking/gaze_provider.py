@@ -75,6 +75,8 @@ class TobiiGazeProvider(QObject):
         self._pending_gaze_sample: tuple[float, float, object, float] | None = None
         self._pending_gaze_invalid_at: float | None = None
         self._last_gaze_emitted_at: float | None = None
+        # Local receipt time of the point currently delivered on the Qt thread.
+        self.gaze_received_at: float | None = None
         self._stream_generation = 0
         self._dropped_sample_count = 0
         self._last_reported_dropped_sample_count = 0
@@ -275,7 +277,8 @@ class TobiiGazeProvider(QObject):
             if self._delivered_eye_status is not None:
                 self._metrics.eyes(
                     "application_gate",
-                    "open" if eyes_usable(self._eye_tracking_policy, *self._delivered_eye_status)
+                    "open"
+                    if eyes_usable(self._eye_tracking_policy, *self._delivered_eye_status)
                     else "closed",
                     sampled=True,
                     stale_after=None,
@@ -297,6 +300,7 @@ class TobiiGazeProvider(QObject):
             self._last_eye_status = None
             self._eye_sample_received = False
             self._last_gaze_emitted_at = None
+            self.gaze_received_at = None
             self._stream_eye_status_known = False
             self._stream_left_open = False
             self._stream_right_open = False
@@ -641,6 +645,7 @@ class TobiiGazeProvider(QObject):
             age_ms=(time.monotonic() - _received_at) * 1000,
         )
         if stream_generation == self._stream_generation:
+            self.gaze_received_at = _received_at
             self.gaze_updated.emit(x, y, timestamp)
 
     def _accept_delivery(self, sample: tuple, sample_id: object) -> bool:
@@ -655,23 +660,30 @@ class TobiiGazeProvider(QObject):
                 age_ms=(now - sample[3]) * 1000,
             )
             return False
-        self._resume_delivery(now)
+        native_gap_s = (
+            sample[3] - self.gaze_received_at if self.gaze_received_at is not None else 0.0
+        )
+        self._resume_delivery(now, native_gap_s=native_gap_s)
         self._metrics.count("provider_emitted")
         return True
 
-    def _resume_delivery(self, now: float) -> None:
+    def _resume_delivery(self, now: float, *, native_gap_s: float = 0.0) -> None:
         previous = self._last_gaze_emitted_at
         self._last_gaze_emitted_at = now
-        gap = previous is not None and now - previous >= GAZE_DELIVERY_GAP_SECONDS
-        if gap and self._last_eye_status is not None and any(self._last_eye_status):
+        gap_s = max(native_gap_s, now - previous if previous is not None else 0.0)
+        if (
+            gap_s >= GAZE_DELIVERY_GAP_SECONDS
+            and self._last_eye_status is not None
+            and any(self._last_eye_status)
+        ):
             # A resumed callback can beat the watchdog after a stall or sleep.
             # Cancel pending dwell before forwarding it, retaining repeat locks.
-            logger.info("Gaze delivery resumed after gap_ms=%s.", round((now - previous) * 1000))
+            logger.info("Gaze delivery resumed after gap_ms=%s.", round(gap_s * 1000))
             self._metrics.count("delivery_gap")
             self._metrics.event(
                 "delivery_gap",
                 stream_generation=self._stream_generation,
-                gap_ms=(now - previous) * 1000,
+                gap_ms=gap_s * 1000,
             )
             eyes = self._last_eye_status
             self.continuity_lost.emit()

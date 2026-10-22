@@ -98,10 +98,19 @@ def point_settings_at(monkeypatch, tmp_path):
     return path
 
 
-@pytest.mark.parametrize("value,expected", [
-    (None, "both"), ([], "both"), ({}, "both"), (True, "both"), ("unknown", "both"),
-    ("both", "both"), ("hold", "hold"), ("any", "any"),
-])
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, "both"),
+        ([], "both"),
+        ({}, "both"),
+        (True, "both"),
+        ("unknown", "both"),
+        ("both", "both"),
+        ("hold", "hold"),
+        ("any", "any"),
+    ],
+)
 def test_eye_policy_is_validated_without_stringifying_invalid_values(
     monkeypatch, tmp_path, value, expected
 ):
@@ -111,10 +120,20 @@ def test_eye_policy_is_validated_without_stringifying_invalid_values(
     assert load_app_settings()[0].eye_tracking_policy == expected
 
 
-@pytest.mark.parametrize("value,expected", [
-    (None, 150), ("bad", 150), (-100, 50), (1000, 500), ("200", 200), (171, 150),
-    (10 ** 400, 500), (-(10 ** 400), 50), (125, 150),
-])
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, 150),
+        ("bad", 150),
+        (-100, 50),
+        (1000, 500),
+        ("200", 200),
+        (171, 150),
+        (10**400, 500),
+        (-(10**400), 50),
+        (125, 150),
+    ],
+)
 def test_eye_tracking_hold_is_bounded_and_uses_fifty_ms_steps(
     monkeypatch, tmp_path, value, expected
 ):
@@ -127,7 +146,7 @@ def test_eye_tracking_hold_is_bounded_and_uses_fifty_ms_steps(
 def test_eye_policy_defaults_and_timing_do_not_replace_saved_values(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
     gaze, speech = load_app_settings()
-    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (250, 850)
+    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (500, 500)
     assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms) == ("both", 150)
     path.parent.mkdir()
     path.write_text('{"gaze":{"selection_pause_ms":500,"dwell_ms":700}}', encoding="utf-8")

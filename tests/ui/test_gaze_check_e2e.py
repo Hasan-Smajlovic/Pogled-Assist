@@ -12,7 +12,7 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.fixture
-def gaze_check(qtbot, monkeypatch):
+def gaze_check(qtbot, monkeypatch, request):
     from types import SimpleNamespace
 
     from pogled_assist.ui import gaze_check_window as module
@@ -21,7 +21,7 @@ def gaze_check(qtbot, monkeypatch):
     monkeypatch.setattr(
         module.QGuiApplication, "primaryScreen", lambda: SimpleNamespace(geometry=lambda: screen)
     )
-    window = module.GazeCheckWindow(GazeSettings())
+    window = module.GazeCheckWindow(getattr(request, "param", GazeSettings()))
     qtbot.addWidget(window)
     window.setGeometry(screen)
     window.show()
@@ -330,6 +330,12 @@ def test_free_check_shows_nine_targets_and_only_fresh_both_eye_gaze(gaze_check, 
 
 
 @pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
+@pytest.mark.parametrize(
+    "gaze_check",
+    [GazeSettings(eye_tracking_policy=policy) for policy in ("both", "hold", "any")],
+    indirect=True,
+    ids=["both", "hold", "any"],
+)
 def test_trial_neighbors_remain_visible_beside_caregiver_controls(gaze_check, qtbot, size):
     window, now, _screen = gaze_check
     window.resize(*size)
@@ -771,7 +777,7 @@ def test_gaze_check_feedback_precision_does_not_claim_stale_gaze_is_ready(gaze_c
     qtbot.wait(1)
     window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=now[0] - 0.6))
     window._tick()
-    assert "Čekam pogled" in window._test_hint.text()
+    assert "Čekam svjež validan pogled" in window._test_hint.text()
     assert "Zadržite pogled" not in window._test_hint.text()
 
 

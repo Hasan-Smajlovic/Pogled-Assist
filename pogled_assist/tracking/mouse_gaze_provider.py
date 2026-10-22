@@ -74,6 +74,10 @@ class MouseGazeProvider(QObject):
         self._timer.start()
         logger.info("Mouse gaze simulator started.")
 
+    @property
+    def gaze_received_at(self) -> float | None:
+        return self._last_gaze_at
+
     def stop(self) -> None:
         self._timer.stop()
         if not self._running:

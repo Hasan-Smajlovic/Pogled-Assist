@@ -57,12 +57,15 @@ class TrackingFeedback(QObject):
             self._gaze_at = None
         self.refresh()
 
-    def handle_gaze(self, _x: float, _y: float, _timestamp: object) -> None:
+    def handle_gaze(
+        self, _x: float, _y: float, _timestamp: object, received_at: float | None = None
+    ) -> None:
         if (
-            self._status.state == TrackingState.CONNECTED and self._eyes is not None
+            self._status.state == TrackingState.CONNECTED
+            and self._eyes is not None
             and eyes_usable(self._policy, *self._eyes)
         ):
-            self._gaze_at = time.monotonic()
+            self._gaze_at = time.monotonic() if received_at is None else received_at
         self.refresh()
 
     def set_eye_tracking_policy(self, policy: str) -> None:

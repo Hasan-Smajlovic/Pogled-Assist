@@ -87,7 +87,7 @@ def test_startup_query_does_not_overwrite_newer_choices_and_pending_work_is_boun
         assert not window._general_page._startup_checkbox.isChecked()
         assert updates[-1].start_with_windows is False
         assert updates[-1].show_launcher_window is True
-        assert updates[-1].dwell_ms == 950
+        assert updates[-1].dwell_ms == 600
     finally:
         release.set()
         qtbot.waitUntil(lambda: not window._startup_busy)
@@ -126,7 +126,7 @@ def test_slow_startup_update_keeps_qt_running_and_preserves_later_gaze_changes(q
         release.set()
         qtbot.waitUntil(lambda: not window._startup_busy)
         assert updates[-1].start_with_windows is True
-        assert updates[-1].selection_pause_ms == 350
+        assert updates[-1].selection_pause_ms == 600
     finally:
         release.set()
         timer.stop()

@@ -17,7 +17,9 @@ def test_cursor_position_is_normalized_and_clamped():
     assert _normalize_cursor_position(QPoint(-100, 900), geometry) == (0.0, 1.0)
 
 
-def test_experimental_simulation_delivers_single_eye_coordinates_and_pauses_without_them(simulation):
+def test_experimental_simulation_delivers_single_eye_coordinates_and_pauses_without_them(
+    simulation,
+):
     provider, events, _now = simulation
     provider.set_eye_tracking_policy("any")
     provider.toggle_left_eye()

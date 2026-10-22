@@ -21,7 +21,9 @@ pytestmark = pytest.mark.e2e
 
 
 def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot, monkeypatch):
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
     window = SettingsWindow(GazeSettings(), SpeechSettings())
     qtbot.addWidget(window)
     window.resize(1280, 720)
@@ -51,17 +53,28 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
 
 
 @pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
-def test_one_eye_selects_app_controls_including_controller_clicks(hotbar_gaze, qtbot, surface):
-    hotbar, controller, feed, actions, _progress = hotbar_gaze
-    hotbar._update_gaze_settings(replace(
-        controller.settings, eye_tracking_policy="any", selection_pause_ms=250, dwell_ms=850,
-    ))
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
+def test_one_eye_selects_app_controls_including_controller_clicks(
+    hotbar_gaze, qtbot, monkeypatch, surface, eyes
+):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 10.0)
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings,
+            eye_tracking_policy="any",
+            selection_pause_ms=250,
+            dwell_ms=850,
+        )
+    )
     if surface == "hotbar":
         action = QUICK_ACTIONS
         button = hotbar._buttons[action]
     elif surface == "keyboard":
         hotbar._show_keyboard_sidebar()
         window = hotbar._keyboard_window
+        window.setGeometry(900, hotbar.BAR_HEIGHT, 380, 720 - hotbar.BAR_HEIGHT)
         action = next(key for key in window._action_buttons if key.endswith("space"))
         button = window._action_buttons[action]
     elif surface == "speech":
@@ -78,14 +91,21 @@ def test_one_eye_selects_app_controls_including_controller_clicks(hotbar_gaze, q
         button = window._action_buttons[action]
     qtbot.wait(1)
     point = button.mapToGlobal(button.rect().center())
-    controller.handle_eye_status(True, False)
-    feed(point, 0)
-    feed(point, 600)
-    feed(point, 1101)
+    provider = hotbar._gaze
+    gaze, eye_status = provider._new_stream_callbacks()
+
+    def sample(at):
+        now[0] = at
+        eye_status(*eyes, 1)
+        gaze(point.x() / 1279, point.y() / 719, 2)
+        provider._emit_latest_gaze_sample()
+
+    for index in range(24):
+        sample(10.0 + index * 0.05)
     assert actions == [action]
     if surface == "controller":
         assert len(window._input.clicks) == 1
-    feed(point, 2500)
+    sample(12.5)
     assert actions == [action]
 
 
@@ -114,7 +134,9 @@ def test_hold_freezes_feedback_and_first_return_cannot_activate(hotbar_gaze):
 
 def test_settings_hold_expires_without_another_gaze_sample(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
     window = SettingsWindow(GazeSettings(eye_tracking_policy="hold"), SpeechSettings())
     qtbot.addWidget(window)
     window.resize(1280, 720)
@@ -165,7 +187,9 @@ def test_one_eye_check_free_view_and_fixation_keep_real_eye_indicators(qtbot, mo
 
 def test_changed_settings_target_geometry_does_not_resume_a_hold(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False)
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
     window = SettingsWindow(GazeSettings(eye_tracking_policy="hold"), SpeechSettings())
     qtbot.addWidget(window)
     window.resize(1280, 720)
@@ -260,8 +284,17 @@ def test_native_invalid_gaze_closes_quick_action_refinement(hotbar_gaze, monkeyp
 
 def test_settings_one_eye_selection_requires_eye_validity_and_fresh_point(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
-    monkeypatch.setattr("pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False)
-    window = SettingsWindow(GazeSettings(eye_tracking_policy="any"), SpeechSettings())
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(
+        GazeSettings(
+            eye_tracking_policy="any",
+            selection_pause_ms=250,
+            dwell_ms=850,
+        ),
+        SpeechSettings(),
+    )
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window._select_tab(1)
@@ -287,7 +320,13 @@ def test_settings_one_eye_selection_requires_eye_validity_and_fresh_point(qtbot,
 @pytest.mark.parametrize("policy", ["any", "hold"])
 def test_check_trial_completes_with_policy_and_excludes_held_time(qtbot, monkeypatch, policy):
     now = freeze_monotonic(monkeypatch, 10.0)
-    window = GazeCheckWindow(GazeSettings(eye_tracking_policy=policy))
+    window = GazeCheckWindow(
+        GazeSettings(
+            eye_tracking_policy=policy,
+            selection_pause_ms=250,
+            dwell_ms=850,
+        )
+    )
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window.show()
@@ -295,14 +334,17 @@ def test_check_trial_completes_with_policy_and_excludes_held_time(qtbot, monkeyp
     window._start_trial()
     rect = QGuiApplication.primaryScreen().geometry()
     point = window._target.mapToGlobal(window._target.button_rect().center())
-    gaze = ((point.x() - rect.left()) / (rect.width() - 1),
-            (point.y() - rect.top()) / (rect.height() - 1))
+    gaze = (
+        (point.x() - rect.left()) / (rect.width() - 1),
+        (point.y() - rect.top()) / (rect.height() - 1),
+    )
     eyes = (True, False) if policy == "any" else (True, True)
 
     def sample(at, interruptions=0):
         now[0] = at
-        window.handle_snapshot(CheckSnapshot(*eyes, gaze=gaze, gaze_at=at,
-                                             gaze_interruptions=interruptions))
+        window.handle_snapshot(
+            CheckSnapshot(*eyes, gaze=gaze, gaze_at=at, gaze_interruptions=interruptions)
+        )
 
     for index in range(9):
         sample(10.0 + index / 10)
@@ -343,3 +385,66 @@ def test_policy_change_cancels_active_progress_and_keeps_completed_lock(hotbar_g
     hotbar._update_gaze_settings(replace(controller.settings, **{change: value}))
     feed(point, 5000)
     assert actions == [QUICK_ACTIONS]
+
+
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize("surface", ["hotbar", "settings"])
+@pytest.mark.parametrize("policy", ["both", "hold", "any"])
+def test_queued_gaze_keeps_native_freshness_through_application_gates(
+    hotbar_gaze, qtbot, monkeypatch, surface, policy
+):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 9.0)
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings,
+            eye_tracking_policy=policy,
+            dwell_ms=5000,
+        )
+    )
+    provider = hotbar._gaze
+    gaze, eyes = provider._new_stream_callbacks()
+    if surface == "settings":
+        hotbar._open_settings()
+        window = hotbar._settings_window
+        window.setGeometry(0, 0, 1280, 720)
+        window._select_tab(1)
+        qtbot.wait(1)
+        button = window._gaze_page._interaction_overlay_button
+        selection = window._gaze_selection
+        gate = window._eye_gate
+    else:
+        button = hotbar._buttons[QUICK_ACTIONS]
+        selection = controller._toolbar_selection
+        gate = controller._eye_gate
+    provider._set_tracking_status(TrackingState.CONNECTED)
+    point = button.mapToGlobal(button.rect().center())
+    x, y = point.x() / 1279, point.y() / 719
+    for index in range(11):
+        now[0] = 9.0 + index / 10
+        eyes(True, True, index)
+        gaze(x, y, index)
+        provider._emit_latest_gaze_sample()
+    now[0] = 10.01
+    gaze(x, y, 20)
+    now[0] = 10.45
+    eyes(True, True, 21)
+    now[0] = 10.46
+    provider._emit_latest_gaze_sample()
+    assert selection.diagnostic_snapshot()["credited_ms"] > 1000
+    assert hotbar._tracking_status._last_gaze_at == 10.01
+    assert hotbar._tracking_feedback._gaze_at == 10.01
+    now[0] = 10.52
+    if policy == "hold":
+        eyes(True, False, 22)
+        # The native point is 510 ms old, although delivered only 60 ms ago.
+        assert not gate.holding
+    now[0] = 10.55
+    eyes(True, True, 23)
+    gaze(x, y, 24)
+    provider._emit_latest_gaze_sample()
+    assert selection.diagnostic_snapshot()["credited_ms"] == 0
+    assert actions == []

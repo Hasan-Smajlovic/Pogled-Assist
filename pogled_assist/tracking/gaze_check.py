@@ -9,6 +9,7 @@ from itertools import pairwise
 from statistics import median
 
 from ..interaction.eye_tracking_policy import BOTH_EYES, eyes_usable
+
 FRESH_SECONDS = 0.5
 HISTORY_SECONDS = 10.0
 SETTLE_SECONDS = 1.0
@@ -95,7 +96,8 @@ class CheckTelemetry:
             left_position, right_position = self.positions[:2]
         gaze = gaze_at = None
         if (
-            eyes_usable(self.policy, left, right) and self.gaze is not None
+            eyes_usable(self.policy, left, right)
+            and self.gaze is not None
             and 0 <= now - self.gaze[2] < FRESH_SECONDS
         ):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]

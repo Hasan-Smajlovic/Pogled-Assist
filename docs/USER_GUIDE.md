@@ -176,8 +176,8 @@ Gaze settings uses these values:
 
 | Setting | Default | Range |
 | --- | --- | --- |
-| Pause before gaze selection | 250 ms | 100 to 2000 ms |
-| Progress-ring fill time after the pause | 850 ms | 150 to 5000 ms |
+| Pause before gaze selection | 500 ms | 100 to 2000 ms |
+| Progress-ring fill time after the pause | 500 ms | 150 to 5000 ms |
 | Short eye-tracking interruption | 150 ms | 50 to 500 ms, step 50 ms |
 | Stable target radius | 48 px | 10 to 160 px |
 | Delay between actions | 350 ms | 100 to 5000 ms |

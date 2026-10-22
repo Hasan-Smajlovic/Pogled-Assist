@@ -110,7 +110,7 @@
     if (mode === 'trial') {
       const [width, height, gap, left, top] = [
         [136, 64, 12, 64, 14],
-        [96, 88, 10, 64, window.innerHeight - 270],
+        [96, 88, 10, 64, window.innerHeight - 290],
         [180, 72, 12, Math.floor(window.innerWidth / 2) - 282, Math.floor(window.innerHeight / 2) - 36],
       ][checkTrialIndex];
       const expected = [1, 0, 2][checkTrialIndex];

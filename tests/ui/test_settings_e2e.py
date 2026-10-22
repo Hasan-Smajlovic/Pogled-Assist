@@ -151,6 +151,7 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
                 window._gaze_page._gaze_bubble_button,
                 window._gaze_page._precision_zoom_checkbox,
                 window._gaze_page._calibration_button,
+                window._gaze_page._gaze_check_button,
             ),
         ),
         (

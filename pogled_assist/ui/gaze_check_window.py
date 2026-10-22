@@ -333,9 +333,12 @@ class GazeCheckWindow(QWidget):
             self.reset_check()
 
     def handle_snapshot(self, snapshot: CheckSnapshot) -> None:
-        if snapshot.left is not None and snapshot.right is not None:
-            if self._eye_gate.eyes != (snapshot.left, snapshot.right):
-                self.handle_eye_status(snapshot.left, snapshot.right)
+        if (
+            snapshot.left is not None
+            and snapshot.right is not None
+            and self._eye_gate.eyes != (snapshot.left, snapshot.right)
+        ):
+            self.handle_eye_status(snapshot.left, snapshot.right)
         if snapshot.gaze is not None and snapshot.gaze_at != self._policy_sample_at:
             if self._eye_gate.sample(snapshot.gaze_at):
                 self._policy_sample_at = snapshot.gaze_at
@@ -353,9 +356,7 @@ class GazeCheckWindow(QWidget):
         elif self._phase == "free":
             self._render_free()
 
-    def handle_eye_status(
-        self, left: bool, right: bool, received_at: float | None = None
-    ) -> None:
+    def handle_eye_status(self, left: bool, right: bool, received_at: float | None = None) -> None:
         self._eye_gate.update_eyes(left, right, received_at)
         if not eyes_usable(self._settings.eye_tracking_policy, left, right):
             self._snapshot = replace(
@@ -424,9 +425,8 @@ class GazeCheckWindow(QWidget):
                 position_supported=self._snapshot.position_supported,
                 gaze_interruptions=self._snapshot.gaze_interruptions,
             )
-        if (
-            not self._eye_gate.holding
-            and (self._snapshot.gaze_at is None or now - self._snapshot.gaze_at >= FRESH_SECONDS)
+        if not self._eye_gate.holding and (
+            self._snapshot.gaze_at is None or now - self._snapshot.gaze_at >= FRESH_SECONDS
         ):
             self._cancel_trial_progress(loss=True)
             if self._phase == "precision" and self._check is not None:
@@ -586,7 +586,10 @@ class GazeCheckWindow(QWidget):
             for name, x, y in TARGETS
         ]
         self._check = FixationCheck(
-            targets, (screen.width(), screen.height()), self._target.radius, time.monotonic(),
+            targets,
+            (screen.width(), screen.height()),
+            self._target.radius,
+            time.monotonic(),
             policy=self._settings.eye_tracking_policy,
         )
 

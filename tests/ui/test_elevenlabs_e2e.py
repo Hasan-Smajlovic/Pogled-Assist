@@ -234,6 +234,7 @@ def settings(qtbot, qapp, monkeypatch):
     window.resize(1280, 720)
     window._select_tab(2)
     window.show()
+    window.handle_eye_status(True, True)
     yield window, store, client, account, cleared
     account.cancel_check()
 

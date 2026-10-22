@@ -826,8 +826,8 @@ class SettingsWindow(QWidget):
             set_gaze_paused(self._gaze_target, paused)
         self.interaction_hold_changed.emit(paused)
 
-    def handle_gaze(self, point: QPoint) -> None:
-        if not self._eye_gate.sample():
+    def handle_gaze(self, point: QPoint, received_at: float | None = None) -> None:
+        if not self._eye_gate.sample(received_at):
             return
         if self._learning_page.blocks_gaze_at(point):
             self.cancel_gaze_interaction(require_leave=True)
@@ -949,4 +949,3 @@ class SettingsWindow(QWidget):
 
 def _checkbox_x_image_url() -> str:
     return (Path(__file__).resolve().parents[1] / "assets" / "checkbox_x.svg").as_posix()
-

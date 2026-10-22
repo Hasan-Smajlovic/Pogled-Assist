@@ -98,9 +98,7 @@ class EyeTrackingGate(QObject):
         ):
             self.cancel()
 
-    def update_eyes(
-        self, left: bool, right: bool, received_at: float | None = None
-    ) -> None:
+    def update_eyes(self, left: bool, right: bool, received_at: float | None = None) -> None:
         now = time.monotonic()
         at = now if received_at is None else received_at
         previous = self.eyes

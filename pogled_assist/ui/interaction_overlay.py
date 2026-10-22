@@ -158,8 +158,9 @@ class InteractionOverlayWindow(QWidget):
         if self._mode == "paused":
             painter.setPen(QPen(QColor(255, 255, 255), 3))
             for offset in (-3, 3):
-                painter.drawLine(center.x() + offset, center.y() - 5,
-                                 center.x() + offset, center.y() + 5)
+                painter.drawLine(
+                    center.x() + offset, center.y() - 5, center.x() + offset, center.y() + 5
+                )
             text = "Na čekanju"
 
         if text:

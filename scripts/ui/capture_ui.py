@@ -444,7 +444,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             self.capture(self.settings, name, title, size=size)
         combo.setCurrentIndex(combo.findData("both"))
         self.settings._gaze_page.show_tab(1)
-        self.capture(self.settings, "settings-gaze-pointer", "Settings: pointer and check", size=size)
+        self.capture(
+            self.settings, "settings-gaze-pointer", "Settings: pointer and check", size=size
+        )
         self.settings._gaze_page.show_tab(0)
         self.settings._select_tab(2)
         for state in ("preparing", "speaking"):

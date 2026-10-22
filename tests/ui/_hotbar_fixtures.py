@@ -24,7 +24,8 @@ def hotbar_gaze(qtbot, monkeypatch, request):
     monkeypatch.setattr(toolbar, "SuggestionService", PreviewSuggestionService)
     monkeypatch.setattr(toolbar, "speech_library_store", lambda _root: FakeLibraryStore())
     monkeypatch.setattr(
-        toolbar, "load_app_settings",
+        toolbar,
+        "load_app_settings",
         lambda: (GazeSettings(selection_pause_ms=500, dwell_ms=500), SpeechSettings()),
     )
     monkeypatch.setattr(toolbar.HotbarWindow, "_start_services", lambda _self: None)

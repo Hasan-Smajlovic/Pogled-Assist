@@ -67,7 +67,7 @@ class GazeSettingsPage(QFrame):
         selection.addWidget(row)
         self._hold_row, self._hold_value = self._controls.adjust_row(
             "Trajanje kratkog prekida",
-            "Čuvanje napretka pri gubitku jednog oka: 50–500 ms.",
+            "Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.",
             self._owner._adjust_eye_tracking_hold,
             50,
         )
@@ -97,18 +97,22 @@ class GazeSettingsPage(QFrame):
         feedback = QHBoxLayout()
         self._tracking_notifications_checkbox = self._controls.checkbox(
             "Obavijesti o praćenju pogleda",
-            self._owner._toggle_tracking_notifications, QSize(300, 58),
+            self._owner._toggle_tracking_notifications,
+            QSize(300, 58),
         )
         self._interaction_overlay_button = self._controls.toggle_button(
-            "Prikaži napredak radnje", self._owner._toggle_interaction_overlay,
-            QSize(210, 58), "fa5s.circle-notch",
+            "Prikaži napredak radnje",
+            self._owner._toggle_interaction_overlay,
+            QSize(210, 58),
+            "fa5s.circle-notch",
         )
         feedback.addWidget(self._tracking_notifications_checkbox)
         feedback.addWidget(self._interaction_overlay_button)
         selection.addLayout(feedback)
         scope = styled_label(
             "Režim važi za kontrole aplikacije. Direktni desktop unos zahtijeva oba oka.",
-            "settingHint", self,
+            "settingHint",
+            self,
         )
         scope.setWordWrap(True)
         selection.addWidget(scope)
@@ -122,7 +126,8 @@ class GazeSettingsPage(QFrame):
         row, self._radius_value = self._controls.adjust_row(
             "Radijus stabilnog pogleda",
             "Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.",
-            self._owner._adjust_dwell_radius, 2,
+            self._owner._adjust_dwell_radius,
+            2,
         )
         pointer.addWidget(row)
         row, self._smoothing_value = self._controls.adjust_row(
@@ -137,7 +142,9 @@ class GazeSettingsPage(QFrame):
         pointer.addLayout(self._build_gaze_actions())
         note = styled_label(
             "Pokazivač, Brze radnje i precizno uvećanje zahtijevaju oba oka. "
-            "Provjera pogleda koristi izabrani režim.", "settingHint", self,
+            "Provjera pogleda koristi izabrani režim.",
+            "settingHint",
+            self,
         )
         note.setWordWrap(True)
         pointer.addWidget(note)
@@ -187,7 +194,9 @@ class GazeSettingsPage(QFrame):
 
     def refresh(self, settings):
         self._policy_combo.blockSignals(True)
-        self._policy_combo.setCurrentIndex(self._policy_combo.findData(settings.eye_tracking_policy))
+        self._policy_combo.setCurrentIndex(
+            self._policy_combo.findData(settings.eye_tracking_policy)
+        )
         self._policy_combo.blockSignals(False)
         self._policy_hint.setText(
             policy_description(settings.eye_tracking_policy, settings.eye_tracking_hold_ms)

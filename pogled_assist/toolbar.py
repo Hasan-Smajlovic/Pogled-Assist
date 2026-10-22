@@ -216,7 +216,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
     def selection_bounds(self, action: str) -> QRect | None:
         if (
-            isinstance(action, str) and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
+            isinstance(action, str)
+            and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
             and _is_visible(self._controller_window)
         ):
             return self._controller_window.action_bounds(action)
@@ -299,14 +300,12 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
     def _connect_signals(self) -> None:
         self._foreground.status_changed.connect(self._set_status)
-        self._gaze.gaze_updated.connect(self._mouse.handle_gaze)
+        self._gaze.gaze_updated.connect(self._forward_gaze)
         if hasattr(self._gaze, "eye_state_changed"):
             self._gaze.eye_state_changed.connect(self._forward_eye_state)
             self._gaze.continuity_lost.connect(self._reset_tracking_continuity)
             if hasattr(self._gaze, "gaze_invalidated"):
                 self._gaze.gaze_invalidated.connect(self._invalidate_gaze)
-        self._gaze.gaze_updated.connect(self._tracking_status.handle_gaze)
-        self._gaze.gaze_updated.connect(self._tracking_feedback.handle_gaze)
         self._gaze.eye_status_changed.connect(self._handle_eye_status_changed)
         self._gaze.eye_status_changed.connect(self._tracking_feedback.handle_eyes)
         self._gaze.status_changed.connect(self._set_status)
@@ -322,8 +321,12 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.interaction_finished.connect(self._interaction_overlay.show_fired)
         self._mouse.interaction_cancelled.connect(self._interaction_overlay.clear)
         self._mouse.interaction_hold_changed.connect(self._set_interaction_paused)
-        self._mouse._eye_gate.hold_started.connect(lambda _at: self._tracking_status.set_holding(True))
-        self._mouse._eye_gate.hold_finished.connect(lambda: self._tracking_status.set_holding(False))
+        self._mouse._eye_gate.hold_started.connect(
+            lambda _at: self._tracking_status.set_holding(True)
+        )
+        self._mouse._eye_gate.hold_finished.connect(
+            lambda: self._tracking_status.set_holding(False)
+        )
         self._mouse._eye_gate.interrupted.connect(lambda: self._tracking_status.set_holding(False))
         self._mouse.toolbar_action_requested.connect(
             lambda action: self._run_toolbar_action(action, source="gaze")
@@ -856,7 +859,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         window.install_cancelled.connect(self._release_update_manager.finish_cancel)
         window.quit_requested.connect(self._quit_application)
         window.closed.connect(self._settings_window_closed)
-        self._mouse.gaze_position_changed.connect(window.handle_gaze)
+        self._mouse.gaze_position_changed.connect(self._forward_settings_gaze)
         window.interaction_progress_changed.connect(self._interaction_overlay.show_progress)
         window.interaction_finished.connect(self._interaction_overlay.show_fired)
         window.interaction_cancelled.connect(self._interaction_overlay.clear)
@@ -950,7 +953,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             return
 
         try:
-            self._mouse.gaze_position_changed.disconnect(window.handle_gaze)
+            self._mouse.gaze_position_changed.disconnect(self._forward_settings_gaze)
         except (RuntimeError, TypeError):
             logger.info("Settings gaze handler was already disconnected.")
 
@@ -1022,7 +1025,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
     def _update_gaze_settings(self, settings: object) -> None:
         previous = (
-            self._mouse.settings.eye_tracking_policy, self._mouse.settings.eye_tracking_hold_ms
+            self._mouse.settings.eye_tracking_policy,
+            self._mouse.settings.eye_tracking_hold_ms,
         )
         self._mouse.update_settings(settings)
         if previous != (settings.eye_tracking_policy, settings.eye_tracking_hold_ms):
@@ -1047,6 +1051,18 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._tracking_status.set_eye_tracking_policy(policy)
         self._tracking_feedback.set_eye_tracking_policy(policy)
 
+    def _forward_gaze(self, x: float, y: float, timestamp: object) -> None:
+        # SDK timestamps use a different clock. Keep local native receipt age
+        # across Qt dispatch, without changing the provider's three-argument signal.
+        received_at = self._gaze.gaze_received_at
+        self._mouse.handle_gaze(x, y, timestamp, received_at)
+        self._tracking_status.handle_gaze(x, y, timestamp, received_at)
+        self._tracking_feedback.handle_gaze(x, y, timestamp, received_at)
+
+    def _forward_settings_gaze(self, point: QPoint) -> None:
+        if self._settings_window is not None:
+            self._settings_window.handle_gaze(point, self._mouse.gaze_received_at)
+
     def _forward_eye_state(self, state: EyeState) -> None:
         self._mouse.handle_eye_status(state.left, state.right, state.received_at)
         for window in (self._settings_window, self._gaze_check_window):
@@ -1070,7 +1086,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._close_tracking_overlays()
         if not (
             self._mouse._toolbar_selection.tracking_held
-            or (self._settings_window is not None and self._settings_window._gaze_selection.tracking_held)
+            or (
+                self._settings_window is not None
+                and self._settings_window._gaze_selection.tracking_held
+            )
         ):
             self._interaction_overlay.clear()
 

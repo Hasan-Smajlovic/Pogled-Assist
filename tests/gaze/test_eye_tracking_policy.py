@@ -4,7 +4,7 @@ import threading
 
 import pytest
 from _clock import freeze_monotonic
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QRect
 
 from pogled_assist.interaction.eye_tracking_policy import EyeTrackingGate
 from pogled_assist.interaction.gaze_selection import GazeSelectionTimer
@@ -180,11 +180,13 @@ def test_stream_and_research_only_deliver_eligible_real_coordinates(policy, allo
     provider._emit_latest_gaze_sample()
     assert samples == ([(0.2, 0.7)] if allows_single else [])
     samples.clear()
-    provider._on_gaze_data({
-        "left_gaze_point_validity": 0,
-        "right_gaze_point_validity": 1,
-        "right_gaze_point_on_display_area": (0.3, 0.6),
-    })
+    provider._on_gaze_data(
+        {
+            "left_gaze_point_validity": 0,
+            "right_gaze_point_validity": 1,
+            "right_gaze_point_on_display_area": (0.3, 0.6),
+        }
+    )
     provider._emit_latest_gaze_sample()
     assert samples == ([(0.3, 0.6)] if allows_single else [])
     provider._on_stream_engine_gaze(float("nan"), 0.5, 3)
@@ -213,7 +215,10 @@ def test_worker_backlog_preserves_both_invalid_and_single_eye_switches(monkeypat
     now[0] = 10.2
     provider._emit_latest_gaze_sample()
     assert [(event.left, event.right) for event in events] == [
-        (True, True), (True, False), (False, False), (False, True),
+        (True, True),
+        (True, False),
+        (False, False),
+        (False, True),
     ]
     assert all(event.received_at == 10.0 for event in events)
     provider.stop()
@@ -226,12 +231,14 @@ def test_worker_backlog_preserves_both_invalid_and_single_eye_switches(monkeypat
 def test_one_eye_app_selection_never_moves_or_clicks_the_desktop(monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
     bounds = QRect(0, 0, 50, 50)
-    controller = GazeMouseController(GazeTargets(
-        lambda point: "speech" if bounds.contains(point) else None,
-        lambda *_args: bounds.center(),
-        bounds.contains,
-        lambda _action: bounds,
-    ))
+    controller = GazeMouseController(
+        GazeTargets(
+            lambda point: "speech" if bounds.contains(point) else None,
+            lambda *_args: bounds.center(),
+            bounds.contains,
+            lambda _action: bounds,
+        )
+    )
     controller._logical_screen_rect = (0, 0, 101, 101)
     controller._physical_screen_rect = (0, 0, 151, 151)
 
@@ -243,7 +250,14 @@ def test_one_eye_app_selection_never_moves_or_clicks_the_desktop(monkeypatch):
             pytest.fail("One-eye gaze clicked the desktop")
 
     controller._input = Input()
-    controller.update_settings(GazeSettings(eye_tracking_policy="any", use_precision_zoom=False))
+    controller.update_settings(
+        GazeSettings(
+            eye_tracking_policy="any",
+            selection_pause_ms=250,
+            dwell_ms=850,
+            use_precision_zoom=False,
+        )
+    )
     actions = []
     external_points = []
     controller.toolbar_action_requested.connect(actions.append)

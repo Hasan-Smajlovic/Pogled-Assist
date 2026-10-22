@@ -92,7 +92,8 @@ class TrackingFeedbackState:
             if self._problem_since is None:
                 self._problem_since = now
                 self._eye_gap = (
-                    status.state == TrackingState.CONNECTED and eyes is not None
+                    status.state == TrackingState.CONNECTED
+                    and eyes is not None
                     and not eyes_usable(policy, *eyes)
                 )
             if status.state != TrackingState.CONNECTED:

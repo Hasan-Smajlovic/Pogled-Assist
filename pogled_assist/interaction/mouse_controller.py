@@ -48,7 +48,7 @@ TOOLBAR_LEAVE_GRACE_MS = 120
 class GazeSettings:
     smoothing: float = 1.0
     selection_pause_ms: int = DEFAULT_SELECTION_PAUSE_MS
-    dwell_ms: int = 850
+    dwell_ms: int = 500
     dwell_radius_px: int = 48
     click_cooldown_ms: int = 350
     move_mouse: bool = True
@@ -139,8 +139,10 @@ class GazeMouseController(QObject):
         self._eye_gate.hold_started.connect(self._hold_toolbar_tracking)
         self._eye_gate.hold_finished.connect(lambda: self.interaction_hold_changed.emit(False))
         self._tracking_hold_bounds: QRect | None = None
+        self.gaze_received_at: float | None = None
 
     def _tracking_interrupted(self) -> None:
+        self.gaze_received_at = None
         self._pause_toolbar_dwell()
         self._pause_target_dwell()
         self._pause_quick_dwell()
@@ -385,9 +387,13 @@ class GazeMouseController(QObject):
         self._last_cursor_point = None
 
     def handle_gaze(
-        self, normalized_x: float, normalized_y: float, _timestamp: object,
+        self,
+        normalized_x: float,
+        normalized_y: float,
+        _timestamp: object,
         received_at: float | None = None,
     ) -> None:
+        received_at = time.monotonic() if received_at is None else received_at
         if (
             self._input_suspended
             or not math.isfinite(normalized_x)
@@ -404,6 +410,7 @@ class GazeMouseController(QObject):
             return
 
         now_ms = time.monotonic() * 1000
+        self.gaze_received_at = received_at
         point = self._map_to_screen(normalized_x, normalized_y)
         cursor_point = self._smooth_physical(point.physical)
         overlay_was_open = self._overlay_open()
@@ -428,7 +435,8 @@ class GazeMouseController(QObject):
             getter = getattr(self._target, "selection_bounds", self._target.action_bounds)
             bounds = getter(self._toolbar_selection.target)
             if (
-                bounds is None or bounds != self._tracking_hold_bounds
+                bounds is None
+                or bounds != self._tracking_hold_bounds
                 or hit.action != self._toolbar_selection.target
                 or not bounds.contains(point.logical)
             ):

@@ -17,10 +17,10 @@ from .settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
-    EYE_TRACKING_HOLD_MS_RANGE,
-    EYE_TRACKING_HOLD_MS_STEP,
     ELEVENLABS_PERCENT_RANGE,
     ELEVENLABS_STABILITY_STEPS,
+    EYE_TRACKING_HOLD_MS_RANGE,
+    EYE_TRACKING_HOLD_MS_STEP,
     LETTERS_PER_GROUP_RANGE,
     SMOOTHING_RANGE,
     SPEECH_AMPLITUDE_RANGE,
@@ -137,7 +137,8 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
             value.get("eye_tracking_policy") if isinstance(value, dict) else None
         ),
         eye_tracking_hold_ms=(
-            (hold_ms + EYE_TRACKING_HOLD_MS_STEP // 2) // EYE_TRACKING_HOLD_MS_STEP
+            (hold_ms + EYE_TRACKING_HOLD_MS_STEP // 2)
+            // EYE_TRACKING_HOLD_MS_STEP
             * EYE_TRACKING_HOLD_MS_STEP
         ),
         dwell_radius_px=clamp(settings.dwell_radius_px, DWELL_RADIUS_RANGE),

@@ -143,12 +143,15 @@ class TrackingStatusWidget(QWidget):
             self._last_gaze_at = None
         self._refresh()
 
-    def handle_gaze(self, _x: float, _y: float, _timestamp: object) -> None:
+    def handle_gaze(
+        self, _x: float, _y: float, _timestamp: object, received_at: float | None = None
+    ) -> None:
         if (
-            self._status.state == TrackingState.CONNECTED and self._eyes is not None
+            self._status.state == TrackingState.CONNECTED
+            and self._eyes is not None
             and eyes_usable(self._policy, *self._eyes)
         ):
-            self._last_gaze_at = time.monotonic()
+            self._last_gaze_at = time.monotonic() if received_at is None else received_at
             self._refresh()
 
     def set_eye_tracking_policy(self, policy: str) -> None:
@@ -167,7 +170,12 @@ class TrackingStatusWidget(QWidget):
 
     def _refresh(self) -> None:
         view = tracking_status_view(
-            self._status, self._eyes, self._last_gaze_at, time.monotonic(), self._policy, self._holding
+            self._status,
+            self._eyes,
+            self._last_gaze_at,
+            time.monotonic(),
+            self._policy,
+            self._holding,
         )
         if view != self._view:
             self._view = view
