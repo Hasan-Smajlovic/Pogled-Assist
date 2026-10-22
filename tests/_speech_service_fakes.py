@@ -22,7 +22,9 @@ def service(monkeypatch, tmp_path):
             client=client,
             cache=AudioCache(tmp_path / "cache"),
         )
-        instance.update_settings(SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="voice"))
+        instance.update_settings(
+            SpeechSettings(voice_preset="efendija", elevenlabs_voice_id="voice")
+        )
         played = []
 
         def play(request, data, result):

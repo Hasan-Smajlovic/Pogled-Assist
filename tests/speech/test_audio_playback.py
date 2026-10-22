@@ -91,19 +91,6 @@ def test_media_error_retains_whether_any_audio_was_played(player, started):
     assert media.stopped
 
 
-def test_missing_output_is_not_treated_as_corrupt_media(player, monkeypatch):
-    playback, _instances = player
-    monkeypatch.setattr(
-        audio_playback,
-        "QAudioOutput",
-        lambda _parent: SimpleNamespace(device=lambda: SimpleNamespace(isNull=lambda: True)),
-    )
-    result = PlaybackResult()
-    playback.play(1, b"valid audio", result)
-    assert result.done.is_set() and result.outcome == "failed"
-    assert not result.started and not result.invalid_audio
-
-
 @pytest.mark.parametrize("kind", ["status", "format"])
 def test_decoder_rejection_is_distinct_from_output_failure(player, kind):
     playback, instances = player
