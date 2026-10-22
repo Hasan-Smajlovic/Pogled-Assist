@@ -58,6 +58,8 @@ Model preparation, provenance, benchmarks, and evaluation commands are maintaine
 
 ## Verification before a pull request
 
+Run full verification in a Windows session with access to the checkout and temporary files, local HTTP test servers, child processes, process inspection, and Windows Installer for package asset extraction. Restricted agent sessions can block these operations even when Python starts and tests collect successfully. See [restricted verification sessions](DEVELOPMENT_TROUBLESHOOTING.md#restricted-windows-verification-sessions) before diagnosing unrelated failures as application regressions.
+
 During development, run `.\dev.ps1 check-fast` after each meaningful change and repeat it after fixes. Prefer `.\dev.ps1 check -Parallel` against the final diff before marking a pull request ready for review; rerun it after subsequent changes. It uses Python 3.10 and covers the same three categories enforced by the required `code-quality`, `tests`, and `windows-package` pull request checks.
 
 An implementation handoff or draft pull request can precede complete verification. Record unfinished work and skipped checks as Not run with a reason; neither handoff nor draft status establishes readiness for review. When the user defers execution, finish the implementation and documentation, inspect the diff, and report "Implemented; verification not run" with the outstanding checks. Required CI checks and human review remain prerequisites for merge, as defined in [CONTRIBUTING.md](../CONTRIBUTING.md#review-and-merge-responsibility).
