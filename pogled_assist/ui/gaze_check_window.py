@@ -1,8 +1,10 @@
-"""Caregiver-operated, side-effect-free positioning and gaze validation window."""
+"""Caregiver-operated positioning, gaze validation and aggregate reports."""
 
 from __future__ import annotations
 
+import platform
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from html import escape
 
@@ -20,21 +22,41 @@ from PySide6.QtWidgets import (
 )
 
 from .. import diagnostics
+from ..build_info import build_identity
+from ..interaction.eye_tracking_policy import (
+    EYE_TRACKING_POLICY_CHOICES,
+    EyeTrackingGate,
+    eyes_usable,
+)
 from ..interaction.gaze_selection import GazeSelectionTimer
 from ..interaction.mouse_controller import (
     TOOLBAR_EDGE_MARGIN_PX,
-    TOOLBAR_LEAVE_GRACE_MS,
     GazeSettings,
 )
+from ..logging_setup import get_project_root
 from ..tracking.gaze_check import (
     FRESH_SECONDS,
     TARGET_SECONDS,
     CheckSnapshot,
     FixationCheck,
+    FixationResult,
     TrialGazeCoverage,
 )
+from ..tracking.gaze_check_report import (
+    ENVIRONMENT_KEYS,
+    SETTING_KEYS,
+    GazeCheckReport,
+    PrecisionRow,
+    TrialAttempt,
+    TrialRow,
+    identity,
+    timestamp,
+)
+from ..tracking.gaze_check_store import GazeCheckStore
 from ..tracking.status import TrackingState, TrackingStatus
 from .gaze_check_feedback import result_advice
+from .gaze_check_history import GazeCheckHistory
+from .gaze_check_reports import GazeCheckReports
 from .gaze_check_text import (
     free_gaze_is_visible,
     position_guidance,
@@ -43,6 +65,7 @@ from .gaze_check_text import (
     visible_eyes,
 )
 from .gaze_check_views import COLORS, TARGETS, CheckTargetView, EyePositionView, ResultMapView
+from .recording_badge import RecordingBadge
 
 STYLESHEET = """
 QWidget#gazeCheck { background: #111318; color: #eef2f8; font-family: Segoe UI; }
@@ -58,6 +81,9 @@ QPushButton:focus { border: 2px solid #8bd5f5; }
 QPushButton#checkPrimary { background: #245f9f; border-color: #8bd5f5; }
 QProgressBar { background: #394253; border: none; border-radius: 3px; }
 QProgressBar::chunk { background: #8bd5f5; border-radius: 3px; }
+QScrollArea, QScrollArea QWidget { background: #1c2029; border: none; }
+QComboBox { background: #262c38; color: #eef2f8; padding: 8px; font-size: 17px; }
+QComboBox QAbstractItemView { background: #262c38; color: #eef2f8; }
 """
 
 
@@ -68,9 +94,10 @@ def _label(text: str, parent: QWidget, name: str = "") -> QLabel:
     return label
 
 
-class GazeCheckWindow(QWidget):
+class GazeCheckWindow(GazeCheckHistory, QWidget):
     closed = Signal()
     calibration_requested = Signal()
+    diagnostics_requested = Signal()
 
     def __init__(
         self,
@@ -78,6 +105,8 @@ class GazeCheckWindow(QWidget):
         parent: QWidget | None = None,
         *,
         simulated: bool = False,
+        reports: GazeCheckReports | None = None,
+        environment: Callable[[], dict] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Provjera pogleda")
@@ -86,6 +115,22 @@ class GazeCheckWindow(QWidget):
         self.setStyleSheet(STYLESHEET)
         self._settings = replace(settings)
         self._simulated = simulated
+        self._reports = reports or GazeCheckReports(
+            GazeCheckStore(get_project_root() / "logs" / "gaze-check"), self
+        )
+        self._auto_save = reports is not None and settings.logging_enabled
+        self._environment_source = environment or (lambda: {})
+        self._environment: dict = {}
+        self._report: GazeCheckReport | None = None
+        self._view_report: GazeCheckReport | None = None
+        self._archived = False
+        self._attempt_id: str | None = None
+        self._attempt_started_at = ""
+        self._attempt_started_mono = 0.0
+        self._trial_rows: list[TrialRow] = []
+        self._trial_baseline = (0, 0, 0)
+        self._export_token: str | None = None
+        self._displayed_report_id: str | None = None
         self._snapshot = CheckSnapshot()
         self._snapshot_at: float | None = None
         self._check: FixationCheck | None = None
@@ -104,6 +149,14 @@ class GazeCheckWindow(QWidget):
         self._trial_feedback_loss = False
         self._tracking_state: TrackingState | None = None
         self._build_ui()
+        self._reports.changed.connect(self._reports_changed)
+        self._reports.exported.connect(self._export_finished)
+        self._eye_gate = EyeTrackingGate(self)
+        self._eye_gate.configure(settings.eye_tracking_policy, settings.eye_tracking_hold_ms)
+        self._eye_gate.interrupted.connect(self._tracking_interrupted)
+        self._eye_gate.hold_started.connect(self._hold_tracking)
+        self._eye_gate.hold_finished.connect(self._resume_tracking)
+        self._policy_sample_at: float | None = None
         self._escape = QShortcut(QKeySequence("Esc"), self)
         self._escape.activated.connect(self.close)
         self._timer = QTimer(self)
@@ -116,10 +169,21 @@ class GazeCheckWindow(QWidget):
         layout.setSpacing(12)
         header = QHBoxLayout()
         copy = QVBoxLayout()
-        copy.addWidget(_label("Provjera pogleda", self, "checkTitle"))
-        if self._simulated:
-            copy.addWidget(_label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint"))
+        self._title_label = _label("Provjera pogleda", self, "checkTitle")
+        copy.addWidget(self._title_label)
+        self._policy_text = dict(EYE_TRACKING_POLICY_CHOICES)[self._settings.eye_tracking_policy]
+        self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
+        copy.addWidget(self._policy_label)
+        self._simulation_label = _label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint")
+        self._simulation_label.setVisible(self._simulated)
+        copy.addWidget(self._simulation_label)
+        self._recording_badge = RecordingBadge(self)
+        copy.addWidget(self._recording_badge)
         header.addLayout(copy, 1)
+        self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
+        header.addWidget(self._diagnostics_button)
+        self._history_button = self._button("Sačuvani rezultati", self._open_history)
+        header.addWidget(self._history_button)
         self._close_button = self._button("Zatvori · Esc", self.close)
         header.addWidget(self._close_button)
         layout.addLayout(header)
@@ -130,6 +194,7 @@ class GazeCheckWindow(QWidget):
         self._build_position_page()
         self._build_test_page()
         self._build_result_page()
+        self._build_history_page()
         self._notice = _label(
             "Upravljanje pogledom je pauzirano tokom provjere.",
             self,
@@ -141,7 +206,7 @@ class GazeCheckWindow(QWidget):
         self._free_button = self._button("Slobodna provjera", self._start_free)
         self._primary_button = self._button("Provjeri preciznost", self._next)
         self._primary_button.setObjectName("checkPrimary")
-        self._repeat_button = self._button("Ponovi provjeru", self.reset_check)
+        self._repeat_button = self._button("Ponovi preciznost", self._repeat)
         self._repeat_button.hide()
         for button in (
             self._calibration_button,
@@ -190,7 +255,7 @@ class GazeCheckWindow(QWidget):
         card, layout = self._card(page, "Šta uređaj trenutno vidi")
         self._left_label = _label("— Lijevo oko · čekam podatke", card)
         self._right_label = _label("— Desno oko · čekam podatke", card)
-        self._stability_label = _label("— Prikupljam podatke o praćenju", card)
+        self._stability_label = _label("— Oba oka · prikupljam podatke o praćenju", card)
         self._gaze_label = _label("— Čekam pogled na ekranu", card)
         self._guidance = _label("Pogledajte prema ekranu.", card)
         for label in (
@@ -220,7 +285,15 @@ class GazeCheckWindow(QWidget):
         self._test_controls.setObjectName("checkCard")
         layout = QVBoxLayout(self._test_controls)
         layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
+        metadata = QHBoxLayout()
+        metadata.addWidget(
+            _label(f"Režim: {self._policy_text}", self._test_controls, "checkHint"), 1
+        )
+        self._test_recording_badge = RecordingBadge(self._test_controls)
+        self._test_recording_badge.setFixedHeight(26)
+        metadata.addWidget(self._test_recording_badge)
+        layout.addLayout(metadata)
         self._test_hint = _label("", self._test_controls)
         self._test_hint.setTextFormat(Qt.RichText)
         layout.addWidget(self._test_hint, 1)
@@ -231,7 +304,7 @@ class GazeCheckWindow(QWidget):
         self._test_progress.setAccessibleName("Napredak provjere preciznosti")
         layout.addWidget(self._test_progress)
         buttons = QHBoxLayout()
-        self._test_back_button = self._button("Vrati na položaj", self.reset_check)
+        self._test_back_button = self._button("Prekini i prikaži rezultat", self._stop_test)
         self._test_close_button = self._button("Zatvori · Esc", self.close)
         buttons.addWidget(self._test_back_button)
         buttons.addWidget(self._test_close_button)
@@ -241,8 +314,11 @@ class GazeCheckWindow(QWidget):
         card, layout = self._card(self, "")
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
-        self._result_summary = _label("", card, "cardTitle")
-        self._result_detail = _label("", card)
+        precision = QWidget(card)
+        precision_layout = QVBoxLayout(precision)
+        precision_layout.setContentsMargins(0, 0, 0, 0)
+        self._result_summary = _label("", precision, "cardTitle")
+        self._result_detail = _label("", precision)
         self._result_detail.setStyleSheet("font-size: 16px;")
         self._result_detail.setTextFormat(Qt.RichText)
         columns = QHBoxLayout()
@@ -261,13 +337,13 @@ class GazeCheckWindow(QWidget):
         self._result_advice = _label("", card)
         self._trial_summary = _label("", card)
         self._trial_summary.hide()
-        layout.addWidget(self._result_summary)
-        layout.addLayout(columns, 1)
-        layout.addWidget(self._result_advice)
-        layout.addWidget(self._trial_summary)
+        precision_layout.addWidget(self._result_summary)
+        precision_layout.addLayout(columns, 1)
+        precision_layout.addWidget(self._result_advice)
+        precision_layout.addWidget(self._trial_summary)
         self._details_button = self._button("Prikaži mjerenja", self._render_result_details)
         self._details_button.setCheckable(True)
-        layout.addWidget(self._details_button, 0, Qt.AlignLeft)
+        precision_layout.addWidget(self._details_button, 0, Qt.AlignLeft)
         self._metrics_hint = _label(
             "Podaci: dio vremena s važećim pogledom. Odstupanje: udaljenost od mete. "
             "Rasipanje: koliko se pogled pomjerao. Vrijednosti su u pikselima prikaza (px).",
@@ -280,7 +356,8 @@ class GazeCheckWindow(QWidget):
             "najmanje 60% podataka. Promjena položaja može promijeniti rezultat."
         )
         self._metrics_hint.hide()
-        layout.addWidget(self._metrics_hint)
+        precision_layout.addWidget(self._metrics_hint)
+        self._build_report_controls(card, layout, precision)
         self._pages.addWidget(card)
 
     def show_fullscreen_on_primary(self) -> None:
@@ -297,6 +374,7 @@ class GazeCheckWindow(QWidget):
         diagnostics.emit("gaze_check_open", priority=True, phase=self._phase)
 
     def closeEvent(self, event) -> None:
+        self._finalize_attempt("Zatvorena provjera")
         diagnostics.emit("gaze_check_close", priority=True, phase=self._phase)
         self._timer.stop()
         self._selection.cancel()
@@ -305,9 +383,19 @@ class GazeCheckWindow(QWidget):
         self.closed.emit()
         super().closeEvent(event)
 
+    def _request_diagnostics(self) -> None:
+        if self._phase in ("precision", "trial"):
+            return
+        self._timer.stop()
+        self._selection.cancel()
+        self._target.gaze_point = None
+        self._snapshot = CheckSnapshot()
+        self.diagnostics_requested.emit()
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if self._phase in ("precision", "trial", "free"):
+            self._finalize_attempt("Promijenjena veličina prozora")
             self.reset_check()
             self._notice.setText("Veličina ekrana se promijenila. Pokrenite novu provjeru.")
 
@@ -316,9 +404,11 @@ class GazeCheckWindow(QWidget):
         if event.type() != QEvent.WindowStateChange:
             return
         if self.isMinimized() and self._phase in ("precision", "trial", "free"):
+            self._finalize_attempt("Prozor je minimiziran")
             self.reset_check()
 
     def handle_snapshot(self, snapshot: CheckSnapshot) -> None:
+        snapshot = self._apply_snapshot_policy(snapshot)
         self._snapshot = snapshot
         now = time.monotonic()
         self._snapshot_at = now
@@ -331,22 +421,56 @@ class GazeCheckWindow(QWidget):
         elif self._phase == "free":
             self._render_free()
 
-    def handle_eye_status(self, left: bool, right: bool) -> None:
-        if not (left and right):
+    def _apply_snapshot_policy(self, snapshot: CheckSnapshot) -> CheckSnapshot:
+        known_eyes = snapshot.left is not None and snapshot.right is not None
+        if known_eyes and self._eye_gate.eyes != (snapshot.left, snapshot.right):
+            self.handle_eye_status(snapshot.left, snapshot.right)
+        if snapshot.gaze is None or snapshot.gaze_at == self._policy_sample_at:
+            return snapshot
+        if self._eye_gate.sample(snapshot.gaze_at):
+            self._policy_sample_at = snapshot.gaze_at
+            return snapshot
+        return replace(snapshot, gaze=None, gaze_at=None)
+
+    def handle_eye_status(self, left: bool, right: bool, received_at: float | None = None) -> None:
+        self._eye_gate.update_eyes(left, right, received_at)
+        if not eyes_usable(self._settings.eye_tracking_policy, left, right):
             self._snapshot = replace(
                 self._snapshot, left=left, right=right, gaze=None, gaze_at=None
             )
-            self._cancel_trial_progress(loss=True)
+            if not self._eye_gate.holding:
+                self._cancel_trial_progress(loss=True)
             if self._phase == "precision" and self._check is not None:
                 self._check.interrupt()
             elif self._phase == "free":
                 self._render_free()
 
+    def _tracking_interrupted(self) -> None:
+        self._policy_sample_at = None
+        self._cancel_trial_progress(loss=True)
+        if self._check is not None:
+            self._check.interrupt()
+
+    def _hold_tracking(self, deadline_ms: float) -> None:
+        self._selection.hold_tracking(deadline_ms)
+        if self._trial_coverage is not None:
+            self._trial_coverage.interrupt()
+        if self._selection.tracking_held:
+            self._target.paused = True
+            self._target.update()
+            self._set_trial_hint("Na čekanju · čuvam napredak do povratka oba oka.")
+
+    def _resume_tracking(self) -> None:
+        self._target.paused = False
+        self._target.update()
+
     def tracking_unavailable(self) -> None:
+        self._eye_gate.cancel()
         self._snapshot = CheckSnapshot()
         self._snapshot_at = None
         self._cancel_trial_progress(loss=True)
         if self._phase in ("precision", "trial", "free"):
+            self._finalize_attempt("Veza s uređajem je prekinuta")
             self.reset_check()
             self._notice.setText(
                 "Praćenje je prekinuto. Nakon povezivanja pokrenite novu provjeru."
@@ -378,7 +502,10 @@ class GazeCheckWindow(QWidget):
                 position_supported=self._snapshot.position_supported,
                 gaze_interruptions=self._snapshot.gaze_interruptions,
             )
-        if self._snapshot.gaze_at is None or now - self._snapshot.gaze_at >= FRESH_SECONDS:
+        gaze_stale = self._snapshot.gaze_at is None
+        if not gaze_stale:
+            gaze_stale = now - self._snapshot.gaze_at >= FRESH_SECONDS
+        if not self._eye_gate.holding and gaze_stale:
             self._cancel_trial_progress(loss=True)
             if self._phase == "precision" and self._check is not None:
                 self._check.interrupt()
@@ -391,7 +518,9 @@ class GazeCheckWindow(QWidget):
             self._target.target_index = self._check.index
             self._target.update()
         remaining = max(1, round(TARGET_SECONDS - (now - self._check.started_at)))
-        feedback, state = precision_feedback(self._snapshot, remaining, now)
+        feedback, state = precision_feedback(
+            self._snapshot, remaining, now, self._settings.eye_tracking_policy
+        )
         self._set_test_hint(
             f"Meta {self._check.index + 1} od 5 · Gledajte križić u krugu.", feedback, state
         )
@@ -439,9 +568,9 @@ class GazeCheckWindow(QWidget):
             self._stability_label,
             snapshot.stable,
             {
-                True: "Praćenje je uglavnom neprekinuto",
-                False: "Praćenje ima prekide",
-                None: "Prikupljam podatke o praćenju",
+                True: "Oba oka · praćenje je uglavnom neprekinuto",
+                False: "Oba oka · praćenje ima prekide",
+                None: "Oba oka · prikupljam podatke o praćenju",
             }[snapshot.stable],
         )
         self._state(
@@ -456,17 +585,50 @@ class GazeCheckWindow(QWidget):
         )
         self._eyes_view.snapshot = snapshot
         self._eyes_view.update()
-        self._guidance.setText(position_guidance(snapshot))
+        self._guidance.setText(position_guidance(snapshot, self._settings.eye_tracking_policy))
 
     def _next(self) -> None:
         if self._phase == "position":
             self._start_precision()
         elif self._phase == "results":
             self._start_trial()
+        elif self._phase == "history":
+            self._open_selected_report()
+
+    def _repeat(self) -> None:
+        if self._phase == "history":
+            if self._report is not None:
+                self._view_report = self._report
+                self._archived = False
+                self._render_report()
+            else:
+                self.reset_check()
+        elif self._archived:
+            self._open_history()
+        elif self._phase in ("precision", "trial"):
+            self._stop_test()
+        else:
+            self._start_precision()
+
+    def _stop_test(self) -> None:
+        self._finalize_attempt("Korisnik je prekinuo test")
+        if self._report is not None and self._phase in ("precision", "trial"):
+            self._view_report = self._report
+            self._render_report()
+        else:
+            self.reset_check()
 
     def reset_check(self) -> None:
+        self._finalize_attempt("Ponovljena provjera ili podešavanje položaja")
         diagnostics.emit("gaze_check_phase", priority=True, phase="position", previous=self._phase)
         self._phase = "position"
+        self._archived = False
+        self._diagnostics_button.setEnabled(True)
+        self._title_label.setText("Provjera pogleda")
+        self._simulation_label.setVisible(self._simulated)
+        self._history_button.show()
+        self._step.show()
+        self._policy_label.setText(f"Režim: {self._policy_text}")
         self._check = None
         self._selection.cancel()
         self._trial_results.clear()
@@ -480,16 +642,22 @@ class GazeCheckWindow(QWidget):
         self._step.setText("1 · Položaj i praćenje")
         self._primary_button.setText("Provjeri preciznost")
         self._primary_button.show()
+        self._primary_button.setEnabled(True)
         self._repeat_button.hide()
         self._calibration_button.show()
+        self._calibration_button.setText("Otvori Tobii postavke")
         self._free_button.show()
         self._notice.setText("Upravljanje pogledom je pauzirano tokom provjere.")
         self._render_position()
 
     def _set_test_mode(self, phase: str) -> None:
+        self._finalize_attempt("Pokrenuta druga provjera")
+        self._archived = False
+        self._policy_label.setText(f"Režim: {self._policy_text}")
         diagnostics.emit("gaze_check_phase", priority=True, phase=phase, previous=self._phase)
         self._pages.setCurrentIndex(1)
         self._phase = phase
+        self._diagnostics_button.setEnabled(phase not in ("precision", "trial"))
         self._target.trial = phase == "trial"
         self._target.free = phase == "free"
         self._target.target_index = 0
@@ -501,6 +669,12 @@ class GazeCheckWindow(QWidget):
 
     def _start_precision(self) -> None:
         self._set_test_mode("precision")
+        self._report = None
+        self._view_report = None
+        self._trial_results.clear()
+        self._trial_tracked_targets.clear()
+        self._trial_losses = self._trial_wrong_selections = self._trial_departures = 0
+        self._begin_attempt()
         self._step.setText("2 · Preciznost · pet kratkih meta")
         self._set_test_hint(
             "Meta 1 od 5 · Gledajte križić u krugu.",
@@ -516,6 +690,123 @@ class GazeCheckWindow(QWidget):
         self._show_test_stage()
         # Freeze target locations only after Qt has settled the screen geometry.
         QTimer.singleShot(0, self._begin_precision_measurement)
+
+    def _begin_attempt(self) -> None:
+        self._attempt_id = identity()
+        self._attempt_started_at = timestamp()
+        self._attempt_started_mono = time.monotonic()
+        self._export_status.hide()
+        self._export_token = None
+        self._result_tabs.setCurrentIndex(0)
+        self._environment = {
+            key: value
+            for key, value in self._environment_source().items()
+            if key in ENVIRONMENT_KEYS
+        }
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            geometry = screen.geometry()
+            self._environment.update(
+                logical_screen=[geometry.x(), geometry.y(), geometry.width(), geometry.height()],
+                device_pixel_ratio=screen.devicePixelRatio()
+                if hasattr(screen, "devicePixelRatio")
+                else None,
+                logical_dpi=screen.logicalDotsPerInch()
+                if hasattr(screen, "logicalDotsPerInch")
+                else None,
+            )
+        self._environment["platform"] = platform.system()
+        self._environment.update(build_identity())
+
+    def _finalize_attempt(self, reason: str | None) -> None:
+        if self._attempt_id is None or self._phase not in ("precision", "trial"):
+            return
+        attempt_id, self._attempt_id = self._attempt_id, None
+        now = time.monotonic()
+        attempt = {
+            "id": attempt_id,
+            "started_at": self._attempt_started_at,
+            "ended_at": timestamp(),
+            "duration_seconds": max(0, now - self._attempt_started_mono),
+            "state": "interrupted" if reason else "completed",
+            "reason": reason,
+        }
+        if self._phase == "precision":
+            self._finalize_precision(attempt)
+        else:
+            self._finalize_trial(attempt, now)
+        self._view_report = self._report
+        self._reports.record(self._report, auto_save=self._auto_save)
+        diagnostics.emit(
+            "gaze_check_result",
+            priority=True,
+            report_id=self._report.id,
+            attempt_id=attempt_id,
+            phase=self._phase,
+            state=attempt["state"],
+        )
+
+    def _report_settings(self) -> dict:
+        return {key: getattr(self._settings, key, None) for key in SETTING_KEYS}
+
+    def _finalize_precision(self, attempt: dict) -> None:
+        targets = self._check.targets if self._check is not None else TARGETS
+        results = self._check.results if self._check is not None else []
+        rows = [PrecisionRow(name, (x, y)) for name, x, y in targets]
+        for index, result in enumerate(results):
+            rows[index] = PrecisionRow(
+                result.name,
+                rows[index].target_normalized,
+                "insufficient" if result.near is None else "measured",
+                result.samples,
+                result.coverage,
+                result.median_error,
+                result.spread,
+                result.near,
+                result.gaze_center,
+            )
+        self._report = GazeCheckReport(
+            **attempt,
+            simulated=self._simulated,
+            settings=self._report_settings(),
+            environment=self._environment.copy(),
+            precision=rows,
+        )
+        self._observe_fixations(results)
+
+    def _finalize_trial(self, attempt: dict, now: float) -> None:
+        if self._report is None:
+            self._report = GazeCheckReport(
+                identity(),
+                self._attempt_started_at,
+                attempt["ended_at"],
+                0,
+                "interrupted",
+                "Preciznost nije pokrenuta",
+                self._simulated,
+                self._report_settings(),
+                self._environment.copy(),
+                [PrecisionRow(name, (x, y)) for name, x, y in TARGETS],
+            )
+        rows = list(self._trial_rows)
+        for index in range(len(rows), 3):
+            rows.append(TrialRow(index, ((136, 64), (96, 88), (180, 72))[index]))
+        if attempt["reason"] and len(self._trial_rows) < 3:
+            self._fill_interrupted_trial(rows[len(self._trial_rows)], now)
+        self._report.trials.append(
+            TrialAttempt(**attempt, rows=rows, environment=self._environment.copy())
+        )
+
+    def _fill_interrupted_trial(self, row: TrialRow, now: float) -> None:
+        row.coverage = (
+            self._trial_coverage.fraction(min(now, self._trial_deadline))
+            if self._trial_coverage
+            else 0
+        )
+        row.duration_seconds = max(0, min(now, self._trial_deadline) - self._trial_ready_at)
+        row.wrong_selections = self._trial_wrong_selections - self._trial_baseline[0]
+        row.cancelled_selections = self._trial_losses - self._trial_baseline[1]
+        row.departures = self._trial_departures - self._trial_baseline[2]
 
     def _begin_precision_measurement(self) -> None:
         if self._phase != "precision" or not self.isVisible():
@@ -535,7 +826,11 @@ class GazeCheckWindow(QWidget):
             for name, x, y in TARGETS
         ]
         self._check = FixationCheck(
-            targets, (screen.width(), screen.height()), self._target.radius, time.monotonic()
+            targets,
+            (screen.width(), screen.height()),
+            self._target.radius,
+            time.monotonic(),
+            policy=self._settings.eye_tracking_policy,
         )
 
     def _show_test_stage(self) -> None:
@@ -543,12 +838,12 @@ class GazeCheckWindow(QWidget):
         self._target.show()
         self._target.raise_()
         width = min(760, self.width() - 32)
-        top = round(self.height() * 0.72) - 70 if self._phase == "free" else self.height() - 158
-        self._test_controls.setGeometry((self.width() - width) // 2, top, width, 148)
+        top = round(self.height() * 0.72) - 70 if self._phase == "free" else self.height() - 178
+        self._test_controls.setGeometry((self.width() - width) // 2, top, width, 168)
         self._test_controls.show()
         self._test_controls.raise_()
         self._test_back_button.setText(
-            "Prekini test" if self._phase != "free" else "Vrati na položaj"
+            "Prekini i prikaži rezultat" if self._phase != "free" else "Vrati na položaj"
         )
 
     def _start_free(self) -> None:
@@ -562,7 +857,7 @@ class GazeCheckWindow(QWidget):
         snapshot = self._snapshot
         now = time.monotonic()
         point = None
-        if free_gaze_is_visible(snapshot, now):
+        if free_gaze_is_visible(snapshot, now, self._settings.eye_tracking_policy):
             x, y = snapshot.gaze
             screen = QGuiApplication.primaryScreen().geometry()
             point = self._target.mapFromGlobal(
@@ -576,7 +871,7 @@ class GazeCheckWindow(QWidget):
             "Gledajte križiće redom. Zelena oznaka pokazuje vaš pogled.",
             "Bez odbrojavanja; sami pogledajte je li oznaka blizu križića."
             if point is not None
-            else "Čekam pogled s oba oka. Ako oznake nema, vratite se na položaj.",
+            else "Čekam svjež validan pogled. Ako oznake nema, vratite se na položaj.",
         )
         self._target.update()
 
@@ -590,16 +885,100 @@ class GazeCheckWindow(QWidget):
             self._test_hint.setText(text)
 
     def _show_results(self) -> None:
+        reason = None
+        precision_incomplete = self._check is None or len(self._check.results) < 5
+        if self._phase == "precision" and precision_incomplete:
+            reason = "Provjera preciznosti nije završena"
+        self._finalize_attempt(reason)
+        self._view_report = self._report
+        self._archived = False
+        self._render_report()
+
+    def _fixations(self, *, include_unmeasured: bool = False) -> list[FixationResult]:
+        if self._view_report is None:
+            return self._check.results if self._check else []
+        return [
+            FixationResult(
+                row.name,
+                row.samples or 0,
+                row.coverage or 0,
+                row.median_error_logical_px,
+                row.spread_logical_px,
+                row.near,
+                row.gaze_center_normalized,
+            )
+            for row in self._view_report.precision
+            if include_unmeasured or row.state != "unmeasured"
+        ]
+
+    def _render_report(self) -> None:
+        report_id = self._view_report.id if self._view_report is not None else None
+        if report_id != self._displayed_report_id:
+            self._export_status.hide()
+            self._export_token = None
+            self._displayed_report_id = report_id
         self._target.hide()
         self._phase = "results"
+        self._diagnostics_button.setEnabled(True)
         self._pages.setCurrentIndex(2)
         self._step.setText("Rezultat provjere")
-        results = self._check.results if self._check is not None else []
+        results = self._fixations()
         diagnostics.emit("gaze_check_phase", priority=True, phase="results")
-        self._observe_fixations(results)
+        selected, tracked, losses, wrong, policy = self._report_trial_data()
+        trial_finished = len(selected) == 3
+        self._render_precision_summary(results)
+        self._render_result_details()
+        self._result_map.results = self._fixations(include_unmeasured=True)
+        self._result_map.targets = (
+            [(row.name, *row.target_normalized) for row in self._view_report.precision]
+            if self._view_report is not None
+            else self._check.targets
+            if self._check
+            else []
+        )
+        self._result_map.update()
+        self._result_advice.setText(
+            result_advice(
+                results,
+                trial_results=selected,
+                tracked_targets=tracked,
+                losses=losses,
+                wrong_selections=wrong,
+                policy=policy,
+            )
+        )
+        if self._view_report is not None and self._view_report.state == "interrupted":
+            self._result_advice.setText(
+                "Provjera je prekinuta. Završene mete su sačuvane; "
+                "izaberite „Ponovi preciznost“ za cijeli test."
+            )
+        self._render_trial_summary(selected, losses, wrong)
+        self._render_result_actions(trial_finished)
+        self._render_report_identity()
+
+    def _report_trial_data(self):
+        selected = self._trial_results
+        tracked = self._trial_tracked_targets
+        losses, wrong = self._trial_losses, self._trial_wrong_selections
+        policy = self._settings.eye_tracking_policy
+        if self._view_report is not None:
+            trial = self._view_report.trials[-1] if self._view_report.trials else None
+            selected = (
+                [row.selected is True for row in trial.rows if row.state != "unmeasured"]
+                if trial
+                else []
+            )
+            tracked = (
+                {row.index for row in trial.rows if row.state == "measured"} if trial else set()
+            )
+            losses = sum(row.cancelled_selections for row in trial.rows) if trial else 0
+            wrong = sum(row.wrong_selections for row in trial.rows) if trial else 0
+            policy = self._view_report.settings.get("eye_tracking_policy", policy)
+        return selected, tracked, losses, wrong, policy
+
+    def _render_precision_summary(self, results) -> None:
         near = sum(result.near is True for result in results)
         missing = sum(result.near is None for result in results)
-        trial_finished = len(self._trial_results) == 3
         state = None if missing or not results else near == len(results)
         summary = (
             f"Za {missing} od {len(results)} meta nema dovoljno podataka."
@@ -608,40 +987,55 @@ class GazeCheckWindow(QWidget):
         )
         if not results:
             summary = "Preciznost još nije provjerena."
+        if self._view_report is not None and self._view_report.state == "interrupted":
+            state = None
+            summary = (
+                f"Prekinuto · završeno {len(results)} od {len(self._view_report.precision)} meta."
+            )
         mark = {True: "✓", False: "!", None: "—"}[state]
         self._result_summary.setText(f"{mark} {summary}")
         self._result_summary.setStyleSheet(f"color: {COLORS[state]}; font-size: 23px;")
-        self._render_result_details()
-        self._result_map.results = results
-        self._result_map.targets = self._check.targets if self._check is not None else []
-        self._result_map.update()
-        self._result_advice.setText(
-            result_advice(
-                results,
-                trial_results=self._trial_results,
-                tracked_targets=self._trial_tracked_targets,
-                losses=self._trial_losses,
-                wrong_selections=self._trial_wrong_selections,
-            )
-        )
+
+    def _render_trial_summary(self, selected, losses, wrong) -> None:
+        trial_finished = len(selected) == 3
         self._trial_summary.setVisible(trial_finished)
         if trial_finished:
-            trial_ok = all(self._trial_results) and not self._trial_wrong_selections
+            trial_ok = all(selected) and not wrong
             self._state(
                 self._trial_summary,
                 trial_ok,
-                f"Probni izbor: {sum(self._trial_results)}/3 · "
-                f"pogrešni izbori: {self._trial_wrong_selections} · "
-                f"poništeni izbori: {self._trial_losses}",
+                f"Probni izbor: {sum(selected)}/3 · "
+                f"pogrešni izbori: {wrong} · poništeni izbori: {losses}",
             )
+
+    def _render_result_actions(self, trial_finished: bool) -> None:
         self._primary_button.setText(
             "Ponovi probu dugmadi" if trial_finished else "Probaj izbor dugmeta"
         )
         self._primary_button.show()
-        self._calibration_button.show()
-        self._free_button.show()
-        self._repeat_button.setText("Podesi položaj" if state is not True else "Ponovi provjeru")
+        self._primary_button.setEnabled(True)
+        if self._view_report is not None:
+            self._primary_button.setEnabled(self._view_report.state == "completed")
+        self._primary_button.setVisible(not self._archived)
+        self._calibration_button.setVisible(not self._archived)
+        self._calibration_button.setText("Podesi položaj")
+        self._free_button.hide()
+        self._repeat_button.setText("Nazad na listu" if self._archived else "Ponovi preciznost")
         self._repeat_button.show()
+
+    def _render_report_identity(self) -> None:
+        if self._view_report is not None:
+            self._step.hide()
+            self._title_label.setText(
+                "Raniji rezultat provjere" if self._archived else "Provjera pogleda"
+            )
+            self._simulation_label.setVisible(self._view_report.simulated)
+            self._history_button.setVisible(not self._archived)
+            self._render_report_context()
+            policy = dict(EYE_TRACKING_POLICY_CHOICES).get(
+                self._view_report.settings.get("eye_tracking_policy"), "—"
+            )
+            self._policy_label.setText(f"Režim rezultata: {policy}")
 
     @staticmethod
     def _observe_fixations(results) -> None:
@@ -664,43 +1058,49 @@ class GazeCheckWindow(QWidget):
         detailed = self._details_button.isChecked()
         self._details_button.setText("Sakrij mjerenja" if detailed else "Prikaži mjerenja")
         self._metrics_hint.setVisible(detailed)
-        results = self._check.results if self._check is not None else []
-        rows = []
-        for result in results:
-            mark = {True: "✓", False: "!", None: "—"}[result.near]
-            status = {
-                True: "Pogled blizu mete",
-                False: "Pogled izvan mete",
-                None: "Premalo podataka",
-            }[result.near]
-            color = COLORS[result.near]
-            if detailed:
-                error = f"{result.median_error:.0f} px" if result.median_error is not None else "—"
-                spread = f"{result.spread:.0f} px" if result.spread is not None else "—"
-                row = (
-                    f'<td style="color: {color}">{mark} {escape(result.name)}</td>'
-                    f"<td>{result.coverage:.0%}</td><td>{error}</td><td>{spread}</td>"
-                )
-            else:
-                row = (
-                    f'<td>{escape(result.name)}</td><td style="color: {color}">{mark} {status}</td>'
-                )
-            rows.append(f"<tr>{row}</tr>")
+        rows = [self._result_row(result, detailed) for result in self._fixations()]
+        if self._view_report is not None:
+            rows.extend(
+                f'<tr><td>{escape(result.name)}</td><td colspan="4">Nije izmjereno</td></tr>'
+                for result in self._view_report.precision
+                if result.state == "unmeasured"
+            )
         headings = (
-            ("Meta", "Podaci", "Odstupanje", "Rasipanje") if detailed else ("Meta", "Rezultat")
+            ("Meta", "Uzorci", "Podaci", "Odstupanje", "Rasipanje")
+            if detailed
+            else ("Meta", "Rezultat")
         )
         table = '<table width="100%" cellspacing="8"><tr>'
         table += "".join(f'<th align="left">{heading}</th>' for heading in headings)
         table += "</tr>" + "".join(rows) + "</table>"
-        if detailed and self._trial_results:
-            table += (
-                f"<p>Izlasci iz dugmeta: {self._trial_departures}. "
-                f"Prekidi tokom izbora: {self._trial_losses}.</p>"
-            )
         self._result_detail.setText(table)
+
+    @staticmethod
+    def _result_row(result: FixationResult, detailed: bool) -> str:
+        mark = {True: "✓", False: "!", None: "—"}[result.near]
+        status = {
+            True: "Pogled blizu mete",
+            False: "Pogled izvan mete",
+            None: "Premalo podataka",
+        }[result.near]
+        color = COLORS[result.near]
+        if detailed:
+            error = f"{result.median_error:.0f} px" if result.median_error is not None else "—"
+            spread = f"{result.spread:.0f} px" if result.spread is not None else "—"
+            row = (
+                f'<td style="color: {color}">{mark} {escape(result.name)}</td>'
+                f"<td>{result.samples}</td><td>{result.coverage:.0%}</td>"
+                f"<td>{error}</td><td>{spread}</td>"
+            )
+        else:
+            row = f'<td>{escape(result.name)}</td><td style="color: {color}">{mark} {status}</td>'
+        return f"<tr>{row}</tr>"
 
     def _start_trial(self) -> None:
         self._set_test_mode("trial")
+        self._begin_attempt()
+        self._trial_rows = []
+        self._trial_baseline = (0, 0, 0)
         self._step.setText("3 · Probni izbor · bez klika drugim programima")
         self._trial_results.clear()
         self._trial_tracked_targets.clear()
@@ -735,36 +1135,46 @@ class GazeCheckWindow(QWidget):
         )
 
     def _trial_sample(self, snapshot: CheckSnapshot, now: float) -> None:
-        if snapshot.gaze_interruptions != self._trial_interruptions:
-            self._cancel_trial_progress(loss=True)
-            self._trial_interruptions = snapshot.gaze_interruptions
+        self._check_trial_interruptions(snapshot)
         if now >= self._trial_deadline:
             self._finish_trial_target(False, now)
             return
         if not self._trial_sample_ready(snapshot, now):
             return
-        screen = QGuiApplication.primaryScreen().geometry()
-        x, y = snapshot.gaze
-        if not (0 <= x <= 1 and 0 <= y <= 1):
-            if self._selection.target is not None:
-                self._trial_departures += 1
-            self._cancel_trial_progress(loss=False)
+        point = self._trial_point(snapshot.gaze)
+        if point is None:
             return
-        global_point = QPoint(
-            round(screen.left() + x * (screen.width() - 1)),
-            round(screen.top() + y * (screen.height() - 1)),
-        )
-        point = self._target.mapFromGlobal(global_point)
         target, result = self._advance_trial_selection(point, snapshot.gaze_at)
         if result.ready and self._complete_trial_selection(target, now):
             return
         self._update_trial_hint(target)
 
+    def _check_trial_interruptions(self, snapshot: CheckSnapshot) -> None:
+        if snapshot.gaze_interruptions != self._trial_interruptions:
+            if not self._selection.tracking_held:
+                self._cancel_trial_progress(loss=True)
+            self._trial_interruptions = snapshot.gaze_interruptions
+
+    def _trial_point(self, gaze: tuple[float, float]) -> QPoint | None:
+        screen = QGuiApplication.primaryScreen().geometry()
+        x, y = gaze
+        if not (0 <= x <= 1 and 0 <= y <= 1):
+            if self._selection.target is not None:
+                self._trial_departures += 1
+            self._cancel_trial_progress(loss=False)
+            return None
+        global_point = QPoint(
+            round(screen.left() + x * (screen.width() - 1)),
+            round(screen.top() + y * (screen.height() - 1)),
+        )
+        return self._target.mapFromGlobal(global_point)
+
     def _trial_sample_ready(self, snapshot: CheckSnapshot, now: float) -> bool:
         if snapshot.gaze is None:
-            self._cancel_trial_progress(loss=True)
+            if not self._eye_gate.holding:
+                self._cancel_trial_progress(loss=True)
             return False
-        if not (snapshot.left and snapshot.right):
+        if not eyes_usable(self._settings.eye_tracking_policy, snapshot.left, snapshot.right):
             self._cancel_trial_progress(loss=True)
             return False
         at = snapshot.gaze_at
@@ -799,16 +1209,16 @@ class GazeCheckWindow(QWidget):
         previous = self._selection.target
         hold_rect = self._target.button_rect(previous) if previous is not None else rect
         margin = min(TOOLBAR_EDGE_MARGIN_PX, hold_rect.width() // 4, hold_rect.height() // 4)
-        hold = target is None and hold_rect.adjusted(-margin, -margin, margin, margin).contains(
-            point
-        )
+        hold = self._target.rect().contains(point) and hold_rect.adjusted(
+            -margin, -margin, margin, margin
+        ).contains(point)
         result = self._selection.update(
             target,
             at * 1000,
             pause_ms=self._settings.selection_pause_ms,
             dwell_ms=self._settings.dwell_ms,
             can_hold=hold,
-            hold_ms=TOOLBAR_LEAVE_GRACE_MS,
+            hold_ms=self._settings.edge_hold_ms,
         )
         if previous is not None and self._selection.target != previous:
             self._trial_departures += 1
@@ -836,6 +1246,7 @@ class GazeCheckWindow(QWidget):
             self._set_trial_hint("Pogled je na drugom dugmetu. Pogledajte „Pogledaj“.", False)
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
+        self._target.paused = False
         if loss:
             self._record_trial_loss()
             self._selection.pause()
@@ -859,9 +1270,33 @@ class GazeCheckWindow(QWidget):
                 "Praćenje je prekinuto. Pogledajte „Pogledaj“ za novi izbor.", False
             )
         elif not self._trial_feedback_loss:
-            self._set_trial_hint("Čekam pogled s oba oka. Pogledajte prema ekranu.")
+            self._set_trial_hint("Čekam svjež validan pogled. Pogledajte prema ekranu.")
 
     def _finish_trial_target(self, selected: bool, now: float) -> None:
+        coverage = (
+            self._trial_coverage.fraction(min(now, self._trial_deadline))
+            if self._trial_coverage
+            else 0.0
+        )
+        baseline = self._trial_baseline
+        self._trial_rows.append(
+            TrialRow(
+                len(self._trial_results),
+                ((136, 64), (96, 88), (180, 72))[len(self._trial_results)],
+                "measured" if coverage >= 0.6 else "insufficient",
+                selected,
+                coverage,
+                max(0, min(now, self._trial_deadline) - self._trial_ready_at),
+                self._trial_wrong_selections - baseline[0],
+                self._trial_losses - baseline[1],
+                self._trial_departures - baseline[2],
+            )
+        )
+        self._trial_baseline = (
+            self._trial_wrong_selections,
+            self._trial_losses,
+            self._trial_departures,
+        )
         if self._trial_coverage is not None and self._trial_coverage.sufficient(
             min(now, self._trial_deadline)
         ):
@@ -890,6 +1325,10 @@ class GazeCheckWindow(QWidget):
         self._target.update()
 
     def _calibrate(self) -> None:
+        if self._phase == "results":
+            self.reset_check()
+            return
+        self._finalize_attempt("Otvorene Tobii postavke")
         self.reset_check()
         self._notice.setText(
             "U Tobii Core odaberite profil korisnika > Test and recalibrate > Recalibrate. "

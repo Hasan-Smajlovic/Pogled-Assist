@@ -36,8 +36,11 @@ def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def close_top_level_widgets(qapp) -> Iterator[None]:
+    from PySide6.QtCore import QEvent
+
     yield
     for widget in qapp.topLevelWidgets():
         widget.close()
         widget.deleteLater()
+    qapp.sendPostedEvents(None, QEvent.DeferredDelete)
     qapp.processEvents()

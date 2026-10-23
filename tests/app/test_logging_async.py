@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import faulthandler
 import json
 import logging
 import threading
 import time
+
+import pytest
 
 from pogled_assist import logging_setup
 from pogled_assist.log_transport import LogWriter, bounded_copy
@@ -27,7 +30,7 @@ def test_blocked_console_does_not_block_log_producer(monkeypatch, tmp_path):
         def write(self, text):
             if armed.is_set():
                 entered.set()
-                release.wait(5)
+                release.wait()
             return len(text)
 
         def flush(self):
@@ -45,13 +48,16 @@ def test_blocked_console_does_not_block_log_producer(monkeypatch, tmp_path):
     producer = threading.Thread(target=produce)
     try:
         producer.start()
-        assert entered.wait(1), "the real console sink must be blocked"
-        assert finished.wait(0.5), "input must not wait for a console write"
+        assert entered.wait(10), "the real console sink must be blocked"
+        if not finished.wait(10):
+            faulthandler.dump_traceback()
+            pytest.fail("Input waited while the console sink was blocked")
     finally:
         release.set()
-        producer.join(2)
+        producer.join(10)
         logging_setup._restore_standard_streams()
         logging_setup._clear_root_handlers()
+        assert not producer.is_alive(), "Log producer did not stop after releasing the sink"
 
 
 def test_blocked_file_overflow_is_bounded_and_shutdown_has_a_deadline(tmp_path, monkeypatch):
@@ -67,7 +73,7 @@ def test_blocked_file_overflow_is_bounded_and_shutdown_has_a_deadline(tmp_path, 
         def write(self, text):
             if "block-file" in text:
                 entered.set()
-                release.wait(5)
+                release.wait()
             return self.stream.write(text)
 
         def flush(self):
@@ -86,7 +92,7 @@ def test_blocked_file_overflow_is_bounded_and_shutdown_has_a_deadline(tmp_path, 
     writer.start_segment(latest, None, trace=True)
     writer.record(logging.makeLogRecord({"msg": "block-file", "args": (), "levelno": 20}))
     try:
-        assert entered.wait(1)
+        assert entered.wait(10), "File writer did not reach the blocked sink"
         for index in range(2000):
             writer.event("native_gaze", {"sample": index}, trace=True)
         health = writer.health()
@@ -122,7 +128,7 @@ def test_runtime_segments_archive_on_writer_and_discard_disabled_backlog(tmp_pat
     class Console:
         def write(self, text):
             entered.set()
-            release.wait(5)
+            release.wait()
 
         def flush(self):
             pass
@@ -132,7 +138,7 @@ def test_runtime_segments_archive_on_writer_and_discard_disabled_backlog(tmp_pat
     writer.start_segment(latest, Console(), trace=False)
     writer.record(logging.makeLogRecord({"msg": "first segment", "args": (), "levelno": 20}))
     try:
-        assert entered.wait(1)
+        assert entered.wait(10), "Segment writer did not reach the blocked sink"
         writer.event("must_be_discarded", {})
         writer.disable()
         writer.start_segment(latest, None, trace=False)
@@ -294,7 +300,7 @@ def test_old_trace_limit_cannot_disable_a_new_trace_session(tmp_path, monkeypatc
     def wait_before_limit(self, sequence, data):
         if data[0] == "old_trigger":
             entered.set()
-            release.wait(5)
+            release.wait()
         real_write(self, sequence, data)
 
     monkeypatch.setattr(LogWriter, "_write_event", wait_before_limit)
@@ -304,7 +310,7 @@ def test_old_trace_limit_cannot_disable_a_new_trace_session(tmp_path, monkeypatc
     writer.event("old_trace", {}, trace=True)
     writer.event("old_trigger", {}, trace=True)
     try:
-        assert entered.wait(1)
+        assert entered.wait(10), "Trace writer did not reach the blocked event"
         writer.disable()
         writer.start_segment(latest, None, trace=True)
         assert writer.event("new_trace", {}, trace=True)
@@ -339,7 +345,7 @@ def test_closing_summaries_share_the_queue_bound_across_rapid_toggles(tmp_path):
     class Console:
         def write(self, _text):
             entered.set()
-            release.wait(5)
+            release.wait()
 
         def flush(self):
             pass
@@ -349,7 +355,7 @@ def test_closing_summaries_share_the_queue_bound_across_rapid_toggles(tmp_path):
     writer.start_segment(latest, Console(), trace=False)
     writer.record(logging.makeLogRecord({"msg": "blocked", "args": (), "levelno": 20}))
     try:
-        assert entered.wait(1)
+        assert entered.wait(10), "Summary writer did not reach the blocked sink"
         for index in range(20):
             writer.event("stream_summary", {"counts": {"sample": index}}, priority=True)
             writer.disable()

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .. import diagnostics
 
-DEFAULT_SELECTION_PAUSE_MS = 500
+DEFAULT_SELECTION_PAUSE_MS = 250
 MIN_SELECTION_PAUSE_MS = 100
 MAX_SELECTION_PAUSE_MS = 2000
 
@@ -29,6 +29,7 @@ class GazeSelectionTimer:
         self._started_ms = 0.0
         self._last_seen_ms = 0.0
         self._away_since_ms: float | None = None
+        self._tracking_deadline_ms: float | None = None
         self._observer = (
             diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
         )
@@ -126,10 +127,12 @@ class GazeSelectionTimer:
         can_hold, hold_ms = edge_hold
         pause_ms = self._pause_ms
         dwell_ms = self._dwell_ms
+        if self._tracking_deadline_ms is not None:
+            resumed = self._resume_tracking(target, now_ms, restart=restart, hold_ms=hold_ms)
+            if resumed is not None:
+                return resumed
         if restart:
-            self.cancel()
-            if target is not None:
-                self._start(target, now_ms)
+            self._restart(target, now_ms)
             return GazeSelectionUpdate()
 
         if can_hold and self._holds(target, now_ms, hold_ms):
@@ -137,7 +140,9 @@ class GazeSelectionTimer:
             return GazeSelectionUpdate(progress=progress.progress)
 
         self._end_departure(target, now_ms, hold_ms)
+        return self._select_target(target, now_ms)
 
+    def _select_target(self, target, now_ms) -> GazeSelectionUpdate:
         if target is None:
             self.cancel()
             return GazeSelectionUpdate()
@@ -151,7 +156,31 @@ class GazeSelectionTimer:
             return GazeSelectionUpdate()
 
         self._last_seen_ms = now_ms
-        return self._progress(now_ms, pause_ms, dwell_ms)
+        return self._progress(now_ms, self._pause_ms, self._dwell_ms)
+
+    def _restart(self, target, now_ms) -> None:
+        self.cancel()
+        if target is not None:
+            self._start(target, now_ms)
+
+    def _resume_tracking(self, target, now_ms, *, restart, hold_ms):
+        resume = self._can_resume_tracking(target, now_ms, restart=restart, hold_ms=hold_ms)
+        self._tracking_deadline_ms = None
+        if not resume:
+            self.pause(reason="tracking_hold_cancelled")
+            return None
+        self._started_ms += max(0.0, now_ms - self._last_seen_ms)
+        self._last_seen_ms = now_ms
+        self._away_since_ms = None
+        progress = self._progress(now_ms, self._pause_ms, self._dwell_ms)
+        return GazeSelectionUpdate(progress=progress.progress)
+
+    def _can_resume_tracking(self, target, now_ms, *, restart, hold_ms):
+        if restart or target is None or target != self._target:
+            return False
+        if now_ms >= self._tracking_deadline_ms:
+            return False
+        return self._away_since_ms is None or now_ms - self._away_since_ms < hold_ms
 
     def complete(self) -> None:
         if self._target is not None:
@@ -175,6 +204,15 @@ class GazeSelectionTimer:
 
         self._clear_target()
         self._observe(reason)
+
+    def hold_tracking(self, deadline_ms: float) -> None:
+        if self._target is not None and self._tracking_deadline_ms is None:
+            self._tracking_deadline_ms = deadline_ms
+            self._observe("tracking_held")
+
+    @property
+    def tracking_held(self) -> bool:
+        return self._tracking_deadline_ms is not None
 
     def _holds(self, target: object | None, now_ms: float, hold_ms: int) -> bool:
         if self.target is None or target == self.target or hold_ms <= 0:
@@ -205,6 +243,7 @@ class GazeSelectionTimer:
         self._away_since_ms = None
 
     def _clear_target(self) -> None:
+        self._tracking_deadline_ms = None
         self._target = None
         self._started_ms = 0.0
         self._last_seen_ms = 0.0

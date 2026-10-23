@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="assets/speech.css">
   <link rel="stylesheet" href="assets/tracking.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/tracking.js" defer></script>
 </head>
@@ -17,8 +19,9 @@
   <main id="tracking-screen" class="tracking-concept" aria-label="Nacrt povratnih informacija o praćenju">
     <header class="tracking-preview-tools">
       <div><h1>Praćenje tokom korištenja</h1><small>Nacrt · izmišljeni podaci za pregled dizajna</small></div>
+      <label>Režim<select id="tracking-policy-preview"></select></label>
       <label>Prikaz<select id="tracking-context"><option value="message">Pisanje poruke</option><option value="letters" selected>Izbor slova</option><option value="confirm">Potvrda brisanja</option></select></label>
-      <label>Stanje praćenja<select id="tracking-state"><option value="ready" selected>Praćenje spremno</option><option value="brief">Kratak prekid lijevog oka</option><option value="right">Duži prekid desnog oka</option><option value="left">Duži prekid lijevog oka</option><option value="both">Prekid oba oka</option><option value="waiting">Oči se prate, pogled kasni</option><option value="frequent">Česti prekidi, pogled se vratio</option><option value="disconnected">Uređaj nije povezan</option><option value="stabilizing">Praćenje se vraća</option><option value="recovered">Praćenje se vratilo</option></select></label>
+      <label>Stanje praćenja<select id="tracking-state"><option value="ready" selected>Praćenje spremno</option><option value="brief">Kratak prekid lijevog oka</option><option value="right">Samo lijevo oko i svjež pogled</option><option value="left">Samo desno oko i svjež pogled</option><option value="both">Prekid oba oka</option><option value="waiting">Oba oka se prate, pogled kasni</option><option value="one-waiting">Jedno oko se prati, pogled kasni</option><option value="frequent">Česti prekidi, pogled se vratio</option><option value="disconnected">Uređaj nije povezan</option><option value="stabilizing">Praćenje se vraća</option><option value="recovered">Praćenje se vratilo</option></select></label>
       <button id="tracking-demo" type="button">Prikaži prekid i povratak</button>
     </header>
     <section id="tracking-stage" class="tracking-stage" data-context="letters" aria-label="Primjer aplikacije">
@@ -44,13 +47,13 @@
               <button type="button" data-tracking-group="4">O P R S Š</button><button type="button" data-tracking-group="5">T U V Z Ž</button>
             </div>
           </section>
-          <aside class="system-actions"><h2 class="section-label">Kontrole</h2><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Zatvori govorni način</small></button></aside>
+          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="section-label">Kontrole</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Zatvori govorni način</small></button></aside>
         </div>
         <footer class="utility-row"><button type="button">Razmak</button><button type="button">Obriši slovo</button><button type="button">Brojevi i znakovi</button><button type="button">Arapski</button></footer>
       </div>
       <div class="tracking-modal-layer">
         <section class="tracking-modal" aria-labelledby="tracking-dialog-title">
-          <header class="tracking-modal-heading"><h2 id="tracking-dialog-title">Odaberite slovo</h2><div id="tracking-dialog-feedback"></div></header>
+          <header class="tracking-modal-heading"><div class="tracking-dialog-title"><h2 id="tracking-dialog-title">Odaberite slovo</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><div id="tracking-dialog-feedback"></div></header>
           <div id="tracking-letter-options" class="letter-grid">
             <button type="button" data-tracking-letter>A</button><button type="button" data-tracking-letter>B</button><button type="button" data-tracking-letter>C</button>
             <button type="button" data-tracking-letter>Č</button><button type="button" data-tracking-letter>Ć</button><button class="back" type="button" data-tracking-context="message">Nazad na grupe</button>
@@ -68,8 +71,9 @@
 <details class="design-notes"><summary>O ovom nacrtu</summary>
   <p>Interaktivni pregled obavijesti tokom pisanja, izbora slova i potvrde brisanja. Podaci su izmišljeni. Selektori i dugme Prikaži prekid i povratak služe samo pregledu; ne mijenjaju aplikaciju. Primjer ima 1280 × 720 logičkih piksela i proporcionalno se smanjuje prema prostoru preglednika.</p>
   <p>Obavijest klizi odozgo u postojeće zaglavlje aktivnog prikaza. Tekst ostaje u jednom redu, odvojen srednjom tačkom, bez prečice za Provjeru pogleda. Nema praznog reda niti pomjeranja dugmadi. Polje poruke zadržava punu širinu; obavijest mu privremeno smanjuje visinu, koja se vraća nakon nestanka. Pokazatelji očiju i tekst skriveni su tokom urednog praćenja.</p>
-  <p>Duži problem prikazuje upozorenje nakon približno 0,8 s; tri prekida očiju od najmanje 0,35 s unutar 10 s mogu prikazati Praćenje često prekida. Nakon povratka oba oka i svježeg pogleda slijedi Praćenje se vraća, zatim poslije 500 ms zeleno Možete nastaviti na 2 s. Obavijest se povlači i blijedi za 180 ms. Novi prekid ažurira istu obavijest. Smanjene animacije isključuju klizanje, izbljeđivanje i animiranu promjenu visine.</p>
-  <p>Obavijest ne zaustavlja unos niti potvrđuje preciznost. Sigurnosno poništavanje odabira pri gubitku oka ostaje trenutno, nezavisno od ovih vremena. Pri ponavljanim prekidima unos je moguć dok su podaci važeći; poruka odabir je zaustavljen prikazuje se samo kada nisu. Povratne informacije opisuju podatke, bez dijagnoze oka.</p>
+  <p>Duži problem prikazuje upozorenje nakon približno 0,8 s; tri stvarna prekida upotrebljivog praćenja od najmanje 0,35 s unutar 10 s mogu prikazati Praćenje često prekida. Nakon povratka uslova izabranog režima i svježeg pogleda slijedi Praćenje se vraća, zatim poslije 500 ms zeleno Možete nastaviti na 2 s. Obavijest se povlači i blijedi za 180 ms. Novi prekid ažurira istu obavijest. Smanjene animacije isključuju klizanje, izbljeđivanje i animiranu promjenu visine.</p>
+  <p>Obavijest ne zaustavlja unos niti potvrđuje preciznost. Izabrani režim određuje da li je pogled dopušten za odabir. Probni režim uz jedno oko i svjež pogled ne prikazuje odabir je zaustavljen niti upozorenje samo zbog drugog oka. Ako pogled nedostaje, čekanje ostaje stvarno i odabir ne napreduje. Pokazatelji očiju ne pretvaraju jedno praćeno oko u dva.</p>
+  <p>Kratko čuvanje napretka ne čeka obavijest od 0,8 s: odmah zamrzava krug i isticanje cilja, dodaje oznaku pauze i prestaje pulsirati. Po isteku podesivog roka napredak se uklanja. <a href="selection-progress.html">Zaseban prikaz napretka</a> definiše izgled i pravila nastavka. Ručno izabrana stanja u ovom nacrtu zaustavljena su radi pregleda; ne predstavljaju mjerenje trajanja.</p>
   <p>Obavijesti o praćenju pogleda početno su uključene u Postavkama. Isključivanje skriva cijelu obavijest, uključujući potvrdu povratka. Početni meni i Provjera pogleda ostaju nezavisni; Odmor, Postavke i Provjera pogleda ne izazivaju obavijesti. Izbor u Opcijama pregleda i HTML Postavkama dijeli se samo unutar sesije preglednika, bez upisa u stvarne postavke.</p>
   <p>Automatski primjer prikazuje deset sekundi prekida lijevog oka i povratak, bez automatskog odabira dugmeta. Ručni klikovi predstavljaju pomoć mišem. <a href="../USER_GUIDE.md#tracking-notifications-in-speech">Vodič za korištenje</a> opisuje ponašanje u aplikaciji.</p>
 </details>

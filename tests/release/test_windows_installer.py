@@ -188,6 +188,14 @@ def _existing_installation(tmp_path: Path) -> Path:
     (install_root / "logs" / "diagnostics" / "session.jsonl").write_bytes(
         b'{"keep":"diagnostics"}\n'
     )
+    (install_root / "logs" / "gaze-check").mkdir()
+    (install_root / "logs" / "gaze-check" / "synthetic-report.json").write_bytes(
+        b'{"keep":"gaze-check-report"}\n'
+    )
+    recording = install_root / "logs" / "diagnostic-recordings" / ("a" * 32)
+    recording.mkdir(parents=True)
+    (recording / "recording.json").write_bytes(b'{"keep":"recording-metadata"}\n')
+    (recording / "snimak.jsonl").write_bytes(b'{"keep":"recorded-events"}\n')
     (install_root / "install_info.json").write_bytes(b'{"keep":"metadata"}')
     (install_root / "setup_windows.log").write_bytes(b"existing setup log\r\n")
     (install_root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
@@ -436,19 +444,7 @@ def test_msi_setup_preserves_exit_codes_and_raw_path_argument(msi_process_result
         assert "exit code 7" in result.stderr
 
 
-def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(
-    tmp_path, smoke_app, monkeypatch
-):
-    from pogled_assist.settings_store import load_app_settings, save_app_settings
-    from pogled_assist.speech.speech_library import (
-        CategoryRecord,
-        PhraseRecord,
-        speech_library_store,
-    )
-    from pogled_assist.suggestions.learning import LearningStore
-
-    package = _release_package(tmp_path, smoke_app)
-    install_root = _existing_installation(tmp_path)
+def _seed_round_trip_data(install_root):
     data = install_root / "data"
     (install_root / "VERSION").write_text("0.3.5", encoding="utf-8")
     (data / "app_settings.json").write_text(
@@ -475,6 +471,24 @@ def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(
     extra = data / "custom" / "entry.txt"
     extra.parent.mkdir()
     extra.write_text("Synthetic manual entry", encoding="utf-8")
+    return library, extra
+
+
+def test_newer_older_newer_round_trip_preserves_data_and_supported_edits(
+    tmp_path, smoke_app, monkeypatch
+):
+    from pogled_assist.settings_store import load_app_settings, save_app_settings
+    from pogled_assist.speech.speech_library import (
+        CategoryRecord,
+        PhraseRecord,
+        speech_library_store,
+    )
+    from pogled_assist.suggestions.learning import LearningStore
+
+    package = _release_package(tmp_path, smoke_app)
+    install_root = _existing_installation(tmp_path)
+    data = install_root / "data"
+    library, extra = _seed_round_trip_data(install_root)
     before = _persistent_snapshot(install_root)
 
     downgrade = _run_installer(package, install_root)
@@ -541,6 +555,9 @@ def _persistent_snapshot(install_root: Path) -> dict[str, bytes]:
             "data/speech_learning.json",
             "logs/latest.txt",
             "logs/diagnostics/session.jsonl",
+            "logs/gaze-check/synthetic-report.json",
+            "logs/diagnostic-recordings/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/recording.json",
+            "logs/diagnostic-recordings/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/snimak.jsonl",
             "install_info.json",
             "setup_windows.log",
         )
@@ -1024,24 +1041,29 @@ def _run_process_batch(root, script, cases):
     return {name: {**case, "result": results[name]} for name, case in cases.items()}
 
 
+def _package_process_cases(root, smoke_app, *, build):
+    cases = {}
+    for outcome in ("success", "failure", "invalid", "timeout"):
+        directory = root / f"smoke-{outcome}"
+        directory.mkdir()
+        cases[directory.name] = _package_process_case(directory, smoke_app, build, outcome)
+    if not build:
+        for name, prepare in [
+            ("installation-check", _installation_check_case),
+            ("post-install", _post_install_case),
+        ]:
+            directory = root / name
+            directory.mkdir()
+            cases[name] = prepare(directory, smoke_app)
+    return cases
+
+
 @pytest.fixture(scope="module")
 def package_process_results(tmp_path_factory, smoke_app):
     batches = {}
     for build in (False, True):
         root = tmp_path_factory.mktemp(f"package-process-{build}")
-        cases = {}
-        for outcome in ("success", "failure", "invalid", "timeout"):
-            directory = root / f"smoke-{outcome}"
-            directory.mkdir()
-            cases[directory.name] = _package_process_case(directory, smoke_app, build, outcome)
-        if not build:
-            for name, prepare in [
-                ("installation-check", _installation_check_case),
-                ("post-install", _post_install_case),
-            ]:
-                directory = root / name
-                directory.mkdir()
-                cases[name] = prepare(directory, smoke_app)
+        cases = _package_process_cases(root, smoke_app, build=build)
         script = (
             REPO_ROOT / "scripts/release/build_windows_package.ps1" if build else INSTALLER_SCRIPT
         )

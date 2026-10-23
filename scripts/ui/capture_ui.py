@@ -6,7 +6,6 @@ import argparse
 import os
 from contextlib import ExitStack
 from dataclasses import replace
-from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +14,7 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pogled_assist import toolbar as toolbar_module
@@ -36,11 +35,15 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
+from pogled_assist.ui.recording_badge import RecordingIndicator
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_window import SpeechWindow
+from scripts.ui.capture_diagnostics import CaptureDiagnostics
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
 from scripts.ui.capture_speech_voices import CaptureSpeechVoices
+from scripts.ui.gallery import GROUPS, gallery_content, group_for, page_html, select_names
 
 
 class PreviewAppBar:
@@ -258,69 +261,60 @@ def _capture_widget(
 
 
 def _write_gallery(output_dir: Path, snapshots: list[tuple[str, Path]]) -> Path:
-    cards = "\n".join(
-        f'<article><h2>{escape(title)}</h2><a href="{path.name}">'
-        f'<img src="{path.name}" alt="{escape(title)}"></a></article>'
-        for title, path in snapshots
-    )
-    document = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pogled Assist UI preview</title>
-  <style>
-    body {{ margin: 0; padding: 32px; background: #0c0e12; color: #f6f7fb;
-      font-family: "Segoe UI", Arial, sans-serif; }}
-    header {{ max-width: 900px; margin: 0 auto 32px; }}
-    h1 {{ margin-bottom: 8px; }}
-    p {{ color: #aeb8c8; }}
-    main {{ display: grid; gap: 24px; }}
-    article {{ overflow: hidden; border: 1px solid #303746; border-radius: 12px;
-      background: #151923; }}
-    h2 {{ margin: 0; padding: 14px 18px; font-size: 16px; }}
-    a {{ display: block; overflow: auto; background: #08090c; }}
-    img {{ display: block; max-width: 100%; height: auto; margin: 0 auto; }}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Pogled Assist UI preview</h1>
-    <p>Generated from the real Qt widgets with hardware and Windows input disabled.</p>
-  </header>
-  <main>{cards}</main>
-</body>
-</html>
-"""
     gallery_path = output_dir / "index.html"
-    gallery_path.write_text(document, encoding="utf-8")
+    images = {path.stem: title for title, path in snapshots}
+    gallery_path.write_text(
+        page_html("Pogled Assist UI preview", gallery_content(images)), encoding="utf-8"
+    )
     return gallery_path
 
 
-def capture_ui(output_dir: Path, *, width: int = 1280, height: int = 720) -> list[Path]:
+def capture_ui(
+    output_dir: Path,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    profile: str = "core",
+    groups: tuple[str, ...] = (),
+) -> list[Path]:
+    selected = select_names(profile, groups)
     output_dir.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication(["capture-ui"])
-    session = _CaptureSession(app, output_dir, (width, height))
+    session = _CaptureSession(app, output_dir, (width, height), selected, groups)
     with ExitStack() as stack:
         for active_patch in session.patches():
             stack.enter_context(active_patch)
         try:
             session.capture_hotbar()
             session.capture_settings()
+            session.capture_selection_progress()
             session.capture_gaze_check()
+            session.capture_diagnostics()
             session.capture_speech()
             session.capture_sidebars()
             session.capture_arabic()
         finally:
             session.close()
+    # Remove only known screenshots omitted by this successful capture. Never
+    # recursively clean a caller-provided output directory or unrelated files.
+    retained = {path.stem for _, path in session.snapshots}
+    for name in session.encountered - retained:
+        (output_dir / f"{name}.png").unlink(missing_ok=True)
     _write_gallery(output_dir, session.snapshots)
     return [path for _, path in session.snapshots]
 
 
-class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
+class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics):
     """Keep preview windows alive until all states have been captured."""
 
-    def __init__(self, app: QApplication, output_dir: Path, size: tuple[int, int]) -> None:
+    def __init__(
+        self,
+        app: QApplication,
+        output_dir: Path,
+        size: tuple[int, int],
+        selected: frozenset[str] | None,
+        groups: tuple[str, ...],
+    ) -> None:
         self.app = app
         self.output_dir = output_dir
         self.size = size
@@ -328,6 +322,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.speech_settings = SpeechSettings()
         self.widgets: list[QWidget] = []
         self.snapshots: list[tuple[str, Path]] = []
+        self.selected = selected
+        self.groups = groups
+        self.encountered: set[str] = set()
+        self.prepared: set[QWidget] = set()
 
     def patches(self) -> tuple:
         return (
@@ -353,6 +351,21 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self, widget: QWidget, name: str, title: str, *, size: tuple[int, int] | None = None
     ) -> None:
         width, height = self.size if size is None else size
+        self.encountered.add(name)
+        selected_name = self.selected is None or name in self.selected
+        selected_group = not self.groups or group_for(name) in self.groups
+        if not (selected_name and selected_group):
+            # State setup later in the sequence can rely on this window's geometry.
+            # Do not grab or encode an image for omitted states.
+            if widget not in self.prepared:
+                widget.resize(width, height)
+                widget.show()
+                self.prepared.add(widget)
+            # Deferred state setup (for example fixation initialization) still
+            # needs Qt dispatch even when this particular image is not selected.
+            self.app.processEvents()
+            return
+        self.prepared.add(widget)
         path = _capture_widget(self.app, widget, self.output_dir, name, (width, height))
         self.snapshots.append((title, path))
 
@@ -361,6 +374,11 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.widgets.append(hotbar)
         size = min(self.size[0], 1280), hotbar.BAR_HEIGHT
         self.capture(hotbar, "hotbar", "Hotbar", size=size)
+        hotbar._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
+        self.capture(hotbar, "hotbar-recording", "Hotbar: passive recording status", size=size)
+        hotbar._recording_badge.set_status(None)
         with patch.object(toolbar_module, "save_app_settings", return_value=False):
             hotbar._save_settings()
         self.capture(hotbar, "hotbar-unsaved-settings", "Hotbar: settings not saved", size=size)
@@ -385,6 +403,30 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             self.capture(
                 hotbar, f"hotbar-simulation-{name}", f"Hotbar: simulated {name}", size=size
             )
+        status = hotbar._tracking_status
+        status.set_tracking_status(TrackingStatus(TrackingState.CONNECTED))
+        status.set_eye_tracking_policy("any")
+        status.set_eye_status(True, False)
+        status.handle_gaze(0.5, 0.5, 0)
+        self.capture(hotbar, "hotbar-one-eye-ready", "Hotbar: one-eye selection ready", size=size)
+        status._last_gaze_at = None
+        status._refresh()
+        self.capture(hotbar, "hotbar-one-eye-waiting", "Hotbar: one eye without gaze", size=size)
+        status.set_eye_tracking_policy("hold")
+        status.set_holding(True)
+        self.capture(hotbar, "hotbar-selection-held", "Hotbar: selection on hold", size=size)
+
+    def capture_selection_progress(self) -> None:
+        scene = QWidget()
+        scene.setStyleSheet("background: #111318;")
+        self.widgets.append(scene)
+        overlay = InteractionOverlayWindow()
+        overlay.setParent(scene, Qt.Widget)
+        overlay._timer.timeout.disconnect(overlay._tick)
+        overlay.show_progress(QPoint(320, 180), 0.65, "Pogledaj")
+        self.capture(scene, "selection-progress", "Selection progress: active", size=(640, 360))
+        overlay.set_paused(True)
+        self.capture(scene, "selection-held", "Selection progress: paused", size=(640, 360))
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
@@ -408,6 +450,35 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
+        self.settings._select_tab(1)
+        self.settings._recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(self.settings, "settings-recording", "Settings: recording status", size=size)
+        self.settings._recording_badge.set_status(None)
+        for policy, name, title in (
+            ("hold", "settings-gaze-hold", "Settings: brief interruption"),
+            ("any", "settings-gaze-one-eye", "Settings: one-eye selection"),
+        ):
+            combo = self.settings._gaze_page._policy_combo
+            combo.setCurrentIndex(combo.findData(policy))
+            self.capture(self.settings, name, title, size=size)
+        combo.setCurrentIndex(combo.findData("both"))
+        self.settings._gaze_page.show_tab(2)
+        self.capture(
+            self.settings, "settings-gaze-stability", "Settings: edge stability", size=size
+        )
+        self.settings._adjust_edge_hold(-120)
+        self.capture(
+            self.settings, "settings-gaze-stability-off", "Settings: edge tolerance off", size=size
+        )
+        self.settings._adjust_edge_hold(120)
+        self.settings._gaze_page.show_tab(1)
+        self.capture(
+            self.settings, "settings-gaze-pointer", "Settings: pointer and check", size=size
+        )
+        self.settings._gaze_page.show_tab(0)
+        self.settings._select_tab(2)
         for state in ("preparing", "speaking"):
             self.settings.set_speech_playback_state(state)
             self.capture(
@@ -421,6 +492,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.settings.set_save_error(True)
         self.capture(self.settings, "settings-save-error", "Settings: save failed", size=size)
         self.settings.set_save_error(False)
+        self.capture_release_settings(size)
+
+    def capture_release_settings(self, size: tuple[int, int]) -> None:
         self.settings._select_tab(0)
         row = self.settings._general_page._update_row
         row._version_combo.setCurrentIndex(3)
@@ -462,6 +536,27 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.speech.bind_recording_indicator(RecordingIndicator(self.speech))
+        self.speech._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
+        self.capture(self.speech, "speech-recording", "Speech: passive recording status")
+        self.speech._open_letter_dialog(0)
+        self.capture_dialog(
+            self.speech._dialogs.letter, "speech-recording-letters", "Speech letters: recording"
+        )
+        self.speech._close_dialog()
+        for state, busy, complete in (
+            ("finishing", True, False),
+            ("completed", False, True),
+            ("interrupted", False, False),
+            ("error", False, False),
+        ):
+            self.speech._recording_badge.set_status(
+                {"id": "preview", "busy": busy, "state": state, "complete": complete}
+            )
+            self.capture(self.speech, f"speech-recording-{state}", f"Speech recording: {state}")
+        self.speech._recording_badge.set_status(None)
         self.capture_speech_voices()
         self.capture_tracking_feedback()
         self.speech._view_mode = "categories"
@@ -528,6 +623,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             "Speech letters: tracking interrupted",
         )
         self.speech._close_dialog()
+        self.speech._recording_badge.set_status(
+            {"busy": True, "remaining_seconds": 83, "state": "recording"}
+        )
         self.speech._open_clear_dialog()
         self.speech.set_tracking_notice(
             TrackingNotice(
@@ -538,9 +636,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.capture_dialog(
             self.speech._dialogs.confirm,
             "speech-tracking-confirm",
-            "Clear message: tracking interrupted",
+            "Clear message: recording and tracking interrupted",
         )
         self.speech._close_dialog()
+        self.speech._recording_badge.set_status(None)
         self.speech.set_tracking_notice(None, immediate=True)
         self.speech._input.clear()
 
@@ -555,28 +654,36 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
         self.capture_dialog(self.speech._dialogs.exit, "speech-exit", "Speech exit confirmation")
         self.speech._close_dialog()
 
+    def _capture_sidebar_modes(self, widget, size, modes) -> None:
+        for show, name, title in modes:
+            if show is not None:
+                show()
+            self.capture(widget, name, title, size=size)
+
     def capture_sidebars(self) -> None:
         size = 380, self.size[1]
         self.keyboard = KeyboardWindow(self.speech_settings)
         self.widgets.append(self.keyboard)
-        for show, name, title in (
-            (None, "keyboard-letters", "Keyboard: letters"),
-            (self.keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
-            (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
-        ):
-            if show is not None:
-                show()
-            self.capture(self.keyboard, name, title, size=size)
+        self._capture_sidebar_modes(
+            self.keyboard,
+            size,
+            (
+                (None, "keyboard-letters", "Keyboard: letters"),
+                (self.keyboard._show_numpad, "keyboard-numpad", "Keyboard: numpad"),
+                (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
+            ),
+        )
         self.controller = ControllerWindow(self.gaze_settings, self.speech_settings)
         self.widgets.append(self.controller)
-        for show, name, title in (
-            (None, "controller-general", "Controller: general"),
-            (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
-            (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
-        ):
-            if show is not None:
-                show()
-            self.capture(self.controller, name, title, size=size)
+        self._capture_sidebar_modes(
+            self.controller,
+            size,
+            (
+                (None, "controller-general", "Controller: general"),
+                (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
+                (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
+            ),
+        )
         small_groups = replace(self.speech_settings, letters_per_group=2)
         self.keyboard.update_settings(small_groups)
         self.controller.update_speech_settings(small_groups)
@@ -590,6 +697,12 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices):
             ),
         ):
             self.capture(widget, name, title, size=(380, 640))
+        for widget, name in ((self.keyboard, "keyboard"), (self.controller, "controller")):
+            widget._recording_badge.set_status(
+                {"busy": True, "state": "recording", "remaining_seconds": 83}
+            )
+            self.capture(widget, f"{name}-recording", f"{name}: recording status", size=(380, 640))
+            widget._recording_badge.set_status(None)
 
     def capture_arabic(self) -> None:
         # Arabic uses the same services and storage fakes, with original Unicode.
@@ -667,10 +780,16 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=Path("dist/ui-preview"))
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--profile", choices=("core", "full"), default="core")
+    parser.add_argument("--group", choices=tuple(GROUPS), action="append", default=[])
     arguments = parser.parse_args()
 
     snapshots = capture_ui(
-        arguments.output.resolve(), width=arguments.width, height=arguments.height
+        arguments.output.resolve(),
+        width=arguments.width,
+        height=arguments.height,
+        profile=arguments.profile,
+        groups=tuple(arguments.group),
     )
     print(f"Rendered {len(snapshots)} UI snapshots: {arguments.output.resolve() / 'index.html'}")
     return 0

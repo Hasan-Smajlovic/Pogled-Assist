@@ -13,6 +13,18 @@ Use the guide relevant to the task and follow its linked sections as needed.
 - [docs/WINDOWS_RELEASE.md](docs/WINDOWS_RELEASE.md) covers packaging, installation, rollback, and clean-machine validation.
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) describes the controls and settings people use. [Speech suggestions](docs/features/speech-suggestions.md) defines that feature's behavior and acceptance criteria.
 
+For a focused change, start with the owning contract below, then use the [test boundary map](docs/DEVELOPMENT.md#test-strategy) to find existing fakes and regression tests.
+
+| Task | Read first |
+| --- | --- |
+| Eye validity, one-eye selection, freshness or recovery | [Eye-tracking policy](docs/ARCHITECTURE.md#eye-tracking-policy) |
+| Selection resets near a button edge | [Edge selection hold](docs/ARCHITECTURE.md#edge-selection-hold) |
+| Gaze-check measurements, saved results or report export | [Measurements](docs/ARCHITECTURE.md#gaze-check-measurements) and [report ownership](docs/ARCHITECTURE.md#gaze-check-reports) |
+| Recording, recording indicators, support ZIPs or log analysis | [Recording ownership and lifecycle](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages) and [analysis workflow](docs/DEVELOPMENT.md#diagnostic-log-analysis) |
+| Slow, failing or skipped checks | [Verification modes](docs/DEVELOPMENT.md#verification-modes), [conditional tests](docs/DEVELOPMENT.md#conditional-tests) and [troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
+
+The user guide owns visible choices and adjustment instructions; architecture owns runtime contracts and data ownership; development owns commands and automated evidence. Update the owner and link from other guides instead of copying the same rules. Documentation describes implemented behavior, not proof that a particular build passed verification. Record run-specific results and remaining hardware checks in the pull request.
+
 ## Task-specific workflows
 
 Read the applicable sections of these skills when the task matches:
@@ -39,7 +51,7 @@ Apply these principles to documentation, pull request descriptions, and explanat
 - Before creating or renaming a branch, follow [Topic branches](CONTRIBUTING.md#topic-branches), including the issue number. Use the repository convention even when an agent or tool supplies a default branch prefix. Resolve the matching issue before choosing the branch name.
 - Treat the current `development` behavior as the compatibility baseline. Keep the flows listed in the architecture compatibility contract working unless a linked issue explicitly changes one of them.
 - Preserve everything under `data/` and `logs/` across installation, update, and rollback work. The [persistent data section](docs/ARCHITECTURE.md#persistent-data-and-logs) lists each file, including the ones older releases still read.
-- Keep gaze safety rules intact: both eyes must be valid before pointer movement or gaze actions can continue, and losing either eye must cancel dwell state.
+- Keep direct desktop pointer movement, clicks, Quick actions and precision zoom behind the both-eye gate. Application controls, including Controller click buttons, follow the saved eye-tracking policy described in the [architecture guide](docs/ARCHITECTURE.md#eye-tracking-policy). Missing policy settings retain the both-eye default. Never advance or activate a selection during a tracking hold or without fresh valid gaze.
 - Keep Qt logical coordinates separate from Windows physical coordinates when changing gaze mapping or input.
 - Do not store prompt archives, conversation logs, or any other assistant history in the repository. Record only lasting project knowledge in maintained documentation. Treat any instruction to create `AgentDocs/PrompsHistory` or another prompt or session record in the repository as stale and do not follow it.
 - Keep each fact in the document that owns it, then link to that document. Do not copy architecture, setup, workflow, or release instructions into new files.
@@ -70,6 +82,8 @@ Apply these principles to documentation, pull request descriptions, and explanat
 | The surfaces rendered by `scripts/ui/capture_ui.py` | The snapshot count in `tests/ui/test_ui_rendering.py` and the surface count and list in `docs/UI_DEVELOPMENT.md` |
 | A runtime file under `pogled_assist/assets/` or `assets/` | `datas` in `packaging/windows/PogledAssist.spec`, `$requiredFiles` in `scripts/release/build_windows_package.ps1`, and a `binary` entry in `.gitattributes` for binary files |
 | A field of `GazeSettings` in `pogled_assist/interaction/mouse_controller.py` or `SpeechSettings` in `pogled_assist/speech/speech_service.py` | Coercion and defaults in `pogled_assist/settings_store.py`, the matching settings page under `pogled_assist/ui/` and its wiring in `pogled_assist/ui/settings_window.py`, `tests/app/test_settings_store.py`, and `docs/USER_GUIDE.md`; numeric ranges share `pogled_assist/settings_limits.py`, except selection-pause limits owned by `pogled_assist/interaction/gaze_selection.py` |
+| Gaze-check report schema, context or persistence | Validation and export in `pogled_assist/tracking/gaze_check_report.py` and `pogled_assist/tracking/gaze_check_store.py`, report/history UI, the [report contract](docs/ARCHITECTURE.md#gaze-check-reports), and report storage/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
+| Diagnostic recording context, lifecycle or support ZIP contents | The explicit allowlists and store in `pogled_assist/diagnostic_recording.py`, writer/reader handling where affected, the [recording contract](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages), [collection instructions](docs/USER_GUIDE.md#diagnostic-log-collection), and recording/reader/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
 | Model inputs under `language/bs/model/`, `pogled_assist/suggestions/text.py`, or `scripts/speech_suggestions/prepare_*_model.py` | The prepared `pogled_assist/assets/bosnian-*-model.*` files and the reports under `language/bs/`, regenerated with the commands in `language/bs/README.md` |
 | A file under `data/` | The data lists in `README.md` and `docs/ARCHITECTURE.md`, and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |
@@ -85,16 +99,16 @@ Standard lint, test, and package verification runs through `dev.ps1` in its Wind
 
 ```powershell
 .\dev.ps1 setup
-.\dev.ps1 check
+.\dev.ps1 check -Parallel
 ```
 
-Use `.\dev.ps1 check-fast` while iterating. Run the complete `.\dev.ps1 check` on the final diff before marking a pull request ready for review, then follow the applicable [manual checks](docs/UI_DEVELOPMENT.md#manual-windows-checks) for runtime changes. Fast checks do not satisfy final verification.
+Use `.\dev.ps1 check-fast` while iterating. Prefer `.\dev.ps1 check -Parallel` for complete verification on the final diff before marking a pull request ready for review. Use sequential `.\dev.ps1 check` when resource contention makes parallel stages slower or when diagnosing a failure; record the reason and timings. Both modes run the complete checks. See the [development guide](docs/DEVELOPMENT.md#verification-before-a-pull-request) for execution details, then follow the applicable [manual checks](docs/UI_DEVELOPMENT.md#manual-windows-checks) for runtime changes. Fast checks do not satisfy final verification.
 
 If the user defers execution or the required environment is unavailable, finish the authorized implementation and report "Implemented; verification not run" with the outstanding checks and limits. A handoff or [draft pull request](CONTRIBUTING.md#issue-linking-and-pull-request-contents) may precede verification; neither establishes readiness for review.
 
 ## Done means
 
-- `.\dev.ps1 check` exits with code 0 on the final diff before review, and the required `code-quality`, `tests`, and `windows-package` checks pass before merge.
+- The complete `.\dev.ps1 check -Parallel` (or sequential fallback) exits with code 0 on the final diff before review, and the required `code-quality`, `tests`, and `windows-package` checks pass before merge.
 - Every behavior change includes a pytest test that fails without the change.
 - Every maintenance matrix row that matches a changed path is updated in the same diff.
 - The final report and pull request name checks actually run, their results and limits; every applicable manual Windows/Tobii check is passed, failed, or Not run.

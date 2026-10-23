@@ -59,6 +59,7 @@ def test_package_smoke_loads_the_bundled_suggestion_model(monkeypatch, tmp_path)
     assert "bosnian-model.meta.json exists=True" in contents
     assert "bosnian-islamic-model.json.gz exists=True" in contents
     assert "bosnian-islamic-model.meta.json exists=True" in contents
+    assert "build_identity=" in contents
 
     monkeypatch.delenv(main_module.PACKAGE_SMOKE_REPORT_ENV)
 
@@ -67,6 +68,14 @@ def test_package_smoke_loads_the_bundled_suggestion_model(monkeypatch, tmp_path)
 
     monkeypatch.setattr(Path, "write_text", unexpected_write)
     main_module._write_package_smoke_report(["synthetic smoke result"])
+
+
+def test_frozen_smoke_rejects_missing_build_revision(monkeypatch, tmp_path):
+    monkeypatch.setenv(main_module.PACKAGE_SMOKE_REPORT_ENV, str(tmp_path / "smoke.txt"))
+    monkeypatch.setattr(main_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(main_module, "resolve_build_identity", lambda: {"build_revision": None})
+    assert main_module.package_smoke_test() == 1
+    assert "Missing packaged build revision" in (tmp_path / "smoke.txt").read_text()
 
 
 def test_windows_package_declares_the_bundled_suggestion_files():

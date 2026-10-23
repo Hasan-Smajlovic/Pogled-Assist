@@ -35,7 +35,15 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
     api.pulls.append(_pull(2, SECOND_SHA))
     api.runs[102] = _run(2, 102, SECOND_SHA)
     api.artifacts.append(_artifact(102, SECOND_SHA, 2))
-    api.archives[102] = _archive({"1280x720/speech.png": _png()})
+    api.archives[102] = _archive(
+        {
+            "1280x720/speech.png": _png(),
+            "1280x720/settings-gaze-one-eye.png": _png(),
+            "1280x720/settings-gaze.png": _png(),
+            "1280x720/speech-voice-timeout.png": _png(),
+            "1280x720/future-surface.png": _png(),
+        }
+    )
     api.pulls[0]["title"] = '<script>alert("PR title")</script>'
 
     comments = site.prepare_site(api, tmp_path / "site", BASE_URL)
@@ -48,9 +56,24 @@ def test_site_keeps_multiple_prs_and_does_not_publish_artifact_html(tmp_path):
         assert "attacker.example" not in html
         assert "speech.png" in html
         assert "Hardware and Windows input are disabled" in html
+        assert 'id="overview"' in html
+        assert 'loading="lazy"' in html
+        assert 'target="_blank" rel="noopener"' in html
+        assert "<script>" not in html
+        if number == 2:
+            assert 'href="#voice"' in html
+            assert 'id="other"' in html
+            assert "5 screenshots" in html
+            assert (
+                html.index('id="speech"') < html.index('id="settings"') < html.index('id="voice"')
+            )
+            assert html.index('href="settings-gaze.png"') < html.index(
+                'href="settings-gaze-one-eye.png"'
+            )
     root = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
     assert '<script>alert("PR title")</script>' not in root
     assert "&lt;script&gt;" in root
+    assert "&lt;script&gt;" in site.gallery_content({"speech": '<script>alert("title")</script>'})
     assert api.writes == []
     assert comments[0]["body"].startswith(site.COMMENT_MARKER)
     assert f"{BASE_URL}/pr-1/artifact-101/1280x720/speech.png" in comments[0]["body"]
@@ -288,7 +311,6 @@ def test_expired_gallery_updates_an_existing_comment_but_does_not_create_one(tmp
     assert "No UI gallery is available" in api.comments[1][0]["body"]
 
 
-@pytest.mark.e2e
 def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(tmp_path):
     api = FakeGitHub()
     first = site.prepare_site(api, tmp_path / "first", BASE_URL)

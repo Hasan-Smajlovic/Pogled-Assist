@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="assets/hotbar.css">
   <link rel="stylesheet" href="assets/gaze-demo.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/gaze-demo.js" defer></script>
   <script src="assets/hotbar.js" defer></script>
 </head>
@@ -16,26 +18,29 @@
   <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <main id="hotbar-screen">
     <nav class="hotbar-reference" aria-label="Početni meni">
-      <button id="hotbar-hide" type="button" data-edge-control>Sakrij</button>
-      <button type="button" data-edge-control data-open-view="settings">Postavke</button>
-      <button type="button" data-edge-control>Brze radnje</button>
-      <button type="button" data-edge-control>Lijevi klik</button>
-      <button type="button" data-edge-control>Desni klik</button>
-      <button type="button" data-edge-control>Dvostruki klik</button>
-      <button type="button" data-edge-control data-open-view="speech">Govor</button>
-      <button type="button" data-edge-control data-open-view="sidebar">Tastatura</button>
-      <button type="button" data-edge-control data-open-view="controller">Upravljač</button>
+      <button id="hotbar-hide" type="button" data-edge-control><span class="hotbar-button-icon" aria-hidden="true">⌃</span><span>Sakrij</span></button>
+      <button class="hotbar-settings-recording" type="button" data-edge-control data-open-view="settings"><span class="hotbar-button-icon" aria-hidden="true">⚙</span><span data-settings-label>Postavke</span><span class="recording-slot"><small class="recording-badge" data-recording-status data-recording-compact hidden></small></span></button>
+      <button type="button" data-edge-control><span class="hotbar-button-icon" aria-hidden="true">ϟ</span><span>Brze radnje</span></button>
+      <button type="button" data-edge-control><span class="hotbar-button-icon" aria-hidden="true">↖</span><span>Lijevi klik</span></button>
+      <button type="button" data-edge-control><span class="hotbar-button-icon" aria-hidden="true">◧</span><span>Desni klik</span></button>
+      <button type="button" data-edge-control><span class="hotbar-button-icon" aria-hidden="true">☝</span><span>Dvostruki klik</span></button>
+      <button type="button" data-edge-control data-open-view="speech"><span class="hotbar-button-icon" aria-hidden="true">♩</span><span>Govor</span></button>
+      <button type="button" data-edge-control data-open-view="sidebar"><span class="hotbar-button-icon" aria-hidden="true">⌨</span><span>Tastatura</span></button>
+      <button type="button" data-edge-control data-open-view="controller"><span class="hotbar-button-icon" aria-hidden="true">✥</span><span>Upravljač</span></button>
       <div id="hotbar-tracking-status" class="hotbar-tracking-status" role="status" aria-live="polite">
         <div class="hotbar-tracking-title"><span id="hotbar-tracking-icon" class="hotbar-tracking-icon" aria-hidden="true">✓</span><span id="hotbar-tracking-title">Praćenje spremno</span></div>
         <div id="hotbar-tracking-detail" class="hotbar-tracking-detail">Lijevo ✓ &nbsp; Desno ✓</div>
       </div>
     </nav>
     <button id="hotbar-restore" type="button" data-edge-control hidden>Prikaži</button>
+    <label class="hotbar-status-preview">Režim <select id="hotbar-policy-preview"></select></label>
     <label class="hotbar-status-preview">Primjer stanja
       <select id="hotbar-status-preview">
         <option value="ready">Oba oka i svježi pogled</option>
-        <option value="left">Lijevo oko nije prepoznato</option>
-        <option value="right">Desno oko nije prepoznato</option>
+        <option value="left">Samo desno oko i svjež pogled</option>
+        <option value="right">Samo lijevo oko i svjež pogled</option>
+        <option value="hold">Kratak prekid jednog oka, napredak sačuvan</option>
+        <option value="one-waiting">Jedno oko se prati, bez svježeg pogleda</option>
         <option value="eyes">Nijedno oko nije prepoznato</option>
         <option value="waiting">Čekanje svježih podataka</option>
         <option value="connecting">Povezivanje</option>
@@ -49,20 +54,22 @@
       </select>
     </label>
     <p>Status je dio trake, nije dugme i nije površina odabira pogledom. Sakrij uklanja cijelu traku sa statusom. Prikaži vraća traku; dok je sakrivena, nema izdvojenog statusnog panela.</p>
+    <p>Dok traje <a href="diagnostics.html">dijagnostičko snimanje</a>, oznaka s tačkom i preostalim vremenom zauzima mjesto ikone zupčanika u dugmetu Postavke. Naziv je poravnat s ostalim dugmadima i ne pomjera se pri promjeni stanja snimanja. Dugme vodi u Postavke; oznaka nije zaseban cilj i ne zamjenjuje stvarni status očiju. Sakrivanje trake ne zaustavlja snimak. Primjer se otvara pomoću <code>?recording=demo</code> ili izbora „Dijagnostičko snimanje“ u Opcijama pregleda. <a href="diagnostics.html">Nacrt dijagnostike</a> definiše završna stanja i prikaz u drugim prozorima.</p>
     <p>Razvojni simulator zadržava naslov Simulacija mišem i ispod njega prikazuje aktivni probni prekid. Dok je aplikacija aktivna i traka prikazana, F6 mijenja validnost lijevog oka, F7 desnog oka, F8 zaustavlja ili nastavlja isporuku pogleda, F9 prekida ili vraća vezu, a F10 vraća oba oka, vezu i isporuku pogleda. Prekidi se mogu kombinovati. Ove prečice postoje samo u razvojnom simulatoru; ne mijenjaju sačuvane postavke i ne predstavljaju mjerenje Tobii uređaja. Simulator provjerava odabir i oznaku pogleda; Tobii obavijesti i automatsko ponovno povezivanje provjeravaju se zasebno.</p>
-    <p>Praćenje spremno zahtijeva aktivnu vezu, validne podatke oba oka i svježi uzorak pogleda. Gubitak oka prikazuje Praćenje pauzirano i zadržava obje oznake oka: ✓ za validan podatak, — kada podatak nije validan. Čekanje podataka se razlikuje od gubitka oka i nepovezanog uređaja. Simulacija mišem ne prikazuje lažnu potvrdu Tobii očiju. Prikaz nema treperenja, animacije ni zvučnih upozorenja pri treptaju.</p>
-    <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Kratak izlazak uz rub zamrzava napredak do 120 ms; povratak ga nastavlja. Gubitak validnosti bilo kojeg oka poništava napredak.</p>
+    <p>Praćenje spremno zahtijeva aktivnu vezu, podatke oba oka i svjež pogled. U probnom režimu samo jedno oko uz svjež pogled prikazuje Odabir jednim okom; direktni desktop unos ostaje zaustavljen. U režimu kratkih prekida tekući pokušaj može prikazati Odabir na čekanju. Pokazatelji ostaju stvarni: ✓ za validan podatak, — kada podatak nije validan. Oko bez novog pogleda prikazuje čekanje podataka. Simulacija zadržava svoju oznaku i ne potvrđuje Tobii praćenje.</p>
+    <p>Površina odabira svakog dugmeta doseže gornji rub ekrana, samo unutar njegove širine. Razmaci ostaju neutralni. Čuvanje uz rub podešava se na kartici Stabilnost uz rub: zadano 120 ms, raspon 0 do 300 ms, korak 20 ms; nula isključuje čuvanje. Prostorna tolerancija se ne mijenja. Tokom čuvanja nema napretka; susjedno dugme nakon isteka počinje od nule. <a href="selection-progress.html">Napredak odabira</a> definiše prikaz prekida praćenja i pravila nastavka.</p>
     <p>Ako Tobii više ne šalje stanje očiju, nakon 500 ms odabir se poništava i prikazuje se „Čekam svježe podatke o očima.” Nakon 3 sekunde bez tog toka u x86 mostu ili prekida mosta aplikacija ponovo traži uređaj. Direktna veza ostaje pauzirana do povratka podataka. Poruke o nevalidnim očima su svježi podaci i ne pokreću ponovno povezivanje.</p>
     <p>Nakon prekida isporuke pogleda od najmanje 500 ms prvi svježi uzorak započinje odabir ispočetka, čak i ako se stanje očiju vratilo prije osvježavanja interfejsa. Prekid ne otključava već potvrđeno dugme: za ponavljanje i dalje treba skloniti pogled.</p>
   </main>
   <section id="marker-screen">
     <h2>Oznaka pogleda</h2>
-    <p>Plavi krug prikazuje posljednji svježi, prihvaćeni pogled. Pri gubitku validnosti bilo kojeg oka odmah nestaje. Ako novi pogled ne stigne 500 ms, nestaje pri sljedećem osvježavanju prikaza.</p>
+    <p>Plavi krug prikazuje posljednji svježi pogled koji izabrani režim dopušta. U režimima oba oka gubitak jednog oka skriva oznaku; u probnom režimu ona ostaje samo uz nove validne podatke o pogledu. Zamrznuti napredak na dugmetu nije oznaka položaja pogleda. Ako novi pogled ne stigne 500 ms, oznaka nestaje pri sljedećem osvježavanju.</p>
     <p>Povratak validnosti očiju sam po sebi ne vraća krug. Ponovo se pojavljuje tek na svježoj poziciji pogleda. Isključivanje i ponovno uključivanje oznake ne vraća nevalidnu ili zastarjelu poziciju.</p>
     <label class="hotbar-status-preview">Primjer stanja
       <select id="marker-state-preview">
         <option value="fresh">Svježi pogled</option>
-        <option value="eye-loss">Jedno oko nije prepoznato</option>
+        <option value="eye-loss">Jedno oko i svjež pogled</option>
+        <option value="one-waiting">Jedno oko, nema svježeg pogleda</option>
         <option value="stale">Nema novog pogleda 500 ms</option>
         <option value="eyes-only">Oči su validne, novi pogled još nije stigao</option>
         <option value="resumed">Stigao je novi pogled</option>

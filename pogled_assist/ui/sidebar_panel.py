@@ -81,6 +81,16 @@ class SidebarPanel(QWidget):
         self.hide()
         self._logger.info("%s sidebar hidden.", self.log_name)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_diagnostic_context"):
+            self.interaction_context_changed.emit()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        if hasattr(self, "_diagnostic_context"):
+            self.interaction_context_changed.emit()
+
     def set_full_height(self, full_height: bool) -> None:
         full_height = bool(full_height)
         if self._full_height == full_height:

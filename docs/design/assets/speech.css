@@ -54,6 +54,7 @@
 .main-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
 .view-header { display: flex; align-items: center; gap: 10px; min-height: 24px; }
 .view-header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 500; }
+.speech-controls-heading { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; }
 .view-header button { min-width: 160px; min-height: 80px; font-size: 18px; flex: 0 1 165px; }
 .key-grid, .item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); flex: 1; gap: var(--gap); min-height: 0; }
 .key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(72px, 1fr)); row-gap: 5px; }
@@ -62,8 +63,9 @@
 .symbols { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); }
 .item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: clamp(18px, 1.65vw, 26px); }
 .item small { color: #bac5d4; font-size: 14px; font-weight: 400; }
-.system-actions { display: grid; grid-template-rows: 24px repeat(3, minmax(80px, 1fr)); gap: 10px; min-height: 0; }
+.system-actions { display: grid; grid-template-rows: 54px repeat(3, minmax(80px, 1fr)); gap: 10px; min-height: 0; }
 .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
+.system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
 .sleep { background: #202538; border-color: #5b658c; color: #e0e5ff; }
 .utility-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr .8fr; gap: var(--gap); }
@@ -127,8 +129,9 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .workspace { display: flex; flex-direction: column; }
   .key-grid, .item-grid { min-height: 310px; }
   .system-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto 100px; }
-  .system-actions .section-label { grid-column: 1 / -1; }
+  .system-actions .section-label, .system-actions .speech-controls-heading { grid-column: 1 / -1; }
   .system-actions button { font-size: 21px; }
+  .system-actions button[data-action="exit"] { font-size: 21px; }
   .system-actions small { font-size: 12px; }
   .utility-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   #status { white-space: normal; }
@@ -139,7 +142,32 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .confirm-actions { grid-template-columns: 1fr; gap: 24px; }
 }
 /* Stable playback target: stop stays in the same cell while speech is active. */
-.speech-playback { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.speech-playback button { flex: 1; width: 100%; }
-.speech-playback progress { width: 100%; height: 5px; accent-color: #91dec0; }
-.speech-playback progress[hidden] { display: block !important; visibility: hidden; }
+.speech-playback { position: relative; display: grid; min-width: 0; }
+.speech-playback button { width: 100%; height: 100%; }
+.speech-activity {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #123750;
+  pointer-events: none;
+}
+.speech-activity::before {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: #91dec0;
+  animation: speech-activity 1.4s ease-in-out infinite alternate;
+}
+@keyframes speech-activity {
+  from { transform: translateX(0); }
+  to { transform: translateX(150%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speech-activity::before { width: 100%; animation: none; }
+}

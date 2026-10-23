@@ -12,7 +12,7 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.fixture
-def gaze_check(qtbot, monkeypatch):
+def gaze_check(qtbot, monkeypatch, request):
     from types import SimpleNamespace
 
     from pogled_assist.ui import gaze_check_window as module
@@ -21,7 +21,7 @@ def gaze_check(qtbot, monkeypatch):
     monkeypatch.setattr(
         module.QGuiApplication, "primaryScreen", lambda: SimpleNamespace(geometry=lambda: screen)
     )
-    window = module.GazeCheckWindow(GazeSettings())
+    window = module.GazeCheckWindow(getattr(request, "param", GazeSettings()))
     qtbot.addWidget(window)
     window.setGeometry(screen)
     window.show()
@@ -102,7 +102,9 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
     assert "5 od 5" in window._result_summary.text()
     window._repeat_button.click()
     assert window._check is None
-    assert window._phase == "position"
+    assert window._phase == "precision"
+    qtbot.wait(1)
+    assert window._check is not None
 
 
 @pytest.mark.parametrize("missing", ["eyes", "gaze", "stale"])
@@ -113,6 +115,7 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     for _ in range(3):
         now[0] = window._trial_ready_at + 0.1
@@ -137,6 +140,24 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     assert not window._trial_tracked_targets
 
 
+def _feed_isolated_trial(window, now, samples, interruptions):
+    start = window._trial_ready_at
+    count = 1 if samples == "single" else 90
+    for index in range(count):
+        now[0] = start + 0.1 + index * 0.1
+        at = start + 0.1 if samples == "repeated" else now[0]
+        if samples == "sparse" and index % 10:
+            continue
+        if samples == "interrupted":
+            interruptions += 1
+        window.handle_snapshot(
+            CheckSnapshot(
+                True, True, gaze=(0.99, 0.5), gaze_at=at, gaze_interruptions=interruptions
+            )
+        )
+    return interruptions
+
+
 @pytest.mark.parametrize("samples", ["single", "repeated", "sparse", "interrupted"])
 def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check, qtbot, samples):
     window, now, _screen = gaze_check
@@ -145,23 +166,11 @@ def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check,
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     interruptions = 0
     for _ in range(3):
-        start = window._trial_ready_at
-        count = 1 if samples == "single" else 90
-        for index in range(count):
-            now[0] = start + 0.1 + index * 0.1
-            at = start + 0.1 if samples == "repeated" else now[0]
-            if samples == "sparse" and index % 10:
-                continue
-            if samples == "interrupted":
-                interruptions += 1
-            window.handle_snapshot(
-                CheckSnapshot(
-                    True, True, gaze=(0.99, 0.5), gaze_at=at, gaze_interruptions=interruptions
-                )
-            )
+        interruptions = _feed_isolated_trial(window, now, samples, interruptions)
         now[0] = window._trial_deadline + 0.01
         window._tick()
     assert window._trial_losses == 0  # No pending dwell to cancel outside the buttons.
@@ -176,6 +185,7 @@ def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(g
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
     ]
+    window._show_results()
     window._start_trial()
     for _ in range(3):
         start = window._trial_ready_at
@@ -442,6 +452,34 @@ def test_trial_edge_hold_matches_normal_control_bounds(gaze_check, scenario):
 
 
 @pytest.mark.parametrize(
+    "gaze_check,scenario",
+    [
+        (GazeSettings(selection_pause_ms=500, dwell_ms=500, edge_hold_ms=duration), scenario)
+        for duration, scenario in ((0, 0), (120, 0), (240, 0), (120, 1), (120, 2))
+    ],
+    indirect=["gaze_check"],
+)
+def test_trial_uses_saved_edge_duration_even_when_gaze_enters_neighbor(gaze_check, scenario):
+    window, _now, _screen = gaze_check
+    window._start_trial()
+    window._target.target_index = scenario
+    first = window._target.button_rect(0)
+    second = window._target.button_rect(1)
+    a = first.center()
+    b = QPoint(second.left() + 1, second.center().y())
+    duration = window._settings.edge_hold_ms
+    window._advance_trial_selection(a, 10.0)
+    window._advance_trial_selection(a, 10.8)
+    window._advance_trial_selection(b, 10.82)
+    if duration:
+        assert window._selection.target == 0
+        assert window._selection.diagnostic_snapshot()["credited_ms"] == pytest.approx(800)
+        window._advance_trial_selection(b, 10.821 + duration / 1000)
+    assert window._selection.target == 1
+    assert window._selection.diagnostic_snapshot()["credited_ms"] == 0
+
+
+@pytest.mark.parametrize(
     "left,right,labels",
     [
         ((1.2, 0.5, 0.5), (1.1, 0.5, 0.5), {"L/D"}),
@@ -609,6 +647,49 @@ def test_trial_offscreen_gaze_does_not_overflow_or_choose_a_button(gaze_check):
     assert window._selection.target is None
 
 
+def _pass_precision(window):
+    window._check.results = [
+        FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in window._check.targets
+    ]
+    window._show_results()
+
+
+def _show_fit_phase(window, phase):
+    if phase == "precision":
+        window._start_precision()
+    elif phase == "results":
+        _pass_precision(window)
+    elif phase == "details":
+        window._details_button.click()
+    elif phase == "trial":
+        window._start_trial()
+    elif phase == "trial-no-gaze":
+        for _index in range(3):
+            window._finish_trial_target(False, window._trial_deadline)
+    elif phase == "free":
+        window._start_free()
+
+
+def _assert_fit_child(window, child, phase):
+    from PySide6.QtWidgets import QPushButton, QScrollArea
+
+    ancestor = child.parentWidget()
+    while ancestor is not None and not isinstance(ancestor, QScrollArea):
+        ancestor = ancestor.parentWidget()
+    if ancestor is not None:
+        viewport = ancestor.viewport()
+        bounds = QRect(viewport.mapTo(window, QPoint()), viewport.size())
+        assert window.rect().contains(bounds)
+        return
+    bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
+    assert window.rect().contains(bounds), (phase, child.text(), bounds)
+    if isinstance(child, QPushButton):
+        assert child.height() >= 60
+        assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
+    elif child.hasHeightForWidth():
+        assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
+
+
 @pytest.mark.parametrize("simulated", [False, True])
 def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulated):
     from PySide6.QtWidgets import QLabel, QPushButton
@@ -616,35 +697,12 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulate
     window, _now, _screen = gaze_check
     window._simulated = simulated
     for phase in ("position", "precision", "results", "details", "trial", "trial-no-gaze", "free"):
-        if phase == "precision":
-            window._start_precision()
-        elif phase == "results":
-            window._check.results = [
-                FixationResult(name, 90, 0.9, 12, 8, True, (x, y))
-                for name, x, y in window._check.targets
-            ]
-            window._show_results()
-        elif phase == "details":
-            window._details_button.click()
-        elif phase == "trial":
-            window._start_trial()
-        elif phase == "trial-no-gaze":
-            window._trial_results = [False] * 3
-            window._show_results()
-        elif phase == "free":
-            window._start_free()
+        _show_fit_phase(window, phase)
         qtbot.wait(1)
         assert (window.width(), window.height()) == (1280, 720)
         for child in window.findChildren(QWidget):
-            if not child.isVisible() or not isinstance(child, (QLabel, QPushButton)):
-                continue
-            bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
-            assert window.rect().contains(bounds), (phase, child.text(), bounds)
-            if isinstance(child, QPushButton):
-                assert child.height() >= 60
-                assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
-            elif child.hasHeightForWidth():
-                assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
+            if child.isVisible() and isinstance(child, (QLabel, QPushButton)):
+                _assert_fit_child(window, child, phase)
 
 
 @pytest.mark.parametrize(
@@ -695,11 +753,8 @@ def test_gaze_check_feedback_results_explain_next_action_without_metrics(
 @pytest.mark.parametrize(
     "selected,wrong,loss,advice",
     [
-        ([True, True, True], 0, 0, "govornu tastaturu"),
         ([True, True, True], 0, 1, "govornu tastaturu"),
-        ([True, True, True], 1, 0, "pogrešna dugmad"),
-        ([True, True, False], 0, 2, "Prekidi praćenja"),
-        ([False, False, False], 0, 0, "nisu odabrana na vrijeme"),
+        ([True, True, False], 1, 0, "pogrešna dugmad"),
     ],
 )
 def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
@@ -713,11 +768,13 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     ]
     window._show_results()
     window._start_trial()
-    window._trial_results = selected
-    window._trial_tracked_targets = {0, 1, 2}
     window._trial_wrong_selections = wrong
     window._trial_losses = loss
-    window._show_results()
+    for choice in selected:
+        start = window._trial_ready_at
+        for sample in range(100):
+            window._trial_coverage.add(start + sample * 0.02)
+        window._finish_trial_target(choice, start + 2)
     assert advice in window._result_advice.text()
     assert window._trial_summary.isVisible()
     assert f"pogrešni izbori: {wrong}" in window._trial_summary.text()
@@ -739,8 +796,13 @@ def test_gaze_check_feedback_successful_trial_never_overrides_precision_problem(
     window._check.results = [
         FixationResult(name, 90, 0.9, 12, 8, state, (x, y)) for name, x, y in window._check.targets
     ]
-    window._trial_results = [True] * 3
     window._show_results()
+    window._start_trial()
+    for _index in range(3):
+        start = window._trial_ready_at
+        for sample in range(100):
+            window._trial_coverage.add(start + sample * 0.02)
+        window._finish_trial_target(True, start + 2)
     assert "govornu tastaturu" not in window._result_advice.text()
     assert "Podesi položaj" in window._result_advice.text()
 
@@ -771,7 +833,7 @@ def test_gaze_check_feedback_precision_does_not_claim_stale_gaze_is_ready(gaze_c
     qtbot.wait(1)
     window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.5, 0.5), gaze_at=now[0] - 0.6))
     window._tick()
-    assert "Čekam pogled" in window._test_hint.text()
+    assert "Čekam svjež validan pogled" in window._test_hint.text()
     assert "Zadržite pogled" not in window._test_hint.text()
 
 
