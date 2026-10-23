@@ -80,7 +80,7 @@ The default `core` profile renders:
 | Speech (`speech`) | 13 | Main keyboard, categories, answers, phrases, editor, alarm/sleep/exit, Arabic letters/symbols/marks/editor |
 | Keyboard and Controller (`keyboards`) | 12 | All main tabs, narrow Latin pagination, Arabic keyboards and second symbols pages |
 | Settings (`settings`) | 10 | General, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
-| Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, active and frozen selection arcs |
+| Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, calm active and paused Speech selection rings |
 | Gaze check and diagnostics (`gaze-check`) | 17 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback, free view, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 9 | Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
@@ -99,7 +99,7 @@ The full profile retains all 146 states:
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
 - General, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
 - Diagnostic recording: ready, recording, finishing, saved history with optional report, incomplete with omitted events, write failure and export failure; passive badges in the hotbar, Settings, Speech and its letters dialog, Keyboard, Controller, gaze-check header and free view. Speech also previews finishing, saved, incomplete and error indicator states.
-- Selection progress: active and frozen arc with pause mark
+- Speech selection progress: calm active ring and frozen ring with pause mark
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup (connected, replacing key, Nema glasova, missing key, invalid key, missing permission, credential save failure, quota, low/critical credits and preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device, live position, eye positions without valid gaze, too-close/too-far/outside-frame guidance without valid gaze, eye loss, fixation target with and without gaze, incomplete results, optional measurements, measured misses, passed targets, three local dwell trial sizes, cancelled selection and wrong-neighbor feedback, trial results needing adjustment, a trial without gaze data, completed check, free check with and without live gaze, experimental one-eye free view, held button trial, saved trial attempts, settings/device context, save pending/failure, logging off, export failure, interrupted precision, history, read-only archived result, empty history and history read error
 - Speech keyboard, `speech-preparing`, `speech-speaking`, categories, answers, saved phrases, shared editor, and library read failure

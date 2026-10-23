@@ -6,15 +6,18 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget
 
 
-def set_gaze_feedback(widget: QWidget, active: bool) -> None:
-    """Toggle a pulsing gaze-target style on a widget."""
+def set_gaze_feedback(widget: QWidget, active: bool, *, pulsing: bool = True) -> None:
+    """Toggle gaze-target feedback, optionally keeping its highlight steady."""
 
     timer = _feedback_timer(widget)
+    widget.setProperty("gazePulsing", pulsing)
     if active:
         widget.setProperty("gazeTarget", True)
         widget.setProperty("gazePulse", "0")
         _refresh_style(widget)
-        if not timer.isActive() and not widget.property("gazePaused"):
+        if not pulsing:
+            timer.stop()
+        elif not timer.isActive() and not widget.property("gazePaused"):
             timer.start()
         return
 
@@ -31,7 +34,7 @@ def set_gaze_paused(widget: QWidget, paused: bool) -> None:
         if paused:
             timer.stop()
             widget.setProperty("gazePulse", "0")
-        else:
+        elif widget.property("gazePulsing") is not False:
             timer.start()
         _refresh_style(widget)
 

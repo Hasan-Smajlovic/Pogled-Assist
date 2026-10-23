@@ -634,7 +634,7 @@ class SpeechSurface(QWidget):
             return
         button = self._action_buttons.get(action)
         if button is not None:
-            set_gaze_feedback(button, selected)
+            set_gaze_feedback(button, selected, pulsing=False)
 
     def _context_changed(self) -> None:
         previous = self._diagnostic_context
@@ -870,16 +870,8 @@ SPEECH_STYLE = """
                 border-color: #657084;
                 color: #bac5d4;
             }
-            QWidget#speechWindow QPushButton[gazeTarget="true"][gazePulse="0"],
-            QWidget#speechWindow QDialog#speechDialog QPushButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #111318;
-            }
-            QWidget#speechWindow QPushButton[gazeTarget="true"][gazePulse="1"],
-            QWidget#speechWindow QDialog#speechDialog QPushButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #86efac;
-                color: #ffffff;
+            QWidget#speechWindow QPushButton[gazeTarget="true"],
+            QWidget#speechWindow QDialog QPushButton[gazeTarget="true"] {
+                border-color: #9bc9f3;
             }
             """
