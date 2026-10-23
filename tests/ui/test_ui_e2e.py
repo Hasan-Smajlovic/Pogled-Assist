@@ -4,7 +4,7 @@ import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -156,7 +156,6 @@ def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
 
 
 def _check_sidebar_row(window, buttons):
-    QCoreApplication.sendPostedEvents(None, QEvent.LayoutRequest)
     rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
     assert min(rect.left() for rect in rects) == 10
     assert max(rect.right() for rect in rects) == window.width() - 11
@@ -205,7 +204,7 @@ def test_controller_keyboard_rows_fill_sidebar_width(
     prefix = CONTROLLER_WINDOW_ACTION_PREFIX
 
     def check_row(buttons):
-        _check_sidebar_row(window, buttons)
+        qtbot.waitUntil(lambda: _check_sidebar_row(window, buttons))
 
     window._tab_buttons["keyboard"].click()
     for tab, group_command, key_command in (
@@ -242,18 +241,21 @@ def test_controller_keyboard_rows_fill_sidebar_width(
         check_row(list(window._keyboard_tab_buttons.values()))
         check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
 
-    for tab in ("general", "settings"):
-        window._tab_buttons[tab].click()
-        QCoreApplication.sendPostedEvents(None, QEvent.LayoutRequest)
+    def check_first_row():
         buttons = [
             button
             for button in window._action_buttons.values()
             if button.isVisible() and button.objectName() in ("shortcutButton", "checkButton")
         ]
+        assert buttons
         first_row = [
             button for button in buttons if button.y() == min(target.y() for target in buttons)
         ]
-        check_row(first_row)
+        _check_sidebar_row(window, first_row)
+
+    for tab in ("general", "settings"):
+        window._tab_buttons[tab].click()
+        qtbot.waitUntil(check_first_row)
 
 
 @pytest.mark.e2e
