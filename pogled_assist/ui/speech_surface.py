@@ -805,7 +805,7 @@ SPEECH_STYLE = """
                 background: #1c2029;
                 border-color: #303747;
                 color: #eef2f8;
-                font-size: 27px;
+                font-size: 24px;
             }
             QPushButton#phraseButton {
                 font-size: 19px;

@@ -273,8 +273,12 @@ def test_retention_restart_and_partial_recordings_do_not_touch_other_files(
     assert any(item["state"] == "unreadable" for item in store.load())
 
 
-@pytest.mark.parametrize("measurement", ["bytes", "duration_seconds"])
-def test_overflowing_metadata_is_isolated_from_readable_history(writer, tmp_path, measurement):
+@pytest.mark.parametrize(
+    "field,invalid",
+    [("bytes", 10**400), ("duration_seconds", 10**400), ("started_at", None)],
+    ids=["overflowing-bytes", "overflowing-duration", "missing-start-time"],
+)
+def test_invalid_metadata_is_isolated_from_readable_history(writer, tmp_path, field, invalid):
     folder = tmp_path / "recordings"
     corrupt_id = writer.start_recording(folder, 1, context())
     finish(writer, folder)
@@ -282,7 +286,7 @@ def test_overflowing_metadata_is_isolated_from_readable_history(writer, tmp_path
     finish(writer, folder)
     metadata_path = folder / corrupt_id / "recording.json"
     metadata = json.loads(metadata_path.read_bytes())
-    metadata[measurement] = 10**400
+    metadata[field] = invalid
     module.atomic_bytes(metadata_path, module.json_bytes(metadata))
 
     store = RecordingStore(folder)

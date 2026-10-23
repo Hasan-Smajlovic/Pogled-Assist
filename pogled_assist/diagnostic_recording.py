@@ -680,7 +680,9 @@ def _is_valid_recording_measurement(value) -> bool:
 
 def _validate_recording_timestamps(item: dict) -> None:
     for name in ("started_at", "ended_at"):
-        if item[name] is not None and datetime.fromisoformat(item[name]).utcoffset() is None:
+        if name == "ended_at" and item[name] is None:
+            continue
+        if datetime.fromisoformat(item[name]).utcoffset() is None:
             raise ValueError("Missing recording timezone")
 
 

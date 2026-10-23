@@ -277,12 +277,26 @@ def test_settings_and_check_shortcuts_preserve_input_suspension_and_result(
 
 
 def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaze, qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QPushButton, QStyle, QStyleOptionButton
+
     from pogled_assist.interaction.mouse_controller import QUICK_ACTIONS, SETTINGS
 
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._open_speech()
-    qtbot.wait(1)
     speech = hotbar._speech_window
+    speech.showNormal()
+    speech.resize(1280, 720)
+    qtbot.wait(1)
+    for name in ("systemAlarm", "systemSleep", "systemExit"):
+        control = speech.findChild(QPushButton, name)
+        option = QStyleOptionButton()
+        control.initStyleOption(option)
+        contents = control.style().subElementRect(QStyle.SE_PushButtonContents, option, control)
+        text = control.fontMetrics().boundingRect(
+            contents, int(Qt.AlignCenter | Qt.TextWordWrap), control.text()
+        )
+        assert contents.contains(text), (name, contents, text)
     button = hotbar._buttons[SETTINGS]
     neighbor = hotbar._buttons[QUICK_ACTIONS]
     assert button.iconSize() == neighbor.iconSize()
@@ -294,8 +308,6 @@ def test_recording_badges_preserve_targets_and_do_not_intercept_input(hotbar_gaz
     status = {"busy": True, "remaining_seconds": 119, "state": "recording"}
     hotbar._diagnostic_recordings.status = status
     hotbar._recording_changed()
-    from PySide6.QtCore import Qt
-
     for badge in (hotbar._recording_badge, speech._recording_badge):
         assert badge.isVisible()
         assert badge.testAttribute(Qt.WA_TransparentForMouseEvents)

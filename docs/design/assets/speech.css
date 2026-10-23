@@ -65,6 +65,7 @@
 .item small { color: #bac5d4; font-size: 14px; font-weight: 400; }
 .system-actions { display: grid; grid-template-rows: 54px repeat(3, minmax(80px, 1fr)); gap: 10px; min-height: 0; }
 .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
+.system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
 .sleep { background: #202538; border-color: #5b658c; color: #e0e5ff; }
 .utility-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr .8fr; gap: var(--gap); }
@@ -130,6 +131,7 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .system-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto 100px; }
   .system-actions .section-label, .system-actions .speech-controls-heading { grid-column: 1 / -1; }
   .system-actions button { font-size: 21px; }
+  .system-actions button[data-action="exit"] { font-size: 21px; }
   .system-actions small { font-size: 12px; }
   .utility-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   #status { white-space: normal; }
