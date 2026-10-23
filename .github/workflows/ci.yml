@@ -101,7 +101,7 @@ jobs:
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -B -m pytest -p no:cacheprovider `
-            -n 2 --dist=loadfile `
+            -vv -o faulthandler_timeout=120 `
             --durations=30 `
             --cov=pogled_assist `
             --cov-report=term-missing:skip-covered `

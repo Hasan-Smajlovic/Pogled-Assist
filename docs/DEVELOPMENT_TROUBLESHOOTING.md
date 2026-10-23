@@ -31,6 +31,8 @@ For a slow `check -Parallel`, inspect the paths printed when each stage starts. 
 
 `-Workers 1` controls pytest workers; it does not disable the overlapping stages requested by `-Parallel`. Use plain `check` to isolate stage contention. Run only one check/package command per checkout, and keep source files unchanged until it finishes. CI uses separate jobs, rather than these local overlapping stages; see [verification modes](DEVELOPMENT.md#verification-modes).
 
+For a CI test timeout, keep the job annotation and the last verbose test name, then inspect any thread dump in the log. The [CI diagnostic settings](DEVELOPMENT.md#final-verification-and-fast-selection) print stacks before the job deadline; the slowest-test summary appears only after the suite finishes. A progress percentage or a cancelled job without a dump cannot identify the stalled test. Reproduce coverage with `.\dev.ps1 coverage -Workers 1` before trying two workers; a passing local run does not establish the cause of a hosted-runner stall.
+
 If different tests fail on different runs, keep both logs and look for shared worker/thread cleanup, Qt ownership, process detection, blocked sinks and machine contention before increasing timeouts. A producer test with a deliberately blocked sink must finish before the test releases that sink. Wait for the observable state or signal; an arbitrary sleep or weakened assertion does not establish the required ordering. For a skipped test, use the [conditional-test guide](DEVELOPMENT.md#conditional-tests) to identify where it can run before deciding whether its coverage is redundant.
 
 ## Restricted Windows verification sessions
