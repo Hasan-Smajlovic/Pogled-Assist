@@ -15,12 +15,17 @@ function Test-AnalyzerModule {
     param([string]$Path)
 
     $manifest = Join-Path $Path "PSScriptAnalyzer.psd1"
-    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+    $rootModule = Join-Path $Path "PSScriptAnalyzer.psm1"
+    # Windows PowerShell 5.1 can accept a manifest whose RootModule is missing.
+    # Check the pinned package's own file before relying on manifest validation.
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $rootModule -PathType Leaf)) {
         return $false
     }
     try {
         $module = Test-ModuleManifest -Path $manifest -ErrorAction Stop
-        return $module.Version -eq [version]$version
+        return $module.Version -eq [version]$version -and
+            $module.RootModule -eq "PSScriptAnalyzer.psm1"
     } catch {
         Write-Verbose "Analyzer cache is incomplete: $($_.Exception.Message)"
         return $false

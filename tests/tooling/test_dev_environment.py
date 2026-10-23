@@ -106,7 +106,10 @@ def _prepare_setup_environment(tmp_path):
         tmp_path / ".dev-tools" / "PSScriptAnalyzer" / "1.25.0" / "PSScriptAnalyzer.psd1"
     )
     analyzer_path.parent.mkdir(parents=True)
-    analyzer_path.write_text("@{ ModuleVersion = '1.25.0' }", encoding="utf-8")
+    analyzer_path.write_text(
+        "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }", encoding="utf-8"
+    )
+    analyzer_path.with_suffix(".psm1").write_text("", encoding="utf-8")
     check_script = tmp_path / "scripts" / "checks" / "check_github_actions.ps1"
     check_script.parent.mkdir(parents=True)
     check_script.write_text("", encoding="utf-8")
@@ -188,11 +191,13 @@ def _prepare_analyzer_installer(tmp_path, failure=None):
     script = tmp_path / "scripts" / "checks" / "install_powershell_analyzer.ps1"
     script.parent.mkdir(parents=True)
     package = tmp_path / "package.zip"
+    manifest = "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }"
+    if failure == "version":
+        manifest = manifest.replace("1.25.0", "1.24.0")
+    elif failure == "manifest":
+        manifest = "@{ ModuleVersion = '1.25.0' }"
     with ZipFile(package, "w") as archive:
-        archive.writestr(
-            "PSScriptAnalyzer.psd1",
-            "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }",
-        )
+        archive.writestr("PSScriptAnalyzer.psd1", manifest)
         if failure != "module":
             archive.writestr(
                 "PSScriptAnalyzer.psm1", "function Invoke-ScriptAnalyzer { 'synthetic analyzer' }"
@@ -254,7 +259,7 @@ Invoke-ScriptAnalyzer
     assert not list((tmp_path / ".dev-tools/PSScriptAnalyzer").glob(".download-*"))
 
 
-@pytest.mark.parametrize("failure", ["checksum", "module", "network"])
+@pytest.mark.parametrize("failure", ["checksum", "module", "version", "manifest", "network"])
 def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(tmp_path, failure):
     _prepare_analyzer_installer(tmp_path, failure)
     previous = tmp_path / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
@@ -264,7 +269,7 @@ def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(tmp_pa
         tmp_path,
         {
             "install": {
-                "body": ('$state.Failures = 3\n' if failure == "network" else "")
+                "body": ("$state.Failures = 3\n" if failure == "network" else "")
                 + r'& (Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1")'
             }
         },
@@ -275,6 +280,8 @@ def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(tmp_pa
     assert {
         "checksum": "archive checksum does not match",
         "module": "archive does not contain a valid module",
+        "version": "archive does not contain a valid module",
+        "manifest": "archive does not contain a valid module",
         "network": "after 3 attempts",
     }[failure] in result.stderr
     assert previous.read_bytes() == b"previous files"
