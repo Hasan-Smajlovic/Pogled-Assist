@@ -144,6 +144,18 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
 /* Stable playback target: stop stays in the same cell while speech is active. */
 .speech-playback { position: relative; display: grid; min-width: 0; }
 .speech-playback button { width: 100%; height: 100%; }
+/* Speech keeps one steady focus outline and a transparent, non-pulsing ring. */
+body[data-reference-page="speech"] #gaze-ring {
+  width: 64px; height: 64px; margin: -32px 0 0 -32px;
+  background: conic-gradient(#9bc9f3 var(--progress, 0deg), #9bc9f333 0);
+  mask: radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+body[data-reference-page="speech"] button.gaze-target {
+  border-color: #9bc9f3; box-shadow: inset 0 0 0 1px #9bc9f3;
+}
+body[data-reference-page="speech"] #gaze-ring[data-state="fired"] {
+  background: #9bc9f3;
+}
 .speech-activity {
   position: absolute;
   left: 12px;

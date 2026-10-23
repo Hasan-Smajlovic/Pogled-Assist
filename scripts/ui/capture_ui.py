@@ -15,7 +15,7 @@ if os.name == "nt":
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
@@ -35,10 +35,12 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
 from pogled_assist.ui.recording_badge import RecordingIndicator
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
+from pogled_assist.ui.speech_surface import SPEECH_STYLE
 from pogled_assist.ui.speech_window import SpeechWindow
 from scripts.ui.capture_diagnostics import CaptureDiagnostics
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
@@ -418,15 +420,22 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
 
     def capture_selection_progress(self) -> None:
         scene = QWidget()
-        scene.setStyleSheet("background: #111318;")
+        scene.setObjectName("speechWindow")
+        scene.setStyleSheet(SPEECH_STYLE)
         self.widgets.append(scene)
+        button = QPushButton("H", scene)
+        button.setObjectName("groupButton")
+        button.setGeometry(200, 120, 240, 120)
+        set_gaze_feedback(button, True, pulsing=False)
         overlay = InteractionOverlayWindow()
         overlay.setParent(scene, Qt.Widget)
         overlay._timer.timeout.disconnect(overlay._tick)
+        overlay.set_calm(True)
         overlay.show_progress(QPoint(320, 180), 0.65, "Pogledaj")
-        self.capture(scene, "selection-progress", "Selection progress: active", size=(640, 360))
+        self.capture(scene, "selection-progress", "Speech selection: calm ring", size=(640, 360))
         overlay.set_paused(True)
-        self.capture(scene, "selection-held", "Selection progress: paused", size=(640, 360))
+        set_gaze_paused(button, True)
+        self.capture(scene, "selection-held", "Speech selection: paused ring", size=(640, 360))
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()

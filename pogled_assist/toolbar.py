@@ -488,6 +488,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
                 button.setVisible(visible)
 
     def _set_toolbar_gaze_target(self, action: object) -> None:
+        self._interaction_overlay.set_calm(
+            isinstance(action, str) and action.startswith(SPEECH_WINDOW_ACTION_PREFIX)
+        )
         for button_action, button in self._buttons.items():
             set_gaze_feedback(button, button_action == action)
         if self._speech_window is not None:
