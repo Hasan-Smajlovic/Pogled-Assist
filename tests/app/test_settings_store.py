@@ -214,11 +214,20 @@ def test_unknown_settings_survive_saves_and_downgrade_round_trip(monkeypatch, tm
     assert json.loads(path.read_text(encoding="utf-8"))["speech"]["future_voice"] == "keep"
 
 
-@pytest.mark.parametrize("contents", ["invalid json", '{"version":999,"speech":{"speed":220}}'])
-def test_unsupported_or_unreadable_settings_are_never_overwritten(monkeypatch, tmp_path, contents):
+@pytest.mark.parametrize(
+    "contents,expected_speech",
+    [
+        ("invalid json", SpeechSettings()),
+        ('{"version":999,"speech":{"speed":220}}', SpeechSettings(speed=220)),
+    ],
+)
+def test_unsupported_or_unreadable_settings_are_never_overwritten(
+    monkeypatch, tmp_path, contents, expected_speech
+):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
     path.write_text(contents, encoding="utf-8")
+    assert load_app_settings() == (GazeSettings(), expected_speech)
     assert not save_app_settings(GazeSettings(), SpeechSettings())
     assert path.read_text(encoding="utf-8") == contents
 
@@ -230,14 +239,6 @@ def test_load_returns_defaults_when_file_is_missing(monkeypatch, tmp_path):
 
     assert gaze == GazeSettings()
     assert speech == SpeechSettings()
-
-
-def test_load_returns_defaults_for_invalid_json(monkeypatch, tmp_path):
-    path = point_settings_at(monkeypatch, tmp_path)
-    path.parent.mkdir()
-    path.write_text("not json", encoding="utf-8")
-
-    assert load_app_settings() == (GazeSettings(), SpeechSettings())
 
 
 def test_load_coerces_and_clamps_each_setting(monkeypatch, tmp_path):

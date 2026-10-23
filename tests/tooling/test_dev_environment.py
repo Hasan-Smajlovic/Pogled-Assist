@@ -25,6 +25,14 @@ FAST_CASES = [
     (4, False, 1, 1),
     (1, True, 1, 1),
 ]
+WORKER_CASES = [
+    (1, False, "0", "--ignore=tests/tooling --cov-fail-under=0"),
+    (2, False, "2", None),
+    (2, True, "2", "--ignore=tests/tooling --cov-fail-under=0"),
+    (0, False, "2", "--ignore=tests/tooling --cov-fail-under=0"),
+    (0, True, "0", None),
+]
+ANALYZER_FAILURES = ("checksum", "module", "version", "manifest", "network")
 
 DEV_SCRIPT = Path(__file__).resolve().parents[2] / "dev.ps1"
 PACKAGE_SCRIPT = DEV_SCRIPT.parent / "scripts" / "release" / "build_windows_package.ps1"
@@ -259,22 +267,32 @@ Invoke-ScriptAnalyzer
     assert not list((tmp_path / ".dev-tools/PSScriptAnalyzer").glob(".download-*"))
 
 
-@pytest.mark.parametrize("failure", ["checksum", "module", "version", "manifest", "network"])
-def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(tmp_path, failure):
-    _prepare_analyzer_installer(tmp_path, failure)
-    previous = tmp_path / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
-    previous.parent.mkdir(parents=True)
-    previous.write_bytes(b"previous files")
-    result = run_powershell_cases(
-        tmp_path,
-        {
-            "install": {
-                "body": ("$state.Failures = 3\n" if failure == "network" else "")
-                + r'& (Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1")'
-            }
-        },
-        prelude=ANALYZER_DOWNLOAD_FAKE,
-    )["install"]
+@pytest.fixture(scope="module")
+def analyzer_failure_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("analyzer-failures")
+    cases = {}
+    for failure in ANALYZER_FAILURES:
+        directory = root / failure
+        directory.mkdir()
+        _prepare_analyzer_installer(directory, failure)
+        previous = directory / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
+        previous.parent.mkdir(parents=True)
+        previous.write_bytes(b"previous files")
+        cases[failure] = {
+            "body": ANALYZER_DOWNLOAD_FAKE.replace("$PSScriptRoot", "(Get-Location)")
+            + ("$state.Failures = 3\n" if failure == "network" else "")
+            + r'& (Join-Path (Get-Location) "scripts\checks\install_powershell_analyzer.ps1")'
+        }
+    return root, run_powershell_cases(root, cases)
+
+
+@pytest.mark.parametrize("failure", ANALYZER_FAILURES)
+def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(
+    analyzer_failure_results, failure
+):
+    root, results = analyzer_failure_results
+    previous = root / failure / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
+    result = results[failure]
 
     assert result.returncode != 0
     assert {
@@ -362,22 +380,7 @@ def test_python_probe_handles_output_and_exit_status(python_probe_results, case,
     assert result.stderr == ""
 
 
-@pytest.mark.parametrize(
-    ("workers", "coverage", "expected", "pytest_options"),
-    [
-        (1, False, "0", "--ignore=tests/tooling --cov-fail-under=0"),
-        (2, False, "2", None),
-        (2, True, "2", "--ignore=tests/tooling --cov-fail-under=0"),
-        (0, False, "2", "--ignore=tests/tooling --cov-fail-under=0"),
-        (0, True, "0", None),
-    ],
-)
-def test_test_command_uses_process_workers_and_restores_environment(
-    tmp_path, workers, coverage, expected, pytest_options
-):
-    result = _run_dev_driver(
-        tmp_path,
-        """
+TEST_COMMAND_TEMPLATE = """
 function Get-DevPython { return "python-from-venv.exe" }
 function Invoke-ExternalCommand {
     param([string]$FilePath, [string[]]$ArgumentList)
@@ -385,20 +388,25 @@ function Invoke-ExternalCommand {
         executable = $FilePath; arguments = $ArgumentList
         qt = $env:QT_QPA_PLATFORM; pytest_options = $env:PYTEST_ADDOPTS
     } |
-        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot "command.json")
+        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path (Get-Location) "command.json")
 }
 $env:QT_QPA_PLATFORM = "original-platform"
 $env:PYTEST_ADDOPTS = PYTEST_OPTIONS
 Invoke-TestSuite -WorkerCount WORKERS -Coverage "$COVERAGE"
 if ($env:QT_QPA_PLATFORM -ne "original-platform") { throw "Qt environment leaked" }
 if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" }
-""".replace("WORKERS", str(workers))
-        .replace("$COVERAGE", "Full" if coverage else "None")
-        .replace("PYTEST_OPTIONS", f'"{pytest_options}"' if pytest_options else "$null"),
-    )
+"""
 
+
+@pytest.mark.parametrize("workers,coverage,expected,pytest_options", WORKER_CASES)
+def test_test_command_uses_process_workers_and_restores_environment(
+    test_suite_results, workers, coverage, expected, pytest_options
+):
+    root, results = test_suite_results
+    case = f"workers-{workers}-{coverage}"
+    result = results[case]
     assert result.returncode == 0, result.stdout + result.stderr
-    command = json.loads((tmp_path / "command.json").read_text(encoding="utf-8-sig"))
+    command = json.loads((root / case / "command.json").read_text(encoding="utf-8-sig"))
     assert command["executable"] == "python-from-venv.exe"
     assert command["qt"] == "offscreen"
     assert command["pytest_options"] == (None if coverage else pytest_options)
@@ -452,27 +460,28 @@ def test_coverage_groups_partition_the_suite(coverage_group_results, group, mode
     assert json.loads(result.stdout) == {"coverage": mode, "paths": paths, "ignore": ignored}
 
 
-@pytest.mark.parametrize("defer_report", [False, True])
-def test_coverage_can_append_a_deferred_test_file(tmp_path, defer_report):
-    result = _run_dev_driver(
-        tmp_path,
-        """
+APPEND_COVERAGE_TEMPLATE = """
 function Get-DevPython { return "python-from-venv.exe" }
 function Invoke-ExternalCommand {
     param([string]$FilePath, [string[]]$ArgumentList)
     $ArgumentList | ConvertTo-Json -Compress |
-        Set-Content -LiteralPath (Join-Path $PSScriptRoot "arguments.json")
+        Set-Content -LiteralPath (Join-Path (Get-Location) "arguments.json")
 }
 Invoke-TestSuite `
     -Coverage MODE `
     -IgnorePaths @("tests/release/test_windows_installer.py") `
     -Paths @("tests/release/test_windows_installer.py") `
     -WorkerCount 1
-""".replace("MODE", "Collect" if defer_report else "Append"),
-    )
+"""
 
+
+@pytest.mark.parametrize("defer_report", [False, True])
+def test_coverage_can_append_a_deferred_test_file(test_suite_results, defer_report):
+    root, results = test_suite_results
+    case = f"append-{defer_report}"
+    result = results[case]
     assert result.returncode == 0, result.stdout + result.stderr
-    arguments = json.loads((tmp_path / "arguments.json").read_text(encoding="utf-8-sig"))
+    arguments = json.loads((root / case / "arguments.json").read_text(encoding="utf-8-sig"))
     assert ("--cov-append" in arguments) != defer_report
     assert "--ignore=tests/release/test_windows_installer.py" in arguments
     assert arguments[-1] == "tests/release/test_windows_installer.py"
@@ -482,15 +491,11 @@ Invoke-TestSuite `
     assert ("--cov-report=term-missing:skip-covered" in arguments) != defer_report
 
 
-@pytest.mark.parametrize("coverage", [False, True])
-def test_test_failure_restores_environment_and_reports_failed_stage(tmp_path, coverage):
-    result = _run_dev_driver(
-        tmp_path,
-        """
+TEST_FAILURE_TEMPLATE = """
 function Get-DevPython { return "python-from-venv.exe" }
 function Invoke-ExternalCommand {
     [PSCustomObject]@{ pytest_options = $env:PYTEST_ADDOPTS } |
-        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot "command.json")
+        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path (Get-Location) "command.json")
     throw "test failed"
 }
 $env:QT_QPA_PLATFORM = "original-platform"
@@ -506,17 +511,43 @@ catch {
     if ($StageTimings[0].Status -ne "FAILED") { throw "Failure timing missing" }
     throw
 }
-""".replace("$COVERAGE", "Full" if coverage else "None"),
-    )
+"""
 
+
+@pytest.mark.parametrize("coverage", [False, True])
+def test_test_failure_restores_environment_and_reports_failed_stage(test_suite_results, coverage):
+    root, results = test_suite_results
+    case = f"failure-{coverage}"
+    result = results[case]
     assert result.returncode != 0
     assert "Regression tests (FAILED," in result.stdout
     assert "test failed" in result.stderr
     assert "environment leaked" not in result.stderr
-    command = json.loads((tmp_path / "command.json").read_text(encoding="utf-8-sig"))
+    command = json.loads((root / case / "command.json").read_text(encoding="utf-8-sig"))
     assert command["pytest_options"] == (
         None if coverage else "--ignore=tests/tooling --cov-fail-under=0"
     )
+
+
+@pytest.fixture(scope="module")
+def test_suite_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("test-suite")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    cases = {}
+    for workers, coverage, _expected, pytest_options in WORKER_CASES:
+        body = (
+            TEST_COMMAND_TEMPLATE.replace("WORKERS", str(workers))
+            .replace("$COVERAGE", "Full" if coverage else "None")
+            .replace("PYTEST_OPTIONS", f'"{pytest_options}"' if pytest_options else "$null")
+        )
+        cases[f"workers-{workers}-{coverage}"] = {"body": DEV_PRELUDE + body}
+    for defer_report in (False, True):
+        body = APPEND_COVERAGE_TEMPLATE.replace("MODE", "Collect" if defer_report else "Append")
+        cases[f"append-{defer_report}"] = {"body": DEV_PRELUDE + body}
+    for coverage in (False, True):
+        body = TEST_FAILURE_TEMPLATE.replace("$COVERAGE", "Full" if coverage else "None")
+        cases[f"failure-{coverage}"] = {"body": DEV_PRELUDE + body}
+    return root, run_powershell_cases(root, cases)
 
 
 @pytest.mark.parametrize("count,full_suite,workers,expected_workers", FAST_CASES)

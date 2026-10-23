@@ -84,7 +84,10 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
         "pogled_assist.ui.settings_window.set_windows_startup_enabled",
         lambda enabled, **_options: StartupTaskResult(enabled, True, "updated"),
     )
-    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    window = SettingsWindow(
+        GazeSettings(selection_pause_ms=200, dwell_ms=250, smoothing=0.15),
+        SpeechSettings(speed=310, letters_per_group=11),
+    )
     qtbot.addWidget(window)
     assert window.windowTitle() == "Postavke"
     assert window._general_tab_button.text() == "Opće postavke"
@@ -100,24 +103,24 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     window._gaze_page.show_tab(1)
     qtbot.mouseClick(window._gaze_page._move_pointer_button, Qt.LeftButton)
     qtbot.mouseClick(window._gaze_page._precision_zoom_checkbox, Qt.LeftButton)
-    for _ in range(100):
+    for _ in range(2):
         window._adjust_selection_pause(-100)
         window._adjust_dwell_ms(-100)
         window._adjust_smoothing(-0.1)
+        assert gaze_updates[-1].selection_pause_ms == 100
+        assert gaze_updates[-1].dwell_ms == 150
+        assert gaze_updates[-1].smoothing == 0.05
     qtbot.mouseClick(window._speech_tab_button, Qt.LeftButton)
-    for _ in range(100):
+    for _ in range(2):
         window._adjust_speech_speed(10)
         window._adjust_letters_per_group(1)
+        assert speech_updates[-1].speed == 320
+        assert speech_updates[-1].letters_per_group == 12
     window._speech_page._voice_buttons["human_like"].click()
 
     assert window._stack.currentIndex() == 2
     assert gaze_updates[-1].move_mouse is False
     assert gaze_updates[-1].use_precision_zoom is False
-    assert gaze_updates[-1].selection_pause_ms == 100
-    assert gaze_updates[-1].dwell_ms == 150
-    assert gaze_updates[-1].smoothing == 0.05
-    assert speech_updates[-1].speed == 320
-    assert speech_updates[-1].letters_per_group == 12
     assert speech_updates[-1].voice_preset == "human_like"
 
 

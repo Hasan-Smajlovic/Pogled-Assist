@@ -311,7 +311,6 @@ def test_expired_gallery_updates_an_existing_comment_but_does_not_create_one(tmp
     assert "No UI gallery is available" in api.comments[1][0]["body"]
 
 
-@pytest.mark.e2e
 def test_comment_tracks_new_commit_failure_and_recovery_without_losing_previews(tmp_path):
     api = FakeGitHub()
     first = site.prepare_site(api, tmp_path / "first", BASE_URL)

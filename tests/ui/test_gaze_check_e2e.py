@@ -753,11 +753,8 @@ def test_gaze_check_feedback_results_explain_next_action_without_metrics(
 @pytest.mark.parametrize(
     "selected,wrong,loss,advice",
     [
-        ([True, True, True], 0, 0, "govornu tastaturu"),
         ([True, True, True], 0, 1, "govornu tastaturu"),
-        ([True, True, True], 1, 0, "pogrešna dugmad"),
-        ([True, True, False], 0, 2, "Prekidi praćenja"),
-        ([False, False, False], 0, 0, "nisu odabrana na vrijeme"),
+        ([True, True, False], 1, 0, "pogrešna dugmad"),
     ],
 )
 def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(

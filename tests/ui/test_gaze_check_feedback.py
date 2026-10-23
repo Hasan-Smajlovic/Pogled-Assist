@@ -16,10 +16,12 @@ from pogled_assist.ui.gaze_check_feedback import result_advice
         ([True] * 5, [True, False], set(), 2, 1, "Još provjerite izbor"),
         ([True] * 5, [True, False, True], {0, 2}, 2, 1, "dovoljno podataka"),
         ([True] * 5, [True, False, True], {0, 1, 2}, 2, 1, "Prekidi praćenja"),
+        ([True] * 5, [True, True, False], {0, 1, 2}, 2, 0, "Prekidi praćenja"),
         ([True] * 5, [True, False, True], {0, 1, 2}, 0, 1, "pogrešna dugmad"),
         ([True] * 5, [True] * 3, set(), 2, 1, "pogrešna dugmad"),
         ([True] * 5, [False] * 3, {0, 1, 2}, 0, 0, "nisu odabrana na vrijeme"),
         ([True] * 5, [True] * 3, set(), 0, 0, "govornu tastaturu"),
+        ([True] * 5, [True] * 3, set(), 1, 0, "govornu tastaturu"),
         ([True] * 5, [True] * 3, set(), 2, 0, "Ako se izbor često poništava"),
     ],
 )

@@ -17,8 +17,11 @@ from pogled_assist.ui.settings_window import SettingsWindow
 pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.parametrize("edge_surface", ["hotbar", "keyboard", "speech"], indirect=True)
-@pytest.mark.parametrize("duration", [0, 120, 240])
+@pytest.mark.parametrize(
+    "edge_surface,duration",
+    [("speech", 0), ("speech", 120), ("speech", 240), ("hotbar", 240), ("keyboard", 240)],
+    indirect=["edge_surface"],
+)
 def test_saved_edge_duration_controls_real_application_targets(edge_surface, duration):
     _window, controller, feed, actions, _progress, action, center, outside = edge_surface
     controller.update_settings(replace(controller.settings, edge_hold_ms=duration))

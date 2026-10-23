@@ -198,10 +198,11 @@ def test_more_than_100_trials_and_large_reports_remain_exportable(tmp_path, monk
     store.save(value)
     assert len(store.load()[0].report.trials) == 150
     monkeypatch.setattr(module, "MAX_TOTAL_BYTES", 1024)
-    before = store.load()[0].report.to_json()
+    saved = store.directory / f"gaze-check-{value.id}.json"
+    before = saved.read_bytes()
     with pytest.raises(ValueError):
         store.save(value)
-    assert store.load()[0].report.to_json() == before
+    assert saved.read_bytes() == before
     destination = tmp_path / "all-attempts.zip"
     store.export(value, destination)
     with ZipFile(destination) as archive:
