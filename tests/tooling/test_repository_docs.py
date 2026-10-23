@@ -27,6 +27,7 @@ REQUIRED_FILES = (
     "docs/features/speech-suggestions.md",
     "language/bs/README.md",
     "docs/design/speech-keyboard-reference.html",
+    "docs/design/design-system.html",
     "docs/design/speech.html",
     "docs/design/settings.html",
     "docs/design/gaze-check.html",

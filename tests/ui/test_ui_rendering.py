@@ -31,6 +31,14 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     def capture_with_script_control_check(app, widget, output_dir, name, size):
         snapshot = capture_widget(app, widget, output_dir, name, size)
+        if name == "keyboard-latin-paged":
+            assert widget._active_tab == "letters"
+            first_group = widget._action_buttons[widget._action("group:0")]
+            next_page = widget._action_buttons[widget._action("group-page:1")]
+            assert first_group.isVisible()
+            assert first_group.text() == "A B"
+            assert next_page.isVisible()
+            assert next_page.isEnabled()
         if name in (
             "controller-keyboard",
             "controller-latin-paged",

@@ -7,7 +7,7 @@
   let startupTimer;
   let voiceTestTimer;
   const query = new URLSearchParams(location.search);
-  const settingsPages = ['general-settings', 'gaze-settings', 'speech-settings', 'eleven-settings', 'audio-settings', 'learning-settings'];
+  const settingsPages = ['general-settings', 'support-settings', 'gaze-settings', 'speech-settings', 'eleven-settings', 'audio-settings', 'learning-settings'];
   const voiceNames = { standard: 'Standardni', natural: 'Prirodni', efendija: 'Efendija' };
   let selectedVoice = query.get('voice') || ReferenceDesign.readSession('voice', 'standard');
   if (!Object.hasOwn(voiceNames, selectedVoice)) selectedVoice = 'standard';
@@ -63,7 +63,7 @@
     $('arabic-voice-preview').hidden = !arabic;
     $('eleven-summary').hidden = arabic || selectedVoice !== 'efendija';
     $('standard-speed').hidden = arabic || selectedVoice !== 'standard';
-    for (const button of document.querySelectorAll('[data-voice]')) button.setAttribute('aria-pressed', String(button.dataset.voice === selectedVoice));
+    for (const option of document.querySelectorAll('[data-voice]')) option.checked = option.dataset.voice === selectedVoice;
     $('test-selected-voice').textContent = !arabic && selectedVoice === 'efendija' ? 'Isprobaj Efendiju' : 'Isprobaj govor';
   }
   $('settings-script-preview').addEventListener('click', () => {
@@ -220,7 +220,9 @@
       ['test-eleven-voice', 'stop-test-voice', 'test-voice-progress'],
     ]) {
       $(test).disabled = active;
-      $(stop).hidden = $(progress).hidden = !active;
+      $(stop).hidden = false;
+      $(stop).disabled = !active;
+      $(progress).hidden = !active;
       if (active) $(test).textContent = 'Pripremam…';
     }
     if (!active) {
@@ -302,7 +304,10 @@
     }
     for (const id of settingsPages) $(id).hidden = id !== action;
     const navAction = ['eleven-settings', 'audio-settings', 'learning-settings'].includes(action) ? 'speech-settings' : action;
-    for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) button.setAttribute('aria-pressed', String(button.dataset.settingsAction === navAction));
+    for (const button of document.querySelectorAll('.settings-nav [data-settings-action]')) {
+      if (button.dataset.settingsAction === navAction) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    }
     const url = new URL(location.href);
     url.hash = '';
     url.searchParams.set('page', action);
@@ -420,6 +425,7 @@
     const failed = $('settings-save-error').checked;
     ReferenceDesign.writeSession('settings-save-error', failed);
     $('settings-save-note').textContent = failed ? 'Postavke nisu sačuvane. Važe do zatvaranja aplikacije.' : !$('eleven-settings').hidden ? 'Glas i model se čuvaju automatski. Ključ potvrdite dugmetom Sačuvaj ključ.' : 'Promjene se primjenjuju i čuvaju automatski.';
+    $('settings-save-state').dataset.tone = failed ? 'error' : '';
     $('retry-settings').hidden = !failed;
   }
 

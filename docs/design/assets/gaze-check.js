@@ -111,6 +111,10 @@
     checkEl('check-next').hidden = history || viewingArchive;
     checkEl('check-next').textContent = nextCheckLabel(results);
     checkEl('check-next').disabled = results && displayedReport.state === 'interrupted';
+    const repeatPrecision = results && (displayedReport.state === 'interrupted'
+      || displayedReport.results.some(row => row.state !== 'measured' || !row.near));
+    checkEl('check-next').classList.toggle('primary', !results || !repeatPrecision);
+    checkEl('check-repeat').classList.toggle('primary', repeatPrecision);
     checkEl('check-reset').hidden = !results || viewingArchive;
     checkEl('check-repeat').hidden = !results || viewingArchive;
     checkEl('check-back').hidden = !history && !viewingArchive;
@@ -165,9 +169,18 @@
 
   function renderPrecision() {
     const report = displayedReport;
+    const summary = [
+      ['Blizu mete', report.results.filter(row => row.state === 'measured' && row.near).length, 'check-pass'],
+      ['Izvan mete', report.results.filter(row => row.state === 'measured' && !row.near).length, 'check-attention'],
+      ['Premalo podataka', report.results.filter(row => row.state === 'insufficient').length, ''],
+      ['Nije izmjereno', report.results.filter(row => row.state === 'unmeasured').length, ''],
+    ];
+    checkEl('check-result-summary').innerHTML = summary.map(([label, count, tone]) =>
+      `<div><strong class="${count ? tone : ''}">${count}</strong><span>${label}</span></div>`).join('');
     const headings = checkDetails ? ['Meta', 'Uzorci', 'Podaci', 'Odstupanje', 'Rasipanje'] : ['Meta', 'Rezultat'];
     const rows = report.results.map(precisionRow);
     checkEl('check-result-table').innerHTML = '<thead><tr>' + headings.map(heading => `<th scope="col">${heading}</th>`).join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody>';
+    checkEl('check-result-table').classList.toggle('check-metrics-details', checkDetails);
     checkEl('check-details').textContent = checkDetails ? 'Sakrij mjerenja' : 'Prikaži mjerenja';
     checkEl('check-details').setAttribute('aria-pressed', String(checkDetails));
     checkEl('check-metrics-help').hidden = !checkDetails;
@@ -192,10 +205,11 @@
   function precisionAdvice(report) {
     const count = state => report.results.filter(result => result.state === state).length;
     return report.state === 'interrupted'
-      ? 'Provjera je prekinuta. Završene mete su sačuvane; izaberite „Ponovi preciznost“ za cijeli test.'
-      : 'Blizu mete: ' + report.results.filter(result => result.state === 'measured' && result.near).length
-        + ' · Izvan mete: ' + report.results.filter(result => result.state === 'measured' && !result.near).length
-        + ' · Premalo podataka: ' + count('insufficient') + '. Podesite položaj pa ponovite provjeru.';
+      ? 'Sačuvane su završene mete. Za cijeli test odaberite „Ponovi preciznost“.'
+      : count('insufficient') || count('unmeasured') ? 'Za neke mete nema dovoljno podataka. Podesite položaj pa ponovite provjeru.'
+        : report.results.some(result => result.state === 'measured' && !result.near)
+          ? 'Pogled je na nekim metama izvan kruga. Podesite položaj pa ponovite provjeru.'
+          : 'Pogled je blizu svih meta. Možete probati izbor dugmeta.';
   }
   function renderPrecisionMap(report) {
     const map = checkEl('check-result-map');
@@ -357,6 +371,7 @@
     renderFrame();
     checkEl('check-test').classList.toggle('free', mode === 'free');
     checkEl('check-test-next').hidden = mode === 'free';
+    checkEl('check-test-back').textContent = mode === 'free' ? 'Nazad na položaj' : 'Prekini i prikaži rezultat';
     const targets = checkEl('check-targets');
     targets.replaceChildren();
     if (mode === 'trial') {

@@ -35,7 +35,7 @@
       <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
-      <h2 class="section-label">Brzi izbor</h2>
+      <h2 class="visually-hidden">Ponuđene riječi</h2>
       <div class="prediction-controls">
         <div id="predictions" class="prediction-row"></div>
         <button id="undo-word" type="button" data-action="undo-word" disabled>Poništi riječ</button>
@@ -43,7 +43,7 @@
     </section>
     <div class="workspace">
       <section class="main-panel" aria-labelledby="view-title">
-        <div class="view-header">
+        <div id="view-header" class="view-header" hidden>
           <h1 id="view-title">Odaberite grupu slova</h1>
           <button id="back" type="button" data-action="back" hidden>Nazad</button>
           <button id="add" class="primary" type="button" data-action="add" hidden>Dodaj</button>
@@ -60,7 +60,7 @@
         </nav>
       </section>
       <aside class="system-actions" aria-label="Kontrole aplikacije">
-        <div class="speech-controls-heading"><h2 class="section-label">Kontrole</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
+        <div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
         <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
         <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
@@ -129,6 +129,7 @@
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
+    <p>Prijedlog poravnanja: ponuđene riječi i Poništi riječ dijele istu visinu (83 px, odnosno 73 px pri visini ekrana do 760 px). Osnovni raspored nema vidljive naslove Brzi izbor, Odaberite grupu slova i Kontrole; sekcije odvaja linija. Pristupačni nazivi ostaju dostupni, a naslovi i radnje biblioteke i uređivanja prikazuju se kada su potrebni. Oznaka snimanja ima rezervisan prostor iznad dugmadi. Indikator govora je nepomičan. Svaka sekcija ima svoj red u mreži: skrivanje prijedloga u arapskom pismu povećava prostor tastature, dok visina i položaj donjih komandi ostaju isti. Preglednik ne pomjera prikaz pri promjeni pisma. Ovo je HTML prijedlog, još nije prenesen u Qt aplikaciju.</p>
     <p>Dok radi <a href="diagnostics.html">dijagnostičko snimanje</a>, mala nepulsirajuća oznaka s preostalim vremenom stoji uz naslov Kontrole. Koristi postojeći prostor naslova, bez pomjeranja dugmadi ili prekrivanja obavijesti o praćenju i glasu. Ne uzima fokus i nije novo dugme. Snimanje se može zaustaviti iz Postavki; primjer se otvara pomoću <code>?recording=demo</code>. Ovaj HTML ne snima poruku.</p>
     <p>izabrani Efendija prvo koristi važeći sačuvani snimak cijele spremljene fraze ili odgovora. Za ostale poruke pokušava ElevenLabs, pa Prirodni, pa Standardni. Izbor glasa ostaje sačuvan. Efendija ima najviše 30 sekundi za pripremu zvuka, Prirodni još najviše 3 sekunde; potvrđena greška pokreće zamjenu odmah. To su pragovi za pripremu, ne obećanje početka zvuka u 33 sekunde. Dostupni sačuvani zvuk se može koristiti i kada nema interneta ili kredita.</p>
     <p>Obavijest koristi postojeće zaglavlje poruke. Unutar gornjeg reda od 96 px zaglavlje se proširi sa 18 na 38 px, a polje poruke se smanji; dugmad i tastatura ostaju na istim mjestima. Razlog i dodatna poruka stoje jedan uz drugi, u dvije kolone koje po potrebi prelamaju tekst. Obavijest se ne zatvara potvrdom i ne uzima fokus. Obavijest o zamjenskom glasu ostaje nakon završetka izgovora dok se taj glas koristi. Tekst navodi stvarni korišteni glas i razlog zamjene. Izgovor sačuvanim Efendijinim glasom ne prikazuje da se koristi Prirodni. Obavijest o praćenju ima prednost; nakon nje vraća se aktuelno stanje govora.</p>

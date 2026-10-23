@@ -225,7 +225,8 @@
       $(id).disabled = Boolean(editor);
     }
     $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
-    message.placeholder = editor ? 'Unesite tekst…' : 'Odaberite grupu slova…';
+    message.placeholder = editor ? 'Unesite tekst…' : '';
+    $('view-header').hidden = !editor && view === 'keyboard';
     $('view-title').textContent = viewTitle();
     $('cancel-edit').hidden = !editor;
     $('save').hidden = !editor;

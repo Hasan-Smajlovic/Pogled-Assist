@@ -695,6 +695,7 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
         small_groups = replace(self.speech_settings, letters_per_group=2)
         self.keyboard.update_settings(small_groups)
+        self.keyboard._show_letter_groups()
         self.controller.update_speech_settings(small_groups)
         self.controller._show_keyboard_tab()
         for widget, name, title in (

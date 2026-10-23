@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const pages = [
+    ['design-system', 'design-system.html', 'Boje i komponente'],
     ['hotbar', 'hotbar.html', 'Početni meni'],
     ['sidebar', 'keyboard.html', 'Tastatura'],
     ['controller', 'controller-keyboard.html', 'Upravljač: tastatura'],
@@ -14,6 +15,7 @@
   ];
   const currentPage = document.body.dataset.referencePage;
   const query = new URLSearchParams(location.search);
+  document.body.dataset.previewClean = String(query.get('preview') === 'clean');
   const memory = new Map();
   function readSession(key, fallback) {
     try { return JSON.parse(sessionStorage.getItem('pogled-assist-reference-' + key)) ?? fallback; }
@@ -23,11 +25,16 @@
     memory.set(key, value);
     try { sessionStorage.setItem('pogled-assist-reference-' + key, JSON.stringify(value)); } catch {}
   }
+  const previewFont = query.get('font') || readSession('preview-font', 'segoe');
+  document.documentElement.dataset.previewFont = previewFont === 'inter' ? 'inter' : 'segoe';
+  if (query.has('font')) writeSession('preview-font', document.documentElement.dataset.previewFont);
   if (query.has('feedback')) writeSession('feedback', query.get('feedback') !== 'off');
   function pageUrl(key, params = {}) {
     const page = pages.find(item => item[0] === key);
     if (!page) throw new Error('Unknown reference page: ' + key);
     const url = new URL(page[1], location.href);
+    url.searchParams.set('font', document.documentElement.dataset.previewFont);
+    if (query.get('preview') === 'clean') url.searchParams.set('preview', 'clean');
     if (!readSession('feedback', true)) url.searchParams.set('feedback', 'off');
     const policy = readSession('eye-policy', 'both');
     if (['both', 'hold', 'any'].includes(policy)) url.searchParams.set('policy', policy);
