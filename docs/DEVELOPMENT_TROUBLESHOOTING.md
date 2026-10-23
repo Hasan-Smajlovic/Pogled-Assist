@@ -2,6 +2,21 @@
 
 This guide covers common problems when running the checks in the [development guide](DEVELOPMENT.md#verification-before-a-pull-request).
 
+## PowerShell analyzer setup fails
+
+Setup, PR CI and release verification use the same [pinned analyzer installer](DEVELOPMENT.md#first-setup). It downloads from the official GitHub release, not PSGallery. A log naming `Get-PSRepository`, `Register-PSRepository` or `Save-Module` therefore belongs to an older installer or a different command. Check the run's source revision before changing repository registration or rerunning it.
+
+For the current installer, keep the first download/checksum/module error and its attempt count. In a Windows checkout, reproduce the tool step without running the application:
+
+```powershell
+.\scripts\checks\install_powershell_analyzer.ps1 -Verbose
+.\scripts\checks\check_powershell.ps1 -RequireAnalyzer
+```
+
+A valid cache skips the download; an incomplete module is replaced only after a new package passes validation. To investigate a cache-specific import failure, preserve the suspect version directory outside `.dev-tools\PSScriptAnalyzer`, then run those commands again to exercise installation without that cached version. Keep the cache and tool-step logs as evidence. Download failure, checksum mismatch and module import failure are different observations: retries address transient download errors, not a wrong hash or broken package. Do not change the expected hash to accept a failing download or bypass `-RequireAnalyzer`.
+
+The CI tool-cache key includes the installer scripts, so a committed installer change creates a different key. A successful cache restore does not prove the analyzer step passed. Likewise, a Ruff failure before tool setup leaves analyzer installation untested in that run. Follow a focused repair with the complete check from the development guide.
+
 ## Bundled model metadata has an outdated source checksum
 
 If `tests/suggestions/test_suggestion_text.py` fails on `preparation_sha256` or `tokenizer_sha256`, compare the recorded hash in the corresponding model metadata with the source file. Refactoring or formatting changes the hash even when the intended model behavior is unchanged. A model copied from another checkout can also have metadata for different source files.
@@ -13,6 +28,10 @@ Rebuild the affected model and regenerate its reports following the [model comma
 Run `.\dev.ps1 test -Workers 1` to reproduce a failure in a single process. For a specific module, use `.\dev.ps1 test -Workers 1 -TestPaths tests/tooling/test_dev_environment.py`. After fixing the failure, run the complete `.\dev.ps1 check -Parallel`; use sequential `.\dev.ps1 check` when diagnosing stage contention or another parallel-only failure. If pytest reports an unrecognized `-n` argument, run `.\dev.ps1 setup` to install the declared development dependencies. Do not install plugins into another environment or remove coverage/packaging to make a final check pass.
 
 For a slow `check -Parallel`, inspect the paths printed when each stage starts. `application.log` and `infrastructure.log` include individual test names and the 30 slowest durations at completion. Their `.stderr.log` files contain process diagnostics. Read an active test log from another terminal with `Get-Content -LiteralPath '<printed-log-path>' -Tail 15 -Wait` (Ctrl+C stops the reader). Output may arrive in batches; a test name or elapsed-time status alone does not prove progress. Compare each test group with `package.log` and the final timing summary before increasing `-Workers`. The deferred installer tests and combined report are printed in the main terminal.
+
+`-Workers 1` controls pytest workers; it does not disable the overlapping stages requested by `-Parallel`. Use plain `check` to isolate stage contention. Run only one check/package command per checkout, and keep source files unchanged until it finishes. CI uses separate jobs, rather than these local overlapping stages; see [verification modes](DEVELOPMENT.md#verification-modes).
+
+If different tests fail on different runs, keep both logs and look for shared worker/thread cleanup, Qt ownership, process detection, blocked sinks and machine contention before increasing timeouts. A producer test with a deliberately blocked sink must finish before the test releases that sink. Wait for the observable state or signal; an arbitrary sleep or weakened assertion does not establish the required ordering. For a skipped test, use the [conditional-test guide](DEVELOPMENT.md#conditional-tests) to identify where it can run before deciding whether its coverage is redundant.
 
 ## Restricted Windows verification sessions
 

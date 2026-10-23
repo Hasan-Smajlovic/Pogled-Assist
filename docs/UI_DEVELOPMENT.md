@@ -81,7 +81,7 @@ The default `core` profile renders:
 | Keyboard and Controller (`keyboards`) | 12 | All main tabs, narrow Latin pagination, Arabic keyboards and second symbols pages |
 | Settings (`settings`) | 10 | General, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
 | Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, active and frozen selection arcs |
-| Gaze check and diagnostics (`gaze-check`) | 17 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback free view, and diagnostic recording ready/active/history |
+| Gaze check and diagnostics (`gaze-check`) | 17 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback, free view, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 9 | Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
 The other 77 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:

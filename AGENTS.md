@@ -13,6 +13,18 @@ Use the guide relevant to the task and follow its linked sections as needed.
 - [docs/WINDOWS_RELEASE.md](docs/WINDOWS_RELEASE.md) covers packaging, installation, rollback, and clean-machine validation.
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) describes the controls and settings people use. [Speech suggestions](docs/features/speech-suggestions.md) defines that feature's behavior and acceptance criteria.
 
+For a focused change, start with the owning contract below, then use the [test boundary map](docs/DEVELOPMENT.md#test-strategy) to find existing fakes and regression tests.
+
+| Task | Read first |
+| --- | --- |
+| Eye validity, one-eye selection, freshness or recovery | [Eye-tracking policy](docs/ARCHITECTURE.md#eye-tracking-policy) |
+| Selection resets near a button edge | [Edge selection hold](docs/ARCHITECTURE.md#edge-selection-hold) |
+| Gaze-check measurements, saved results or report export | [Measurements](docs/ARCHITECTURE.md#gaze-check-measurements) and [report ownership](docs/ARCHITECTURE.md#gaze-check-reports) |
+| Recording, recording indicators, support ZIPs or log analysis | [Recording ownership and lifecycle](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages) and [analysis workflow](docs/DEVELOPMENT.md#diagnostic-log-analysis) |
+| Slow, failing or skipped checks | [Verification modes](docs/DEVELOPMENT.md#verification-modes), [conditional tests](docs/DEVELOPMENT.md#conditional-tests) and [troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
+
+The user guide owns visible choices and adjustment instructions; architecture owns runtime contracts and data ownership; development owns commands and automated evidence. Update the owner and link from other guides instead of copying the same rules. Documentation describes implemented behavior, not proof that a particular build passed verification. Record run-specific results and remaining hardware checks in the pull request.
+
 ## Task-specific workflows
 
 Read the applicable sections of these skills when the task matches:
@@ -70,6 +82,8 @@ Apply these principles to documentation, pull request descriptions, and explanat
 | The surfaces rendered by `scripts/ui/capture_ui.py` | The snapshot count in `tests/ui/test_ui_rendering.py` and the surface count and list in `docs/UI_DEVELOPMENT.md` |
 | A runtime file under `pogled_assist/assets/` or `assets/` | `datas` in `packaging/windows/PogledAssist.spec`, `$requiredFiles` in `scripts/release/build_windows_package.ps1`, and a `binary` entry in `.gitattributes` for binary files |
 | A field of `GazeSettings` in `pogled_assist/interaction/mouse_controller.py` or `SpeechSettings` in `pogled_assist/speech/speech_service.py` | Coercion and defaults in `pogled_assist/settings_store.py`, the matching settings page under `pogled_assist/ui/` and its wiring in `pogled_assist/ui/settings_window.py`, `tests/app/test_settings_store.py`, and `docs/USER_GUIDE.md`; numeric ranges share `pogled_assist/settings_limits.py`, except selection-pause limits owned by `pogled_assist/interaction/gaze_selection.py` |
+| Gaze-check report schema, context or persistence | Validation and export in `pogled_assist/tracking/gaze_check_report.py` and `pogled_assist/tracking/gaze_check_store.py`, report/history UI, the [report contract](docs/ARCHITECTURE.md#gaze-check-reports), and report storage/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
+| Diagnostic recording context, lifecycle or support ZIP contents | The explicit allowlists and store in `pogled_assist/diagnostic_recording.py`, writer/reader handling where affected, the [recording contract](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages), [collection instructions](docs/USER_GUIDE.md#diagnostic-log-collection), and recording/reader/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
 | Model inputs under `language/bs/model/`, `pogled_assist/suggestions/text.py`, or `scripts/speech_suggestions/prepare_*_model.py` | The prepared `pogled_assist/assets/bosnian-*-model.*` files and the reports under `language/bs/`, regenerated with the commands in `language/bs/README.md` |
 | A file under `data/` | The data lists in `README.md` and `docs/ARCHITECTURE.md`, and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |

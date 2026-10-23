@@ -4,8 +4,11 @@ Pogled Assist is one Windows desktop process built with Python and PySide6. It t
 
 - [Runtime flow and components](#runtime-flow)
 - [Gaze and input](#gaze-and-input-path)
+- [Eye-tracking policy](#eye-tracking-policy) and [edge selection hold](#edge-selection-hold)
+- [Gaze-check measurements](#gaze-check-measurements) and [saved reports](#gaze-check-reports)
 - [UI and service ownership](#ui-and-service-ownership)
 - [Persistent data and diagnostic logging](#persistent-data-and-logs)
+- [Short recordings and support packages](#short-diagnostic-recordings-and-support-packages)
 - [Packaging and installation](#packaging-and-installation)
 - [Compatibility contract](#compatibility-contract)
 
@@ -43,6 +46,8 @@ The Python package is named `pogled_assist`. The existing `run_gaze_mouse.py` an
 | Runtime composition | `pogled_assist/toolbar.py` | Hotbar UI, service wiring, child-window ownership, status, cleanup |
 | Gaze acquisition | `pogled_assist/tracking/` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge, calibration |
 | Gaze interaction | `pogled_assist/interaction/` | Logical/physical coordinate mapping in `screen_mapping.py`, UI target lookup through `GazeTarget`, smoothing, shared selection timing, click and Quick action requests |
+| Gaze-check reports | `pogled_assist/tracking/gaze_check_report.py`, `pogled_assist/tracking/gaze_check_store.py`, `pogled_assist/ui/gaze_check_reports.py` | Aggregate report schema, atomic storage/export, application-lifetime memory and file-worker results |
+| Diagnostic recording | `pogled_assist/diagnostics.py`, `pogled_assist/log_transport.py`, `pogled_assist/diagnostic_recording.py`, `pogled_assist/ui/diagnostic_recordings.py` | Observations, bounded writer, recording storage/retention/export and Qt-facing lifecycle |
 | Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, external foreground/cursor tracking, focus, z-order |
 | User surfaces | `pogled_assist/ui/` | Settings, speech, keyboard, controller, radial menu, precision zoom, gaze feedback |
 | Speech | `pogled_assist/speech/` | eSpeak NG, Edge and ElevenLabs playback, saved-entry audio, saved categories, answers and phrases, and the repeating local alarm |
@@ -75,7 +80,17 @@ Each backend reports actual left and right eye validity. Direct desktop pointer 
 
 ### Eye-tracking policy
 
-`interaction/eye_tracking_policy.py` owns eligibility, the local monotonic interruption deadline and gaze freshness notifications. `GazeSettings.eye_tracking_policy` accepts `both` (default), `hold`, or experimental `any`; storage rejects other values. `eye_tracking_hold_ms` defaults to 150 ms and uses 50–500 ms in 50 ms steps. The user-facing choices are defined in the [Settings guide](USER_GUIDE.md#eye-tracking-policy).
+`interaction/eye_tracking_policy.py` owns eligibility, the local monotonic interruption deadline and gaze freshness notifications. `GazeSettings.eye_tracking_policy` accepts `both` (default), `hold`, or experimental `any`; missing or unrecognized values load as `both`. `eye_tracking_hold_ms` sets the interruption duration. The [Settings guide](USER_GUIDE.md#settings) owns timing defaults/ranges and the [visible policy choices](USER_GUIDE.md#eye-tracking-policy).
+
+| Boundary | Rule |
+| --- | --- |
+| Application controls | `both` requires two valid eyes; `hold` can freeze an existing attempt during single-eye loss; `any` allows selection with one valid eye. Every selection needs fresh valid gaze. |
+| Direct desktop input | Pointer movement, direct clicks, Quick actions and precision zoom always require both eyes, regardless of application policy. |
+| Controller click buttons | Selecting the button follows the application policy. Its Windows click uses the existing cached external target. |
+| Gaze check | Precision, free view and button trials follow copied policy/settings. Eye indicators and both-eye availability report actual data. |
+| Status and notifications | Observe eligibility and freshness; their display delays never extend input eligibility. |
+
+#### Provider delivery and clocks
 
 The provider retains SDK-valid finite coordinates for one tracked eye only in `any`. Stream Engine still supplies its [combined, interaction-filtered point](https://developer.tobii.com/how-to-get-started-with-developing-software-for-the-eye-tracker-with-the-pdk/); separate per-eye screen points are a different, advanced stream. Normalized eye origins are never converted to screen gaze. Pro SDK averages available valid screen points and discards [invalid gaze data](https://developer.tobiipro.com/commonconcepts/validitycodes.html). Tobii's [profile eye choice](https://help.tobii.com/hc/en-us/articles/210247825-Calibration-options) is independent of this application's policy; the policy does not alter the profile or calibration. Usable one-eye gaze accuracy on the installed Tobii 4C remains a hardware check. Missing gaze never selects a control and never changes the chosen mode automatically.
 
@@ -83,11 +98,20 @@ Qt receives timestamped eye transitions before gaze. A bounded queue retains bot
 
 The provider's `gaze_received_at` carries the delivered point's local monotonic receipt time alongside its existing signal. The hotbar forwards that age to the controller, Settings and tracking feedback; Qt dispatch never renews freshness. SDK timestamps remain separate and are not compared with the local clock. The provider checks gaps in both native receipt and Qt delivery, so a delayed point cannot bridge a native gap of 500 ms before the expiry timer runs. The mouse simulator uses its sample time at the same boundary.
 
-The controller, Settings and caregiver trial each use the shared gate and existing `GazeSelectionTimer`. In `hold`, loss of one eye freezes the current target without accumulating time. Repeated reports cannot extend the deadline; a Qt timer expires it without another gaze sample. Recovery requires both eyes and a fresh point inside the same target, with unchanged context and geometry. The first returning sample restores credited progress but cannot activate. In `any`, a change from one sole eye to the other cancels progress unless a fresh both-eye point established continuity between them. Both-invalid state, connection loss, stale gaze, suspended input, and policy or hold-duration changes cancel pending progress. Completed selections keep their leave-before-repeat lock.
+#### Selection interruption and recovery
+
+The controller, Settings and caregiver trial each use the shared `EyeTrackingGate` and existing `GazeSelectionTimer`. The gate decides whether a sample is eligible and when to freeze or cancel; the selection timer owns target identity, credited time and repeat blocking.
+
+- In `hold`, loss of one eye freezes the current target without accumulating time. Repeated reports cannot extend the deadline; a Qt timer expires it without another gaze sample.
+- Recovery requires both eyes and a fresh point inside the same target, with unchanged context and geometry. The first returning sample restores credited progress but cannot activate.
+- In `any`, a change from one sole eye to the other cancels progress unless a fresh both-eye point established continuity between them.
+- Both-invalid state, connection loss, stale gaze, suspended input, and policy or hold-duration changes cancel pending progress. Completed selections keep their leave-before-repeat lock.
 
 Application gaze and desktop-overlay gaze use separate signals. Controller buttons intentionally retain their existing cached external click target, while selecting those buttons follows the application policy. Coordinate mapping remains in Qt logical and Windows physical coordinates at their existing boundaries. A held interaction keeps its arc with a pause mark and no pulsing; disabling progress hides that feedback without changing eligibility.
 
 The source-only mouse gaze simulator bypasses discovery and feeds primary-screen cursor coordinates into the same application path. It follows the selected eye policy, including one-eye coordinates in `any`; development shortcuts change either eye, pause gaze, disconnect, or reset. Gaze gaps cancel before resumed coordinates. Automatic pointer movement is disabled so the cursor remains the input. The hotbar always labels synthetic input as simulation; Tobii notifications remain suppressed. The [UI development guide](UI_DEVELOPMENT.md#mouse-gaze-simulation) owns its controls and limits.
+
+### Coordinates and pointer movement
 
 The controller keeps two coordinate spaces separate:
 
@@ -96,7 +120,20 @@ The controller keeps two coordinate spaces separate:
 
 Smoothing affects visible pointer movement. Click targeting uses the current gaze target so smoothing does not move the requested click away from the selected point.
 
-`GazeSelectionTimer` owns pause, dwell, and repeat blocking. The controller opts Speech, hotbar, and standalone Keyboard controls into a bounded edge hold using their current visible, enabled button rectangles in logical coordinates. Hotbar hit rectangles extend vertically to the top screen edge, keeping button widths and neutral horizontal gaps. Other surfaces retain their existing selection rules. `GazeSettings.edge_hold_ms` controls the duration; the [user guide](USER_GUIDE.md#selection-stability-near-edges) owns defaults, limits and adjustment. The margin remains at most 24 logical pixels and a quarter of each target dimension. During an edge hold, neither elapsed outside time nor the interval back to the first returning sample advances selection. Feedback stays on the previous button, and a held update can never confirm it. A nearby neighbor earns no time while the original target is held; after expiry it starts its full pause and dwell from the first eligible sample. Farther moves switch immediately. Zero duration disables edge retention. Changing the duration cancels unfinished application selection and preserves its repeat lock. Context changes cancel progress; eye loss follows the selected policy, and a tracking hold cannot extend an existing edge deadline. Speech also blocks a suggestion replaced beneath gaze; that rejection must not count as leaving its button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
+### Edge selection hold
+
+An edge hold handles a fresh gaze point just outside a target; an eye-tracking hold handles loss of one eye under `hold`. These are separate conditions and deadlines. Neither permits an activation while held, and a tracking hold cannot extend an existing edge deadline.
+
+The controller opts Speech, hotbar, and standalone Keyboard controls into edge retention using their current visible, enabled button rectangles in Qt logical coordinates. Settings controls, Controller controls and direct desktop actions do not opt in. The caregiver button trial copies the setting. `GazeSettings.edge_hold_ms` controls the duration; the [user guide](USER_GUIDE.md#selection-stability-near-edges) owns defaults, limits and adjustment. The margin remains at most 24 logical pixels and a quarter of each target dimension. Hotbar hit rectangles extend vertically to the top screen edge, keeping button widths and neutral horizontal gaps.
+
+| Gaze movement | Selection result |
+| --- | --- |
+| Just outside A, within its margin and deadline | Keep A's pause/progress frozen; a nearby B earns no time. |
+| Back inside unchanged A before expiry | Resume A, excluding outside time and the interval up to the first returning sample. |
+| First eligible sample at or after expiry | Discard A's retained progress. The sampled target starts its full pause and dwell, including if it is A again. |
+| Farther outside A's margin | Switch immediately using the normal selection rules. |
+
+Zero duration disables edge retention. Changing the duration cancels unfinished application selection and preserves its repeat lock. Context or target-geometry changes cancel progress. A completed target stays blocked through a brief edge departure; an expired departure can release that lock, including when the next sample returns to A. Speech also blocks a suggestion replaced beneath gaze; that rejection must not count as leaving its button. See [Speech selection behavior](USER_GUIDE.md#speech) for the user flow.
 
 ### Gaze-check measurements
 
@@ -117,11 +154,26 @@ The hotbar owns diagnostic signal connections, Settings return, shutdown and Tob
 
 `launch_tobii_settings` tries discovered UI candidates in rank order, excluding maintenance, Guest, calibration and test targets. A rejected candidate does not block later candidates; exhaustion returns the manual tray-icon route. Existing Guest calibration entry points retain their behavior and also exclude maintenance targets. The [user guide](USER_GUIDE.md#gaze-check) owns calibration instructions and the caregiver flow.
 
-`tracking/gaze_check_report.py` owns version 1 aggregate reports, used by the UI, local JSON storage and ZIP export. Precision finalizes once, immediately on completion or interruption; rendering never emits another fixation result. Reports retain completed targets, with explicit insufficient-data and unmeasured states. Each optional trial has its own identity, timestamps, state, interruption reason, environment snapshot and per-group coverage, duration, wrong/cancelled selections and departures. Repeated trials update the same precision report without remeasuring precision. Coverage describes eligible gaze during the measured interval, not the positioning screen's rolling both-eye indicator. Distances and target sizes use Qt logical pixels; gaze/target centres are normalized and are never replaced with physical Windows input coordinates. Context includes the copied eye policy, hold/pause/dwell/edge/cooldown/overlay settings and available version, backend, SDK, device model, firmware, primary-screen geometry, pixel ratio and logical DPI. Missing metadata is null; simulator results carry an explicit flag. No serial numbers, credentials, typed text, speech data or raw sample stream are collected.
-
-`ui/gaze_check_reports.py` owns application-lifetime memory and one serial daemon file worker, separate from diagnostic transport and its trace limits. It passes immutable copies to that worker and queues outcomes back to Qt. Version counters prevent an older save acknowledgement from marking a newer revision saved. Auto-save follows the check's copied logging setting; manual export and history reads work when logging is off. `tracking/gaze_check_store.py` writes UTF-8 JSON atomically through a flushed temporary file and replacement, then prunes supported reports to the newest 100 and 10 MiB. Unknown, corrupt, unrelated and symlink entries are not deletion candidates. Reads are limited to 10 MiB per report and validate the version, structure and key-specific allowlisted context. Unreadable reports remain visible but cannot be opened/exported. Repeated trials have no fixed count limit; a report larger than the automatic storage budget stays in memory and can still be manually exported. Failed writes retain the in-memory result and expose retry; export creates a separate atomic ZIP with JSON and Bosnian TXT from the same snapshot, without modifying auto-save status. The selected destination is never rewritten after the native dialog's overwrite check. No export starts without a caregiver-selected path. Shutdown drains the worker for at most two seconds; a blocked disk, crash or forced termination can leave a pending result unsaved. Temporary files are ignored on history reads. Normal gaze input remains suspended across history, read-only report views, minimization and the native save dialog.
-
 Coordinates follow Tobii's [Stream Engine API](https://developer.tobii.com/product-integration/) and [track-box description](https://developer.tobii.com/wp-content/uploads/2016/03/Developers-Guide-DotNet.pdf). Normalized-position availability and movement guidance still require validation on the installed 4C runtime; synthetic tests cannot establish hardware accuracy.
+
+### Gaze-check reports
+
+`tracking/gaze_check_report.py` owns version 1 aggregate reports, used by the UI, local JSON storage and ZIP export. They are separate from detailed [diagnostic recordings](#short-diagnostic-recordings-and-support-packages).
+
+- Precision finalizes once, immediately on completion or interruption; rendering never emits another fixation result. Completed targets remain, with explicit insufficient-data and unmeasured states.
+- Each optional trial has its own identity, timestamps, state, interruption reason, environment snapshot and per-group coverage, duration, wrong/cancelled selections and departures. Repeated trials update the same precision report without remeasuring precision.
+- Coverage describes eligible gaze during the measured interval, not the positioning screen's rolling both-eye indicator. Distances and target sizes use Qt logical pixels; gaze/target centres are normalized, never physical Windows input coordinates.
+- Context includes the copied eye policy, hold/pause/dwell/edge/cooldown/overlay settings and available version, backend, SDK, device model, firmware, primary-screen geometry, pixel ratio and logical DPI. Missing metadata is null; simulator results carry an explicit flag. No serial numbers, credentials, typed text, speech data or raw sample stream are collected.
+
+`ui/gaze_check_reports.py` owns application-lifetime memory and one serial daemon file worker, separate from diagnostic transport and its trace limits. Immutable copies go to that worker and outcomes return to Qt. Version counters prevent an older save acknowledgement from marking a newer revision saved. Auto-save follows the check's copied logging setting; manual export and history reads work when logging is off. Failed writes retain the in-memory result and expose retry.
+
+`tracking/gaze_check_store.py` owns the file operations:
+
+- Save UTF-8 JSON through a flushed temporary file and atomic replacement, then prune supported reports to the newest 100 and 10 MiB. Unknown, corrupt, unrelated and symlink entries are not deletion candidates.
+- Limit reads to 10 MiB per report and validate version, structure and key-specific allowlisted context. Unreadable reports remain visible but cannot be opened/exported. Repeated trials have no fixed count limit; a report over the automatic storage budget stays in memory and can still be manually exported.
+- Export JSON and Bosnian TXT from the same snapshot in a separate atomic ZIP, without modifying auto-save status. Use exactly the caregiver-selected path confirmed by the native dialog; never append an extension after its overwrite check.
+
+Shutdown drains the worker for at most two seconds; a blocked disk, crash or forced termination can leave a pending result unsaved. Temporary files are ignored on history reads. Normal gaze input remains suspended across history, read-only report views, minimization and the native save dialog.
 
 ## UI and service ownership
 
@@ -188,19 +240,49 @@ Typed text, suggestions, phrases, key labels and content action IDs are excluded
 
 ### Short diagnostic recordings and support packages
 
-`DiagnosticRecordings` is owned by the hotbar for the application lifetime. Both Settings and the caregiver check open the same recording window. Closing it keeps recording active; opening it suspends normal input until returning. The gaze-check shortcut is unavailable during precision/button measurement. Hiding the check for diagnostics stops its UI timer and telemetry collection without discarding its report; returning restores the check and its existing input suspension. Passive recording badges fit inside the existing Settings button and Speech Controls label, without changing targets or taking input/focus.
+| Owner | Responsibility |
+| --- | --- |
+| `ui/diagnostic_recordings.py` (`DiagnosticRecordings`) | Application-lifetime status, start/stop requests, Qt delivery, history/export queue and the shared indicator |
+| `diagnostics.py` and `log_transport.py` | Existing observations and the persistent `LogWriter`; recording admission, event order, deadlines, byte cap and final drain |
+| `diagnostic_recording.py` (`RecordingStore`) | Metadata validation, crash recovery, retention, full inspection and atomic support ZIP export |
+| `ui/recording_badge.py` | One shared `RecordingIndicator` and passive `RecordingBadge` views; no recording or input decisions |
+| `build_info.py` | Cached source identity shared by ordinary logs, recordings and gaze-check reports |
+
+#### Window and indicator ownership
+
+The hotbar owns `DiagnosticRecordings`; closing the recording window keeps recording active. Opening that window suspends normal input until returning. The gaze-check shortcut is unavailable during precision/button measurement. Hiding the check for diagnostics stops its UI timer and telemetry collection without discarding its report; returning restores the check and its existing input suspension.
+
+All badges bind to the same indicator, including windows opened later. The indicator's saved-confirmation timer and accessibility announcement identity are shared; reopening a window must not restart them. Badges reserve space or overlay an existing control, take no focus and pass mouse events through. They never move gaze targets or replace tracking/speech notices. The [collection guide](USER_GUIDE.md#diagnostic-log-collection) owns visible messages and durations; the [design workflow](UI_DEVELOPMENT.md#application-design-reference-workflow) maps their references.
+
+#### Recording admission and completion
 
 Manual recording reuses `diagnostics.py` observations and the persistent `LogWriter` queue. The writer snapshots a recording identity with each event, so normal-log toggles cannot discard recording events or mix segments. Only structured events enter the recording; text logging and console output are excluded. Normal logging retains its current switch and independent session cap. Manual trace can start without ordinary logging, without a restart, and after a normal session reaches 64 MiB. It never changes saved settings, eye eligibility, input decisions, or measurement calculations.
 
 The selected duration is 1, 2, 5 or 10 minutes (default 2); a monotonic deadline, manual stop, shutdown, write failure or the 32 MiB total cap ends admission. One recording remains busy through the writer's confirmed drain/close, including a blocked sink; another cannot start during that interval. Queue pressure and truncated snapshots are counted for this recording rather than copied from process-cumulative normal-log health. A reserved footer stays inside the file cap. Status distinguishes start/record/finish, end reason, lifecycle footer and completeness. Shutdown or a missing footer is incomplete even when some data was saved. No file/console wait or worker join is added to gaze/Qt callbacks. Application logging retains its existing two-second shutdown bound.
 
-For a `manual_trace` stream, the offline reader requires a `manual` or `time` end reason and the footer's `recording_health` without dropped records, writer errors or bounded snapshots before marking the stream complete. Missing or invalid recording health leaves it incomplete. Process-cumulative `logging_health` remains separately reported and does not make a clean later recording incomplete. Ordinary log sessions keep their existing process-health checks.
+The status progresses from `starting` to `recording` to `finishing` while the writer drains. An inactive status or a present closing record alone does not establish completeness. For a `manual_trace` stream, the offline reader requires lifecycle records, no parse warnings or size-limit event, a `manual` or `time` end reason, and valid footer `recording_health` without dropped records, writer errors or bounded snapshots. Missing or invalid recording health leaves it incomplete. Process-cumulative `logging_health` remains separately reported and does not make a clean later recording incomplete. Ordinary log sessions keep their existing process-health checks.
 
-`diagnostic_recording.py` owns atomic metadata, history, retention and ZIP export. After successful final metadata storage, the oldest recording folders are removed to retain five and at most 200 MiB; the active recording is excluded. Known unreadable recordings share that budget. Unrelated files, manually exported ZIPs and folders containing additional files are preserved; such external content is outside this managed budget. History reads bounded metadata and lifecycle edges, while full JSONL analysis happens only for inspection/export on a file worker. A separate bounded four-task worker serializes history and export requests. Pruning and export serialize file access. A force-killed process can leave a partial stream or initial metadata; recovery labels it interrupted and never certifies completeness. Unsupported or unreadable recordings remain visible and cannot be exported as successful recordings.
+#### History, recovery and retention
 
-The local ZIP contains only the chosen recording, allowlisted gaze settings and environment, a readable Bosnian summary and a version-1 manifest with lifecycle identity, completeness, file sizes and SHA-256 hashes. An explicitly selected current-memory or saved gaze-check report adds separate JSON/TXT companions; its own date, policy, simulation and state remain labeled. Nothing is attached automatically or sent over the network. Export uses an adjacent temporary file and atomic replacement of the exact Windows Save As destination, without appending an extension after overwrite confirmation. Failures preserve an existing destination. Trace coordinates/geometry can reveal activity; composed/spoken text, key labels, credentials, the speech library, audio, screenshots, device serial numbers and whole settings/log folders are excluded.
+`diagnostic_recording.py` owns atomic metadata, history, retention and ZIP export. After successful final metadata storage, the oldest recording folders are removed to retain five and at most 200 MiB; the active recording is excluded. Known unreadable recordings share that budget. Unrelated files, manually exported ZIPs and folders containing additional files are preserved; such external content is outside this managed budget. History reads bounded metadata and lifecycle edges, while full JSONL analysis happens only for inspection/export on a file worker. A separate worker with a four-task queue serializes history and export requests. Pruning and export serialize file access. A force-killed process can leave a partial stream or initial metadata; recovery labels it interrupted and never certifies completeness. Readable partial recordings can be exported with `complete=false`; unsupported or unreadable recordings remain visible but cannot be exported.
 
 On history load, readable crash remnants are atomically stored as confirmed partial recordings, with unknown duration kept distinct from zero. Recovery then restores retention, including a process killed after final metadata but before pruning. A process-local active-identity registry prevents a queued history job from recovering, exporting or pruning the current recording. That registry uses no file-worker lock on input/Qt producers. A failed recovery leaves older recordings intact and blocks another start until the history check succeeds. Ordinary basic suppression counts stay independent of manual trace; deliberate basic exclusions never become false queue-loss reports. Rotation preserves recording-event order even while ordinary summary footers finish separately.
+
+#### Support ZIP contents and privacy
+
+The local ZIP includes these files; it does not copy a settings or logs folder:
+
+| File | Contents |
+| --- | --- |
+| `snimak.jsonl` | The chosen detailed recording |
+| `kontekst.json` | Allowlisted gaze settings and environment |
+| `sazetak.txt` | Readable Bosnian technical summary |
+| `manifest.json` | Version 1 manifest, recording lifecycle/completeness and each payload file's byte size and SHA-256; the manifest does not hash itself |
+| `provjera/rezultat.json`, `provjera/izvjestaj.txt` | Only when explicitly selected: one current-memory or saved gaze-check report, with its own date, policy, simulation flag and state |
+
+Nothing is attached automatically or sent over the network. Export uses an adjacent temporary file and atomic replacement of the exact Windows Save As destination, without appending an extension after overwrite confirmation. Failures preserve an existing destination. Trace coordinates/geometry can reveal activity; composed/spoken text, key labels, credentials, the speech library, audio, screenshots and device serial numbers are excluded. `GAZE_KEYS` and `recording_context` in `diagnostic_recording.py` own recording-context selection; `SETTING_KEYS` and `ENVIRONMENT_KEYS` in `tracking/gaze_check_report.py` own report context. Extend those explicit allowlists rather than serializing whole settings or device objects.
+
+#### Build identity
 
 `build_info.py` provides one cached build identity to normal logs, recordings and gaze-check reports. Source startup resolves the Git revision and dirty state before UI work; missing Git information stays unknown. Package preparation embeds `BUILD_INFO.json` beside `VERSION`, with the full source revision and a separate dirty flag. Frozen runtime reads that file without invoking Git; the package smoke check rejects a missing/invalid revision. A dirty build is explicitly different from an exact clean revision. The runtime log-root override never changes the source used for build identity.
 

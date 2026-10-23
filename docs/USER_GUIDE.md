@@ -1,11 +1,11 @@
 # User guide
 
 - [Installation readiness](#installation-readiness) and [before starting](#before-starting)
-- [Tracking notifications](#tracking-notifications-in-speech) and [gaze check](#gaze-check)
+- [Tracking notifications](#tracking-notifications-in-speech), [gaze check](#gaze-check) and [saved results](#saved-gaze-check-results)
 - [Hotbar controls](#hotbar-controls) and [quick actions](#quick-actions)
 - [Speech](#speech), [Keyboard](#keyboard), and [Controller](#controller)
 - [Settings](#settings) and [updates](#update)
-- [Troubleshooting](#troubleshooting) and [exit](#exit)
+- [Troubleshooting](#troubleshooting), [diagnostic recording](#diagnostic-log-collection) and [exit](#exit)
 
 ## Installation readiness
 
@@ -55,11 +55,15 @@ Open **Postavke > Postavke pogleda > Pokazivač i provjera > Provjera pogleda** 
 
 The [architecture guide](ARCHITECTURE.md#gaze-check-measurements) defines the measurement rules and thresholds. They are application heuristics, not Tobii-certified or clinical assessments. A short loss may be a blink; the app does not diagnose tears, lighting or illness. Recognized positions and the both-eye continuity indicator do not change the selected input policy. Connection loss, minimizing an active test or resizing interrupts it. Simulator results are labeled and are not Tobii measurements.
 
-Results have three tabs: **Preciznost**, **Probni izbor** and **Postavke i uređaj**. Precision is saved as soon as its five targets finish; the optional button trial is not required. Repeating a trial keeps separate dated attempts under the same precision result. **Prekini i prikaži rezultat** keeps completed parts, marks the attempt **Prekinuto** and leaves unfinished targets **Nije izmjereno**. Missing gaze data is shown as **Premalo podataka**, without claiming a measured miss. Closing, repeating, resizing, minimizing or disconnecting also retains completed parts with the reason for interruption.
+### Saved gaze-check results
 
-When **Uključi zapisivanje** is enabled, completed and interrupted reports are automatically saved in the background. When disabled, new results remain in memory until the application closes. **Sačuvani rezultati** lists disk and current-session results by date, eye policy and state; selecting a result opens a read-only view of its measurements and the settings used. Viewing an older result never applies its settings. A failed disk read or unsupported report is shown explicitly. **Pokušaj ponovo** retries a failed automatic save; the result remains available in memory.
+Results have three tabs: **Preciznost**, **Probni izbor** and **Postavke i uređaj**. A precision result is created as soon as its five targets finish; the optional button trial is not required. Repeating a trial keeps separate dated attempts under the same precision result. **Prekini i prikaži rezultat** keeps completed parts, marks the attempt **Prekinuto** and leaves unfinished targets **Nije izmjereno**. Missing gaze data is shown as **Premalo podataka**, without claiming a measured miss. Closing, repeating, resizing, minimizing or disconnecting also retains completed parts with the reason for interruption.
+
+If **Uključi zapisivanje** was enabled when the check opened, completed and interrupted reports are automatically saved in the background. Otherwise, new results remain in memory until the application closes. This choice is copied with the check's other settings. **Sačuvani rezultati** lists disk and current-session results by date, eye policy and state; selecting a result opens a read-only view of its measurements and the settings used. Viewing an older result never applies its settings. A failed disk read or unsupported report is shown explicitly. **Pokušaj ponovo** retries a failed automatic save; the result remains available in memory.
 
 **Izvezi ZIP** is available independently of logging and opens Windows Save As. The ZIP contains `rezultat.json` for analysis and `izvjestaj.txt`, a readable Bosnian report of the same measurements, settings and available environment information. Unknown device/build values stay unavailable. It includes no raw gaze stream, typed messages, saved speech or credentials. Export status is separate from automatic-save status. Up to 100 automatic reports and 10 MiB are retained; after a successful save, the oldest supported reports are removed when needed. Manually exported ZIPs are never automatically removed. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns the file locations. The broader diagnostic-log bundle remains separate; see [Diagnostic log collection](#diagnostic-log-collection).
+
+### Calibration handoff
 
 **Otvori Tobii postavke** opens the installed Tobii settings and minimizes the check. In Tobii Core, select the user's profile, then **Test and recalibrate > Recalibrate** if needed. This action does not use `TOBII_CALIBRATION_COMMAND` or Ctrl+Shift+F10. Tobii documents that shortcut as [Guest calibration](https://help.tobii.com/hc/en-us/articles/209530409-Create-a-new-user-profile), which uses a temporary profile and does not recalibrate the saved one. The existing installation **Pokreni kalibraciju** and Settings **Pokreni Tobii kalibraciju** actions retain that Guest flow.
 
@@ -192,6 +196,8 @@ Gaze settings uses these values:
 
 **Postavke pogleda** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Pointer actions use three equal columns with 58-pixel controls. Existing saved timing values remain unchanged when installing a version with new defaults.
 
+The edge duration applies when gaze moves just beyond a button. The short eye-tracking interruption applies when one eye loses valid tracking in **Oba oka uz kratke prekide**. They are separate settings; neither fills progress or permits activation while paused. Neither corrects calibration or establishes which setting is best for a person.
+
 ### Selection stability near edges
 
 Use **Postavke > Postavke pogleda > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's local button trial copies this setting when opened.
@@ -213,6 +219,8 @@ Choose **Režim praćenja očiju** in **Postavke > Postavke pogleda > Odabir pog
 **Trajanje kratkog prekida** remains visible and retains its saved value in every mode; it is adjustable only in the second mode. During the hold, the filled arc stays still with a pause mark. It cannot fill or activate. The first returning sample adds no progress. Expiry, losing both eyes, changing the sole tracked eye without fresh both-eye gaze between them, changing the target or its content/geometry, losing the connection, or changing the mode or duration discards pending progress. Completed controls still require looking away before selecting them again. Turning off the progress display hides the arc and its pause mark.
 
 The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and button trial use the selected policy and display its name; eye indicators and both-eye availability remain actual measurements. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
+
+### Speech settings
 
 Speech settings controls eSpeak speed (155 words per minute by default, 80 to 320), letters per group (5 by default, 1 to 12), and the voice preset. `Pismo tastature` accepts `Latinica` (the default for existing installations) or `Arapski`. The voice choices appear directly below it. Speed and letters-per-group rows align their `Manje`, value, and `Više` controls in the same columns. The selected voice button stays selected when pressed again. Arabic replaces the Bosnian choices with Hamed while retaining the Bosnian preference. The speed control appears only for Standardni and applies to eSpeak. `Naučene riječi` opens the personal vocabulary. Select one word and then `Zaboravi riječ` to remove its personal ranking contribution without changing messages, phrases, answers, or the bundled dictionary. If learning cannot be read or saved, the page preserves the last file, reports the problem, and offers `Pokušaj ponovo` while normal typing and speech remain usable. Other settings are saved immediately to `data\app_settings.json`.
 
@@ -261,9 +269,29 @@ Runtime diagnostics are written to `logs\latest.txt` when logging is enabled. Th
 
 ### Diagnostic log collection
 
-Open **Postavke > Opće postavke > Dijagnostičko snimanje**, or use the same shortcut in **Provjera pogleda** when no precision/button measurement is active. A caregiver operates this screen by mouse or keyboard. Normal gaze input is paused while this screen is open. Choose **1, 2, 5 or 10 min** (default 2), then **Pokreni snimanje**. Return to the application, reproduce the problem and note the approximate time and intended control. Closing this window keeps recording active. A steady **Snimanje dijagnostike · MM:SS** indicator shows the remaining time in Speech's Controls column and letter/delete/exit/alarm dialogs, Settings, Keyboard, Controller, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
+Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets and button trials. Use a diagnostic recording to investigate what happened during application use. The two exports are separate; a support ZIP includes a gaze-check result only when you explicitly choose one.
 
-Recording ends at the selected duration or 32 MiB. Reopen the same screen and choose **Zaustavi snimanje** to finish earlier. **Završavam snimak…** waits for the file worker; another recording cannot start until completion is acknowledged. Confirmed successful saving shows **Snimak je sačuvan** for five seconds across the open windows. **Snimak nije potpun** or **Greška čuvanja snimka** stays visible until a new recording starts. Explicit recording works even with **Uključi zapisivanje** off and never changes that setting. It also works after a long ordinary log session reaches its size cap. Returning from the gaze-check shortcut preserves its displayed result and keeps normal input paused until the check closes; no measurement continues hidden behind diagnostics.
+#### Record a problem
+
+1. Open **Postavke > Opće postavke > Dijagnostičko snimanje**, or use the same shortcut in **Provjera pogleda** when no precision/button measurement is active. A caregiver operates this screen by mouse or keyboard; normal gaze input is paused while it is open.
+2. Choose **1, 2, 5 or 10 min** (default 2), then **Pokreni snimanje**. Explicit recording works even with **Uključi zapisivanje** off and never changes that setting. It also works after an ordinary log session reaches its size cap.
+3. Return to the application, reproduce the problem and note the approximate time and intended control. Closing the recording window keeps recording active. Returning to a gaze check preserves its result and keeps normal input paused until the check closes; no measurement continues hidden behind diagnostics.
+4. Wait for the duration or 32 MiB limit, or reopen the screen and choose **Zaustavi snimanje**. Wait for saving to finish before exporting or starting another recording.
+
+#### Understand the indicator
+
+A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Speech's Controls column and letter/delete/exit/alarm dialogs, Settings, Keyboard, Controller, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
+
+| Message | Meaning |
+| --- | --- |
+| **Završavam snimak…** | The writer is finishing; another recording cannot start until it acknowledges completion. |
+| **Snimak je sačuvan** | Confirmed successful saving; shown for five seconds across open windows. |
+| **Snimak nije potpun** | A recording was retained with an interruption or missing data; review its details. |
+| **Greška čuvanja snimka** | Saving failed; review the recording's available data and error state. |
+
+Incomplete/error messages stay visible until a new recording starts. Opening another window does not restart the shared confirmation timer. A recording is technical gaze/event data, not microphone or screen capture.
+
+#### Review and export
 
 **Sačuvani snimci** lists recordings available after restart. Review the reason, final-record presence, omitted-event count, write errors and truncated-data count. Time expiry or a manual stop can be complete; a size cap, shutdown, write error, missing final record or reported loss is incomplete. A force-killed application can leave a useful partial stream. An unreadable recording cannot be exported. Failed reading offers **Osvježi listu**. The newest five recordings, up to 200 MiB, are kept after a successful new save; manually exported ZIPs are preserved. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns file locations and retention details.
 
@@ -271,7 +299,9 @@ Choose **Izvezi ZIP** and a destination in Windows Save As. The package includes
 
 The package includes detailed gaze coordinates and control geometry, selected gaze settings, display/backend/device information and build identity. A full revision with **Lokalne izmjene izvora: Da** describes a modified build; unknown values remain unavailable. It excludes complete settings/log folders, API keys, composed or spoken messages, library contents, audio, screenshots and device serial numbers. Coordinates and geometry may reveal activity; review the package before sharing it through your agreed support channel.
 
-Normal logging collects summaries and selection interruption reasons. For a short, more detailed reproduction, a caregiver can launch from PowerShell with:
+#### Ordinary logs and launch-time trace
+
+Normal logging collects summaries and selection interruption reasons. The explicit recording controls above are the normal way to capture a short problem. The older launch-time trace remains available from PowerShell:
 
 ```powershell
 $env:POGLED_ASSIST_GAZE_DIAGNOSTICS = 'trace'

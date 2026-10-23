@@ -11,6 +11,8 @@ This guide owns setup, commands, automated verification, and test strategy. Read
 | Bosnian model preparation, evaluation, or benchmarks | [Bosnian language guide](../language/bs/README.md#preparation-and-evaluation) |
 | A failing local check | [Development troubleshooting](DEVELOPMENT_TROUBLESHOOTING.md) |
 
+For a fresh checkout, start with [setup](#first-setup). For an existing branch, use [verification modes](#verification-modes) to choose a command, the [test boundary map](#test-strategy) to find reusable inputs, and [diagnostic analysis](#diagnostic-log-analysis) to interpret a captured problem. Implemented behavior and ownership live in [architecture](ARCHITECTURE.md), rather than in test-run summaries.
+
 ## First setup
 
 Run PowerShell from the repository root:
@@ -23,6 +25,8 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 Setup creates `.venv`, installs the application, test and packaging dependencies, and downloads actionlint 1.7.12 and PSScriptAnalyzer 1.25.0 into the ignored `.dev-tools` directory. It does not install Tobii software or change the system-wide Python environment. The `.venv` always uses Python 3.10. If `.venv` points to a removed or unsupported interpreter, setup moves it to `.dev-tools\venv-backups` before creating a fresh one. To use a specific installed interpreter, pass `-BasePython C:\Path\To\python.exe` to setup. Interpreter probes start executables directly without the Windows shell, so a broken interpreter returns an error without an interactive security warning.
 
 Setup, PR CI and release verification share `scripts/checks/install_powershell_analyzer.ps1`. It downloads the pinned package from the official `PowerShell/PSScriptAnalyzer` GitHub release and checks its fixed SHA-256 before extraction. Before publishing a download or reusing the cache under `.dev-tools`, it checks the manifest version, expected root-module name and presence of both files. The explicit root-file check is required because Windows PowerShell 5.1 can accept a manifest whose root module is missing. An incomplete cache is replaced only after the new package passes validation. Downloads have a 30-second request timeout and at most three attempts; download, checksum or module failures stop setup rather than skipping the analyzer. This works in Windows PowerShell 5.1 without PSGallery registration or a package-manager bootstrap.
+
+Cache validation checks that module structure; it does not rehash every extracted file. The PowerShell source check then imports the analyzer and requires its command to be available. See [tool setup recovery](DEVELOPMENT_TROUBLESHOOTING.md#powershell-analyzer-setup-fails) for a failed download or cache.
 
 `tobii-research==2.1.0` has a Windows wheel for Python 3.10, so the same interpreter is used for development, Tobii Pro discovery, automated checks, and Windows packaging.
 
@@ -59,6 +63,20 @@ The supporting scripts are grouped by purpose: `scripts/checks/` validates sourc
 Model preparation, provenance, benchmarks, and evaluation commands are maintained in the [Bosnian language guide](../language/bs/README.md#preparation-and-evaluation). Run those commands from the repository root with the same Python 3.10 `.venv` created by `dev.ps1 setup`. Documented model and diagnostic commands may invoke that interpreter directly; standard lint, test, and package verification uses `dev.ps1`. Do not substitute system Python, a temporary environment, or ad hoc tool installation.
 
 ## Verification before a pull request
+
+### Verification modes
+
+| Mode | Execution | Evidence and limits |
+| --- | --- | --- |
+| `check-fast` | Python quality checks and affected PowerShell/Actions checks, then changed-path test selection | Iteration feedback; no coverage or package. A large branch or unknown/shared path can select the full suite. |
+| `check` | Lint, the full suite with coverage, then packaging, sequentially | Complete local verification; useful for diagnosing contention. Coverage defaults to one test process. |
+| `check -Parallel` | Lint, overlapping test groups and packaging, then deferred installer tests and combined coverage | The same complete local verification. Each test group defaults to one process. |
+| PR CI | Independent `code-quality`, `tests` and `windows-package` jobs, plus PR-only dependency review | The `tests` job uses two xdist workers grouped by file. CI does not invoke local `check -Parallel`. |
+| Release verification | Quality checks, the suite and packaging before publication | Tests run sequentially in the release job; no physical Tobii or audible playback validation. |
+
+`-Parallel` overlaps local check stages; `-Workers` controls pytest processes within a test invocation. They are independent. Passing either complete local mode does not prove hardware behavior or substitute for the required PR checks and review. Some tests are [conditional](#conditional-tests), including in complete runs.
+
+### Final verification and fast selection
 
 Run full verification in a Windows session with access to the checkout and temporary files, local HTTP test servers, child processes, process inspection, and Windows Installer for package asset extraction. Restricted agent sessions can block these operations even when Python starts and tests collect successfully. See [restricted verification sessions](DEVELOPMENT_TROUBLESHOOTING.md#restricted-windows-verification-sessions) before diagnosing unrelated failures as application regressions.
 
@@ -130,7 +148,13 @@ Use these existing fakes and regression tests when changing a runtime boundary:
 | --- | --- |
 | Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
+| Eye policy, interruption deadlines and the independent desktop gate | `tests/gaze/test_eye_tracking_policy.py` and `tests/ui/test_eye_tracking_policy_e2e.py` |
+| Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
+| Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
+| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` and `tests/ui/test_diagnostics_e2e.py` |
+| Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
+| Parallel checks, coverage merging and pinned tool installation | `tests/tooling/test_dev_environment.py` and `tests/tooling/test_dev_coverage.py` |
 | Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |
 | Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
@@ -150,6 +174,28 @@ The native API fakes check arguments, callback filtering, failure cleanup, and r
 
 Pixel baselines are intentionally not enforced in CI. Qt rendering changes with Windows fonts, scaling, and GPU backends, which would make strict image diffs noisy. CI confirms that the representative screenshot set renders. Extended variants remain available for targeted review through the [gallery profiles](UI_DEVELOPMENT.md#rendered-ui-gallery); functional UI tests continue to exercise their behavior. A human reviews the generated gallery for clipping, overlap, spacing, contrast, and consistency.
 
+### Conditional tests
+
+A complete run discovers the suite, but a test can still require an unavailable capability or explicit opt-in. Record the actual skip reason; a skip is not a pass for that boundary.
+
+| Test | When it runs | What remains unproven |
+| --- | --- | --- |
+| `test_native_buffer_replacement_and_completion_keep_qt_responsive` in `tests/speech/test_audio_playback.py` | When Qt finds an audio output. A probe exits with code 77 and pytest skips it otherwise. | A passing muted, isolated native-decoder probe checks replacement/stop/completion and Qt responsiveness, not audible speech or MP3 quality. |
+| `test_gaze_logging_performance` in `tests/ui/test_gaze_performance.py` | Windows, explicit environment opt-in and `-Workers 1`. Ordinary CI does not enable it. | Software logging overhead under synthetic input, not physical Tobii latency or the overhead of manual recording. |
+
+To run the software benchmark on the reference Windows PC, close competing workloads and use:
+
+```powershell
+$env:POGLED_ASSIST_RUN_GAZE_BENCHMARK = '1'
+try {
+    .\dev.ps1 test -Workers 1 -TestPaths tests/ui/test_gaze_performance.py
+} finally {
+    Remove-Item Env:\POGLED_ASSIST_RUN_GAZE_BENCHMARK
+}
+```
+
+It compares logging off/basic/trace in three rotated repeats with 60 Hz synthetic input. Reports and synthetic logs go under a unique `dist/gaze-benchmark/<id>/` directory. Compare repeated runs on the same machine and Qt platform; do not turn those measurements into universal CI speed thresholds. Manual-recording overhead still needs the separate [target-machine comparison](UI_DEVELOPMENT.md#manual-tobii-checks).
+
 ## Mouse gaze simulation
 
 See [mouse gaze simulation](UI_DEVELOPMENT.md#mouse-gaze-simulation) for the interactive simulator, failure controls, and hardware limits.
@@ -168,7 +214,7 @@ See the [UI gallery guide](UI_GALLERY.md) for status reporting, Pages setup, per
 
 ## Diagnostic log analysis
 
-The [architecture](ARCHITECTURE.md#diagnostic-logging) owns schema, clocks, queue, privacy and session limits. The [user guide](USER_GUIDE.md#diagnostic-log-collection) owns collection and the short trace launch. For source launches, set the same `POGLED_ASSIST_GAZE_DIAGNOSTICS=trace` variable before `dev.ps1 run`.
+The [architecture](ARCHITECTURE.md#diagnostic-logging) owns schema, clocks, queue, privacy and session limits. The [user guide](USER_GUIDE.md#diagnostic-log-collection) owns explicit recording, ZIP export and the older launch-time trace. For source launches, set the same `POGLED_ASSIST_GAZE_DIAGNOSTICS=trace` variable before `dev.ps1 run`; that trace requires ordinary logging, unlike explicit recording.
 
 An offline reader imports neither Qt nor a Tobii backend:
 
@@ -177,6 +223,15 @@ An offline reader imports neither Qt nor a Tobii backend:
 ```
 
 It counts provider rejection reasons from summaries and selection-end reasons from events. It reports process-cumulative writer health separately from a manual recording's footer health and end reason; do not sum cumulative loss counts repeatedly. The [architecture contract](ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages) defines when a recording is complete. The same command accepts a recording's `snimak.jsonl`, including one extracted from a support ZIP. Basic event counts can be lower than actual transitions; check suppressed counters in the summaries. Missing start/end, malformed or partial last lines, dropped records and size limits constrain the conclusion. Read the requested time range's raw events when explaining a specific attempt. Compare event timestamps with video time; file rotation names are not session start timestamps. Do not infer tracking accuracy without a known intended target.
+
+For a reported selection failure:
+
+1. Establish the app version, `build_revision`, `build_dirty`, backend, policy, timing settings and simulation flag. Old logs cannot validate a newer implementation; a dirty revision does not identify an exact clean build. Missing metadata stays unknown.
+2. Check `complete`, `lifecycle_complete`, parse warnings, `session_end_reason` and the applicable health counters before interpreting event counts. A closing record proves neither loss-free data nor successful intended selection.
+3. Find the time range and intended target. Follow native eye receipt, provider rejection/delivery, applied application gate and selection events in order. Application eligibility is distinct from actual both-eye validity and from fresh gaze; an eligible-eye event alone cannot confirm a selection. Older events without explicit application eligibility retain the reader's both-eye interpretation.
+4. Separate observed evidence from explanations needing a new recording or target-machine check. A change of target may be intentional; it is not proof of jitter. Aggregate gaze-check reports provide measurements for their own dated attempts, not a replay of the recorded interaction. An optionally attached report may be from another time or policy.
+
+Support ZIP hashes describe the payload files listed in the manifest. Check them when transferring a package, and keep its recording identity separate from an optional report identity. Never attach whole local data folders or raw user logs to the repository as test fixtures; use synthetic inputs.
 
 For changes to diagnostics, test the same provider/controller/Qt input sequence with logging off, basic, trace and a blocked writer. Include the existing gaze check and tracking-feedback suites: their snapshots, coverage, interruption counts and UI state must agree. Test actual blocked file/console sinks, overflow, runtime rotation, missing streams, exceptions and bounded shutdown. Keep stdout IPC atomic and independent of droppable logging. Use the existing pytest fakes and repository verification commands; Mac-only checks are not Windows or Tobii hardware verification. Measure producer/Qt latency, CPU, memory and output size on the same reference Windows device before release. A background thread still shares Python scheduling and the GIL, so asynchronous output alone does not establish zero overhead.
 
