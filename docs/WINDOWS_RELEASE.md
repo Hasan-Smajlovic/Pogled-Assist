@@ -111,6 +111,8 @@ dist\PogledAssist-v<version>-windows-x64.zip
 
 The build downloads the pinned eSpeak MSI, Python x86 ZIP, and source archives into `.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without installing it globally, and freezes both Edge commands with a shared Python runtime. The first build needs internet; cached assets are rechecked on every build. A checksum mismatch fails the build before extraction.
 
+Each package also includes `BUILD_INFO.json`, generated from the source revision and local dirty state. The frozen smoke check validates that identity; recordings, normal logs and gaze-check reports use the same source. See the [build identity contract](ARCHITECTURE.md#build-identity). Verify the packaged revision/dirty state in a local support export before release. Logs and diagnostic recordings are preserved with the rest of `logs/` during installation and rollback.
+
 No physical tracker, Tobii runtime, system speech installation, or network speech service is used by the package smoke test. It verifies bundled speech tools, MP3 decoder availability, the bundled Bosnian model checksum, and an offline prediction. Decoder availability does not prove audible playback.
 
 ## Automated release
@@ -137,6 +139,8 @@ Rerunning the same commit is idempotent. A complete public release is left uncha
 See the [hotfix process](../CONTRIBUTING.md#hotfix-process) for backport drafts and workflow permissions.
 
 Report software-only and Tobii hardware checks separately.
+
+For eye policies, edge selection stability, gaze-check reports, diagnostic recording/indicators and support export, use the [manual Windows checks](UI_DEVELOPMENT.md#manual-windows-checks) and [manual Tobii checks](UI_DEVELOPMENT.md#manual-tobii-checks) in the UI development guide. Record the tested build, settings and outcome. A valid package or readable support ZIP alone does not demonstrate improved tracking on the user's device.
 
 Software-only checks on a clean Windows x64 environment:
 

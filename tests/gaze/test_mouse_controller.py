@@ -131,6 +131,7 @@ def test_simulation_can_disable_pointer_movement_without_blocking_gaze():
 
 def test_click_modes_call_native_input_and_reset():
     controller = make_controller()
+    controller.handle_eye_status(True, True)
     fired = []
     controller.action_fired.connect(lambda action, point: fired.append((action, QPoint(point))))
     target = GazeScreenPoint(QPoint(20, 30), QPoint(200, 300))
@@ -147,6 +148,7 @@ def test_click_modes_call_native_input_and_reset():
 
 def test_right_click_arms_direct_left_click_for_context_menu():
     controller = make_controller()
+    controller.handle_eye_status(True, True)
     statuses = []
     controller.status_changed.connect(statuses.append)
     target = GazeScreenPoint(QPoint(20, 30), QPoint(200, 300))
@@ -163,7 +165,9 @@ def test_right_click_arms_direct_left_click_for_context_menu():
 def test_target_dwell_opens_zoom_before_click():
     controller = make_controller()
     controller.update_settings(
-        GazeSettings(dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True)
+        GazeSettings(
+            selection_pause_ms=500, dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True
+        )
     )
     controller.set_mode(LEFT_CLICK)
     target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
@@ -258,7 +262,9 @@ def test_cancel_toolbar_interaction_clears_dwell_and_gaze_feedback():
 def test_mouse_action_cancels_pending_desktop_dwell_until_gaze_moves_away():
     controller = make_controller()
     controller.update_settings(
-        GazeSettings(dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True)
+        GazeSettings(
+            selection_pause_ms=500, dwell_ms=200, click_cooldown_ms=100, use_precision_zoom=True
+        )
     )
     controller.set_mode(LEFT_CLICK)
     target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))

@@ -34,6 +34,7 @@ from pogled_assist.ui.speech_window import _group_letters
 
 
 def test_alarm_sound_repeats_until_stopped(monkeypatch):
+    assert ALARM_SOUND_FILE.is_file()
     calls = []
     winsound = SimpleNamespace(
         SND_FILENAME=0x20000,
@@ -56,10 +57,6 @@ def test_alarm_sound_repeats_until_stopped(monkeypatch):
     assert calls == [(None, 0)]
     assert alarm.is_playing is False
     assert alarm.last_error is None
-
-
-def test_alarm_uses_a_bundled_emergency_sound():
-    assert ALARM_SOUND_FILE.is_file()
 
 
 def test_alarm_sound_reports_playback_failure(qtbot):

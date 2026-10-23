@@ -81,6 +81,120 @@ def test_report_uses_summaries_and_marks_suppressed_evidence_incomplete(tmp_path
     assert analysis["latency"]["provider_receive_to_emit"]["p95_ms"] is None
 
 
+@pytest.mark.parametrize("gate_open", [False, True])
+def test_report_uses_recorded_application_eligibility(tmp_path, gate_open):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0),
+            record(
+                "eye_gate_applied",
+                1,
+                left_valid=False,
+                right_valid=True,
+                application_gate_open=gate_open,
+            ),
+            record("selection_end", 1.1, reason="target_departure"),
+            record("session_end", 2),
+        ],
+    )
+    assert result["analysis"]["recent_selection_ends"][0]["nearby_observations"] == (
+        [] if gate_open else ["eye_gate_closed"]
+    )
+
+
+@pytest.mark.parametrize(
+    "reason,health,complete",
+    [
+        ("manual", {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}, True),
+        ("time", {"dropped": {"event": 0}, "writer_errors": 0, "bounded_snapshots": 0}, True),
+        ("manual", {}, False),
+        ("size", {}, False),
+        ("shutdown", {}, False),
+        ("writer_error", {}, False),
+        ("unknown", {}, False),
+        (None, {}, False),
+        ("manual", {"dropped": {"event": 2}, "writer_errors": 0, "bounded_snapshots": 0}, False),
+        ("manual", {"dropped": {}, "writer_errors": 1, "bounded_snapshots": 0}, False),
+        ("manual", {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 1}, False),
+        ("manual", None, False),
+        ("manual", "invalid", False),
+    ],
+)
+def test_manual_report_requires_a_clean_recording_footer(tmp_path, reason, health, complete):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0, mode="manual_trace"),
+            record("session_end", 1, reason=reason, recording_health=health),
+        ],
+    )
+    assert result["lifecycle_complete"]
+    assert result["complete"] is complete
+    assert result["analysis"]["evidence_incomplete"] is (not complete)
+    assert result["session_end_reason"] == reason
+    assert result["recording_health"] == (health if isinstance(health, dict) else None)
+
+
+def test_manual_report_keeps_recording_health_separate_from_process_loss(tmp_path):
+    process_health = {"dropped": {"event": 20}, "writer_errors": 1, "bounded_snapshots": 4}
+    recording_health = {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}
+    start = record("session_start", 0, mode="manual_trace")
+    start["logging_health"] = process_health
+    result = read_report(
+        tmp_path,
+        [start, record("session_end", 1, reason="manual", recording_health=recording_health)],
+    )
+    assert result["complete"]
+    assert not result["analysis"]["evidence_incomplete"]
+    assert result["logging_health_process_cumulative"] == process_health
+    assert result["recording_health"] == recording_health
+
+
+@pytest.mark.parametrize(
+    "field,invalid",
+    [
+        ("dropped", -1),
+        ("dropped", 0.5),
+        ("dropped", True),
+        ("dropped", "2"),
+        ("dropped", None),
+        ("writer_errors", -1),
+        ("bounded_snapshots", -1),
+    ],
+)
+def test_manual_report_rejects_invalid_health_counters(tmp_path, field, invalid):
+    health = {"dropped": {}, "writer_errors": 0, "bounded_snapshots": 0}
+    health[field] = {"event": invalid} if field == "dropped" else invalid
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0, mode="manual_trace"),
+            record("session_end", 1, reason="manual", recording_health=health),
+        ],
+    )
+    assert not result["complete"]
+    assert result["analysis"]["evidence_incomplete"]
+
+
+@pytest.mark.parametrize("dropped", [None, "lost records", [], 0])
+def test_manual_report_rejects_invalid_loss_mapping(tmp_path, dropped):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0, mode="manual_trace"),
+            record(
+                "session_end",
+                1,
+                reason="manual",
+                recording_health={"dropped": dropped, "writer_errors": 0, "bounded_snapshots": 0},
+            ),
+        ],
+    )
+    assert not result["complete"]
+    assert result["analysis"]["evidence_incomplete"]
+
+
 def test_report_does_not_mix_sessions_or_process_clocks(tmp_path):
     other_session = record("selection_end", 2, reason="completed")
     other_session["session_id"] = "session-b"

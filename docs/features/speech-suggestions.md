@@ -68,7 +68,7 @@ The `d` and `dj` alternatives also work inside a prefix. They do not make `DŽ` 
 
 Mouse and gaze selection call the same text-editing behaviour. After a suggestion activates, continuing to look at its button cannot activate the replacement label. The person must look outside the button and return. A label change does not count as looking away. Changing text during a pending dwell cancels that selection.
 
-The existing [gaze compatibility contract](../ARCHITECTURE.md#compatibility-contract) also applies: both eyes must remain valid before gaze actions continue, and losing either eye cancels dwell state. The shared selection timing lives in [`gaze_selection.py`](../../pogled_assist/interaction/gaze_selection.py).
+Suggestion buttons follow the selected [application eye-tracking policy](../ARCHITECTURE.md#eye-tracking-policy) and Speech's [edge selection hold](../ARCHITECTURE.md#edge-selection-hold). Neither kind of hold advances progress or activates a suggestion. Missing fresh valid gaze cannot select a word; resuming tracking never makes a changed suggestion eligible without leaving its button. The shared pause, dwell and repeat-blocking state lives in [`gaze_selection.py`](../../pogled_assist/interaction/gaze_selection.py).
 
 ## Personal learning and privacy
 
@@ -120,7 +120,7 @@ Full acceptance also requires the following checks on the reference Windows lapt
 
 - At least 95% of applicable suggestion updates appear within 100 ms after loading. Record initial load time, memory use, and prepared data size separately. The prediction worker must not stall the UI.
 - The frozen Windows package loads and queries both bundled models offline on first launch. Installation, update, and rollback preserve `data/speech_learning.json` and a working previous version after failure.
-- Mouse and real Tobii selection produce the same text, including spacing and Bosnian letters. Both-eye gating, dwell cancellation, reactivation after a changing label, AppBar, calibration, and speech work on the target setup.
+- Mouse and real Tobii selection produce the same text, including spacing and Bosnian letters. The selected application eye policy, the independent desktop both-eye gate, dwell cancellation, reactivation after a changing label, AppBar, calibration, and speech work on the target setup.
 - A real user can find and select useful words while composing messages with gaze; simulated button counts do not establish that experience.
 - The actual display resolution and scaling are reviewed against the [design reference](../design/speech-keyboard-reference.html).
 

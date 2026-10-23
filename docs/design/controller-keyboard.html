@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="assets/reference.css">
   <link rel="stylesheet" href="assets/keyboard.css">
   <script src="assets/reference.js" defer></script>
+  <script src="assets/diagnostic-preview.js" defer></script>
   <script src="assets/keyboard-data.js" defer></script>
   <script src="assets/keyboard.js" defer></script>
 </head>
@@ -15,6 +16,7 @@
   <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <main id="controller-screen">
     <section class="sidebar-reference" aria-label="Tastatura u upravljaču">
+      <div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div>
       <nav><button type="button">Opće</button><button type="button">Tastatura</button><button type="button">Govor</button><button type="button">Postavke</button></nav>
       <button type="button" data-script-toggle>Arapski</button>
       <nav><button type="button" data-side-tab="letters">Slova</button><button type="button" data-side-tab="numbers">Brojevi</button><button type="button" data-side-tab="symbols">Znakovi</button></nav>

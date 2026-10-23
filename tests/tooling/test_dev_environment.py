@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
+from _powershell import run_dev_driver as _run_dev_driver
 from _powershell import run_powershell_cases
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="dev.ps1 uses Windows PowerShell")
@@ -21,6 +25,14 @@ FAST_CASES = [
     (4, False, 1, 1),
     (1, True, 1, 1),
 ]
+WORKER_CASES = [
+    (1, False, "0", "--ignore=tests/tooling --cov-fail-under=0"),
+    (2, False, "2", None),
+    (2, True, "2", "--ignore=tests/tooling --cov-fail-under=0"),
+    (0, False, "2", "--ignore=tests/tooling --cov-fail-under=0"),
+    (0, True, "0", None),
+]
+ANALYZER_FAILURES = ("checksum", "module", "version", "manifest", "network")
 
 DEV_SCRIPT = Path(__file__).resolve().parents[2] / "dev.ps1"
 PACKAGE_SCRIPT = DEV_SCRIPT.parent / "scripts" / "release" / "build_windows_package.ps1"
@@ -91,13 +103,7 @@ def test_base_python_probe_resolves_the_interpreter_behind_a_venv(python_probe_r
     assert Path(result.stdout.strip()).resolve() == Path(sys._base_executable).resolve()
 
 
-@pytest.mark.parametrize(
-    ("current_version", "same_base", "should_recreate"),
-    [("3.10", True, False), ("3.10", False, True), ("3.12", True, True)],
-)
-def test_setup_uses_the_requested_base_interpreter(
-    tmp_path: Path, current_version: str, same_base: bool, should_recreate: bool
-) -> None:
+def _prepare_setup_environment(tmp_path):
     shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
     python_path = tmp_path / ".venv" / "Scripts" / "python.exe"
     python_path.parent.mkdir(parents=True)
@@ -108,11 +114,29 @@ def test_setup_uses_the_requested_base_interpreter(
         tmp_path / ".dev-tools" / "PSScriptAnalyzer" / "1.25.0" / "PSScriptAnalyzer.psd1"
     )
     analyzer_path.parent.mkdir(parents=True)
-    analyzer_path.write_text("test", encoding="utf-8")
+    analyzer_path.write_text(
+        "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }", encoding="utf-8"
+    )
+    analyzer_path.with_suffix(".psm1").write_text("", encoding="utf-8")
     check_script = tmp_path / "scripts" / "checks" / "check_github_actions.ps1"
     check_script.parent.mkdir(parents=True)
     check_script.write_text("", encoding="utf-8")
+    shutil.copy2(
+        DEV_SCRIPT.parent / "scripts" / "checks" / "install_powershell_analyzer.ps1",
+        check_script.parent,
+    )
     driver = tmp_path / "run-setup.ps1"
+    return python_path, driver
+
+
+@pytest.mark.parametrize(
+    ("current_version", "same_base", "should_recreate"),
+    [("3.10", True, False), ("3.10", False, True), ("3.12", True, True)],
+)
+def test_setup_uses_the_requested_base_interpreter(
+    tmp_path: Path, current_version: str, same_base: bool, should_recreate: bool
+) -> None:
+    python_path, driver = _prepare_setup_environment(tmp_path)
     driver.write_text(
         """
 . (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null
@@ -169,6 +193,118 @@ Install-DevEnvironment
         assert python_path.read_bytes() == b"old environment"
         assert backups == []
     assert "-m pip install" in commands
+
+
+def _prepare_analyzer_installer(tmp_path, failure=None):
+    script = tmp_path / "scripts" / "checks" / "install_powershell_analyzer.ps1"
+    script.parent.mkdir(parents=True)
+    package = tmp_path / "package.zip"
+    manifest = "@{ ModuleVersion = '1.25.0'; RootModule = 'PSScriptAnalyzer.psm1' }"
+    if failure == "version":
+        manifest = manifest.replace("1.25.0", "1.24.0")
+    elif failure == "manifest":
+        manifest = "@{ ModuleVersion = '1.25.0' }"
+    with ZipFile(package, "w") as archive:
+        archive.writestr("PSScriptAnalyzer.psd1", manifest)
+        if failure != "module":
+            archive.writestr(
+                "PSScriptAnalyzer.psm1", "function Invoke-ScriptAnalyzer { 'synthetic analyzer' }"
+            )
+    checksum = hashlib.sha256(package.read_bytes()).hexdigest()
+    if failure == "checksum":
+        checksum = "0" * 64
+    source = (DEV_SCRIPT.parent / "scripts" / "checks" / script.name).read_text(encoding="utf-8")
+    source, replacements = re.subn(
+        r'(?m)^\$expectedHash = "[0-9a-f]{64}"$', f'$expectedHash = "{checksum}"', source
+    )
+    assert replacements == 1
+    script.write_text(source, encoding="utf-8")
+
+
+ANALYZER_DOWNLOAD_FAKE = r"""
+$state = @{ Calls = 0; Failures = 0 }
+function Invoke-WebRequest {
+    param($Uri, $OutFile, [switch]$UseBasicParsing, $TimeoutSec)
+    if ($Uri -ne "https://github.com/PowerShell/PSScriptAnalyzer/releases/download/1.25.0/PSScriptAnalyzer.1.25.0.nupkg" -or
+        -not $UseBasicParsing -or $TimeoutSec -ne 30) { throw "Unexpected download source or deadline" }
+    $state.Calls++
+    if ($state.Calls -le $state.Failures) { throw "Synthetic network failure" }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "package.zip") -Destination $OutFile -Force
+}
+function Start-Sleep { param($Seconds) }
+function Get-PSRepository { throw "Legacy PSGallery must not be used" }
+function Save-Module { throw "Legacy PSGallery must not be used" }
+"""
+
+
+def test_analyzer_installs_without_gallery_retries_and_repairs_incomplete_cache(tmp_path):
+    _prepare_analyzer_installer(tmp_path)
+    result = run_powershell_cases(
+        tmp_path,
+        {
+            "install": {
+                "body": r"""
+$state.Failures = 1
+$installer = Join-Path $PSScriptRoot "scripts\checks\install_powershell_analyzer.ps1"
+$module = Join-Path $PSScriptRoot ".dev-tools\PSScriptAnalyzer\1.25.0\PSScriptAnalyzer.psd1"
+& $installer
+if ($state.Calls -ne 2) { throw "Transient download was not retried" }
+& $installer
+if ($state.Calls -ne 2) { throw "Valid cached analyzer was downloaded again" }
+Remove-Item -LiteralPath ([IO.Path]::ChangeExtension($module, ".psm1"))
+& $installer
+if ($state.Calls -ne 3) { throw "Incomplete cache was accepted" }
+Import-Module $module -Force
+Invoke-ScriptAnalyzer
+"""
+            }
+        },
+        prelude=ANALYZER_DOWNLOAD_FAKE,
+    )["install"]
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.endswith("synthetic analyzer")
+    assert not list((tmp_path / ".dev-tools/PSScriptAnalyzer").glob(".download-*"))
+
+
+@pytest.fixture(scope="module")
+def analyzer_failure_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("analyzer-failures")
+    cases = {}
+    for failure in ANALYZER_FAILURES:
+        directory = root / failure
+        directory.mkdir()
+        _prepare_analyzer_installer(directory, failure)
+        previous = directory / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
+        previous.parent.mkdir(parents=True)
+        previous.write_bytes(b"previous files")
+        cases[failure] = {
+            "body": ANALYZER_DOWNLOAD_FAKE.replace("$PSScriptRoot", "(Get-Location)")
+            + ("$state.Failures = 3\n" if failure == "network" else "")
+            + r'& (Join-Path (Get-Location) "scripts\checks\install_powershell_analyzer.ps1")'
+        }
+    return root, run_powershell_cases(root, cases)
+
+
+@pytest.mark.parametrize("failure", ANALYZER_FAILURES)
+def test_failed_analyzer_download_keeps_existing_files_and_cleans_staging(
+    analyzer_failure_results, failure
+):
+    root, results = analyzer_failure_results
+    previous = root / failure / ".dev-tools/PSScriptAnalyzer/1.25.0/keep.txt"
+    result = results[failure]
+
+    assert result.returncode != 0
+    assert {
+        "checksum": "archive checksum does not match",
+        "module": "archive does not contain a valid module",
+        "version": "archive does not contain a valid module",
+        "manifest": "archive does not contain a valid module",
+        "network": "after 3 attempts",
+    }[failure] in result.stderr
+    assert previous.read_bytes() == b"previous files"
+    assert list(previous.parent.iterdir()) == [previous]
+    assert not list(previous.parent.parent.glob(".download-*"))
 
 
 @pytest.mark.skipif(
@@ -234,23 +370,6 @@ def test_package_rejects_newer_python_before_using_output_directory(tmp_path: Pa
     assert sentinel.read_bytes() == b"existing output"
 
 
-def _run_dev_driver(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
-    shutil.copy2(DEV_SCRIPT, tmp_path / "dev.ps1")
-    driver = tmp_path / "driver.ps1"
-    driver.write_text(
-        '. (Join-Path $PSScriptRoot "dev.ps1") help | Out-Null\n' + body,
-        encoding="utf-8",
-    )
-    return subprocess.run(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(driver)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=20,
-    )
-
-
 @pytest.mark.parametrize(
     "case,expected", [("probe0", "quoted value"), ("probe1", "ok"), ("probe2", "<missing>")]
 )
@@ -261,22 +380,7 @@ def test_python_probe_handles_output_and_exit_status(python_probe_results, case,
     assert result.stderr == ""
 
 
-@pytest.mark.parametrize(
-    ("workers", "coverage", "expected", "pytest_options"),
-    [
-        (1, False, "0", "--ignore=tests/tooling --cov-fail-under=0"),
-        (2, False, "2", None),
-        (2, True, "2", "--ignore=tests/tooling --cov-fail-under=0"),
-        (0, False, "2", "--ignore=tests/tooling --cov-fail-under=0"),
-        (0, True, "0", None),
-    ],
-)
-def test_test_command_uses_process_workers_and_restores_environment(
-    tmp_path, workers, coverage, expected, pytest_options
-):
-    result = _run_dev_driver(
-        tmp_path,
-        """
+TEST_COMMAND_TEMPLATE = """
 function Get-DevPython { return "python-from-venv.exe" }
 function Invoke-ExternalCommand {
     param([string]$FilePath, [string[]]$ArgumentList)
@@ -284,20 +388,25 @@ function Invoke-ExternalCommand {
         executable = $FilePath; arguments = $ArgumentList
         qt = $env:QT_QPA_PLATFORM; pytest_options = $env:PYTEST_ADDOPTS
     } |
-        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot "command.json")
+        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path (Get-Location) "command.json")
 }
 $env:QT_QPA_PLATFORM = "original-platform"
 $env:PYTEST_ADDOPTS = PYTEST_OPTIONS
-Invoke-TestSuite -WorkerCount WORKERS -WithCoverage:$COVERAGE
+Invoke-TestSuite -WorkerCount WORKERS -Coverage "$COVERAGE"
 if ($env:QT_QPA_PLATFORM -ne "original-platform") { throw "Qt environment leaked" }
 if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" }
-""".replace("WORKERS", str(workers))
-        .replace("$COVERAGE", "$true" if coverage else "$false")
-        .replace("PYTEST_OPTIONS", f'"{pytest_options}"' if pytest_options else "$null"),
-    )
+"""
 
+
+@pytest.mark.parametrize("workers,coverage,expected,pytest_options", WORKER_CASES)
+def test_test_command_uses_process_workers_and_restores_environment(
+    test_suite_results, workers, coverage, expected, pytest_options
+):
+    root, results = test_suite_results
+    case = f"workers-{workers}-{coverage}"
+    result = results[case]
     assert result.returncode == 0, result.stdout + result.stderr
-    command = json.loads((tmp_path / "command.json").read_text(encoding="utf-8-sig"))
+    command = json.loads((root / case / "command.json").read_text(encoding="utf-8-sig"))
     assert command["executable"] == "python-from-venv.exe"
     assert command["qt"] == "offscreen"
     assert command["pytest_options"] == (None if coverage else pytest_options)
@@ -305,23 +414,94 @@ if ($env:PYTEST_ADDOPTS -ne PYTEST_OPTIONS) { throw "Pytest environment leaked" 
     assert args[args.index("-n") + 1] == expected
     assert ("--dist=loadfile" in args) == (expected == "2")
     assert ("--cov=pogled_assist" in args) == coverage
+    assert ("--durations=30" in args) == coverage
 
 
-@pytest.mark.parametrize("coverage", [False, True])
-def test_test_failure_restores_environment_and_reports_failed_stage(tmp_path, coverage):
-    result = _run_dev_driver(
-        tmp_path,
-        """
+@pytest.fixture(scope="module")
+def coverage_group_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("coverage-groups")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    return run_powershell_cases(
+        root,
+        {
+            group: {
+                "body": f'$CoverageGroup = "{group}"\n'
+                + """
+function Invoke-TestSuite {
+    param([string]$Coverage, [string[]]$Paths = @(), [string[]]$IgnorePaths = @())
+    [pscustomobject]@{ coverage = $Coverage; paths = @($Paths); ignore = @($IgnorePaths) } |
+        ConvertTo-Json -Compress
+}
+Invoke-CoverageGroup
+"""
+            }
+            for group in ("All", "Application", "Infrastructure")
+        },
+        prelude=DEV_PRELUDE,
+    )
+
+
+@pytest.mark.parametrize(
+    "group,mode,paths,ignored",
+    [
+        ("All", "Full", [], []),
+        ("Application", "Collect", [], ["tests/release", "tests/tooling"]),
+        (
+            "Infrastructure",
+            "Collect",
+            ["tests/release", "tests/tooling"],
+            ["tests/release/test_windows_installer.py"],
+        ),
+    ],
+)
+def test_coverage_groups_partition_the_suite(coverage_group_results, group, mode, paths, ignored):
+    result = coverage_group_results[group]
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {"coverage": mode, "paths": paths, "ignore": ignored}
+
+
+APPEND_COVERAGE_TEMPLATE = """
+function Get-DevPython { return "python-from-venv.exe" }
+function Invoke-ExternalCommand {
+    param([string]$FilePath, [string[]]$ArgumentList)
+    $ArgumentList | ConvertTo-Json -Compress |
+        Set-Content -LiteralPath (Join-Path (Get-Location) "arguments.json")
+}
+Invoke-TestSuite `
+    -Coverage MODE `
+    -IgnorePaths @("tests/release/test_windows_installer.py") `
+    -Paths @("tests/release/test_windows_installer.py") `
+    -WorkerCount 1
+"""
+
+
+@pytest.mark.parametrize("defer_report", [False, True])
+def test_coverage_can_append_a_deferred_test_file(test_suite_results, defer_report):
+    root, results = test_suite_results
+    case = f"append-{defer_report}"
+    result = results[case]
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = json.loads((root / case / "arguments.json").read_text(encoding="utf-8-sig"))
+    assert ("--cov-append" in arguments) != defer_report
+    assert "--ignore=tests/release/test_windows_installer.py" in arguments
+    assert arguments[-1] == "tests/release/test_windows_installer.py"
+    assert ("--cov-report=" in arguments) == defer_report
+    assert ("--cov-fail-under=0" in arguments) == defer_report
+    assert any(arg.startswith("--cov-report=html:") for arg in arguments) != defer_report
+    assert ("--cov-report=term-missing:skip-covered" in arguments) != defer_report
+
+
+TEST_FAILURE_TEMPLATE = """
 function Get-DevPython { return "python-from-venv.exe" }
 function Invoke-ExternalCommand {
     [PSCustomObject]@{ pytest_options = $env:PYTEST_ADDOPTS } |
-        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $PSScriptRoot "command.json")
+        ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path (Get-Location) "command.json")
     throw "test failed"
 }
 $env:QT_QPA_PLATFORM = "original-platform"
 $env:PYTEST_ADDOPTS = "--ignore=tests/tooling --cov-fail-under=0"
 try {
-    Invoke-CheckStage -Name "Regression tests" -Command { Invoke-TestSuite -WithCoverage:$COVERAGE }
+    Invoke-CheckStage -Name "Regression tests" -Command { Invoke-TestSuite -Coverage "$COVERAGE" }
 }
 catch {
     if ($env:QT_QPA_PLATFORM -ne "original-platform") { throw "Qt environment leaked" }
@@ -331,17 +511,43 @@ catch {
     if ($StageTimings[0].Status -ne "FAILED") { throw "Failure timing missing" }
     throw
 }
-""".replace("$COVERAGE", "$true" if coverage else "$false"),
-    )
+"""
 
+
+@pytest.mark.parametrize("coverage", [False, True])
+def test_test_failure_restores_environment_and_reports_failed_stage(test_suite_results, coverage):
+    root, results = test_suite_results
+    case = f"failure-{coverage}"
+    result = results[case]
     assert result.returncode != 0
     assert "Regression tests (FAILED," in result.stdout
     assert "test failed" in result.stderr
     assert "environment leaked" not in result.stderr
-    command = json.loads((tmp_path / "command.json").read_text(encoding="utf-8-sig"))
+    command = json.loads((root / case / "command.json").read_text(encoding="utf-8-sig"))
     assert command["pytest_options"] == (
         None if coverage else "--ignore=tests/tooling --cov-fail-under=0"
     )
+
+
+@pytest.fixture(scope="module")
+def test_suite_results(tmp_path_factory):
+    root = tmp_path_factory.mktemp("test-suite")
+    shutil.copy2(DEV_SCRIPT, root / "dev.ps1")
+    cases = {}
+    for workers, coverage, _expected, pytest_options in WORKER_CASES:
+        body = (
+            TEST_COMMAND_TEMPLATE.replace("WORKERS", str(workers))
+            .replace("$COVERAGE", "Full" if coverage else "None")
+            .replace("PYTEST_OPTIONS", f'"{pytest_options}"' if pytest_options else "$null")
+        )
+        cases[f"workers-{workers}-{coverage}"] = {"body": DEV_PRELUDE + body}
+    for defer_report in (False, True):
+        body = APPEND_COVERAGE_TEMPLATE.replace("MODE", "Collect" if defer_report else "Append")
+        cases[f"append-{defer_report}"] = {"body": DEV_PRELUDE + body}
+    for coverage in (False, True):
+        body = TEST_FAILURE_TEMPLATE.replace("$COVERAGE", "Full" if coverage else "None")
+        cases[f"failure-{coverage}"] = {"body": DEV_PRELUDE + body}
+    return root, run_powershell_cases(root, cases)
 
 
 @pytest.mark.parametrize("count,full_suite,workers,expected_workers", FAST_CASES)
@@ -364,6 +570,134 @@ def test_full_check_rejects_manual_partial_test_selection(tmp_path):
 
     assert result.returncode != 0
     assert "coverage and check always run the full suite" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "failed_action", ["none", "application", "infrastructure", "package", "installer", "report"]
+)
+def test_parallel_check_defers_installer_tests_until_package_finishes(tmp_path, failed_action):
+    if failed_action == "installer":
+        (tmp_path / "fail-installer-tests").write_text("fail", encoding="utf-8")
+    (tmp_path / "child.ps1").write_text(
+        """
+param([string]$Action, [int]$Workers, [string]$CoverageGroup = "All")
+if ($Workers -ne 2) { throw "Worker option was lost" }
+if (($Action -eq "coverage") -eq ($CoverageGroup -eq "All")) {
+    throw "Only coverage stages should select a test group"
+}
+$id = if ($Action -eq "coverage") { $CoverageGroup.ToLowerInvariant() } else { $Action }
+if ($Action -eq "coverage") {
+    if ([IO.Path]::GetFileName($env:COVERAGE_FILE) -ne "$id.coverage") {
+        throw "Coverage stages must use separate data files"
+    }
+    Set-Content -LiteralPath $env:COVERAGE_FILE -Value $id
+} elseif ($env:COVERAGE_FILE -ne "original-coverage") { throw "Coverage environment leaked" }
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$id.started") -Value "started"
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while (-not ((Test-Path (Join-Path $PSScriptRoot "application.started")) -and
+             (Test-Path (Join-Path $PSScriptRoot "infrastructure.started")) -and
+             (Test-Path (Join-Path $PSScriptRoot "package.started")))) {
+    if ([DateTime]::UtcNow -gt $deadline) { throw "Stages did not overlap" }
+    Start-Sleep -Milliseconds 20
+}
+[Console]::Out.WriteLine("$id output " + ('x' * 131072))
+[Console]::Error.WriteLine("$id diagnostic " + ('y' * 131072))
+$logRoot = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "dist") -Directory)[0].FullName
+foreach ($suffix in @("log", "stderr.log")) {
+    $reader = [IO.File]::Open((Join-Path $logRoot "$id.$suffix"), "Open", "Read", "ReadWrite")
+    $reader.Dispose()
+}
+Start-Sleep -Milliseconds 350
+Set-Content -LiteralPath (Join-Path $PSScriptRoot "$id.finished") -Value "finished"
+if ($id -eq 'FAILED_ACTION') { throw "Synthetic stage failure" }
+""".replace("FAILED_ACTION", failed_action),
+        encoding="utf-8",
+    )
+    result = _run_dev_driver(
+        tmp_path,
+        """
+$Workers = 2
+$env:COVERAGE_FILE = "original-coverage"
+function Invoke-TestSuite {
+    param([string]$Coverage, [string[]]$Paths)
+    if ($Coverage -ne "Collect") { throw "Installer coverage must defer the report" }
+    if ($Paths.Count -ne 1 -or $Paths[0] -ne "tests/release/test_windows_installer.py") {
+        throw "Unexpected deferred test selection"
+    }
+    foreach ($action in @("application", "infrastructure", "package")) {
+        if (-not (Test-Path (Join-Path $PSScriptRoot "$action.finished"))) {
+            throw "Installer tests ran before $action finished"
+        }
+    }
+    if ([IO.Path]::GetFileName($env:COVERAGE_FILE) -ne "installer.coverage") {
+        throw "Installer coverage must use a separate data file"
+    }
+    Set-Content -LiteralPath $env:COVERAGE_FILE -Value "installer"
+    Set-Content -LiteralPath (Join-Path $PSScriptRoot "installer-tests.finished") -Value "finished"
+    if (Test-Path (Join-Path $PSScriptRoot "fail-installer-tests")) {
+        throw "Synthetic installer test failure"
+    }
+}
+function Merge-CheckCoverage {
+    param([string[]]$Files)
+    if ($env:COVERAGE_FILE -ne "original-coverage") { throw "Coverage environment leaked" }
+    $contents = @($Files | ForEach-Object { (Get-Content -LiteralPath $_ -Raw).Trim() })
+    if (($contents -join ',') -ne "application,infrastructure,installer") {
+        throw "Combined report omitted test coverage"
+    }
+    if (-not (Test-Path (Join-Path $PSScriptRoot "installer-tests.finished"))) {
+        throw "Report ran before installer tests"
+    }
+    if ("FAILED_ACTION" -eq "report") { throw "Synthetic report failure" }
+}
+try {
+    Invoke-ParallelCheck -ScriptPath (Join-Path $PSScriptRoot "child.ps1") -StatusIntervalMilliseconds 100
+} finally {
+    $StageTimings | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot "timings.json")
+}
+""".replace("FAILED_ACTION", failed_action),
+    )
+    assert (result.returncode == 0) == (failed_action == "none"), result.stdout + result.stderr
+    timings = json.loads((tmp_path / "timings.json").read_text(encoding="utf-8-sig"))
+    statuses = {entry["Name"]: entry["Status"] for entry in timings}
+    assert statuses == {
+        "Application tests and coverage": "FAILED" if failed_action == "application" else "passed",
+        "Release and tooling tests and coverage": (
+            "FAILED" if failed_action == "infrastructure" else "passed"
+        ),
+        "Windows package and installer smoke tests": (
+            "FAILED" if failed_action == "package" else "passed"
+        ),
+        "Installer integration tests and coverage": (
+            "FAILED" if failed_action == "installer" else "passed"
+        ),
+        "Combined coverage report": "FAILED" if failed_action == "report" else "passed",
+    }
+    assert all(entry["Seconds"] > 0 for entry in timings)
+    assert (tmp_path / "installer-tests.finished").exists()
+    _assert_parallel_output(tmp_path, result)
+
+
+def _assert_parallel_output(tmp_path, result):
+    (log_root,) = (tmp_path / "dist").glob("check-*")
+    for action in ("application", "infrastructure", "package"):
+        assert (tmp_path / f"{action}.finished").exists()
+        assert f"{action} output " in (log_root / f"{action}.log").read_text()
+        assert f"{action} diagnostic " in (log_root / f"{action}.stderr.log").read_text()
+    assert "Stages did not overlap" not in result.stderr
+    status_lines = [line for line in result.stdout.splitlines() if line.startswith("Running:")]
+    assert len(status_lines) >= 2
+    assert any("Application tests and coverage (" in line for line in status_lines)
+    assert any("Release and tooling tests and coverage (" in line for line in status_lines)
+    assert any("Windows package and installer smoke tests (" in line for line in status_lines)
+    assert all("elapsed)" in line and "/3 finished" in line for line in status_lines)
+
+
+def test_parallel_option_is_rejected_outside_full_check(tmp_path):
+    result = _run_dev_script(tmp_path, "test", "-Parallel")
+
+    assert result.returncode != 0
+    assert "-Parallel is supported only by check" in result.stderr
 
 
 @pytest.mark.parametrize("selected", ["valid.ps1", "broken.ps1", "../outside.ps1"])
@@ -488,8 +822,8 @@ function Get-FastCheckPlan {
 }
 function Invoke-LintChecks { param($Plan); Write-Host "FAST-LINT" }
 function Invoke-TestSuite {
-    param([string[]]$Paths, [int]$WorkerCount, [switch]$WithCoverage)
-    if ($WithCoverage) { throw "Unexpected coverage" }
+    param([string[]]$Paths, [int]$WorkerCount, [string]$Coverage = "None")
+    if ($Coverage -ne "None") { throw "Unexpected coverage" }
     Write-Host "TEST-WORKERS:$WorkerCount PATH-COUNT:$($Paths.Count)"
 }
 function Invoke-PackageBuild { throw "Unexpected package" }

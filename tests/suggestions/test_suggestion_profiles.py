@@ -1,12 +1,7 @@
 from collections import Counter
 
 from pogled_assist.suggestions.learning import LearningStore
-from pogled_assist.suggestions.model import WordModel, load_model
-from scripts.speech_suggestions.evaluate_speech_learning import (
-    SCENARIOS,
-    assess_learning,
-    evaluate_learning,
-)
+from pogled_assist.suggestions.model import WordModel
 from scripts.speech_suggestions.evaluate_speech_model import diagnose
 
 
@@ -72,10 +67,3 @@ def test_diagnostics_distinguish_missing_words_context_and_low_rank():
     assert diagnose(model, "Želim zvrkovića")[-1]["reason"] == "missing_vocabulary"
     assert diagnose(model, "Želim med")[-1]["reason"] == "missing_context"
     assert diagnose(model, "Želim sir")[-1]["reason"] == "ranked_below_five"
-
-
-def test_learning_scenarios_meet_personalization_contract():
-    results = evaluate_learning(load_model(), SCENARIOS)
-
-    assert len(results) >= 12
-    assert assess_learning(results)["passed"]

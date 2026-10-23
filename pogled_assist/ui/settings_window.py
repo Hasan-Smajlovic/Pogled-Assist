@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
+from ..interaction.eye_tracking_policy import EyeTrackingGate
 from ..interaction.gaze_selection import (
     MAX_SELECTION_PAUSE_MS,
     MIN_SELECTION_PAUSE_MS,
@@ -25,6 +26,8 @@ from ..settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
     DWELL_MS_RANGE,
     DWELL_RADIUS_RANGE,
+    EDGE_HOLD_MS_RANGE,
+    EYE_TRACKING_HOLD_MS_RANGE,
     LETTERS_PER_GROUP_RANGE,
     SMOOTHING_RANGE,
     SPEECH_SPEED_RANGE,
@@ -40,10 +43,11 @@ from ..windows.windows_startup import (
     set_windows_startup_enabled,
 )
 from .elevenlabs_settings import ElevenLabsPage, SavedAudioPage
-from .gaze_feedback import set_gaze_feedback
+from .gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .gaze_settings_page import GazeSettingsPage
 from .general_settings_page import GeneralSettingsPage
 from .learned_words_page import LearnedWordsPage
+from .recording_badge import RecordingBadge
 from .settings_controls import GazeCallback, SettingsControls, global_rect, styled_label
 from .speech_settings_page import SpeechSettingsPage
 
@@ -274,6 +278,7 @@ class SettingsWindow(QWidget):
     save_retry_requested = Signal()
     calibration_requested = Signal()
     gaze_check_requested = Signal()
+    diagnostics_requested = Signal()
     speech_test_requested = Signal()
     speech_stop_requested = Signal()
     efendija_test_requested = Signal()
@@ -284,6 +289,7 @@ class SettingsWindow(QWidget):
     interaction_progress_changed = Signal(QPoint, float, str)
     interaction_finished = Signal(QPoint, str)
     interaction_cancelled = Signal()
+    interaction_hold_changed = Signal(bool)
     _startup_task_completed = Signal(int, object, object)
 
     def __init__(
@@ -359,6 +365,16 @@ class SettingsWindow(QWidget):
         self.closed.emit()
         super().closeEvent(event)
 
+    def resizeEvent(self, event) -> None:
+        if hasattr(self, "_gaze_selection"):
+            self.cancel_gaze_interaction(require_leave=True)
+        super().resizeEvent(event)
+
+    def moveEvent(self, event) -> None:
+        if hasattr(self, "_gaze_selection"):
+            self.cancel_gaze_interaction(require_leave=True)
+        super().moveEvent(event)
+
     def set_status(self, text: str) -> None:
         self._set_status(text)
 
@@ -429,7 +445,12 @@ class SettingsWindow(QWidget):
 
         title = styled_label("Postavke", "titleLabel", self)
         title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        top_bar.addWidget(title, 1)
+        heading = QVBoxLayout()
+        heading.setSpacing(4)
+        heading.addWidget(title)
+        self._recording_badge = RecordingBadge(self)
+        heading.addWidget(self._recording_badge)
+        top_bar.addLayout(heading, 1)
 
         self._status_label = styled_label("Spremno", "statusLabel", self)
         self._status_label.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
@@ -621,10 +642,30 @@ class SettingsWindow(QWidget):
 
         self._emit_gaze_settings(status)
 
+    def _select_eye_tracking_policy(self, index: int) -> None:
+        policy = self._gaze_page._policy_combo.itemData(index)
+        self._gaze_settings = replace(self._gaze_settings, eye_tracking_policy=policy)
+        self._emit_gaze_settings("Režim praćenja očiju je ažuriran.")
+
+    def _cycle_eye_tracking_policy(self) -> None:
+        combo = self._gaze_page._policy_combo
+        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
+
+    def _adjust_eye_tracking_hold(self, delta: int) -> None:
+        value = clamp(self._gaze_settings.eye_tracking_hold_ms + delta, EYE_TRACKING_HOLD_MS_RANGE)
+        self._gaze_settings = replace(self._gaze_settings, eye_tracking_hold_ms=value)
+        self._emit_gaze_settings("Trajanje kratkog prekida je ažurirano.")
+
     def _adjust_dwell_ms(self, delta: int) -> None:
         value = clamp(self._gaze_settings.dwell_ms + delta, DWELL_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, dwell_ms=value)
         self._emit_gaze_settings("Vrijeme zadržavanja pogleda je ažurirano.")
+
+    def _adjust_edge_hold(self, delta: int) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
+        value = clamp(self._gaze_settings.edge_hold_ms + delta, EDGE_HOLD_MS_RANGE)
+        self._gaze_settings = replace(self._gaze_settings, edge_hold_ms=value)
+        self._emit_gaze_settings("Čuvanje odabira uz rub je ažurirano.")
 
     def _adjust_selection_pause(self, delta: int) -> None:
         value = clamp(
@@ -686,6 +727,9 @@ class SettingsWindow(QWidget):
         )
 
     def _emit_gaze_settings(self, status: str) -> None:
+        self._eye_gate.configure(
+            self._gaze_settings.eye_tracking_policy, self._gaze_settings.eye_tracking_hold_ms
+        )
         self._refresh_values()
         self._set_status(status)
         self.gaze_settings_changed.emit(replace(self._gaze_settings))
@@ -772,8 +816,33 @@ class SettingsWindow(QWidget):
         self._gaze_selection = GazeSelectionTimer()
         self._last_gaze_action_ms = 0.0
         self._interaction_active = False
+        self._eye_gate = EyeTrackingGate(self)
+        self._eye_gate.configure(
+            self._gaze_settings.eye_tracking_policy, self._gaze_settings.eye_tracking_hold_ms
+        )
+        self._eye_gate.interrupted.connect(self.pause_gaze_interaction)
+        self._eye_gate.hold_started.connect(self._hold_tracking)
+        self._eye_gate.hold_finished.connect(lambda: self._set_tracking_paused(False))
+        self._tracking_hold_rect = None
 
-    def handle_gaze(self, point: QPoint) -> None:
+    def handle_eye_status(self, left: bool, right: bool, at: float | None = None) -> None:
+        self._eye_gate.update_eyes(left, right, at)
+
+    def _hold_tracking(self, deadline_ms: float) -> None:
+        self._gaze_selection.hold_tracking(deadline_ms)
+        widget = self._gaze_selection.target
+        if isinstance(widget, QWidget) and self._gaze_selection.tracking_held:
+            self._tracking_hold_rect = global_rect(widget)
+            self._set_tracking_paused(True)
+
+    def _set_tracking_paused(self, paused: bool) -> None:
+        if self._gaze_target is not None:
+            set_gaze_paused(self._gaze_target, paused)
+        self.interaction_hold_changed.emit(paused)
+
+    def handle_gaze(self, point: QPoint, received_at: float | None = None) -> None:
+        if not self._eye_gate.sample(received_at):
+            return
         if self._learning_page.blocks_gaze_at(point):
             self.cancel_gaze_interaction(require_leave=True)
             return
@@ -792,6 +861,11 @@ class SettingsWindow(QWidget):
             return
 
         widget, action = target
+        if self._gaze_selection.tracking_held and (
+            widget is not self._gaze_selection.target
+            or global_rect(widget) != self._tracking_hold_rect
+        ):
+            self.pause_gaze_interaction()
         self._update_gaze(widget, action, now_ms)
 
     def _update_gaze(self, widget, action, now_ms):
@@ -826,6 +900,7 @@ class SettingsWindow(QWidget):
         self._cancel_interaction()
 
     def pause_gaze_interaction(self) -> None:
+        self._set_tracking_paused(False)
         self._gaze_selection.pause()
         self._set_gaze_target(None)
         self._cancel_interaction()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -192,6 +193,38 @@ def test_existing_diverged_branch_is_never_overwritten(workflow):
     assert "different content" in summary
 
 
+def git(directory, *args):
+    return subprocess.run(
+        ["git", "-c", "core.hooksPath=/dev/null", *args],
+        cwd=directory,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+
+
+@pytest.fixture(scope="module")
+def hotfix_history(tmp_path_factory):
+    remote = tmp_path_factory.mktemp("hotfix-history")
+    git(remote, "init", "-b", "master")
+    git(remote, "config", "user.name", "Synthetic tester")
+    git(remote, "config", "user.email", "tester@example.invalid")
+    git(remote, "config", "commit.gpgsign", "false")
+    (remote / "VERSION").write_text("0.1.0\n")
+    (remote / "speech.py").write_text("original\n")
+    git(remote, "add", ".")
+    git(remote, "commit", "-m", "Initial")
+    git(remote, "checkout", "-b", "development")
+    (remote / "feature.py").write_text("unreleased feature\n")
+    git(remote, "add", ".")
+    git(remote, "commit", "-m", "Development feature")
+    git(remote, "checkout", "master")
+    (remote / "VERSION").write_text("0.4.1\n")
+    git(remote, "add", ".")
+    git(remote, "commit", "-m", "Release")
+    return remote
+
+
 # Hotfixes reach master through merge commits. Both parent shapes apply the same
 # diff, so only the code case also covers the single-parent cherry-pick path.
 @pytest.mark.parametrize(
@@ -204,46 +237,30 @@ def test_existing_diverged_branch_is_never_overwritten(workflow):
         ("conflict", True),
     ],
 )
-def test_real_git_backport_preserves_development_version(tmp_path, monkeypatch, case, merge_commit):
+def test_real_git_backport_preserves_development_version(
+    tmp_path, monkeypatch, hotfix_history, case, merge_commit
+):
     remote = tmp_path / "remote"
-    remote.mkdir()
+    # Copy Git objects and refs too: cases can push and conflict independently.
+    shutil.copytree(hotfix_history, remote)
 
-    def git(*args, cwd=remote):
-        return subprocess.run(
-            ["git", "-c", "core.hooksPath=/dev/null", *args],
-            cwd=cwd,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
+    def run_git(*args, cwd=remote):
+        return git(cwd, *args)
 
-    git("init", "-b", "master")
-    git("config", "user.name", "Synthetic tester")
-    git("config", "user.email", "tester@example.invalid")
-    git("config", "commit.gpgsign", "false")
-    (remote / "VERSION").write_text("0.1.0\n")
-    (remote / "speech.py").write_text("original\n")
-    git("add", ".")
-    git("commit", "-m", "Initial")
-    git("checkout", "-b", "development")
-    (remote / "feature.py").write_text("unreleased feature\n")
     if case in ("already-present", "conflict"):
+        run_git("checkout", "development")
         (remote / "speech.py").write_text("fixed\n" if case == "already-present" else "different\n")
-    git("add", ".")
-    git("commit", "-m", "Development feature")
-    git("checkout", "master")
-    (remote / "VERSION").write_text("0.4.1\n")
-    git("add", ".")
-    git("commit", "-m", "Release")
-    git("checkout", "-b", "hotfix/42-speech")
+        run_git("commit", "-am", "Different development speech")
+        run_git("checkout", "master")
+    run_git("checkout", "-b", "hotfix/42-speech")
     (remote / "VERSION").write_text("0.4.2\n")
     if case != "version-only":
         (remote / "speech.py").write_text("fixed\n")
-    git("add", ".")
-    git("commit", "-m", "Hotfix")
-    git("checkout", "master")
-    git("merge", "--no-ff" if merge_commit else "--ff-only", "hotfix/42-speech")
-    hotfix = git("rev-parse", "HEAD")
+    run_git("add", ".")
+    run_git("commit", "-m", "Hotfix")
+    run_git("checkout", "master")
+    run_git("merge", "--no-ff" if merge_commit else "--ff-only", "hotfix/42-speech")
+    hotfix = run_git("rev-parse", "HEAD")
 
     source = WORKFLOW.read_text(encoding="utf-8").split("python3 - <<'PY'\n", 1)[1]
     source = textwrap.dedent(source.rsplit("          PY", 1)[0]).split("\ntry:\n    main()", 1)[0]
@@ -266,17 +283,17 @@ def test_real_git_backport_preserves_development_version(tmp_path, monkeypatch, 
     assert (checkout / "VERSION").read_text() == "0.1.0\n"
     assert (checkout / "feature.py").read_text() == "unreleased feature\n"
     assert (remote / "VERSION").read_text() == "0.4.2\n"
-    assert not git("status", "--porcelain", cwd=checkout)
+    assert not run_git("status", "--porcelain", cwd=checkout)
     if case == "code":
         assert pushed
-        assert git("diff", "--name-only", "development", "sync/42") == "speech.py"
-        assert git("show", "sync/42:speech.py") == "fixed"
+        assert run_git("diff", "--name-only", "development", "sync/42") == "speech.py"
+        assert run_git("show", "sync/42:speech.py") == "fixed"
         # A rerun reuses the same branch without overwriting it.
         rerun = tmp_path / "rerun"
         rerun.mkdir()
         assert namespace["prepare_branch"](rerun, {"merge_commit_sha": hotfix}, "sync/42")
     else:
         assert not pushed
-        assert "sync/42" not in git("branch", "--list")
+        assert "sync/42" not in run_git("branch", "--list")
         message = summary.read_text(encoding="utf-8")
         assert ("nothing was pushed" if case == "conflict" else "No PR needed") in message

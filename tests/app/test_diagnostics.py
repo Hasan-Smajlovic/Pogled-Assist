@@ -172,6 +172,72 @@ def test_application_gate_duration_waits_for_the_qt_delivery(monkeypatch, qtbot)
     provider.stop()
 
 
+@pytest.mark.parametrize("single_eye", [(True, False), (False, True)])
+def test_one_eye_selection_is_not_reported_as_a_closed_gate(
+    monkeypatch, qtbot, tmp_path, single_eye
+):
+    from _clock import freeze_monotonic
+    from PySide6.QtCore import QRect
+
+    from pogled_assist.interaction.gaze_targets import GazeTargets
+    from pogled_assist.interaction.mouse_controller import GazeMouseController, GazeSettings
+    from pogled_assist.log_transport import LogWriter
+    from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+
+    now = freeze_monotonic(monkeypatch, 10.0)
+    writer = LogWriter()
+    latest = tmp_path / "logs/latest.txt"
+    writer.start_segment(latest, None, trace=True)
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    bounds = QRect(0, 0, 50, 50)
+    controller = GazeMouseController(
+        GazeTargets(
+            lambda point: "speech" if bounds.contains(point) else None,
+            lambda *_args: bounds.center(),
+            bounds.contains,
+            lambda _action: bounds,
+        ),
+        pointer_movement_enabled=False,
+    )
+    controller.update_settings(
+        GazeSettings(eye_tracking_policy="any", selection_pause_ms=250, dwell_ms=850)
+    )
+    controller._logical_screen_rect = (0, 0, 101, 101)
+    controller._physical_screen_rect = (0, 0, 151, 151)
+    provider = TobiiGazeProvider()
+    provider.set_eye_tracking_policy("any")
+    gaze, eyes = provider._new_stream_callbacks()
+    provider.eye_status_changed.connect(controller.handle_eye_status)
+    provider.gaze_updated.connect(controller.handle_gaze)
+    actions = []
+    controller.toolbar_action_requested.connect(actions.append)
+    try:
+        for index in range(65):
+            now[0] += 0.02
+            eyes(*(single_eye if index >= 20 else (True, True)), index)
+            gaze(0.2, 0.2, index)
+            provider._emit_latest_gaze_sample()
+        assert actions == ["speech"]
+    finally:
+        provider.stop()
+        assert writer.stop()
+    path = next((latest.parent / "diagnostics").glob("*.jsonl"))
+    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    single = next(
+        item["data"]
+        for item in events
+        if item["event"] == "eye_gate_applied"
+        and (item["data"]["left_valid"], item["data"]["right_valid"]) == single_eye
+    )
+    assert single["eye_tracking_policy"] == "any" and single["application_gate_open"] is True
+    report = summarize(path)
+    completed = [
+        end for end in report["analysis"]["recent_selection_ends"] if end["outcome"] == "completed"
+    ]
+    assert len(completed) == 1
+    assert "eye_gate_closed" not in completed[0]["nearby_observations"]
+
+
 @pytest.mark.parametrize("off_eyes", [(True, True), (True, False)])
 def test_reenabled_logging_keeps_the_applied_gate_without_a_new_signal(
     monkeypatch, qtbot, off_eyes

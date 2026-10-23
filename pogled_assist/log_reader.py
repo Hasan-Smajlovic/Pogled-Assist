@@ -28,6 +28,9 @@ class _SessionReader:
         self.process = None
         self.identity_set = False
         self.health: dict = {}
+        self.manual_trace = False
+        self.recording_health: dict | None = None
+        self.end_reason: str | None = None
         self.analysis = SessionAnalysis()
 
     def read(self, line_number: int, line: str) -> None:
@@ -75,6 +78,13 @@ class _SessionReader:
             self.cancellations[data["reason"]] += 1
         if isinstance(item.get("logging_health"), dict):
             self.health = item["logging_health"]
+        if event == "session_start":
+            self.manual_trace = data.get("mode") == "manual_trace"
+        if event == "session_end":
+            reason = data.get("reason")
+            self.end_reason = reason if isinstance(reason, str) else None
+            health = data.get("recording_health")
+            self.recording_health = health if isinstance(health, dict) else None
 
     def _observe_rejections(self, counts: object) -> None:
         if not isinstance(counts, dict):
@@ -83,24 +93,41 @@ class _SessionReader:
             if reason.startswith("rejected:") and isinstance(count, int):
                 self.rejected[reason.removeprefix("rejected:")] += count
 
-    def _records_missing(self) -> bool:
-        loss = self.health.get("dropped", {})
+    def _records_missing(self, health: dict) -> bool:
+        loss = health.get("dropped", {})
         return isinstance(loss, dict) and any(
             isinstance(count, int) and count > 0 for count in loss.values()
         )
 
+    def _manual_footer_valid(self) -> bool:
+        health = self.recording_health
+        if not isinstance(health, dict) or set(health) != {
+            "dropped",
+            "writer_errors",
+            "bounded_snapshots",
+        }:
+            return False
+        dropped = health["dropped"]
+        if not isinstance(dropped, dict):
+            return False
+        counts = (*dropped.values(), health["writer_errors"], health["bounded_snapshots"])
+        return all(type(count) is int and count >= 0 for count in counts)
+
     def result(self) -> dict:
         started = "session_start" in self.counts
         ended = "session_end" in self.counts
+        health = (self.recording_health or {}) if self.manual_trace else self.health
         complete = all(
             (
                 started,
                 ended,
                 not self.warnings,
                 "session_limit" not in self.counts,
-                not self._records_missing(),
-                not self.health.get("writer_errors"),
-                not self.health.get("bounded_snapshots"),
+                not self._records_missing(health),
+                not health.get("writer_errors"),
+                not health.get("bounded_snapshots"),
+                not self.manual_trace
+                or (self.end_reason in {"manual", "time"} and self._manual_footer_valid()),
             )
         )
         return {
@@ -112,6 +139,8 @@ class _SessionReader:
             "provider_rejections_from_summaries": dict(self.rejected),
             "selection_end_reasons_from_events": dict(self.cancellations),
             "logging_health_process_cumulative": self.health,
+            "recording_health": self.recording_health,
+            "session_end_reason": self.end_reason,
             "parse_warnings": self.warnings,
             "lifecycle_complete": started and ended,
             "complete": complete,

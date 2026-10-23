@@ -27,7 +27,8 @@
   color: #fff;
 }
 .settings-topbar { display: flex; align-items: center; gap: 16px; }
-.settings-topbar h1 { flex: 1; margin: 0; font-size: 25px; font-weight: 650; }
+.settings-heading { flex:1; min-width:264px; }
+.settings-topbar h1 { margin: 0 0 4px; font-size: 25px; font-weight: 650; }
 .settings-status { min-width: 360px; margin: 0; color: #b8c5c0; font-size: 14px; text-align: right; }
 .settings-danger { background: #492326 !important; border-color: #804047 !important; }
 .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0; }
@@ -37,6 +38,8 @@
 .settings-nav button { justify-content: flex-start; min-height: 66px; text-align: left; }
 .settings-nav-note { margin: auto 8px 6px; color: #8fa099; font-size: 13px; line-height: 1.45; }
 .settings-page { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+#general-settings { min-height:0; overflow:auto; }
+#general-settings > * { flex-shrink:0; }
 .settings-page-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
 .settings-page-header h2 { margin: 0; color: #fff; font-size: 24px; font-weight: 650; }
 .settings-page-header p { margin: 0; color: #aeb9b3; font-size: 14px; }
@@ -44,6 +47,9 @@
 .settings-page-header > .settings-checkbox { grid-column: 2; grid-row: 1 / span 2; }
 .settings-group-label { margin: 4px 2px 0; color: #8fa099; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .settings-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-diagnostics-row { display:grid; grid-template-columns:minmax(0, 1fr) 252px; gap:16px; align-items:center; padding:10px 14px; border:1px solid #3a403c; border-radius:10px; background:#222522; }
+.settings-diagnostics-row h3 { margin:0 0 5px; font-size:17px; }
+.settings-diagnostics-row p { margin:0; font-size:13px; line-height:1.4; color:#b9b2a5; }
 .settings-checkbox {
   display: flex;
   align-items: center;
@@ -97,6 +103,15 @@
 .setting-value { display: grid; place-items: center; border: 1px solid #3a3d3b; border-radius: 10px; background: #0f1110; color: #fff; font-size: 22px; font-weight: 650; }
 .setting-choice { grid-template-columns: minmax(260px, 1fr) 260px; }
 .setting-choice button { background: #0f1110; border-color: #4c534e; font-size: 20px; text-align: left; justify-content: flex-start; }
+.gaze-settings-tabs, .gaze-feedback-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gaze-settings-tabs button { height: 58px; }
+.gaze-settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.gaze-settings-tabs button[aria-selected="true"] { background: #1d6f68; border-color: #74d3c6; }
+.gaze-settings-content { display: flex; flex-direction: column; gap: 8px; }
+.eye-policy-row { grid-template-columns: minmax(0, 1fr) 360px; }
+.eye-policy-row select { width: 100%; height: 58px; padding: 8px 12px; border: 1px solid #4c534e; border-radius: 10px; background: #0f1110; color: #fff; font: inherit; font-size: 18px; }
+.gaze-policy-scope { margin: 2px 0 0; color: #aeb9b3; font-size: 13px; line-height: 1.4; }
+#eye-hold-row[data-disabled="true"] .setting-copy, #eye-hold-row[data-disabled="true"] .setting-value { color: #8b928e; }
 .settings-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .settings-action-grid button, .settings-action-grid .settings-checkbox { width: 100%; height: 58px; }
 .learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -199,7 +214,7 @@
 }
 @media (max-width: 560px) {
   .settings-topbar { flex-wrap: wrap; }
-  .settings-topbar h1 { order: -1; flex-basis: 100%; }
+  .settings-heading { order: -1; flex-basis: 100%; }
   .settings-status { flex: 1; text-align: left; }
   .settings-body { display: flex; flex-direction: column; }
   .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -210,6 +225,8 @@
   .setting-copy { grid-column: 1 / -1; }
   .settings-action-grid { grid-template-columns: 1fr; }
   .setting-choice { grid-template-columns: 1fr; }
+  .eye-policy-row { grid-template-columns: 1fr; }
+  .eye-policy-row select { grid-column: 1 / -1; }
   .secret-input-row { grid-template-columns: minmax(0, 1fr) 100px; }
   .secret-input-row > .settings-primary { grid-column: 1 / -1; }
   .eleven-summary, .eleven-test-card, .audio-clear-row, .eleven-selects { grid-template-columns: 1fr; }
