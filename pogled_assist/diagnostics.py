@@ -62,6 +62,11 @@ def tracing() -> bool:
     return writer is not None and writer.trace
 
 
+def normal_tracing() -> bool:
+    writer = diagnostic_writer()
+    return writer is not None and getattr(writer, "normal_trace", writer.trace)
+
+
 def emit(event: str, *, trace: bool = False, priority: bool = False, **fields) -> None:
     writer = diagnostic_writer()
     if writer is not None:
@@ -69,13 +74,13 @@ def emit(event: str, *, trace: bool = False, priority: bool = False, **fields) -
             writer.event(event, fields, trace=trace, priority=priority)
         except Exception:
             # An observation must never escape into the input or check callback.
-            writer._failure()
+            writer.observation_failed()
 
 
 def observation_failed() -> None:
     writer = diagnostic_writer()
     if writer is not None:
-        writer._failure()
+        writer.observation_failed()
 
 
 def safe_action(action: str | None) -> str | None:
@@ -131,7 +136,7 @@ class StreamMetrics:
         if writer is None:
             self._writer = None
             return False
-        identity = (writer, writer._generation)
+        identity = (writer, getattr(writer, "observation_generation", writer._generation))
         if identity != self._writer:
             self._writer = identity
             self.started = time.monotonic()
@@ -189,10 +194,10 @@ class StreamMetrics:
             if now - start >= 1:
                 start, count = now, 0
             self._rates[event] = start, count + 1
+            if count >= 4 and not normal_tracing():
+                self.counts[f"suppressed:{event}"] += 1
             if tracing() or count < 4:
                 emit(event, trace=count >= 4, **fields)
-            else:
-                self.counts[f"suppressed:{event}"] += 1
 
     def summary(self, *, force: bool = False, **fields) -> bool:
         with self._lock:
@@ -307,7 +312,11 @@ class SelectionObserver:
 
     def _ready(self) -> bool:
         writer = diagnostic_writer()
-        identity = (writer, writer._generation) if writer is not None else None
+        identity = (
+            (writer, getattr(writer, "observation_generation", writer._generation))
+            if writer is not None
+            else None
+        )
         if identity != self._writer:
             self._state = None
             self.attempt = None

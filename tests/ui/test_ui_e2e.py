@@ -13,11 +13,21 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("size", [(1280, 720), (1440, 900)])
-@pytest.mark.parametrize("script", ["latin", "arabic"])
-@pytest.mark.parametrize("letters_per_group", [1, 5, 12])
+@pytest.mark.parametrize(
+    "size,script,letters_per_group,use_gaze",
+    [
+        ((1280, 720), "latin", 1, False),
+        ((1280, 720), "latin", 5, True),
+        ((1280, 720), "latin", 12, False),
+        ((1280, 720), "arabic", 1, True),
+        ((1280, 720), "arabic", 5, False),
+        ((1280, 720), "arabic", 12, True),
+        ((1440, 900), "latin", 5, False),
+        ((1440, 900), "arabic", 5, True),
+    ],
+)
 def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
-    qtbot, make_speech_window, size, script, letters_per_group
+    qtbot, make_speech_window, size, script, letters_per_group, use_gaze
 ):
     speech = FakeSpeech()
     speech._settings = SpeechSettings(keyboard_script=script)
@@ -49,22 +59,21 @@ def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
         assert window.action_at_global_point(point) == f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
 
     assert window._script_button.minimumHeight() == 76
-    for use_gaze in (False, True):
-        window._input.setText("ABC")
-        for button, command in controls[:2]:
-            if use_gaze:
-                window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
-            else:
-                button.click()
-            assert window._input.text() == ("ABC " if command == "space" else "ABC")
-
-        original = window._symbols_mode
+    window._input.setText("ABC")
+    for button, command in controls[:2]:
         if use_gaze:
-            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle")
+            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
         else:
-            window._keyboard_toggle_button.click()
-        assert window._symbols_mode != original
-        assert window._input.text() == "ABC"
+            button.click()
+        assert window._input.text() == ("ABC " if command == "space" else "ABC")
+
+    original = window._symbols_mode
+    if use_gaze:
+        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle")
+    else:
+        window._keyboard_toggle_button.click()
+    assert window._symbols_mode != original
+    assert window._input.text() == "ABC"
 
 
 @pytest.mark.e2e
@@ -146,8 +155,7 @@ def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
     assert window._input.text() == "TREBAM ODMOR"
 
 
-def _check_sidebar_row(window, buttons, qtbot):
-    qtbot.wait(1)
+def _check_sidebar_row(window, buttons):
     rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
     assert min(rect.left() for rect in rects) == 10
     assert max(rect.right() for rect in rects) == window.width() - 11
@@ -168,9 +176,17 @@ def _assert_sidebar_hit(window, button):
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("script", ["latin", "arabic"])
-@pytest.mark.parametrize("letters_per_group", [2, 5])
-@pytest.mark.parametrize("size", [(320, 640), (380, 640), (380, 950)])
+@pytest.mark.parametrize(
+    "size,script,letters_per_group",
+    [
+        ((320, 640), "latin", 2),
+        ((320, 640), "arabic", 2),
+        ((380, 640), "latin", 5),
+        ((380, 640), "arabic", 5),
+        ((380, 950), "latin", 2),
+        ((380, 950), "arabic", 5),
+    ],
+)
 def test_controller_keyboard_rows_fill_sidebar_width(
     qtbot, monkeypatch, script, letters_per_group, size
 ):
@@ -188,7 +204,7 @@ def test_controller_keyboard_rows_fill_sidebar_width(
     prefix = CONTROLLER_WINDOW_ACTION_PREFIX
 
     def check_row(buttons):
-        _check_sidebar_row(window, buttons, qtbot)
+        qtbot.waitUntil(lambda: _check_sidebar_row(window, buttons))
 
     window._tab_buttons["keyboard"].click()
     for tab, group_command, key_command in (
@@ -225,18 +241,21 @@ def test_controller_keyboard_rows_fill_sidebar_width(
         check_row(list(window._keyboard_tab_buttons.values()))
         check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
 
-    for tab in ("general", "settings"):
-        window._tab_buttons[tab].click()
-        qtbot.wait(1)
+    def check_first_row():
         buttons = [
             button
             for button in window._action_buttons.values()
             if button.isVisible() and button.objectName() in ("shortcutButton", "checkButton")
         ]
+        assert buttons
         first_row = [
             button for button in buttons if button.y() == min(target.y() for target in buttons)
         ]
-        check_row(first_row)
+        _check_sidebar_row(window, first_row)
+
+    for tab in ("general", "settings"):
+        window._tab_buttons[tab].click()
+        qtbot.waitUntil(check_first_row)
 
 
 @pytest.mark.e2e

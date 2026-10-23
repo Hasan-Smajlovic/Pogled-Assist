@@ -79,7 +79,11 @@ RULES = (
     ),
     (
         ("scripts/ui/",),
-        ("tests/ui/", "tests/suggestions/test_suggestion_ui.py"),
+        (
+            "tests/ui/",
+            "tests/suggestions/test_suggestion_ui.py",
+            "tests/tooling/test_ui_gallery_site.py",
+        ),
         "UI previews, gallery and suggestion rendering",
     ),
 )

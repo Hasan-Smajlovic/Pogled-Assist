@@ -11,6 +11,7 @@ from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QRect
 
 from pogled_assist import logging_setup
+from pogled_assist.diagnostic_recording import recording_context
 from pogled_assist.interaction.mouse_controller import GazeMouseController, GazeSettings
 from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
 from pogled_assist.ui.speech_window import SpeechWindow
@@ -18,7 +19,7 @@ from pogled_assist.ui.speech_window import SpeechWindow
 pytestmark = pytest.mark.e2e
 
 
-@pytest.fixture(params=["off", "basic", "trace", "blocked"])
+@pytest.fixture(params=["off", "basic", "trace", "blocked", "manual"])
 def diagnostic_mode(request, monkeypatch, tmp_path):
     mode = request.param
     release = threading.Event()
@@ -38,7 +39,11 @@ def diagnostic_mode(request, monkeypatch, tmp_path):
     monkeypatch.setenv(
         "POGLED_ASSIST_GAZE_DIAGNOSTICS", "trace" if mode in {"trace", "blocked"} else ""
     )
-    latest = logging_setup.set_application_logging_enabled(mode != "off")
+    latest = logging_setup.set_application_logging_enabled(mode not in {"off", "manual"})
+    if mode == "manual":
+        logging_setup.recording_writer().start_recording(
+            tmp_path / "recordings", 2, recording_context({}, {}, simulated=True)
+        )
     if mode == "blocked":
         assert entered.wait(1)
         _fill_log_queue()

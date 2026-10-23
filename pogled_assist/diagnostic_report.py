@@ -173,7 +173,12 @@ def _nonnegative(value: object, default=None):
 
 def _event_evidence(event: str, data: dict) -> tuple[str | None, float]:
     if event == "eye_gate_applied":
-        closed = data.get("left_valid") is False or data.get("right_valid") is False
+        gate_open = data.get("application_gate_open")
+        closed = (
+            not gate_open
+            if isinstance(gate_open, bool)
+            else data.get("left_valid") is False or data.get("right_valid") is False
+        )
         return ("eye_gate_closed" if closed else None), 0.0
     if event == "delivery_gap":
         return "gaze_delivery_gap", _nonnegative(data.get("gap_ms"), 0.0) / 1000

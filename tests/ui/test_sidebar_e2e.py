@@ -4,7 +4,7 @@ from itertools import product
 
 import pytest
 from _ui_fakes import FakeAppBar, FakeControllerInput, FakeKeyboardInput
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_LETTERS, ARABIC_SYMBOLS, SYMBOL_KEYS
@@ -49,7 +49,6 @@ def test_sidebar_pages_fit_and_send_actual_unicode(qtbot, monkeypatch, kind, lay
 
 class _Sidebar:
     def __init__(self, qtbot, kind, settings):
-        self.qtbot = qtbot
         self.kind = kind
         self.settings = settings
         self.window = (
@@ -71,7 +70,7 @@ class _Sidebar:
         if kind == "controller":
             self.window._show_settings_tab()
             self.window.show()
-            qtbot.wait(1)
+            QCoreApplication.sendPostedEvents(None, QEvent.LayoutRequest)
             self.window._show_keyboard_tab()
         self.window.resize(380, 640)
         self.window.show()
@@ -92,7 +91,7 @@ class _Sidebar:
 
     def _check_page(self, page, pages, symbols):
         window = self.window
-        self.qtbot.wait(1)
+        QCoreApplication.sendPostedEvents(None, QEvent.LayoutRequest)
         assert window.width() <= 380 and window.height() <= 640, (
             self.kind,
             self.settings.keyboard_script,

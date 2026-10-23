@@ -87,7 +87,7 @@ def test_startup_query_does_not_overwrite_newer_choices_and_pending_work_is_boun
         assert not window._general_page._startup_checkbox.isChecked()
         assert updates[-1].start_with_windows is False
         assert updates[-1].show_launcher_window is True
-        assert updates[-1].dwell_ms == 600
+        assert updates[-1].dwell_ms == 950
     finally:
         release.set()
         qtbot.waitUntil(lambda: not window._startup_busy)
@@ -126,7 +126,7 @@ def test_slow_startup_update_keeps_qt_running_and_preserves_later_gaze_changes(q
         release.set()
         qtbot.waitUntil(lambda: not window._startup_busy)
         assert updates[-1].start_with_windows is True
-        assert updates[-1].selection_pause_ms == 600
+        assert updates[-1].selection_pause_ms == 350
     finally:
         release.set()
         timer.stop()
@@ -349,6 +349,8 @@ def test_settings_gaze_controls_remain_usable_during_startup_query(qtbot, monkey
     try:
         qtbot.waitUntil(entered.is_set)
         window._gaze_tab_button.click()
+        window._gaze_page.show_tab(1)
+        window.handle_eye_status(True, True)
         qtbot.wait(1)
         target = window._gaze_page._gaze_bubble_button
         center = target.mapToGlobal(target.rect().center())

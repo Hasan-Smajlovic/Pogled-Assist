@@ -7,14 +7,16 @@ Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into poi
 ## Features
 
 - A top hotbar that reserves desktop space through the Windows AppBar API.
-- Pointer movement and dwell actions only while both eyes have valid tracking.
+- Direct desktop pointer movement and clicks require both eyes; application controls follow the selected [eye-tracking policy](docs/USER_GUIDE.md#eye-tracking-policy).
 - Left, right, and double-click modes with an optional precision zoom step.
 - A radial Quick actions menu for choosing a click at the current gaze target.
 - A visible gaze bubble and action progress overlay.
 - A full-screen Bosnian speech keyboard with offline word completion and next-word suggestions, reusable phrases, and local personal learning.
 - Right-side Keyboard and Controller panels for typing and common shortcuts.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
-- An optional caregiver gaze check with live positioning, timed targets, and a local dwell trial.
+- Adjustable [edge selection stability](docs/USER_GUIDE.md#selection-stability-near-edges) for Speech, Keyboard and the hotbar.
+- An optional caregiver gaze check with live positioning, timed targets, a local dwell trial, and [saved results and ZIP export](docs/USER_GUIDE.md#saved-gaze-check-results).
+- Short, explicitly started [diagnostic recordings and local support ZIPs](docs/USER_GUIDE.md#diagnostic-log-collection), with a visible recording indicator.
 - Tobii Pro SDK, Stream Engine, and optional 32-bit Stream Engine bridge support.
 
 ## Install
@@ -76,7 +78,7 @@ The repository uses one PowerShell entry point for setup and verification:
 
 ```powershell
 .\dev.ps1 setup
-.\dev.ps1 check
+.\dev.ps1 check -Parallel
 ```
 
 Development uses Python 3.10 for the application, Tobii Pro SDK, automated checks, and Windows packaging. See the [development guide](docs/DEVELOPMENT.md) for repair of a stale `.venv` and interpreter selection.
@@ -147,6 +149,9 @@ data\speech_learning.json
 data\version-history\*\
 logs\latest.txt
 logs\diagnostics\*.jsonl
+logs\gaze-check\gaze-check-*.json
+logs\diagnostic-recordings\<recording-id>\recording.json
+logs\diagnostic-recordings\<recording-id>\snimak.jsonl
 ```
 
 For credentials and saved audio outside `data/`, see [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs).

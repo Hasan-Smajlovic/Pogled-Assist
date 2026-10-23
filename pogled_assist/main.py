@@ -10,6 +10,7 @@ import time
 import traceback
 from pathlib import Path
 
+from .build_info import resolve_build_identity
 from .logging_setup import (
     install_qt_message_handler,
     setup_application_logging,
@@ -50,6 +51,7 @@ def main() -> int:
 
 def _run_locked_application(lock, simulate_gaze: bool) -> int:
     try:
+        resolve_build_identity()
         return _run_application(simulate_gaze=simulate_gaze)
     except Exception:
         # The top-level exception hook runs only after finally has stopped the
@@ -171,6 +173,9 @@ def package_smoke_test() -> int:
         path_results = [(path, bool(path and path.is_file())) for path in required_paths]
         model = load_model()
         suggestions_loaded = "ŽELIM" in model.predict("žel") and "KUR'AN" in model.predict("kur")
+        build = resolve_build_identity()
+        if getattr(sys, "frozen", False) and not build["build_revision"]:
+            raise ValueError("Missing packaged build revision")
         _verify_bundled_runtime()
     except Exception:
         _write_package_smoke_report([traceback.format_exc()])
@@ -179,6 +184,7 @@ def package_smoke_test() -> int:
     report_lines = [
         f"imports_loaded={imports_loaded}",
         f"suggestions_loaded={suggestions_loaded}",
+        f"build_identity={build}",
     ]
     report_lines.extend(f"{path} exists={exists}" for path, exists in path_results)
     _write_package_smoke_report(report_lines)

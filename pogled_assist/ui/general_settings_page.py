@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QFrame, QGridLayout
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout
 
 from .release_update_row import ReleaseUpdateRow
 from .settings_controls import action_grid, content_layout, styled_label
@@ -53,6 +53,24 @@ class GeneralSettingsPage(QFrame):
                 (self._startup_checkbox, self._logging_checkbox, self._launcher_window_checkbox)
             )
         )
+
+        self._diagnostics_button = self._controls.button(
+            "Dijagnostičko snimanje",
+            self._owner.diagnostics_requested.emit,
+            QSize(270, 58),
+            "fa5s.file-medical-alt",
+        )
+        diagnostic_row = QHBoxLayout()
+        copy = QVBoxLayout()
+        copy.addWidget(styled_label("Snimite problem s pogledom", "groupLabel", page))
+        copy.addWidget(
+            styled_label(
+                "Kratak dijagnostički snimak i paket za podršku.", "sectionDescription", page
+            )
+        )
+        diagnostic_row.addLayout(copy, 1)
+        diagnostic_row.addWidget(self._diagnostics_button)
+        layout.addLayout(diagnostic_row)
 
         layout.addWidget(styled_label("VERZIJA APLIKACIJE", "groupLabel", page))
         self._update_row = ReleaseUpdateRow(self._controls, self._owner._update_manager, page)

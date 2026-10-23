@@ -105,6 +105,11 @@ class InteractionOverlayWindow(QWidget):
         self._ensure_visible()
         self.update()
 
+    def set_paused(self, paused: bool) -> None:
+        if self._active and self._mode != "fired":
+            self._mode = "paused" if paused else "progress"
+            self.update()
+
     def clear(self) -> None:
         if self._mode == "fired":
             return
@@ -118,7 +123,7 @@ class InteractionOverlayWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
-        pulse = (math.sin(self._phase) + 1.0) / 2.0
+        pulse = 0.5 if self._mode == "paused" else (math.sin(self._phase) + 1.0) / 2.0
         fired = self._mode == "fired"
         base_rect = QRectF(15, 15, self.width() - 30, self.height() - 30)
         arc_rect = QRectF(21, 21, self.width() - 42, self.height() - 42)
@@ -150,6 +155,13 @@ class InteractionOverlayWindow(QWidget):
         painter.setPen(QPen(QColor(255, 255, 255, 220), 2))
         painter.setBrush(QColor(15, 23, 42, 185))
         painter.drawEllipse(center, dot_radius, dot_radius)
+        if self._mode == "paused":
+            painter.setPen(QPen(QColor(255, 255, 255), 3))
+            for offset in (-3, 3):
+                painter.drawLine(
+                    center.x() + offset, center.y() - 5, center.x() + offset, center.y() + 5
+                )
+            text = "Na čekanju"
 
         if text:
             painter.setPen(QColor(255, 255, 255, 238))
@@ -159,7 +171,8 @@ class InteractionOverlayWindow(QWidget):
             painter.drawText(self.rect().adjusted(12, 92, -12, -12), Qt.AlignCenter, text)
 
     def _tick(self) -> None:
-        self._phase += 0.24
+        if self._mode != "paused":
+            self._phase += 0.24
         if self._mode == "fired":
             elapsed_ms = time.monotonic() * 1000 - self._fired_started_ms
             if elapsed_ms >= self.FIRED_DURATION_MS:

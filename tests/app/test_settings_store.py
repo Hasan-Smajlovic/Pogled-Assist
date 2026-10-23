@@ -98,6 +98,91 @@ def point_settings_at(monkeypatch, tmp_path):
     return path
 
 
+@pytest.mark.parametrize(
+    "field,value,expected",
+    [
+        ("eye_tracking_policy", None, "both"),
+        ("eye_tracking_policy", [], "both"),
+        ("eye_tracking_policy", {}, "both"),
+        ("eye_tracking_policy", True, "both"),
+        ("eye_tracking_policy", "unknown", "both"),
+        ("eye_tracking_policy", "both", "both"),
+        ("eye_tracking_policy", "hold", "hold"),
+        ("eye_tracking_policy", "any", "any"),
+        ("eye_tracking_hold_ms", None, 150),
+        ("eye_tracking_hold_ms", "bad", 150),
+        ("eye_tracking_hold_ms", -100, 50),
+        ("eye_tracking_hold_ms", 1000, 500),
+        ("eye_tracking_hold_ms", "200", 200),
+        ("eye_tracking_hold_ms", 171, 150),
+        ("eye_tracking_hold_ms", 10**400, 500),
+        ("eye_tracking_hold_ms", -(10**400), 50),
+        ("eye_tracking_hold_ms", 125, 150),
+        ("edge_hold_ms", None, 120),
+        ("edge_hold_ms", "bad", 120),
+        ("edge_hold_ms", -20, 0),
+        ("edge_hold_ms", 0, 0),
+        ("edge_hold_ms", 1000, 300),
+        ("edge_hold_ms", "240", 240),
+        ("edge_hold_ms", 131, 140),
+    ],
+)
+def test_eye_and_edge_settings_validate_types_clamp_and_snap_to_steps(
+    monkeypatch, tmp_path, field, value, expected
+):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"gaze": {field: value}}), encoding="utf-8")
+    assert getattr(load_app_settings()[0], field) == expected
+
+
+@pytest.mark.parametrize("field,expected", [("eye_tracking_hold_ms", 150), ("edge_hold_ms", 120)])
+@pytest.mark.parametrize("literal", ["1e309", "-1e309"])
+def test_overflowing_timing_numbers_load_defaults(monkeypatch, tmp_path, field, expected, literal):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(f'{{"gaze":{{"{field}":{literal}}}}}', encoding="utf-8")
+    assert getattr(load_app_settings()[0], field) == expected
+
+
+def test_new_gaze_settings_default_in_old_files_and_survive_restart(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    gaze, speech = load_app_settings()
+    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (250, 850)
+    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms) == ("both", 150)
+    assert gaze.edge_hold_ms == 120
+    path.parent.mkdir()
+    path.write_text('{"gaze":{"selection_pause_ms":500,"dwell_ms":700}}', encoding="utf-8")
+    gaze, speech = load_app_settings()
+    assert (gaze.selection_pause_ms, gaze.dwell_ms) == (500, 700)
+    assert (gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms, gaze.edge_hold_ms) == (
+        "both",
+        150,
+        120,
+    )
+    gaze.eye_tracking_policy, gaze.eye_tracking_hold_ms = "hold", 400
+    for duration in (0, 240):
+        gaze.edge_hold_ms = duration
+        assert save_app_settings(gaze, speech)
+        assert load_app_settings() == (gaze, speech)
+
+
+def test_older_writer_preserves_eye_policy_from_installation_snapshot(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    gaze = GazeSettings(eye_tracking_policy="any", eye_tracking_hold_ms=450, edge_hold_ms=240)
+    assert save_app_settings(gaze, SpeechSettings())
+    snapshot = path.parent / "version-history" / "20261021-eye-policy"
+    snapshot.mkdir(parents=True)
+    (snapshot / path.name).write_bytes(path.read_bytes())
+    path.write_text('{"gaze":{"dwell_ms":950}}', encoding="utf-8")
+    loaded, speech = load_app_settings()
+    assert (loaded.eye_tracking_policy, loaded.eye_tracking_hold_ms) == ("any", 450)
+    assert loaded.edge_hold_ms == 240
+    assert loaded.dwell_ms == 950
+    assert save_app_settings(loaded, speech)
+    assert load_app_settings()[0] == loaded
+
+
 def test_unknown_settings_survive_saves_and_downgrade_round_trip(monkeypatch, tmp_path):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
@@ -129,11 +214,20 @@ def test_unknown_settings_survive_saves_and_downgrade_round_trip(monkeypatch, tm
     assert json.loads(path.read_text(encoding="utf-8"))["speech"]["future_voice"] == "keep"
 
 
-@pytest.mark.parametrize("contents", ["invalid json", '{"version":999,"speech":{"speed":220}}'])
-def test_unsupported_or_unreadable_settings_are_never_overwritten(monkeypatch, tmp_path, contents):
+@pytest.mark.parametrize(
+    "contents,expected_speech",
+    [
+        ("invalid json", SpeechSettings()),
+        ('{"version":999,"speech":{"speed":220}}', SpeechSettings(speed=220)),
+    ],
+)
+def test_unsupported_or_unreadable_settings_are_never_overwritten(
+    monkeypatch, tmp_path, contents, expected_speech
+):
     path = point_settings_at(monkeypatch, tmp_path)
     path.parent.mkdir()
     path.write_text(contents, encoding="utf-8")
+    assert load_app_settings() == (GazeSettings(), expected_speech)
     assert not save_app_settings(GazeSettings(), SpeechSettings())
     assert path.read_text(encoding="utf-8") == contents
 
@@ -145,14 +239,6 @@ def test_load_returns_defaults_when_file_is_missing(monkeypatch, tmp_path):
 
     assert gaze == GazeSettings()
     assert speech == SpeechSettings()
-
-
-def test_load_returns_defaults_for_invalid_json(monkeypatch, tmp_path):
-    path = point_settings_at(monkeypatch, tmp_path)
-    path.parent.mkdir()
-    path.write_text("not json", encoding="utf-8")
-
-    assert load_app_settings() == (GazeSettings(), SpeechSettings())
 
 
 def test_load_coerces_and_clamps_each_setting(monkeypatch, tmp_path):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 
 import pytest
-from _speech_fakes import FakeCredentials, FakeElevenClient
+from _speech_fakes import FakeCredentials, FakeElevenClient, speech_workers
 from PySide6.QtCore import QObject
 
 from pogled_assist.speech.eleven_account import ElevenAccount
@@ -14,12 +14,15 @@ from pogled_assist.windows.credentials import CredentialError
 @pytest.fixture
 def account(qapp, monkeypatch):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
-    owner = QObject()
-    store, client = FakeCredentials(), FakeElevenClient()
-    account = ElevenAccount(owner, store=store, client=client)
-    account.configure(SpeechSettings())
-    yield account, store, client
-    account.cancel_check()
+    with speech_workers(monkeypatch):
+        owner = QObject()
+        store, client = FakeCredentials(), FakeElevenClient()
+        account = ElevenAccount(owner, store=store, client=client)
+        account.configure(SpeechSettings())
+        try:
+            yield account, store, client
+        finally:
+            account.cancel_check()
 
 
 def test_saved_key_is_reloaded_by_next_account_without_using_settings_json(account):

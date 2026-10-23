@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pogled Assist · Napredak odabira</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/selection-progress.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/eye-policy.js" defer></script>
+  <script src="assets/selection-progress.js" defer></script>
+</head>
+<body data-reference-page="selection-progress">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main class="selection-preview">
+    <header><h1>Napredak odabira</h1><p id="selection-mode-label"></p><p id="selection-preview-copy" role="status"></p></header>
+    <div class="selection-preview-buttons" aria-label="Izmišljena dugmad za pregled napretka">
+      <button type="button">Drugo</button>
+      <div class="selection-preview-target"><button id="selection-button" type="button">Pogledaj</button>
+        <div id="selection-progress-ring" class="selection-progress-ring" data-state="held" role="img" aria-label="Napredak na čekanju: 65 posto">
+          <span class="selection-progress-arc"></span><span id="selection-progress-symbol" class="selection-progress-symbol">Ⅱ</span><span id="selection-progress-label" class="selection-progress-label">Na čekanju</span>
+        </div>
+      </div>
+      <button type="button">Drugo</button>
+    </div>
+    <p class="selection-preview-note">Nacrt prikazuje dugme i postojeći krug napretka. Oznaka pauze ostaje na cilju, bez pulsiranja i bez pomjeranja dugmadi.</p>
+  </main>
+  <details class="reference-tools" open><summary>Opcije pregleda · izmišljeni podaci</summary>
+    <label>Režim <select id="selection-policy-preview"></select></label>
+    <label>Stanje <select id="selection-state-preview"><option value="active">Aktivno punjenje</option><option value="held" selected>Jedno oko izgubljeno, rok još traje</option><option value="resumed">Oba oka i svjež pogled na istom cilju</option><option value="expired">Rok je istekao</option><option value="both-lost">Oba oka izgubljena</option><option value="switch">Promijenjeno jedino praćeno oko</option><option value="no-gaze">Oko se prati, nema svježeg pogleda</option></select></label>
+    <label><input id="selection-progress-visible" type="checkbox" checked> Prikaži napredak radnje</label>
+  </details>
+  <details class="design-notes"><summary>Pravila napretka i nastavka</summary>
+    <p>Primjeri stanja su zaustavljeni radi pregleda dizajna. U aplikaciji rok ističe automatski, i bez novog pogleda. Primjer kratkog prekida vidljiv je samo u režimu Oba oka uz kratke prekide; režim promijenite ovdje ili u Postavkama. Ovo nije mjerenje Tobii uređaja.</p>
+    <p>Pri gubitku jednog oka krug ostaje na istom dugmetu s istim popunjenim dijelom, oznakom pauze i tekstom Na čekanju. I krug i isticanje dugmeta prestaju pulsirati. Tokom početne pauze krug se ne pojavljuje ranije nego inače; već istaknuto dugme može dobiti oznaku pauze. Ako je Prikaži napredak radnje isključeno, krug ostaje skriven.</p>
+    <p>Nastavak traži oba oka i novi validan pogled unutar istog nepromijenjenog cilja prije isteka roka. Prvi povratni uzorak vraća sačuvani napredak, bez dopisivanja vremena prekida ili trenutne aktivacije. Promjena teksta, cilja, dijaloga ili geometrije poništava pokušaj. Postojeća tolerancija uz rub ne produžava rok prekida oka i ne dopušta nastavak izvan dugmeta.</p>
+    <p>Oba izgubljena oka, promjena jedinog praćenog oka bez svježeg pogleda s oba oka između, promjena režima, prekid veze, odmor ili zatvaranje prikaza poništavaju pokušaj. Nedostajući ili zastarjeli pogled nikad ne puni krug. Gubitak praćenja ne otključava već dovršen izbor: za ponavljanje i dalje treba skloniti pogled.</p>
+    <p>Probni režim dopušta početak i završetak uz najmanje jedno oko i svjež validan pogled. Prelazak s oba na jedno oko prolazi uobičajenu provjeru cilja; promjena položaja pogleda ne čuva prethodno dugme na silu. <a href="settings.html#gaze-settings">Postavke pogleda</a> i <a href="gaze-check.html">Provjera pogleda</a> prikazuju isti režim.</p>
+  </details>
+</body>
+</html>

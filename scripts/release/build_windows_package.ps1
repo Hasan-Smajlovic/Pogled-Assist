@@ -116,6 +116,12 @@ $packageFiles = @{
     (Join-Path $RepoRoot "docs\WINDOWS_RELEASE.md") = "README.md"
     $VersionFile = "VERSION"
 }
+$BuildInfoFile = Join-Path $OutputRoot "BUILD_INFO.json"
+& $PythonExecutable (Join-Path $RepoRoot "pogled_assist\build_info.py") --write $BuildInfoFile
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not record the package source identity."
+}
+$packageFiles[$BuildInfoFile] = "BUILD_INFO.json"
 foreach ($sourcePath in $packageFiles.Keys) {
     Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $PackageRoot $packageFiles[$sourcePath]) -Force
 }
@@ -155,6 +161,7 @@ $requiredFiles = @(
     "update_windows.ps1",
     "README.md",
     "VERSION",
+    "BUILD_INFO.json",
     "_internal\assets\icon.png",
     "_internal\pogled_assist\assets\emergency_alarm.wav",
     "_internal\pogled_assist\assets\bosnian-model.json.gz",

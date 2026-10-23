@@ -197,6 +197,34 @@ def test_speech_busy_control_preserves_message_and_rejects_repeat_start(speech):
     assert window._input.text() == text
 
 
+@pytest.mark.parametrize("size", [(1280, 720), (1920, 1080)])
+def test_speech_activity_stays_inside_aligned_button_without_moving_targets(speech, qtbot, size):
+    window, service, _ = speech
+    window.resize(*size)
+    qtbot.wait(1)
+    button = window._play_button
+    activity = window._playback_progress
+    assert activity.parentWidget() is button
+    assert activity.testAttribute(Qt.WA_TransparentForMouseEvents)
+    assert activity.focusPolicy() == Qt.NoFocus
+    targets = {action: item.geometry() for action, item in window._action_buttons.items()}
+    for state in ("preparing", "speaking", "finished", "failed", "stopped", "preparing"):
+        window.set_playback_state(state)
+        qtbot.wait(1)
+        assert button.geometry().top() == window._phrases_button.geometry().top()
+        assert button.geometry().bottom() == window._phrases_button.geometry().bottom()
+        assert targets == {
+            action: item.geometry() for action, item in window._action_buttons.items()
+        }
+        assert button.rect().contains(activity.geometry())
+        assert activity.isVisible() == (state in ("preparing", "speaking"))
+        point = activity.mapTo(window, activity.rect().center())
+        assert window.childAt(point) is button
+    stopped = service.stop_calls
+    button.click()
+    assert service.stop_calls == stopped + 1
+
+
 def test_speech_window_tracks_active_speech_started_in_another_window(qtbot):
     service = FakeSpeech()
     service.request_id = 12
@@ -234,6 +262,7 @@ def settings(qtbot, qapp, monkeypatch):
     window.resize(1280, 720)
     window._select_tab(2)
     window.show()
+    window.handle_eye_status(True, True)
     yield window, store, client, account, cleared
     account.cancel_check()
 

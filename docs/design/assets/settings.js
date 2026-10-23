@@ -45,6 +45,11 @@
     }, 800);
   }
   $('startup-enabled').addEventListener('change', previewStartupChange);
+  $('logging-enabled').checked = ReferenceDesign.readSession('logging-enabled', false);
+  $('logging-enabled').addEventListener('change', event => {
+    ReferenceDesign.writeSession('logging-enabled', event.target.checked);
+    $('settings-status').textContent = event.target.checked ? 'Opće zapisivanje je uključeno.' : 'Opće zapisivanje je isključeno. Ručno pokrenuto dijagnostičko snimanje nastavlja do svog završetka.';
+  });
   $('startup-launcher').addEventListener('change', () => {
     if ($('startup-enabled').checked) previewStartupChange();
     else $('settings-status').textContent = $('startup-launcher').checked
@@ -67,6 +72,62 @@
     renderScript();
   });
   $('show-tracking-feedback').checked = ReferenceDesign.readSession('feedback', true);
+  function renderEyePolicy() {
+    const holding = ReferenceEyePolicy.read() === 'hold';
+    const duration = ReferenceEyePolicy.holdMs();
+    $('eye-policy-hint').textContent = ReferenceEyePolicy.description();
+    $('eye-hold-value').textContent = duration + ' ms';
+    $('eye-hold-row').dataset.disabled = String(!holding);
+    $('eye-hold-less').disabled = !holding || duration <= 50;
+    $('eye-hold-more').disabled = !holding || duration >= 500;
+  }
+  ReferenceEyePolicy.setupSelect($('eye-policy'), () => {
+    renderEyePolicy();
+    $('settings-status').textContent = 'Režim je promijenjen. Odabir počinje ispočetka.';
+  });
+  for (const [id, delta] of [['eye-hold-less', -50], ['eye-hold-more', 50]]) {
+    $(id).addEventListener('click', () => {
+      ReferenceEyePolicy.setHoldMs(ReferenceEyePolicy.holdMs() + delta);
+      renderEyePolicy();
+      $('settings-status').textContent = 'Čuvanje napretka: ' + ReferenceEyePolicy.holdMs() + ' ms.';
+    });
+  }
+  const storedEdgeHold = Number(ReferenceDesign.readSession('edge-hold-ms', 120));
+  let edgeHoldMs = Number.isFinite(storedEdgeHold) ? Math.min(300, Math.max(0, Math.round(storedEdgeHold / 20) * 20)) : 120;
+  function renderEdgeHold() {
+    $('edge-hold-value').textContent = edgeHoldMs === 0 ? 'Isključeno' : edgeHoldMs + ' ms';
+  }
+  for (const [id, delta] of [['edge-hold-less', -20], ['edge-hold-more', 20]]) {
+    $(id).addEventListener('click', () => {
+      edgeHoldMs = Math.min(300, Math.max(0, edgeHoldMs + delta));
+      ReferenceDesign.writeSession('edge-hold-ms', edgeHoldMs);
+      renderEdgeHold();
+      $('settings-status').textContent = 'Čuvanje odabira uz rub je ažurirano. Odabir počinje ispočetka.';
+    });
+  }
+  renderEdgeHold();
+  function showGazeTab(name) {
+    for (const button of document.querySelectorAll('[data-gaze-tab]')) {
+      const selected = button.dataset.gazeTab === name;
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      $(button.getAttribute('aria-controls')).hidden = !selected;
+    }
+  }
+  for (const button of document.querySelectorAll('[data-gaze-tab]')) {
+    button.addEventListener('click', () => showGazeTab(button.dataset.gazeTab));
+    button.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = [...document.querySelectorAll('[data-gaze-tab]')];
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+        : (tabs.indexOf(button) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      showGazeTab(tabs[index].dataset.gazeTab);
+      tabs[index].focus();
+    });
+  }
+  showGazeTab(['pointer', 'stability'].includes(query.get('gaze-tab')) ? query.get('gaze-tab') : 'selection');
+  renderEyePolicy();
   for (const button of document.querySelectorAll('[data-voice]')) button.addEventListener('click', () => {
     selectedVoice = button.dataset.voice;
     ReferenceDesign.writeSession('voice', selectedVoice);
