@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES, eyes_usable
 from ..tracking.gaze_check import FRESH_SECONDS, CheckSnapshot
 from ..tracking.status import TrackingState
 
@@ -22,7 +23,11 @@ def position_notice(snapshot: CheckSnapshot, tracking_state: TrackingState | Non
     return "Okvir pokazuje položaj očiju, traka ispod udaljenost."
 
 
-def position_guidance(snapshot: CheckSnapshot) -> str:
+def position_guidance(snapshot: CheckSnapshot, policy: str = BOTH_EYES) -> str:
+    if policy == ANY_EYE and eyes_usable(policy, snapshot.left, snapshot.right):
+        if snapshot.gaze is None:
+            return "Čekam svjež validan pogled za odabir u probnom režimu."
+        return "Probni režim dopušta odabir jednim okom. Provjerite preciznost na metama."
     left_visible, right_visible = visible_eyes(snapshot)
     if left_visible is None or right_visible is None:
         return "Čekam svježe podatke. Provjerite vezu uređaja i pogledajte prema ekranu."
@@ -60,18 +65,18 @@ def _depth_guidance(snapshot: CheckSnapshot) -> str:
 
 
 def precision_feedback(
-    snapshot: CheckSnapshot, remaining: int, now: float
+    snapshot: CheckSnapshot, remaining: int, now: float, policy: str = BOTH_EYES
 ) -> tuple[str, bool | None]:
     missing_eye = _missing_eye_feedback(snapshot)
-    if missing_eye is not None:
+    if missing_eye is not None and policy != ANY_EYE:
         return missing_eye, False
     if not _fresh_gaze(snapshot, now):
-        return "Čekam pogled s oba oka. Ako se ne vrati, odaberite „Prekini test“.", None
+        return "Čekam svjež validan pogled. Ako se ne vrati, odaberite „Prekini test“.", None
     return f"Zadržite pogled · još {remaining} s.", None
 
 
-def free_gaze_is_visible(snapshot: CheckSnapshot, now: float) -> bool:
-    if not (snapshot.left and snapshot.right):
+def free_gaze_is_visible(snapshot: CheckSnapshot, now: float, policy: str = BOTH_EYES) -> bool:
+    if not eyes_usable(policy, snapshot.left, snapshot.right):
         return False
     if not _fresh_gaze(snapshot, now):
         return False

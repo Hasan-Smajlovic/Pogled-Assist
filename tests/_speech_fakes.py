@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import copy
+import faulthandler
+from contextlib import contextmanager
 from dataclasses import replace
+from threading import Thread
 
 from PySide6.QtCore import QObject, Signal
 
@@ -11,6 +14,32 @@ from pogled_assist.speech.elevenlabs import AccountOptions, Subscription
 from pogled_assist.speech.speech_library import SpeechLibrary, default_categories
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.speech.voice_state import ACTIVE_PLAYBACK_STATES, VOICE_TEST_TEXT, VoiceState
+
+
+@contextmanager
+def speech_workers(monkeypatch):
+    """Join real speech workers while their Qt owners are still alive."""
+    from pogled_assist.speech import eleven_account, eleven_transport, speech_service
+
+    workers = []
+
+    def thread(*args, **kwargs):
+        worker = Thread(*args, **kwargs)
+        workers.append(worker)
+        return worker
+
+    for module in (eleven_account, eleven_transport, speech_service):
+        monkeypatch.setattr(module, "Thread", thread)
+    try:
+        yield
+    finally:
+        for worker in workers:
+            if worker.ident is not None:
+                worker.join(10)
+        alive = [worker.name for worker in workers if worker.is_alive()]
+        if alive:
+            faulthandler.dump_traceback()
+        assert not alive, f"Speech workers did not stop: {alive}"
 
 
 class FakeCredentials:

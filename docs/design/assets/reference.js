@@ -8,7 +8,9 @@
     ['settings', 'settings.html', 'Postavke'],
     ['installation', 'installation.html', 'Instalacija'],
     ['gaze-check', 'gaze-check.html', 'Provjera pogleda'],
+    ['diagnostics', 'diagnostics.html', 'Dijagnostičko snimanje'],
     ['tracking', 'tracking.html', 'Praćenje'],
+    ['selection-progress', 'selection-progress.html', 'Napredak odabira'],
   ];
   const currentPage = document.body.dataset.referencePage;
   const query = new URLSearchParams(location.search);
@@ -27,6 +29,10 @@
     if (!page) throw new Error('Unknown reference page: ' + key);
     const url = new URL(page[1], location.href);
     if (!readSession('feedback', true)) url.searchParams.set('feedback', 'off');
+    const policy = readSession('eye-policy', 'both');
+    if (['both', 'hold', 'any'].includes(policy)) url.searchParams.set('policy', policy);
+    const hold = readSession('eye-hold-ms', 150);
+    if (typeof hold === 'number' && hold >= 50 && hold <= 500 && hold % 50 === 0) url.searchParams.set('hold-ms', hold);
     for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
     return url.href;
   }

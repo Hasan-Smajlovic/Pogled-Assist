@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence, Set
 
+from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES
 from ..tracking.gaze_check import FixationResult
 
 
@@ -14,9 +15,12 @@ def result_advice(
     tracked_targets: Set[int],
     losses: int,
     wrong_selections: int,
+    policy: str = BOTH_EYES,
 ) -> str:
+    eyes = "najmanje jedno oko uz svjež pogled" if policy == ANY_EYE else "oba oka"
+    tracking = "se prati" if policy == ANY_EYE else "se prate"
     if not results or any(result.near is None for result in results):
-        return "Odaberite „Podesi položaj“. Kad se prate oba oka, ponovite provjeru."
+        return f"Odaberite „Podesi položaj“. Kad {tracking} {eyes}, ponovite provjeru."
     if any(result.near is False for result in results):
         return (
             "Odaberite „Podesi položaj“. Ako pogled i dalje promašuje, "
@@ -30,12 +34,12 @@ def result_advice(
     ):
         return (
             "Tokom dijela probe nije bilo dovoljno podataka o pogledu. Podesite položaj "
-            "dok se prate oba oka, pa ponovite probu."
+            f"dok {tracking} {eyes}, pa ponovite probu."
         )
     if losses and not all(trial_results):
         return (
             "Prekidi praćenja poništavali su izbor. Podesite ekran dok uređaj "
-            "ne vidi oba oka, pa ponovite probu."
+            f"ne vidi {eyes}, pa ponovite probu."
         )
     if wrong_selections:
         return "Odabrana su i pogrešna dugmad. Provjerite položaj i kalibraciju, pa ponovite probu."

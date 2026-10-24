@@ -91,8 +91,9 @@ def test_media_error_retains_whether_any_audio_was_played(player, started):
     assert media.stopped
 
 
+@pytest.mark.filterwarnings("ignore:libpyside. Failed to disconnect.*:RuntimeWarning")
 def test_missing_output_is_not_treated_as_corrupt_media(player, monkeypatch):
-    playback, _instances = player
+    playback, instances = player
     monkeypatch.setattr(
         audio_playback,
         "QAudioOutput",
@@ -102,6 +103,8 @@ def test_missing_output_is_not_treated_as_corrupt_media(player, monkeypatch):
     playback.play(1, b"valid audio", result)
     assert result.done.is_set() and result.outcome == "failed"
     assert not result.started and not result.invalid_audio
+    assert instances[0].stopped and instances[0].source is None
+    assert not playback._timer.isActive()
 
 
 @pytest.mark.parametrize("kind", ["status", "format"])

@@ -18,6 +18,12 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 from zipfile import BadZipFile, ZipFile
 
+# The publication workflow invokes this file directly; pytest imports it as a module.
+if __package__:
+    from scripts.ui.gallery import gallery_content, page_html
+else:
+    from gallery import gallery_content, page_html
+
 REPOSITORY = "Hasan-Smajlovic/Pogled-Assist"
 COMMENT_MARKER = "<!-- pogled-assist-ui-gallery -->"
 STATUS_START = "<!-- pogled-assist-ui-gallery-status -->"
@@ -564,19 +570,17 @@ def _write_gallery(directory: Path, gallery: Gallery) -> None:
             continue
         target = directory / resolution
         target.mkdir(parents=True, exist_ok=True)
-        cards = []
+        titles = {}
         for path in selected:
             name = PurePosixPath(path).name
             (target / name).write_bytes(images[path])
-            title = name.removesuffix(".png").replace("-", " ").capitalize()
-            cards.append(
-                f'<article><h2>{title}</h2><a href="{name}">'
-                f'<img loading="lazy" src="{name}" alt="{title}"></a></article>'
+            titles[name.removesuffix(".png")] = (
+                name.removesuffix(".png").replace("-", " ").capitalize()
             )
         _write_page(
             target / "index.html",
             f"PR #{pull['number']} · {resolution}",
-            '<p><a href="../">Back to resolutions</a></p>' + "\n".join(cards),
+            '<p><a href="../">Back to resolutions</a></p>' + gallery_content(titles),
         )
         links.append(f'<li><a href="{resolution}/">{resolution}: {len(selected)} images</a></li>')
     _write_page(
@@ -588,38 +592,7 @@ def _write_gallery(directory: Path, gallery: Gallery) -> None:
 
 
 def _write_page(path: Path, title: str, content: str) -> None:
-    path.write_text(
-        f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self';
-    style-src 'unsafe-inline'; base-uri 'none'">
-  <title>{escape(title)}</title>
-  <style>
-    body {{ margin: 0; padding: 24px; background: #0c0e12; color: #f6f7fb;
-      font-family: "Segoe UI", Arial, sans-serif; }}
-    header, main {{ max-width: 1440px; margin: auto; }}
-    main {{ display: grid; gap: 24px; }}
-    article {{ overflow: hidden; border: 1px solid #303746; border-radius: 12px;
-      background: #151923; padding: 16px; }}
-    h2 {{ font-size: 18px; }}
-    p {{ color: #aeb8c8; overflow-wrap: anywhere; }}
-    a {{ color: #9ac7ff; }}
-    img {{ display: block; max-width: 100%; height: auto; margin: auto; }}
-  </style>
-</head>
-<body>
-  <header><h1>{escape(title)}</h1>
-    <p>Generated from Qt widgets with synthetic data. Hardware and Windows input are disabled.</p>
-  </header>
-  <main>{content}</main>
-</body>
-</html>
-""",
-        encoding="utf-8",
-    )
+    path.write_text(page_html(title, content), encoding="utf-8")
 
 
 def _comment(base_url: str, gallery: Gallery) -> str:

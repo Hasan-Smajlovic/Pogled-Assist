@@ -1,7 +1,14 @@
 .hotbar-reference { position: relative; margin: -12px -12px 18px; height: 76px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; background: #111318; }
 .hotbar-reference button { flex: 0 0 104px; min-height: 58px; height: 58px; padding: 4px; font-size: 14px; }
+.hotbar-reference button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:12px; }
+.hotbar-button-icon { height:22px; line-height:22px; font-size:22px; color:#dce6f3; }
 .hotbar-reference button:first-child { flex-basis: 58px; margin-right: 16px; }
 .hotbar-reference button:nth-child(2) { margin-right: 18px; }
+.hotbar-settings-recording { position:relative; }
+.hotbar-settings-recording .recording-slot { position:absolute; left:4px; right:4px; top:8px; height:22px; justify-content:center; pointer-events:none; }
+.hotbar-settings-recording .recording-badge { width:100%; height:22px; }
+.hotbar-settings-recording .recording-badge { gap:4px; padding:0 4px; font-size:11px; line-height:18px; }
+.hotbar-settings-recording .recording-badge::before { flex-basis:9px; font-size:10px; }
 .hotbar-reference button:nth-child(3) { flex-basis: 112px; margin-right: 8px; }
 .hotbar-reference button:nth-child(6) { margin-right: 26px; }
 .hotbar-reference button::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 9px; }
@@ -10,7 +17,7 @@
 .hotbar-tracking-icon { width: 18px; text-align: center; color: var(--tracking-color); }
 .hotbar-tracking-detail { color: #bec9d9; font-size: 13px; white-space: nowrap; }
 .hotbar-status-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
-.hotbar-status-preview select { padding: 8px; font: inherit; }
+.hotbar-status-preview select { padding: 8px; font: inherit; max-width: 480px; color: #eef2f8; background: #1c2029; border: 1px solid #58647a; border-radius: 6px; }
 #hotbar-restore { width: 86px; min-height: 76px; font-size: 13px; }
 .gaze-marker-preview { position: relative; height: 320px; border: 1px solid var(--border); border-radius: 8px; margin-top: 20px; }
 .gaze-marker-preview > p { margin: 20px; color: #bec9d9; }

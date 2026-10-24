@@ -76,7 +76,11 @@ ROOT = Path(__file__).resolve().parents[2]
         ),
         (
             "scripts/ui/capture_ui.py",
-            ["tests/ui/test_ui_rendering.py", "tests/suggestions/test_suggestion_ui.py"],
+            [
+                "tests/ui/test_ui_rendering.py",
+                "tests/suggestions/test_suggestion_ui.py",
+                "tests/tooling/test_ui_gallery_site.py",
+            ],
         ),
     ],
 )

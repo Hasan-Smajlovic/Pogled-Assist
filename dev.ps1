@@ -4,8 +4,16 @@ param(
     [string]$Action = "help",
     [string]$BasePython,
     [switch]$Open,
+    [ValidateSet("core", "full")]
+    [string]$UiProfile = "core",
+    [ValidateSet("speech", "keyboards", "settings", "tracking", "gaze-check", "voice")]
+    [string[]]$UiGroup = @(),
     [ValidateSet(0, 1, 2)]
     [int]$Workers = 0,
+    [switch]$Parallel,
+    [Parameter(DontShow)]
+    [ValidateSet("All", "Application", "Infrastructure")]
+    [string]$CoverageGroup = "All",
     [string[]]$TestPaths = @(),
     [string]$BaseRef = "origin/development"
 )
@@ -17,12 +25,19 @@ $RepoRoot = $PSScriptRoot
 $VenvRoot = Join-Path $RepoRoot ".venv"
 $PythonPath = Join-Path $VenvRoot "Scripts\python.exe"
 $RequiredPythonVersion = "3.10"
-$AnalyzerVersion = "1.25.0"
-$AnalyzerPath = Join-Path $RepoRoot ".dev-tools\PSScriptAnalyzer\$AnalyzerVersion\PSScriptAnalyzer.psd1"
 $StageTimings = [Collections.Generic.List[object]]::new()
 
 if ($TestPaths.Count -gt 0 -and $Action -notin @("test", "test-ui")) {
     throw "-TestPaths is supported only by test and test-ui; coverage and check always run the full suite."
+}
+if (($UiProfile -ne "core" -or $UiGroup.Count -gt 0) -and $Action -ne "ui") {
+    throw "-UiProfile and -UiGroup are supported only by ui."
+}
+if ($Parallel -and $Action -ne "check") {
+    throw "-Parallel is supported only by check."
+}
+if ($CoverageGroup -ne "All" -and $Action -ne "coverage") {
+    throw "-CoverageGroup is supported only by the internal coverage check."
 }
 
 function Invoke-CheckStage {
@@ -200,20 +215,10 @@ function Install-DevEnvironment {
         "-r", (Join-Path $RepoRoot "requirements-build.txt")
     )
 
-    if (-not (Test-Path -LiteralPath $AnalyzerPath -PathType Leaf)) {
-        $toolRoot = Join-Path $RepoRoot ".dev-tools"
-        New-Item -ItemType Directory -Path $toolRoot -Force | Out-Null
-        Save-Module `
-            -Name "PSScriptAnalyzer" `
-            -RequiredVersion $AnalyzerVersion `
-            -Path $toolRoot `
-            -Repository "PSGallery" `
-            -Force
-    }
-
+    & (Join-Path $RepoRoot "scripts\checks\install_powershell_analyzer.ps1")
     & (Join-Path $RepoRoot "scripts\checks\check_github_actions.ps1") -Install
 
-    Write-Output "Development environment is ready. Run .\dev.ps1 check."
+    Write-Output "Development environment is ready. Run .\dev.ps1 check -Parallel."
 }
 
 function Test-DevEnvironmentMatches {
@@ -268,22 +273,32 @@ function Invoke-LintChecks {
     }
 }
 
-function Invoke-TestSuite {
-    param(
-        [switch]$UiOnly,
-        [switch]$WithCoverage,
-        [string[]]$Paths = @(),
-        [int]$WorkerCount = $Workers
-    )
+function Resolve-TestWorkerCount {
+    param([int]$WorkerCount, [switch]$WithCoverage)
 
-    $python = Get-DevPython
-    $arguments = @("-B", "-m", "pytest", "-p", "no:cacheprovider")
     if ($WorkerCount -eq 0) {
         $WorkerCount = 2
         if ($WithCoverage) {
             $WorkerCount = 1
         }
     }
+    return $WorkerCount
+}
+
+function Invoke-TestSuite {
+    param(
+        [switch]$UiOnly,
+        [ValidateSet("None", "Full", "Collect", "Append")]
+        [string]$Coverage = "None",
+        [string[]]$Paths = @(),
+        [string[]]$IgnorePaths = @(),
+        [int]$WorkerCount = $Workers
+    )
+
+    $python = Get-DevPython
+    $withCoverage = $Coverage -ne "None"
+    $arguments = @("-B", "-m", "pytest", "-p", "no:cacheprovider")
+    $WorkerCount = Resolve-TestWorkerCount -WorkerCount $WorkerCount -WithCoverage:$WithCoverage
     if ($WorkerCount -gt 1) {
         $arguments += @("-n", [string]$WorkerCount, "--dist=loadfile")
     } else {
@@ -294,14 +309,81 @@ function Invoke-TestSuite {
         $arguments += @("-m", "e2e")
     }
     if ($WithCoverage) {
+        $arguments += Get-CoverageArguments -Mode $Coverage
+        $arguments += "--durations=30"
+        if ($Coverage -eq "Collect") { $arguments += "-v" }
+    }
+    $arguments += @($IgnorePaths | ForEach-Object { "--ignore=$_" })
+    $arguments += $Paths
+
+    Invoke-Pytest -Python $python -Arguments $arguments -WithCoverage:$WithCoverage
+}
+
+function Invoke-CoverageGroup {
+    # The application group is the complement, so new test folders are included.
+    switch ($CoverageGroup) {
+        "Application" {
+            Invoke-TestSuite -Coverage Collect -IgnorePaths @("tests/release", "tests/tooling")
+        }
+        "Infrastructure" {
+            Invoke-TestSuite -Coverage Collect -Paths @("tests/release", "tests/tooling") `
+                -IgnorePaths @("tests/release/test_windows_installer.py")
+        }
+        default { Invoke-TestSuite -Coverage Full }
+    }
+}
+
+function Merge-CheckCoverage {
+    param([string[]]$Files)
+
+    foreach ($file in $Files) {
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "Missing coverage data: $file"
+        }
+    }
+    $python = Get-DevPython
+    # Reporting also auto-combines sibling shards in coverage.py. Keep its data
+    # inside this unique run directory, away from interrupted checkout runs.
+    $combined = Join-Path (Split-Path -Parent $Files[0]) "combined.coverage"
+    $dataArgument = "--data-file=$combined"
+    Invoke-ExternalCommand -FilePath $python -ArgumentList (@("-m", "coverage", "combine", "--keep", $dataArgument) + $Files)
+    try {
+        # Generate HTML even when the combined coverage is below the configured floor.
+        Invoke-ExternalCommand -FilePath $python -ArgumentList @(
+            "-m", "coverage", "html", $dataArgument, "--fail-under=0", "-d", (Join-Path $RepoRoot "dist\coverage-html")
+        )
+        Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "coverage", "report", $dataArgument)
+    } finally {
+        $destination = $env:COVERAGE_FILE
+        if ([string]::IsNullOrEmpty($destination)) { $destination = Join-Path $RepoRoot ".coverage" }
+        if ([IO.Path]::GetFullPath($destination) -ne [IO.Path]::GetFullPath($combined)) {
+            Copy-Item -LiteralPath $combined -Destination $destination -Force
+        }
+    }
+}
+
+function Get-CoverageArguments {
+    param([ValidateSet("Full", "Collect", "Append")][string]$Mode)
+
+    $arguments = @("--cov=pogled_assist")
+    if ($Mode -eq "Collect") {
+        # Enforce the floor on the combined data after the installer phase.
+        $arguments += @("--cov-report=", "--cov-fail-under=0")
+    } else {
         $coverageHtml = Join-Path $RepoRoot "dist\coverage-html"
         $arguments += @(
-            "--cov=pogled_assist",
             "--cov-report=term-missing:skip-covered",
             "--cov-report=html:$coverageHtml"
         )
     }
-    $arguments += $Paths
+    if ($Mode -eq "Append") {
+        $arguments += "--cov-append"
+    }
+    return $arguments
+}
+
+function Invoke-Pytest {
+    param([string]$Python, [string[]]$Arguments, [switch]$WithCoverage)
 
     $previousQtPlatform = $env:QT_QPA_PLATFORM
     $previousPytestOptions = $env:PYTEST_ADDOPTS
@@ -363,12 +445,207 @@ function Invoke-FastCheck {
     } else {
         Write-Host "No changed paths require tests."
     }
-    Write-Host "Coverage and Windows package: skipped by check-fast. Run .\dev.ps1 check before a PR."
+    Write-Host "Coverage and Windows package: skipped by check-fast. Run .\dev.ps1 check -Parallel before a PR."
 }
 
 function Invoke-PackageBuild {
     $python = Get-DevPython
     & (Join-Path $RepoRoot "scripts\release\build_windows_package.ps1") -PythonPath $python
+}
+
+function New-CheckStage {
+    param($Definition, [string]$LogRoot)
+
+    $process = [Diagnostics.Process]::new()
+    $stage = [PSCustomObject]@{
+        Name = $definition.Name
+        Process = $process
+        Timer = [Diagnostics.Stopwatch]::new()
+        Started = $false
+        Finished = $false
+        OutputFile = $null
+        ErrorFile = $null
+        OutputTask = $null
+        ErrorTask = $null
+        Log = Join-Path $logRoot ($definition.Id + ".log")
+        ErrorLog = Join-Path $logRoot ($definition.Id + ".stderr.log")
+        CoverageFile = if ($definition.CoverageGroup -ne "All") {
+            Join-Path $logRoot ($definition.Id + ".coverage")
+        } else { $null }
+    }
+    return $stage
+}
+
+function Start-CheckStage {
+    param($Stage, $Definition, [string]$ScriptPath)
+
+    $process = $Stage.Process
+    $shellName = if ($PSEdition -eq "Desktop") { "powershell.exe" } else { "pwsh.exe" }
+    $stage.OutputFile = [IO.File]::Open($stage.Log, "Create", "Write", "Read")
+    $stage.ErrorFile = [IO.File]::Open($stage.ErrorLog, "Create", "Write", "Read")
+    $stageArguments = "{0} -Workers {1}" -f $definition.Action, $Workers
+    if ($definition.CoverageGroup -ne "All") {
+        $stageArguments += " -CoverageGroup $($definition.CoverageGroup)"
+        $process.StartInfo.EnvironmentVariables["COVERAGE_FILE"] = $stage.CoverageFile
+    }
+    $command = "try {{ & '{0}' {1}; exit 0 }} catch {{ Write-Error `$_ -ErrorAction Continue; exit 1 }}" -f @(
+        $ScriptPath.Replace("'", "''"), $stageArguments
+    )
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $process.StartInfo.FileName = Join-Path $PSHOME $shellName
+    $process.StartInfo.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand $encoded"
+    $process.StartInfo.WorkingDirectory = $RepoRoot
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = $true
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    Write-Host "Starting: $($stage.Name); logs: $($stage.Log), $($stage.ErrorLog)"
+    $stage.Timer.Start()
+    if (-not $process.Start()) { throw "Could not start $($stage.Name)." }
+    $stage.Started = $true
+    $stage.OutputTask = $process.StandardOutput.BaseStream.CopyToAsync($stage.OutputFile)
+    $stage.ErrorTask = $process.StandardError.BaseStream.CopyToAsync($stage.ErrorFile)
+}
+
+function Complete-CheckStage {
+    param($Stage, $Failed)
+
+    $stage.Timer.Stop()
+    $status = "passed"
+    try {
+        foreach ($task in @($stage.OutputTask, $stage.ErrorTask)) {
+            if (-not $task.Wait(10000)) { throw "Timed out draining check output." }
+        }
+        if ($stage.Process.ExitCode -ne 0) { $status = "FAILED" }
+    } catch {
+        $status = "FAILED"
+        Write-Warning "$($stage.Name): $_"
+    }
+    $stage.Finished = $true
+    $StageTimings.Add([PSCustomObject]@{
+        Name = $stage.Name
+        Seconds = $stage.Timer.Elapsed.TotalSeconds
+        Status = $status
+    })
+    if ($status -ne "passed") { $failed.Add($stage.Name) }
+    foreach ($stream in @($stage.OutputFile, $stage.ErrorFile)) { $stream.Flush() }
+    Write-Host ("Finished: {0} ({1}, {2:N1}s); logs: {3}, {4}" -f @(
+        $stage.Name, $status, $stage.Timer.Elapsed.TotalSeconds, $stage.Log, $stage.ErrorLog
+    ))
+}
+
+function Write-CheckProgress {
+    param($Stages, $Timer, [double]$NextStatus, [int]$Interval)
+
+    $active = @($Stages | Where-Object { -not $_.Finished })
+    if ($active.Count -eq 0 -or $Timer.Elapsed.TotalMilliseconds -lt $NextStatus) {
+        return $NextStatus
+    }
+    $details = foreach ($stage in $active) {
+        "{0} ({1:mm\:ss} elapsed)" -f $stage.Name, $stage.Timer.Elapsed
+    }
+    # Plain lines remain visible in captured output as well as terminals.
+    Write-Host ("Running: {0} | {1}/{2} finished" -f @(
+        ($details -join "; "), ($Stages.Count - $active.Count), $Stages.Count
+    ))
+    return $Timer.Elapsed.TotalMilliseconds + $Interval
+}
+
+function Wait-CheckStages {
+    param($Stages, $Failed, [int]$StatusIntervalMilliseconds)
+
+    $statusTimer = [Diagnostics.Stopwatch]::StartNew()
+    $nextStatusMilliseconds = 0
+    while (@($stages | Where-Object { -not $_.Finished }).Count -gt 0) {
+        foreach ($stage in $stages) {
+            if ($stage.Finished -or -not $stage.Process.HasExited) { continue }
+            Complete-CheckStage -Stage $stage -Failed $failed
+        }
+        $nextStatusMilliseconds = Write-CheckProgress `
+            -Stages $stages -Timer $statusTimer -NextStatus $nextStatusMilliseconds `
+            -Interval $StatusIntervalMilliseconds
+        if (@($stages | Where-Object { -not $_.Finished }).Count -gt 0) {
+            Start-Sleep -Milliseconds 200
+        }
+    }
+}
+
+function Close-CheckStages {
+    param($Stages)
+
+    foreach ($stage in $stages) {
+        if ($stage.Started -and -not $stage.Process.HasExited) {
+            & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $stage.Process.Id /T /F | Out-Null
+            $null = $stage.Process.WaitForExit(5000)
+        }
+        foreach ($stream in @($stage.OutputFile, $stage.ErrorFile)) {
+            if ($null -ne $stream) { $stream.Dispose() }
+        }
+        $stage.Process.Dispose()
+    }
+}
+
+function Invoke-ParallelCheck {
+    param(
+        [string]$ScriptPath = (Join-Path $RepoRoot "dev.ps1"),
+        [ValidateRange(100, 60000)]
+        [int]$StatusIntervalMilliseconds = 5000
+    )
+
+    $logRoot = Join-Path $RepoRoot ("dist\check-{0}" -f [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+    $stages = [Collections.Generic.List[object]]::new()
+    $failed = [Collections.Generic.List[string]]::new()
+    try {
+        foreach ($definition in @(
+            @{
+                Id = "application"
+                Action = "coverage"
+                Name = "Application tests and coverage"
+                CoverageGroup = "Application"
+            },
+            @{
+                Id = "infrastructure"
+                Action = "coverage"
+                Name = "Release and tooling tests and coverage"
+                CoverageGroup = "Infrastructure"
+            },
+            @{
+                Id = "package"
+                Action = "package"
+                Name = "Windows package and installer smoke tests"
+                CoverageGroup = "All"
+            }
+        )) {
+            $stage = New-CheckStage -Definition $definition -LogRoot $logRoot
+            $stages.Add($stage)
+            Start-CheckStage -Stage $stage -Definition $definition -ScriptPath $ScriptPath
+        }
+        Wait-CheckStages -Stages $stages -Failed $failed -StatusIntervalMilliseconds $StatusIntervalMilliseconds
+        $installerCoverage = Join-Path $logRoot "installer.coverage"
+        $previousCoverageFile = $env:COVERAGE_FILE
+        try {
+            $env:COVERAGE_FILE = $installerCoverage
+            Invoke-CheckStage -Name "Installer integration tests and coverage" -Command {
+                Invoke-TestSuite -Coverage Collect -Paths @("tests/release/test_windows_installer.py")
+            }
+        } catch {
+            $failed.Add("Installer integration tests and coverage")
+        } finally {
+            $env:COVERAGE_FILE = $previousCoverageFile
+        }
+        try {
+            Invoke-CheckStage -Name "Combined coverage report" -Command {
+                $files = @($stages | Where-Object { $null -ne $_.CoverageFile } | ForEach-Object { $_.CoverageFile })
+                Merge-CheckCoverage -Files ($files + @($installerCoverage))
+            }
+        } catch {
+            $failed.Add("Combined coverage report")
+        }
+        if ($failed.Count -gt 0) { throw "Failed checks: $($failed -join ', '). See logs in $logRoot" }
+    } finally {
+        Close-CheckStages -Stages $stages
+    }
 }
 
 function Write-Help {
@@ -379,8 +656,10 @@ Pogled Assist development commands
   .\dev.ps1 setup -BasePython C:\Path\To\python.exe    Select an installed Python
   .\dev.ps1 run         Start the real application from source
   .\dev.ps1 simulate    Start with mouse-driven gaze and no Tobii discovery
-  .\dev.ps1 ui          Render deterministic UI screenshots under dist\ui-preview
+  .\dev.ps1 ui          Render representative UI screenshots under dist\ui-preview
   .\dev.ps1 ui -Open    Render UI screenshots and open the HTML gallery
+  .\dev.ps1 ui -UiProfile full    Render all screenshot variants
+  .\dev.ps1 ui -UiProfile full -UiGroup voice    Render only the extended voice group
   .\dev.ps1 test        Run the complete hardware-independent test suite
   .\dev.ps1 test -TestPaths tests/gaze    Run an explicitly focused selection
   .\dev.ps1 test-ui     Run only end-to-end UI workflow and rendering tests
@@ -390,12 +669,15 @@ Pogled Assist development commands
   .\dev.ps1 check-fast  Lint and relevant changed tests, without coverage or package
   .\dev.ps1 check-fast -BaseRef origin/development    Override the comparison ref
   .\dev.ps1 check-fast -Workers 2    Use two workers even for a small selection
-  .\dev.ps1 check       Run all local checks, including the Windows package
+  .\dev.ps1 check       Run all local checks sequentially, including the Windows package
+  .\dev.ps1 check -Parallel    After lint, overlap application tests, release/tooling tests and packaging
   .\dev.ps1 test -Workers 1    Run tests sequentially (default without coverage: two)
   .\dev.ps1 coverage -Workers 2    Opt in to parallel coverage (default: one process)
   .\dev.ps1 package     Build and smoke-test the Windows release ZIP
 
   coverage and check ignore PYTEST_ADDOPTS, then restore it after testing.
+  check -Parallel uses one process per test group by default and reports status every 5 seconds.
+  It writes combined coverage reports once, after installer tests; coverage lists the 30 slowest tests.
 "@
 }
 
@@ -419,9 +701,14 @@ try {
         "ui" {
             $python = Get-DevPython
             $outputRoot = Join-Path $RepoRoot "dist\ui-preview"
-            Invoke-ExternalCommand -FilePath $python -ArgumentList @(
-                "-B", "-m", "scripts.ui.capture_ui", "--output", $outputRoot
+            $uiArguments = @(
+                "-B", "-m", "scripts.ui.capture_ui", "--output", $outputRoot,
+                "--profile", $UiProfile
             )
+            foreach ($group in $UiGroup) {
+                $uiArguments += @("--group", $group)
+            }
+            Invoke-ExternalCommand -FilePath $python -ArgumentList $uiArguments
             if ($Open) {
                 Start-Process -FilePath (Join-Path $outputRoot "index.html")
             }
@@ -433,7 +720,7 @@ try {
             Invoke-CheckStage -Name "UI tests" -Command { Invoke-TestSuite -UiOnly -Paths $TestPaths }
         }
         "coverage" {
-            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
+            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-CoverageGroup }
         }
         "lint" {
             Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
@@ -445,8 +732,12 @@ try {
         }
         "check" {
             Invoke-CheckStage -Name "Lint" -Command { Invoke-LintChecks }
-            Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -WithCoverage }
-            Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
+            if ($Parallel) {
+                Invoke-ParallelCheck
+            } else {
+                Invoke-CheckStage -Name "Tests and coverage" -Command { Invoke-TestSuite -Coverage Full }
+                Invoke-CheckStage -Name "Windows package and installer smoke tests" -Command { Invoke-PackageBuild }
+            }
         }
         "check-fast" {
             Invoke-FastCheck

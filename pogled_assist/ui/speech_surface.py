@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +26,7 @@ from ..keyboard_layouts import switch_label
 from ..speech.voice_state import RECOVERY_NOTICE_MS, VoiceState
 from ..tracking.feedback import TrackingNotice
 from .gaze_feedback import set_gaze_feedback
+from .recording_badge import RecordingBadge
 from .settings_controls import busy_indicator
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
@@ -94,25 +96,27 @@ class SpeechSurface(QWidget):
         self._play_button = self._make_button(
             "Izgovori", "play", "primaryButton", minimum_height=86
         )
-        playback = QWidget(self)
-        playback.setFixedHeight(96)
-        playback_layout = QGridLayout(playback)
-        playback_layout.setContentsMargins(0, 0, 0, 0)
-        playback_layout.setVerticalSpacing(3)
-        playback_layout.addWidget(self._play_button, 0, 0)
-        self._playback_progress = busy_indicator(playback)
-        self._playback_progress.setStyleSheet(
-            "QProgressBar { background: #303747; border: 0; } QProgressBar::chunk { background: #91dec0; }"
+        self._play_button.ensurePolished()
+        self._play_button.setMinimumWidth(
+            self._play_button.fontMetrics().horizontalAdvance("Zaustavi") + 32
         )
-        playback_layout.addWidget(self._playback_progress, 1, 0)
-        self._playback_progress.hide()
+        self._play_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        self._playback_progress = busy_indicator(self._play_button)
+        self._playback_progress.setFixedHeight(4)
+        self._playback_progress.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._playback_progress.setFocusPolicy(Qt.NoFocus)
+        self._playback_progress.setStyleSheet(
+            "QProgressBar { background: #123750; border: 0; border-radius: 2px; } "
+            "QProgressBar::chunk { background: #91dec0; border-radius: 2px; }"
+        )
+        self._play_button.installEventFilter(self)
         self._phrases_button = self._make_button(
             "Fraze", "phrases", "topButton", minimum_height=86, checkable=True
         )
         topbar.addWidget(self._clear_button, 8)
         topbar.addWidget(self._categories_button, 10)
         topbar.addWidget(message_box, 40)
-        topbar.addWidget(playback, 10)
+        topbar.addWidget(self._play_button, 10)
         topbar.addWidget(self._phrases_button, 9)
 
         return topbar
@@ -121,7 +125,29 @@ class SpeechSurface(QWidget):
         self._playback_state = state
         active = state in ("preparing", "speaking")
         self._play_button.setText("Zaustavi" if active else "Izgovori")
+        animate = self._play_button.style().styleHint(
+            QStyle.SH_Widget_Animate, None, self._play_button
+        )
+        self._playback_progress.setRange(0, 0 if animate else 1)
+        self._playback_progress.setValue(1)
+        self._position_playback_progress()
         self._playback_progress.setVisible(active)
+
+    def _position_playback_progress(self) -> None:
+        self._playback_progress.setGeometry(
+            12, self._play_button.height() - 14, max(0, self._play_button.width() - 24), 4
+        )
+        self._playback_progress.raise_()
+
+    def eventFilter(self, watched, event):
+        if watched is self._play_button and event.type() == QEvent.Resize:
+            self._position_playback_progress()
+        return super().eventFilter(watched, event)
+
+    def bind_recording_indicator(self, indicator) -> None:
+        self._recording_badge.bind_indicator(indicator)
+        for badge in self._dialogs.recording_badges:
+            badge.bind_indicator(indicator)
 
     def _build_message_box(self) -> QWidget:
         message_box = QWidget(self)
@@ -307,9 +333,17 @@ class SpeechSurface(QWidget):
         system_layout = QVBoxLayout(system_panel)
         system_layout.setContentsMargins(0, 0, 0, 0)
         system_layout.setSpacing(8)
-        controls_label = QLabel("Kontrole", system_panel)
+        heading = QWidget(system_panel)
+        heading.setFixedHeight(54)
+        heading_layout = QVBoxLayout(heading)
+        heading_layout.setContentsMargins(0, 0, 0, 0)
+        heading_layout.setSpacing(2)
+        controls_label = QLabel("Kontrole", heading)
         controls_label.setObjectName("sectionLabel")
-        system_layout.addWidget(controls_label)
+        self._recording_badge = RecordingBadge(heading)
+        heading_layout.addWidget(controls_label)
+        heading_layout.addWidget(self._recording_badge)
+        system_layout.addWidget(heading)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
             ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
@@ -600,7 +634,7 @@ class SpeechSurface(QWidget):
             return
         button = self._action_buttons.get(action)
         if button is not None:
-            set_gaze_feedback(button, selected)
+            set_gaze_feedback(button, selected, pulsing=False)
 
     def _context_changed(self) -> None:
         previous = self._diagnostic_context
@@ -771,7 +805,7 @@ SPEECH_STYLE = """
                 background: #1c2029;
                 border-color: #303747;
                 color: #eef2f8;
-                font-size: 27px;
+                font-size: 24px;
             }
             QPushButton#phraseButton {
                 font-size: 19px;
@@ -836,16 +870,8 @@ SPEECH_STYLE = """
                 border-color: #657084;
                 color: #bac5d4;
             }
-            QWidget#speechWindow QPushButton[gazeTarget="true"][gazePulse="0"],
-            QWidget#speechWindow QDialog#speechDialog QPushButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #111318;
-            }
-            QWidget#speechWindow QPushButton[gazeTarget="true"][gazePulse="1"],
-            QWidget#speechWindow QDialog#speechDialog QPushButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #86efac;
-                color: #ffffff;
+            QWidget#speechWindow QPushButton[gazeTarget="true"],
+            QWidget#speechWindow QDialog QPushButton[gazeTarget="true"] {
+                border-color: #9bc9f3;
             }
             """

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import faulthandler
 import json
 import logging
 import sys
 import threading
+
+import pytest
 
 from pogled_assist import logging_setup
 
@@ -107,7 +110,7 @@ def test_concurrent_stream_writes_never_write_to_the_fallback():
         def log(self, _level, text):
             if text == "worker message":
                 entered.set()
-                release.wait(5)
+                release.wait()
             calls.append(text)
 
     class Fallback:
@@ -128,16 +131,19 @@ def test_concurrent_stream_writes_never_write_to_the_fallback():
     ui = threading.Thread(target=write_ui_message)
     try:
         worker.start()
-        assert entered.wait(1)
+        assert entered.wait(10), "The first stream write did not reach the blocked logger"
         ui.start()
-        assert returned.wait(0.5), "a competing log call must not wait for the first producer"
+        if not returned.wait(10):
+            faulthandler.dump_traceback()
+            pytest.fail("A competing stream write waited for the first producer")
         assert calls == ["UI message"]
         assert fallback_calls == []
     finally:
         release.set()
-        worker.join(2)
+        worker.join(10)
         if ui.ident is not None:
-            ui.join(2)
+            ui.join(10)
+        assert not worker.is_alive() and not ui.is_alive()
     assert sorted(calls) == ["UI message", "worker message"]
 
 

@@ -17,6 +17,21 @@ def test_cursor_position_is_normalized_and_clamped():
     assert _normalize_cursor_position(QPoint(-100, 900), geometry) == (0.0, 1.0)
 
 
+def test_experimental_simulation_delivers_single_eye_coordinates_and_pauses_without_them(
+    simulation,
+):
+    provider, events, _now = simulation
+    provider.set_eye_tracking_policy("any")
+    provider.toggle_left_eye()
+    events.clear()
+    provider._emit_cursor_sample()
+    assert events == [("gaze", 0.25, 0.5)]
+    provider.toggle_gaze()
+    events.clear()
+    provider._emit_cursor_sample()
+    assert events == []
+
+
 def test_mouse_provider_emits_active_eyes_and_cursor_gaze(qapp, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.tracking.mouse_gaze_provider._primary_screen_geometry",

@@ -40,6 +40,11 @@ class CaptureGazeCheck:
         )
         window._render_position()
         self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
+        window._recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(window, "gaze-check-recording", "Gaze check: recording status", size=size)
+        window._recording_badge.set_status(None)
         window._snapshot = replace(
             window._snapshot,
             left=False,
@@ -73,7 +78,30 @@ class CaptureGazeCheck:
         self.capture(window, "gaze-check-interrupted", "Gaze check: eye loss", size=size)
         self._capture_precision(window, size)
         self._capture_trial(window, size)
+        self._capture_reports(window, size)
         self._capture_free(window, size)
+        single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
+        self.widgets.append(single)
+        single.resize(*size)
+        single._timer.timeout.disconnect(single._tick)
+        single.show()
+        self.app.processEvents()
+        single._start_free()
+        single._snapshot = CheckSnapshot(True, False, gaze=(0.5, 0.5), gaze_at=time.monotonic())
+        single._render_free()
+        self.capture(single, "gaze-check-one-eye-free", "Gaze check: one-eye free view", size=size)
+        held = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="hold"))
+        self.widgets.append(held)
+        held.resize(*size)
+        held._timer.timeout.disconnect(held._tick)
+        held.show()
+        self.app.processEvents()
+        held._start_trial()
+        held._target.progress = 0.65
+        held._target.progress_target = held._target.expected_button
+        held._target.paused = True
+        held._set_trial_hint("Na čekanju · čuvam napredak do povratka oba oka.")
+        self.capture(held, "gaze-check-trial-held", "Gaze check: paused trial", size=size)
 
     def _capture_precision(self, window, size):
         window._start_precision()
@@ -107,11 +135,15 @@ class CaptureGazeCheck:
         window._check.results[-1] = FixationResult(
             "Dolje desno", 90, 0.9, 48, 12, False, (0.92, 0.9)
         )
+        window._phase = "precision"
+        window._begin_attempt()
         window._show_results()
         self.capture(window, "gaze-check-results-misses", "Gaze check: measured misses", size=size)
         window._check.results = [
             FixationResult(name, 90, 0.9, 12, 8, True, (x, y)) for name, x, y in targets
         ]
+        window._phase = "precision"
+        window._begin_attempt()
         window._show_results()
         self.capture(window, "gaze-check-results-ready", "Gaze check: targets passed", size=size)
 
@@ -155,14 +187,18 @@ class CaptureGazeCheck:
             window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
         )
         window._finish_trial_target(False, time.monotonic())
-        window._trial_tracked_targets = {0, 1, 2}
-        window._show_results()
+        for row in window._report.trials[-1].rows:
+            row.state, row.coverage = "measured", 0.9
+        window._render_report()
         self.capture(
             window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
         )
         window._trial_results = [True] * 3
         window._trial_losses = window._trial_wrong_selections = 0
-        window._show_results()
+        for row in window._report.trials[-1].rows:
+            row.selected = True
+            row.wrong_selections = row.cancelled_selections = 0
+        window._render_report()
         self.capture(
             window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
         )
@@ -188,8 +224,66 @@ class CaptureGazeCheck:
         )
         window._render_free()
         self.capture(window, "gaze-check-free", "Gaze check: nine live targets", size=size)
+        window._test_recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(
+            window, "gaze-check-free-recording", "Gaze check: recording in free view", size=size
+        )
+        window._test_recording_badge.set_status(None)
         window._snapshot = CheckSnapshot()
         window._render_free()
         self.capture(
             window, "gaze-check-free-waiting", "Gaze check: free check waiting for gaze", size=size
         )
+
+    def _capture_reports(self, window, size):
+        window._view_report = window._report
+        window._render_report()
+        window._result_tabs.setCurrentIndex(1)
+        self.capture(
+            window, "gaze-check-report-trials", "Gaze check: saved trial attempts", size=size
+        )
+        window._result_tabs.setCurrentIndex(2)
+        self.capture(
+            window, "gaze-check-report-context", "Gaze check: settings and environment", size=size
+        )
+        window._result_tabs.setCurrentIndex(0)
+        window._reports.states[window._report.id] = "error"
+        window._render_storage()
+        self.capture(
+            window, "gaze-check-save-error", "Gaze check: save failed, export available", size=size
+        )
+        window._reports.states[window._report.id] = "saving"
+        window._render_storage()
+        self.capture(window, "gaze-check-saving", "Gaze check: saving in background", size=size)
+        window._reports.states[window._report.id] = "memory"
+        window._render_storage()
+        self.capture(window, "gaze-check-logging-off", "Gaze check: session-only result", size=size)
+        window._export_token = "synthetic-export"
+        window._export_finished("synthetic-export", False)
+        self.capture(window, "gaze-check-export-error", "Gaze check: export failed", size=size)
+        window._export_status.hide()
+        window._start_precision()
+        self.app.processEvents()
+        window._test_back_button.click()
+        self.capture(
+            window, "gaze-check-result-interrupted", "Gaze check: interrupted precision", size=size
+        )
+        # Populate history from session fixtures without touching the developer's logs.
+        window._reports.load = lambda: None
+        window._open_history()
+        self.capture(window, "gaze-check-history", "Gaze check: report history", size=size)
+        window._open_selected_report()
+        self.capture(
+            window, "gaze-check-archived", "Gaze check: read-only archived report", size=size
+        )
+        window._reports.reports.clear()
+        window._open_history()
+        self.capture(window, "gaze-check-history-empty", "Gaze check: no stored reports", size=size)
+        window._reports.history_error = True
+        window._refresh_history()
+        self.capture(
+            window, "gaze-check-history-error", "Gaze check: history read error", size=size
+        )
+        window.reset_check()
