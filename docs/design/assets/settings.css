@@ -28,9 +28,9 @@
   background: var(--blue);
   color: var(--text);
 }
-.settings-topbar { display: grid; grid-template-columns: 250px minmax(0, 1fr) 120px; align-items: center; gap: 16px; }
+.settings-topbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 120px; align-items: center; gap: 16px; min-height: 72px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 .settings-heading { flex:1; min-width:264px; }
-.settings-topbar h1 { margin: 0 0 4px; font-size: 25px; font-weight: 650; }
+.settings-topbar h1 { margin: 0; font-size: 25px; font-weight: 650; }
 .settings-status { min-width: 360px; margin: 0; color: var(--muted); font-size: 14px; text-align: right; }
 .settings-danger { background: #492326 !important; border-color: #804047 !important; }
 .settings-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; flex: 1; min-height: 0; }
@@ -248,15 +248,15 @@
 
 /* Proposed visual language. Keep gaze targets large while separating roles. */
 .settings-screen { font-size: 16px; }
-.settings-heading { flex: 0 0 250px; min-width: 250px; }
+.settings-heading { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .settings-topbar h1 { font-size: 28px; font-weight: 600; }
 .settings-header-feedback { flex: 1; min-width: 0; }
 .settings-status { min-width: 0; text-align: left; font-size: 14px; }
-.settings-save-state { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; padding: 4px 12px; border-left: 3px solid transparent; border-radius: 6px; }
+.settings-save-state { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 4px 8px; border-left: 3px solid transparent; border-radius: 6px; }
 .settings-save-state p { margin: 0; font-size: 15px; line-height: 1.4; color: var(--muted); }
 .settings-save-state[data-tone="error"] { background: #392a31; border-left-color: var(--error); }
 .settings-save-state[data-tone="error"] p { color: #f7d9dc; }
-.settings-save-state button { flex: 0 0 180px; }
+.settings-save-state button { min-width: 0; }
 .settings-screen .settings-close { min-width: 120px; }
 .settings-nav { border-color: transparent; background: transparent; }
 .settings-nav-label, .settings-group-label { font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; }
@@ -307,11 +307,8 @@
 .settings-control-group + .settings-control-group { padding-left: 24px; border-left: 1px solid var(--divider); }
 .settings-control-group h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
 .settings-control-group button { width: 100%; }
-.settings-heading .recording-slot { width: 100%; max-width: 264px; }
+.settings-heading .recording-slot { width: 264px; min-width: 0; }
 .settings-heading .recording-badge { max-width: 100%; font-size: 12px; }
-.settings-scroll { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
-.settings-scroll button { min-height: 58px; padding: 8px; text-align: center; font-size: 16px; background: var(--surface); border-color: var(--border); }
-.settings-nav-note { margin-top: 0; }
 .settings-guidance { max-width: 75ch; margin-top: 12px; padding: 16px 20px; border: 1px solid var(--divider); border-radius: 10px; background: var(--canvas); font-size: 15px; line-height: 1.55; }
 .settings-guidance h3 { margin: 0 0 12px; font-size: 17px; font-weight: 600; }
 .settings-guidance ul { margin: 0; padding-left: 22px; }
@@ -348,9 +345,13 @@
 .eleven-preview .eleven-privacy-note p { font-size: 13px; line-height: 1.4; }
 @media (max-width: 900px) {
   .settings-screen { height: calc(100dvh - 16px); min-height: 620px; }
-  .settings-topbar { grid-template-columns: 210px minmax(0, 1fr) 120px; }
+  .settings-topbar { grid-template-columns: minmax(0, 1fr) 120px; }
+  .settings-header-feedback { grid-column: 1 / -1; grid-row: 2; }
+  .settings-close { grid-column: 2; grid-row: 1; }
   .settings-options { grid-template-columns: 1fr; }
   .settings-heading { min-width: 0; }
+  .settings-heading { flex-wrap: wrap; }
+  .settings-heading .recording-slot { flex: 1 1 264px; width: auto; max-width: 100%; }
   .settings-save-state { flex-wrap: wrap; }
   .settings-body { grid-template-columns: 210px minmax(0, 1fr); }
   .settings-split { grid-template-columns: 1fr; gap: 20px; }
@@ -384,7 +385,6 @@
   .settings-heading { min-width: 0; }
   .settings-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-nav button { font-size: 16px; }
-  .settings-scroll { grid-column: 1 / -1; }
   .settings-header-feedback { flex-basis: calc(100% - 140px); }
   .settings-diagnostics-row { grid-template-columns: 1fr; }
   .voice-choices { grid-template-columns: 1fr; }

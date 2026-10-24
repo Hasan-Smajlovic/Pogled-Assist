@@ -26,7 +26,7 @@ from .settings_switch import SettingsSwitch
 GazeCallback = Callable[[], None]
 CONTROL_HEIGHT = 58
 ADJUST_BUTTON_WIDTH = 84
-VALUE_WIDTH = 160
+VALUE_WIDTH = 184
 CHOICE_WIDTH = 260
 CONTROL_SPACING = 12
 

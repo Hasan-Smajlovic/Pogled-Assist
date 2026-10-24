@@ -316,7 +316,6 @@
     renderStorageState();
     if (action === 'learning-settings') renderLearning();
     $(action).scrollTop = 0;
-    updateSettingsScroll();
   }
 
   function renderConnection() {
@@ -432,23 +431,5 @@
     $('retry-settings').hidden = !failed;
   }
 
-  function updateSettingsScroll() {
-    const panel = document.querySelector('.settings-page:not([hidden])');
-    if (!panel) return;
-    $('settings-scroll-up').disabled = panel.scrollTop <= 1;
-    $('settings-scroll-down').disabled = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
-  }
-  for (const [id, direction] of [['settings-scroll-up', -1], ['settings-scroll-down', 1]]) {
-    $(id).addEventListener('click', () => {
-      const panel = document.querySelector('.settings-page:not([hidden])');
-      panel.scrollBy({ top: direction * panel.clientHeight * .7, behavior: 'instant' });
-      updateSettingsScroll();
-    });
-  }
-  for (const panel of document.querySelectorAll('.settings-page')) panel.addEventListener('scroll', updateSettingsScroll);
-  const scrollResize = new ResizeObserver(updateSettingsScroll);
-  for (const panel of document.querySelectorAll('.settings-page')) scrollResize.observe(panel);
-  new MutationObserver(updateSettingsScroll).observe(document.querySelector('.settings-body'), { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
-  updateSettingsScroll();
 
 })();

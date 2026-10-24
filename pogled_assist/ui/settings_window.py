@@ -118,6 +118,10 @@ SETTINGS_STYLESHEET = """
                 border: 1px solid #394959;
                 border-radius: 14px;
             }
+            QFrame#settingsHeader {
+                border: 0;
+                border-bottom: 1px solid #394959;
+            }
             QFrame#settingRow {
                 background: #222d38;
                 border: 1px solid #394959;
@@ -350,7 +354,7 @@ class SettingsWindow(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 8, 16, 8)
         root.setSpacing(12)
-        root.addLayout(self._build_top_bar())
+        root.addWidget(self._build_top_bar())
 
         body = QHBoxLayout()
         body.setSpacing(14)
@@ -396,17 +400,21 @@ class SettingsWindow(QWidget):
 
         self._select_tab(0)
 
-    def _build_top_bar(self) -> QHBoxLayout:
-        top_bar = QHBoxLayout()
+    def _build_top_bar(self) -> QFrame:
+        header = QFrame(self)
+        header.setObjectName("settingsHeader")
+        top_bar = QHBoxLayout(header)
+        top_bar.setContentsMargins(0, 0, 0, 12)
         top_bar.setSpacing(16)
 
         title = styled_label("Postavke", "titleLabel", self)
         title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        heading = QVBoxLayout()
-        heading.setSpacing(4)
+        heading = QHBoxLayout()
+        heading.setSpacing(16)
         heading.addWidget(title)
         self._recording_badge = RecordingBadge(self)
         heading.addWidget(self._recording_badge)
+        heading.addStretch(1)
         top_bar.addLayout(heading, 1)
 
         self._status_label = styled_label("Spremno", "statusLabel", self)
@@ -417,7 +425,7 @@ class SettingsWindow(QWidget):
             "Zatvori", self.close, QSize(128, 58), "fa5s.times"
         )
         top_bar.addWidget(self._exit_button, 0, Qt.AlignRight)
-        return top_bar
+        return header
 
     def _build_nav_panel(self) -> QFrame:
         nav_panel = QFrame(self)
@@ -453,11 +461,6 @@ class SettingsWindow(QWidget):
             button.setObjectName("navButton")
             nav_layout.addWidget(button)
         nav_layout.addStretch(1)
-        for text, direction in (("Gore", -1), ("Dolje", 1)):
-            button = self._controls.button(
-                text, lambda direction=direction: self._scroll_page(direction), QSize(200, 58)
-            )
-            nav_layout.addWidget(button)
         self._save_note = styled_label(
             "Promjene se primjenjuju i čuvaju automatski.", "navNote", nav_panel
         )
@@ -534,11 +537,6 @@ class SettingsWindow(QWidget):
         for tab, button in enumerate(self._tab_buttons):
             button.setChecked(tab == index)
         self._set_status(self._tab_buttons[index].text())
-
-    def _scroll_page(self, direction: int) -> None:
-        self.cancel_gaze_interaction(require_leave=True)
-        bar = self._scroll.verticalScrollBar()
-        bar.setValue(bar.value() + direction * max(58, bar.pageStep() - 58))
 
     def _toggle_move_pointer(self) -> None:
         checked = not self._gaze_settings.move_mouse

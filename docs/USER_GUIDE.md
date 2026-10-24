@@ -186,7 +186,7 @@ Changes apply immediately. If saving fails, **Postavke \*** on the hotbar and a 
 
 Windows startup queries and changes run in the background, so other settings remain usable. The startup checkbox follows the latest requested choice while a change is pending. Closing Settings keeps requested Windows changes running while the application remains open. Reopening Settings reads the state after those changes finish. A launcher-window choice made during the initial query also applies to an existing enabled startup task.
 
-**Aplikacija** controls startup, updates, and whether the PowerShell launcher window stays visible. **Podrška** contains ordinary logging, diagnostic recording and the gaze check. **Gore** and **Dolje** scroll the active Settings page without changing its values. Scrolling cancels an unfinished gaze selection; clipped controls cannot be selected through the surrounding window. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
+**Aplikacija** controls startup, updates, and whether the PowerShell launcher window stays visible. **Podrška** contains ordinary logging, diagnostic recording and the gaze check. The active Settings page can be scrolled with the mouse wheel or scrollbar. Scrolling cancels an unfinished gaze selection; clipped controls cannot be selected through the surrounding window. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
 
 Gaze settings uses these values:
 

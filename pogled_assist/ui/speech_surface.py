@@ -10,6 +10,7 @@ from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -77,16 +78,29 @@ class SpeechSurface(QWidget):
         apply_theme(self, SPEECH_STYLE)
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(12)
+        root.setSpacing(6)
         root.addLayout(self._build_topbar())
+        self._prediction_divider = self._divider()
+        root.addWidget(self._prediction_divider)
         root.addLayout(self._build_predictions())
         root.addLayout(self._build_workspace(), 1)
+        root.addWidget(self._divider())
         root.addLayout(self._build_utility_row(keyboard_script))
+
+    def _divider(self, *, vertical: bool = False) -> QFrame:
+        divider = QFrame(self)
+        divider.setObjectName("utilityDivider" if vertical else "speechDivider")
+        divider.setStyleSheet("background: #394959; border: 0;")
+        if vertical:
+            divider.setFixedWidth(1)
+        else:
+            divider.setFixedHeight(1)
+        return divider
 
     def _build_topbar(self) -> QHBoxLayout:
         topbar = QHBoxLayout()
         topbar.setContentsMargins(0, 0, 0, 0)
-        topbar.setSpacing(10)
+        topbar.setSpacing(12)
         self._clear_button = self._make_button("Obriši", "clear", "clearButton", minimum_height=86)
         self._categories_button = self._make_button(
             "Kategorije", "categories", "topButton", minimum_height=86, checkable=True
@@ -189,7 +203,7 @@ class SpeechSurface(QWidget):
         self._prediction_label.hide()
         prediction_row = QHBoxLayout()
         prediction_row.setContentsMargins(0, 0, 0, 0)
-        prediction_row.setSpacing(10)
+        prediction_row.setSpacing(12)
         self._prediction_buttons = []
         for index in range(5):
             button = self._make_button(
@@ -213,9 +227,10 @@ class SpeechSurface(QWidget):
     def _build_workspace(self) -> QVBoxLayout:
         workspace = QVBoxLayout()
         workspace.setContentsMargins(0, 0, 0, 0)
-        workspace.setSpacing(8)
+        workspace.setSpacing(6)
         status = QHBoxLayout()
-        status.addStretch(1)
+        status.setSpacing(12)
+        status.addWidget(self._divider(), 1)
         self._recording_badge = RecordingBadge(self)
         self._recording_badge.setFixedHeight(24)
         status.addWidget(self._recording_badge)
@@ -240,7 +255,7 @@ class SpeechSurface(QWidget):
         )
         self._key_grid = QGridLayout(self._key_grid_host)
         self._key_grid.setContentsMargins(0, 0, 0, 0)
-        self._key_grid.setHorizontalSpacing(10)
+        self._key_grid.setHorizontalSpacing(12)
         self._key_grid.setVerticalSpacing(10)
 
         paging = self._build_paging(main_panel)
@@ -343,7 +358,7 @@ class SpeechSurface(QWidget):
         system_panel.setMaximumWidth(480)
         system_layout = QVBoxLayout(system_panel)
         system_layout.setContentsMargins(0, 0, 0, 0)
-        system_layout.setSpacing(8)
+        system_layout.setSpacing(12)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
             ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
@@ -363,7 +378,7 @@ class SpeechSurface(QWidget):
     def _build_utility_row(self, keyboard_script: str) -> QHBoxLayout:
         utility_row = QHBoxLayout()
         utility_row.setContentsMargins(0, 0, 0, 0)
-        utility_row.setSpacing(10)
+        utility_row.setSpacing(12)
         self._space_button = self._make_button(
             "Razmak", "space", "utilityButton", minimum_height=95
         )
@@ -375,6 +390,7 @@ class SpeechSurface(QWidget):
         )
         utility_row.addWidget(self._space_button, 1)
         utility_row.addWidget(self._backspace_button, 1)
+        utility_row.addWidget(self._divider(vertical=True))
         utility_row.addWidget(self._keyboard_toggle_button, 1)
         self._script_button = self._make_button(
             switch_label(keyboard_script),
@@ -556,7 +572,7 @@ class SpeechSurface(QWidget):
             self._key_grid.setRowStretch(row, 0)
         rows = max(1, math.ceil(max(1, item_count) / max(1, columns)))
         # Tighten gaps for five-row grids without shrinking gaze targets.
-        self._key_grid.setVerticalSpacing(5 if rows >= 5 else 10)
+        self._key_grid.setVerticalSpacing(5 if rows >= 5 else 12)
         for column in range(columns):
             self._key_grid.setColumnStretch(column, 1)
         for row in range(rows):

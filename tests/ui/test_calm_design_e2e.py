@@ -7,7 +7,7 @@ from _clock import freeze_monotonic
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QToolButton, QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -97,7 +97,7 @@ def test_support_actions_and_scrolling_keep_hidden_settings_out_of_gaze(qtbot, m
     qtbot.waitUntil(lambda: window._scroll.verticalScrollBar().maximum() > 0)
     control = window._gaze_page._policy_combo
     window._set_gaze_target(control)
-    window._scroll_page(1)
+    window._scroll.verticalScrollBar().setValue(58)
     window._scroll.verticalScrollBar().setValue(0)
     assert window._gaze_target is None
     point = control.mapToGlobal(control.rect().center())
@@ -219,7 +219,7 @@ def test_horizontal_scroll_cancels_pending_settings_selection(qtbot, monkeypatch
     window.resize(800, 720)
     window.show()
     window._open_eleven()
-    window._eleven_page._replace_key()
+    window._eleven_page.setMinimumWidth(1600)
     bar = window._scroll.horizontalScrollBar()
     qtbot.waitUntil(lambda: bar.maximum() > 0)
     button = window._exit_button
@@ -231,3 +231,75 @@ def test_horizontal_scroll_cancels_pending_settings_selection(qtbot, monkeypatch
     assert window._gaze_target is button
     bar.setValue(bar.maximum())
     assert window._gaze_target is None
+
+
+def test_hidden_settings_pages_do_not_create_blank_scroll_space_after_relayout(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    for tab in (0, 2, 3, 1, 0):
+        window._select_tab(tab)
+        window.hide()
+        window.show()
+        window.layout().invalidate()
+        window.layout().activate()
+        window.grab()
+        qtbot.waitUntil(
+            lambda: (
+                window._scroll.verticalScrollBar().maximum() == 0
+                and window._stack.height() == window._scroll.viewport().height()
+            )
+        )
+        assert window._stack.heightForWidth(window._stack.width()) == (
+            window._stack.currentWidget().heightForWidth(window._stack.width())
+        )
+
+
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
+    qtbot, make_speech_window, script
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(keyboard_script=script)
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(lambda: window._space_button.width() > 200)
+    utility = (
+        window._space_button,
+        window._backspace_button,
+        window._keyboard_toggle_button,
+        window._script_button,
+    )
+    before = [QRect(button.geometry()) for button in utility]
+    assert len({rect.top() for rect in before}) == 1
+    assert len({rect.height() for rect in before}) == 1
+    assert max(rect.width() for rect in before) - min(rect.width() for rect in before) <= 1
+    divider = window.findChild(QFrame, "utilityDivider")
+    assert divider is not None
+    assert before[1].right() < divider.x() < before[2].left()
+    assert divider.height() == before[0].height()
+    assert len(window.findChildren(QFrame, "speechDivider")) == 3
+    if script == "latin":
+        for row, command in enumerate(("alarm:start", "sleep:start", "exit")):
+            group = window._action_buttons[window._action(f"group:{row * 2}")]
+            system = window._action_buttons[window._action(command)]
+            assert group.mapTo(window, QPoint()).y() == system.mapTo(window, QPoint()).y()
+            assert abs(group.height() - system.height()) <= 1
+    for action in window._main_dynamic_actions:
+        button = window._action_buttons[action]
+        rect = QRect(button.mapTo(window, QPoint()), button.size())
+        assert window.rect().contains(rect)
+        assert rect.bottom() < before[0].top()
+    window._recording_badge.set_status(
+        {"busy": True, "state": "recording", "remaining_seconds": 80}
+    )
+    qtbot.waitUntil(window._recording_badge.isVisible)
+    assert [button.geometry() for button in utility] == before
+    window._switch_keyboard_script()
+    qtbot.waitUntil(lambda: window._speech_settings.keyboard_script != script)
+    assert [button.geometry() for button in utility] == before

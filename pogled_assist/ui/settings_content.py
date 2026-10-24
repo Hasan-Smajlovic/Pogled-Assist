@@ -18,3 +18,11 @@ class SettingsContent(QStackedWidget):
     def minimumSizeHint(self) -> QSize:
         page = self.currentWidget()
         return page.minimumSizeHint() if page is not None else QSize()
+
+    def hasHeightForWidth(self) -> bool:
+        page = self.currentWidget()
+        return page.hasHeightForWidth() if page is not None else False
+
+    def heightForWidth(self, width: int) -> int:
+        page = self.currentWidget()
+        return page.heightForWidth(width) if page is not None else -1

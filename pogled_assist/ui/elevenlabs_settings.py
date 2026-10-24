@@ -84,27 +84,30 @@ class ElevenLabsPage(QFrame):
         self._layout = layout
         layout.addLayout(self._groups)
         layout.addStretch(1)
+        self._reflow_controls(False)
         self.refresh(account.state)
 
     def _build_header(self):
-        header = QHBoxLayout()
-        header.addWidget(self._controls.button("Nazad", self._back, QSize(120, 58)))
-        header.addWidget(styled_label("ElevenLabs · Efendija", "sectionTitle", self), 1)
+        self._header = QGridLayout()
+        self._header.setHorizontalSpacing(12)
+        self._header.setVerticalSpacing(12)
+        self._back_button = self._controls.button("Nazad", self._back, QSize(120, 58))
+        self._title = styled_label("ElevenLabs · Efendija", "sectionTitle", self)
         self.check_button = self._controls.button(
             "Provjeri vezu", self._check_connection, QSize(150, 58)
         )
-        header.addWidget(self.check_button)
         self.connection_help = self._controls.info_button(
             "O provjeri veze",
             "Provjera čita podatke o računu, glasovima i modelima. "
             "Ne izgovara tekst i ne troši kredite za govor. "
             "Za probu glasa odaberite Isprobaj Efendiju.",
         )
-        header.addWidget(self.connection_help)
-        self._layout.addLayout(header)
+        self._layout.addLayout(self._header)
 
     def _build_key_row(self):
         row, grid, _hint = setting_row(self, "API ključ")
+        self._key_grid = grid
+        self._key_title = grid.itemAtPosition(0, 0).widget()
         self.key_input = QLineEdit(row)
         self.key_input.setAccessibleName("ElevenLabs API ključ")
         self.key_input.setEchoMode(QLineEdit.Password)
@@ -229,9 +232,61 @@ class ElevenLabsPage(QFrame):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._groups.setDirection(
-            QBoxLayout.TopToBottom if self.width() < 820 else QBoxLayout.LeftToRight
+        direction = QBoxLayout.TopToBottom if self.width() < 820 else QBoxLayout.LeftToRight
+        if direction != self._groups.direction():
+            self._controls.interrupt_gaze()
+            self._groups.setDirection(direction)
+            self._reflow_controls(direction == QBoxLayout.TopToBottom)
+
+    def _reflow_controls(self, narrow):
+        header_widgets = (self._back_button, self._title, self.check_button, self.connection_help)
+        key_widgets = (
+            self._key_title,
+            self.key_input,
+            self.saved_key,
+            self.show_key,
+            self.save_key,
+            self.cancel_key,
+            self.replace_key,
+            self.remove_key,
         )
+        for layout, widgets in ((self._header, header_widgets), (self._key_grid, key_widgets)):
+            for widget in widgets:
+                layout.removeWidget(widget)
+            for column in range(layout.columnCount()):
+                layout.setColumnStretch(column, 0)
+                layout.setColumnMinimumWidth(column, 0)
+        # Explicit spacer columns keep gaps when hidden controls span different cells.
+        self._key_grid.setHorizontalSpacing(0)
+        for column in range(1, 11 if narrow else 9, 2):
+            self._key_grid.setColumnMinimumWidth(column, 12)
+        if narrow:
+            header_positions = ((0, 0, 1, 1), (0, 1, 1, 2), (1, 1, 1, 1), (1, 2, 1, 1))
+            key_positions = (
+                (0, 0, 1, 11),
+                (1, 0, 1, 11),
+                (1, 0, 1, 11),
+                (2, 0, 1, 3),
+                (2, 4, 1, 3),
+                (2, 8, 1, 3),
+                (2, 0, 1, 5),
+                (2, 6, 1, 5),
+            )
+            self._header.setColumnStretch(1, 1)
+            for column in range(0, 11, 2):
+                self._key_grid.setColumnStretch(column, 1)
+        else:
+            header_positions = tuple((0, column, 1, 1) for column in range(4))
+            key_positions = tuple((0, column, 2, 1) for column in (0, 2, 2, 4, 6, 8, 4, 6))
+            self._header.setColumnStretch(1, 1)
+            self._key_grid.setColumnStretch(0, 1)
+            self._key_grid.setColumnStretch(2, 2)
+        for layout, widgets, positions in (
+            (self._header, header_widgets, header_positions),
+            (self._key_grid, key_widgets, key_positions),
+        ):
+            for widget, position in zip(widgets, positions, strict=True):
+                layout.addWidget(widget, *position)
 
     def configure(self, settings) -> None:
         self._settings = settings

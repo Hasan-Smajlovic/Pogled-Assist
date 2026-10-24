@@ -156,12 +156,11 @@ def package_smoke_test() -> int:
         )
         from .toolbar import HotbarWindow
         from .tracking.tobii_stream_engine_bridge_backend import bridge_script_path
-        from .ui.settings_window import _checkbox_x_image_url
         from .windows.windows_startup import launcher_script_path
 
         required_paths = (
             app_icon_path(),
-            Path(_checkbox_x_image_url()),
+            Path(__file__).resolve().parent / "assets" / "checkbox_x.svg",
             MODEL_PATH,
             MODEL_METADATA_PATH,
             ISLAMIC_MODEL_PATH,

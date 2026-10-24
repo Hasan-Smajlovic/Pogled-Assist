@@ -110,7 +110,7 @@ def test_larger_suggestions_fit_wrap_and_preserve_selection_and_undo(
     previous = None
     for index, button in enumerate(window._prediction_buttons):
         assert button.isVisible() and button.isEnabled()
-        assert button.height() == 71
+        assert button.height() == 96
         assert button.font().pixelSize() == 27
         rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
         assert window.rect().contains(rect)
@@ -374,7 +374,7 @@ def test_settings_forgets_one_word_and_retries_failed_storage(qtbot, tmp_path, m
         window.show()
         window._speech_tab_button.click()
         window._speech_page._learned_words_button.click()
-        assert window._stack.currentIndex() == 3
+        assert window._stack.currentWidget() is window._learning_page
 
         index = window._learning_page._visible_words.index("čaj")
         window._learning_page._word_buttons[index].click()

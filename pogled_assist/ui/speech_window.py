@@ -188,6 +188,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
         self._dialogs.letter_grid_host.setLayoutDirection(Qt.LeftToRight)
         self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
+        self._prediction_divider.setVisible(not arabic)
         for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
             widget.setVisible(not arabic)
 

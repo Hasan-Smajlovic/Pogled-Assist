@@ -80,5 +80,6 @@
 .tracking-app .key-grid { min-height: 0; }
 .tracking-app .system-actions { grid-template-columns: none; }
 .tracking-app .system-actions .section-label, .tracking-app .system-actions .speech-controls-heading { grid-column: auto; }
-.tracking-app .utility-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tracking-app .utility-row { grid-template-columns: repeat(2, minmax(0, 1fr)) 1px repeat(2, minmax(0, 1fr)); }
+.tracking-app .utility-divider { grid-column: auto; height: auto; }
 .tracking-app .system-actions small { font-size: 15px; }

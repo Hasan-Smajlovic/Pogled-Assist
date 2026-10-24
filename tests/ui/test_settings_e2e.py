@@ -3,12 +3,29 @@ from __future__ import annotations
 import pytest
 from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QAbstractButton, QLabel
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.windows.windows_startup import StartupTaskResult
+
+
+@pytest.mark.e2e
+def test_settings_navigation_has_no_scroll_buttons(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    nav = window.findChild(QLabel, "navSectionLabel").parentWidget()
+    assert {button.text() for button in nav.findChildren(QAbstractButton)} == {
+        "Aplikacija",
+        "Pogled i odabir",
+        "Govor i tastatura",
+        "Podrška",
+        "Pokušaj sačuvati",
+    }
 
 
 @pytest.mark.e2e
@@ -270,7 +287,7 @@ def _assert_speech_row(window, value):
     assert all(rect.height() == 58 and window.rect().contains(rect) for rect in rects)
     assert len({rect.top() for rect in rects}) == 1
     assert rects[0].width() == rects[2].width() == 84
-    assert rects[1].width() == 160
+    assert rects[1].width() == 184
     assert rects[0].right() + 13 == rects[1].left()
     assert rects[1].right() + 13 == rects[2].left()
     assert value.fontMetrics().horizontalAdvance(value.text()) + 26 <= value.width()

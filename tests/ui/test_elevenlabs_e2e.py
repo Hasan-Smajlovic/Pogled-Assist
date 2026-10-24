@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 from _clock import freeze_monotonic
 from _speech_fakes import FakeCredentials, FakeElevenClient
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QLineEdit
+from PySide6.QtWidgets import QBoxLayout, QLineEdit
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.eleven_account import ElevenAccount
@@ -708,3 +709,59 @@ def test_missing_selected_model_cannot_start_paid_test(settings, qtbot):
     assert not window._speech_page._test_speech_button.isEnabled()
     window._open_eleven()
     assert not window._eleven_page.test_button.isEnabled()
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_narrow_key_setup_stays_gaze_reachable_without_horizontal_scrolling(
+    settings, qtbot, saved_key
+):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+    window.resize(800, 720)
+    window._open_eleven()
+    page = window._eleven_page
+    if saved_key:
+        page._replace_key()
+    qtbot.waitUntil(
+        lambda: (
+            window._scroll.horizontalScrollBar().maximum() == 0
+            and page.width() <= window._scroll.viewport().width()
+        )
+    )
+    assert (window.width(), window.height()) == (800, 720)
+    key_actions = [
+        control
+        for control in (page.show_key, page.save_key, page.cancel_key)
+        if control.isVisible()
+    ]
+    for left, right in pairwise(key_actions):
+        assert right.x() - left.geometry().right() - 1 >= 12
+    for control in (
+        page._back_button,
+        page.check_button,
+        page.connection_help,
+        page.show_key,
+        page.save_key,
+        page.cancel_key,
+    ):
+        if not control.isVisible() or not control.isEnabled():
+            continue
+        window._scroll.verticalScrollBar().setValue(0)
+        viewport = window._scroll.viewport()
+        while not viewport.rect().contains(
+            QRect(control.mapTo(viewport, QPoint()), control.size())
+        ):
+            bar = window._scroll.verticalScrollBar()
+            before = bar.value()
+            bar.setValue(before + max(58, bar.pageStep() - 58))
+            assert bar.value() > before
+        point = control.mapToGlobal(control.rect().center())
+        assert window._controls.action_at(point)[0] is control
+        assert control.height() == 58
+    page.key_input.setText("unsaved-replacement")
+    page.clear_input()
+    assert page.key_input.text() == ""
+    window.resize(1280, 720)
+    qtbot.waitUntil(lambda: page._groups.direction() == QBoxLayout.LeftToRight)
+    assert window._scroll.horizontalScrollBar().maximum() == 0
