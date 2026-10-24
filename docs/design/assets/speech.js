@@ -3,7 +3,7 @@
   const { GROUPS, ARABIC_LETTERS, SYMBOLS, ARABIC_SPEECH_SYMBOLS, grouped, keyLabel, readScript, writeScript } = ReferenceKeyboard;
   const $ = id => document.getElementById(id);
   const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
-  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 6;
+  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 4, KEY_PAGE_SIZE = 12;
   const gazeDemo = createReferenceGaze();
   let arabic = readScript();
   let activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
@@ -52,6 +52,17 @@
       editor = savedPreview.editor;
       savedMessage = typeof savedPreview.savedMessage === 'string' ? savedPreview.savedMessage : '';
     }
+  }
+  const previewState = new URLSearchParams(location.search).get('state');
+  if (['keyboard', 'single', 'editor-single', 'phrases', 'answers'].includes(previewState)) {
+    view = previewState === 'phrases' ? 'phrases' : previewState === 'answers' ? 'categories' : 'keyboard';
+    category = previewState === 'answers' ? library.categories[0]?.id : null;
+    page = 0;
+    editor = null;
+    message.value = '';
+    savedMessage = '';
+    if (previewState.includes('single')) activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
+    if (previewState === 'editor-single') editor = { kind: 'phrase', view: 'phrases', category: null, page: 0 };
   }
   if (requestedVoiceState && !message.value) message.value = 'TREBAM VODE, MOLIM TE.';
   $('voice-demo-state').addEventListener('change', () => {
@@ -115,7 +126,7 @@
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
     if ($('letters-dialog').open) closeDialog($('letters-dialog'));
-    symbols = false; render(); renderVoiceNotice(); restoreMessageFocus();
+    symbols = false; page = 0; render(); renderVoiceNotice(); restoreMessageFocus();
   });
 
   document.addEventListener('click', event => {
@@ -253,37 +264,29 @@
     const browsing = view !== 'keyboard';
     $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
     content.replaceChildren();
-    content.className = browsing ? 'item-grid' : keyboardGridClass();
-    const keyCount = symbols ? grouped(ARABIC_SPEECH_SYMBOLS).length : activeGroups.length;
-    const columns = keyboardColumns(keyCount);
-    applyKeyboardDirection(browsing, keyCount, columns);
+    content.className = browsing ? 'item-grid' : 'key-grid';
+    content.style.gridTemplateColumns = '';
+    content.style.gridTemplateRows = '';
+    content.dir = 'ltr';
     if (browsing) renderItems();
     else fillKeyboard();
   }
 
-  function applyKeyboardDirection(browsing, keyCount, columns) {
-    const rtl = !browsing && arabic;
-    content.style.gridTemplateColumns = rtl ? `repeat(${columns}, minmax(0, 1fr))` : '';
-    content.style.gridTemplateRows = rtl ? `repeat(${Math.ceil(keyCount / columns)}, minmax(72px, 1fr))` : '';
-    content.dir = rtl ? 'rtl' : 'ltr';
-  }
-
-  function keyboardGridClass() {
-    if (symbols) return 'key-grid symbols';
-    return activeGroups.length >= 20 ? 'key-grid dense' : 'key-grid';
-  }
-
-  function keyboardColumns(count) {
-    let columns = count <= 1 ? 1 : count <= 8 ? 2 : Math.min(6, Math.ceil(count / 5));
-    if (!symbols) columns = Math.max(columns, Math.ceil(count / 5));
-    return columns;
-  }
-
   function fillKeyboard() {
-    $('paging').hidden = true;
-    if (symbols && arabic) grouped(ARABIC_SPEECH_SYMBOLS).forEach((keys, index) => content.append(makeButton(keys.map(keyLabel).join(' '), 'symbol-group', index, 'group')));
-    else if (symbols) SYMBOLS.forEach(value => content.append(makeButton(value, 'symbol', value, 'group')));
-    else activeGroups.forEach((letters, index) => content.append(makeButton(letters.join(' '), 'group', index, 'group')));
+    const keys = symbols ? (arabic ? grouped(ARABIC_SPEECH_SYMBOLS) : SYMBOLS) : activeGroups;
+    const paged = keys.length > KEY_PAGE_SIZE;
+    const columns = paged ? 6 : symbols ? (arabic ? 3 : 4) : keys.length > 6 ? 3 : 2;
+    updatePaging(keys.length, KEY_PAGE_SIZE);
+    const visible = keys.slice(page * KEY_PAGE_SIZE, (page + 1) * KEY_PAGE_SIZE);
+    content.className = paged ? 'key-grid dense' : symbols ? 'key-grid symbols' : 'key-grid';
+    content.dir = arabic ? 'rtl' : 'ltr';
+    content.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+    content.style.gridTemplateRows = `repeat(${paged ? 2 : Math.ceil(keys.length / columns)}, minmax(72px, 1fr))`;
+    visible.forEach((keys, index) => {
+      const value = page * KEY_PAGE_SIZE + index;
+      content.append(symbols && !arabic ? makeButton(keys, 'symbol', keys, 'group')
+        : makeButton(keys.map(keyLabel).join(' '), symbols ? 'symbol-group' : 'group', value, 'group'));
+    });
   }
 
   const actionHandlers = {
@@ -302,10 +305,10 @@
     'categories': value => { switchView(view === 'categories' ? 'keyboard' : 'categories'); },
     'phrases': value => { switchView(view === 'phrases' ? 'keyboard' : 'phrases'); },
     'keyboard-toggle': value => { if (view !== 'keyboard') switchView('keyboard');
-        else { symbols = !symbols; render(); } },
+        else { symbols = !symbols; page = 0; render(); } },
     'back': value => { category = null; page = 0; deleting = false; render(); },
-    'previous': value => { page--; renderItems(); },
-    'next': value => { page++; renderItems(); },
+    'previous': value => { page--; renderKeyboardGrid(); },
+    'next': value => { page++; renderKeyboardGrid(); },
     'manage': value => { deleting = !deleting; render(); say(deleting ? 'Odaberite stavku koju želite obrisati.' : ''); },
     'item': value => { selectItem(value); },
     'add': value => { startEditor(); },
@@ -340,18 +343,9 @@
     $('letters').classList.toggle('wide', letters.length >= 6);
     $('letters-dialog').classList.toggle('compact', letters.length >= 12);
     $('letters-title').textContent = symbols ? 'Odaberite znak' : 'Odaberite slovo';
-    $('letters').dir = 'ltr';
+    $('letters').dir = arabic ? 'rtl' : 'ltr';
     $('letters').replaceChildren(...letters.map(letter => makeButton(keyLabel(letter), 'letter', letter)));
     $('letters').append(makeButton(letters.length >= 12 ? 'Nazad' : 'Nazad na grupe', 'close-letters', '', 'back'));
-    if (arabic) {
-      const columns = letters.length + 1 <= 6 ? 3 : 4;
-      [...$('letters').children].forEach((button, index) => {
-        const row = Math.floor(index / columns);
-        const rowKeys = Math.min(columns, letters.length - row * columns);
-        button.style.gridRow = String(row + 1);
-        button.style.gridColumn = String(index === letters.length ? index % columns + 1 : rowKeys - index % columns);
-      });
-    }
     openDialog($('letters-dialog'));
   }
 
@@ -374,8 +368,7 @@
   function renderItems() {
     gazeDemo.reset();
     const items = currentItems();
-    const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-    page = Math.min(Math.max(page, 0), pages - 1);
+    updatePaging(items.length, PAGE_SIZE);
     content.replaceChildren();
     for (const item of items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
       const button = makeButton((item.name || item.text).toLocaleUpperCase('bs'), 'item', item.id, deleting ? 'item danger' : 'item');
@@ -393,6 +386,11 @@
       content.append(empty);
     }
     $('manage').disabled = !items.length;
+  }
+
+  function updatePaging(count, size) {
+    const pages = Math.max(1, Math.ceil(count / size));
+    page = Math.min(Math.max(page, 0), pages - 1);
     $('paging').hidden = pages === 1;
     $('page-number').textContent = `${page + 1} / ${pages}`;
     document.querySelector('[data-action="previous"]').disabled = page === 0;
@@ -428,6 +426,7 @@
     undoWord = null; autoSpace = false;
     message.value = '';
     view = 'keyboard';
+    page = 0;
     deleting = false;
     symbols = false;
     render();

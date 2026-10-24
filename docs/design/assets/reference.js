@@ -99,6 +99,14 @@
     else open(button.dataset.openView);
   });
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.querySelector('.info-help[open]')) {
+      const help = document.querySelector('.info-help[open]');
+      help.open = false;
+      help.querySelector('summary').focus();
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (event.key === 'Escape') {
       document.querySelectorAll('.reference-switcher details, .reference-tools').forEach(menu => { menu.open = false; });
     }

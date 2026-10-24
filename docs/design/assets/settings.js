@@ -25,7 +25,7 @@
     clearKeyInput();
     editingKey = true;
     renderConnection();
-    $('eleven-api-key').focus();
+    $('eleven-api-key').focus({ preventScroll: true });
   });
   $('cancel-eleven-key').addEventListener('click', () => {
     clearKeyInput();
@@ -58,7 +58,7 @@
   });
   function renderScript() {
     $('settings-script-preview').textContent = arabic ? 'Arapski' : 'Latinica';
-    $('voice-hint').textContent = arabic ? 'Arapski koristi Hamed uz internet. Izbor bosanskog glasa ostaje sačuvan.' : 'Standardni radi bez interneta. Prirodni i Efendija trebaju internet.';
+    $('voice-hint').textContent = arabic ? 'Izbor bosanskog glasa ostaje sačuvan za povratak na latinicu.' : 'Standardni radi bez interneta. Prirodni i Efendija trebaju internet.';
     $('voice-choices').hidden = arabic;
     $('arabic-voice-preview').hidden = !arabic;
     $('eleven-summary').hidden = arabic || selectedVoice !== 'efendija';
@@ -78,6 +78,7 @@
     $('eye-policy-hint').textContent = ReferenceEyePolicy.description();
     $('eye-hold-value').textContent = duration + ' ms';
     $('eye-hold-row').dataset.disabled = String(!holding);
+    $('eye-hold-hint').textContent = holding ? 'Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.' : 'Dostupno samo u režimu „Oba oka uz kratke prekide“. Sačuvano trajanje ostaje isto.';
     $('eye-hold-less').disabled = !holding || duration <= 50;
     $('eye-hold-more').disabled = !holding || duration >= 500;
   }
@@ -314,6 +315,8 @@
     history.replaceState(null, '', url);
     renderStorageState();
     if (action === 'learning-settings') renderLearning();
+    $(action).scrollTop = 0;
+    updateSettingsScroll();
   }
 
   function renderConnection() {
@@ -428,5 +431,24 @@
     $('settings-save-state').dataset.tone = failed ? 'error' : '';
     $('retry-settings').hidden = !failed;
   }
+
+  function updateSettingsScroll() {
+    const panel = document.querySelector('.settings-page:not([hidden])');
+    if (!panel) return;
+    $('settings-scroll-up').disabled = panel.scrollTop <= 1;
+    $('settings-scroll-down').disabled = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
+  }
+  for (const [id, direction] of [['settings-scroll-up', -1], ['settings-scroll-down', 1]]) {
+    $(id).addEventListener('click', () => {
+      const panel = document.querySelector('.settings-page:not([hidden])');
+      panel.scrollBy({ top: direction * panel.clientHeight * .7, behavior: 'instant' });
+      updateSettingsScroll();
+    });
+  }
+  for (const panel of document.querySelectorAll('.settings-page')) panel.addEventListener('scroll', updateSettingsScroll);
+  const scrollResize = new ResizeObserver(updateSettingsScroll);
+  for (const panel of document.querySelectorAll('.settings-page')) scrollResize.observe(panel);
+  new MutationObserver(updateSettingsScroll).observe(document.querySelector('.settings-body'), { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  updateSettingsScroll();
 
 })();

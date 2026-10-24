@@ -9,9 +9,20 @@
 .gaze-check p { margin: 8px 0; }
 .gaze-check #check-step, .gaze-check #check-notice { margin:0; }
 .gaze-check header button { min-height: 56px; font-size: 16px; padding: 10px 16px; overflow-wrap:normal; }
-.gaze-check header #check-diagnostics { max-width:200px; }
+.check-resources { display:grid; grid-template-columns:auto auto; align-items:center; gap:6px 12px; padding-right:24px; margin-right:8px; border-right:1px solid var(--divider); }
+.check-resources > span { grid-column:1 / -1; color:var(--muted); font-size:13px; font-weight:600; }
+.gaze-check .check-resources button { min-height:48px; padding:8px 16px; font-size:16px; }
+.check-card-title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.check-columns .check-card-title h2 { margin:0; }
+.check-card-title .info-help > summary { width:44px; height:44px; }
 .gaze-check header p { font-size: 15px; margin:0; }
-.gaze-check footer { padding-top:12px; border-top:1px solid var(--divider); }
+.gaze-check footer { padding-top:12px; border-top:1px solid var(--divider); align-items:stretch; gap:24px; }
+.check-action-group { display:flex; flex-direction:column; gap:8px; flex:1; }
+.check-action-group > span { font-size:13px; color:var(--muted); font-weight:600; }
+.check-flow-actions { flex:2; }
+.check-flow-actions > div { display:flex; gap:16px; }
+footer:has(#check-device-actions[hidden]) .check-flow-actions > span { display:none; }
+#check-device-actions { padding-right:24px; border-right:1px solid var(--divider); }
 .gaze-check footer button { flex: 1; min-height: 60px; font-size: 18px; }
 .check-section-label { font-size:14px; font-weight:600; color:var(--muted); }
 .check-columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; min-height: 0; }
@@ -133,7 +144,10 @@
   .check-report-heading { grid-template-columns:1fr; }
   .check-history-list { max-height:300px; }
   .gaze-check footer { flex-wrap:wrap; }
-  .gaze-check footer button { flex-basis:40%; }
+  .gaze-check footer .check-action-group { flex-basis:100%; }
+  #check-device-actions { padding:0 0 12px; border-right:0; border-bottom:1px solid var(--divider); }
+  .check-flow-actions > div { flex-wrap:wrap; }
+  .check-flow-actions button { flex-basis:40%; }
 }
 @media (max-width:560px) {
   .gaze-check header > div { grid-template-columns:1fr; }
@@ -144,6 +158,7 @@
   .check-report-heading { align-items:flex-start; }
   .gaze-check header { gap:12px; }
   .gaze-check header button { flex:1; }
+  .check-resources { grid-template-columns:1fr; flex:1; padding-right:12px; margin-right:0; }
   .check-stage-actions { flex-direction:column; gap:12px; }
   .check-controls { height:auto; min-height:168px; }
   .check-result-columns > div { min-width:0; }

@@ -16,6 +16,8 @@
   const SIDEBAR_SYMBOLS = [...'.,@/?!$%&*()-_+=:;', "'", '"', '#', '\\', ...'|<>[]{}~`^'];
   const SIDEBAR_NUMPAD = [...'7894561230.', 'Potvrdi', ...'+-*/='];
   const readScript = () => {
+    const script = new URLSearchParams(location.search).get('script');
+    if (['latin', 'arabic'].includes(script)) return script === 'arabic';
     try { return localStorage.getItem('pogled-assist-design-script') === 'arabic'; }
     catch { return false; }
   };

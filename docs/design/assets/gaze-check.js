@@ -107,6 +107,7 @@
     checkEl('check-history').hidden = history || viewingArchive;
     checkEl('check-step').hidden = !position;
     checkEl('check-calibrate').hidden = !position;
+    checkEl('check-device-actions').hidden = !position;
     checkEl('check-free').hidden = !position;
     checkEl('check-next').hidden = history || viewingArchive;
     checkEl('check-next').textContent = nextCheckLabel(results);
