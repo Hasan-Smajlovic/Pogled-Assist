@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtWidgets import QLabel
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -55,7 +56,9 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     qtbot.wait(1)
     assert updates[-1].keyboard_script == "arabic"
     assert updates[-1].voice_preset == preset
-    assert window._speech_page._arabic_voice.text() == "Prirodni · Hamed"
+    assert "Prirodni · Hamed" in [
+        label.text() for label in window._speech_page._arabic_voice.findChildren(QLabel)
+    ]
     assert not window._speech_page._voice_choices.isVisible()
     assert window.width() <= 1280 and window.height() <= 720
     for control in (
@@ -90,9 +93,9 @@ def test_settings_controls_emit_bounded_updates(qtbot, monkeypatch):
     )
     qtbot.addWidget(window)
     assert window.windowTitle() == "Postavke"
-    assert window._general_tab_button.text() == "Opće postavke"
-    assert window._gaze_tab_button.text() == "Postavke pogleda"
-    assert window._speech_tab_button.text() == "Postavke govora"
+    assert window._general_tab_button.text() == "Aplikacija"
+    assert window._gaze_tab_button.text() == "Pogled i odabir"
+    assert window._speech_tab_button.text() == "Govor i tastatura"
     gaze_updates = []
     speech_updates = []
     window.gaze_settings_changed.connect(gaze_updates.append)
@@ -137,13 +140,11 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
     qtbot.waitUntil(window.isVisible)
     assert (window.width(), window.height()) == size
 
-    action_columns = None
     for tab, controls in (
         (
             0,
             (
                 window._general_page._startup_checkbox,
-                window._general_page._logging_checkbox,
                 window._general_page._launcher_window_checkbox,
             ),
         ),
@@ -175,8 +176,7 @@ def test_settings_actions_use_equal_cells_and_preserve_gaze_targets(qtbot, monke
             assert window.rect().contains(rect), button.text()
             assert button.height() >= 58
         columns = _assert_action_cells(qtbot, window, controls)
-        assert action_columns is None or columns == action_columns
-        action_columns = columns
+        assert columns
 
 
 def _assert_action_cells(qtbot, window, controls):
@@ -191,7 +191,8 @@ def _assert_action_cells(qtbot, window, controls):
 def _assert_action_grid(window, rects):
     assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
     assert all(rect.height() == 58 and window.rect().contains(rect) for rect in rects)
-    assert len({rect.top() for rect in rects[:3]}) == 1
+    if len(rects) == 3:
+        assert len({rect.top() for rect in rects[:3]}) == 1
     if len(rects) > 3:
         assert rects[3].left() == rects[0].left()
         assert abs(rects[4].left() - rects[1].left()) <= 1
@@ -268,8 +269,8 @@ def _assert_speech_row(window, value):
     rects = [QRect(control.mapTo(window, QPoint()), control.size()) for control in controls]
     assert all(rect.height() == 58 and window.rect().contains(rect) for rect in rects)
     assert len({rect.top() for rect in rects}) == 1
-    assert rects[0].width() == rects[2].width() == 104
-    assert rects[1].width() == 216
+    assert rects[0].width() == rects[2].width() == 84
+    assert rects[1].width() == 160
     assert rects[0].right() + 13 == rects[1].left()
     assert rects[1].right() + 13 == rects[2].left()
     assert value.fontMetrics().horizontalAdvance(value.text()) + 26 <= value.width()

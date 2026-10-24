@@ -129,7 +129,7 @@ def test_credits_display_remaining_and_warning_thresholds(settings):
     window, _store, _client, account, _ = settings
     window._open_eleven()
     for used, percent, color in [
-        (0, 100, "#91dec0"),
+        (0, 100, "#a3d5ba"),
         (850, 15, "#edc779"),
         (950, 5, "#e48c80"),
         (1100, 0, "#e48c80"),

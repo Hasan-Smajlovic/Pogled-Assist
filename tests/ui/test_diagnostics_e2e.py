@@ -253,7 +253,8 @@ def test_settings_and_check_shortcuts_preserve_input_suspension_and_result(
     )
     hotbar._open_settings()
     settings = hotbar._settings_window
-    settings._general_page._diagnostics_button.click()
+    settings._select_tab(3)
+    settings._support_page._diagnostics_button.click()
     assert hotbar._diagnostics_window is not None and controller._input_suspended
     assert not settings.isVisible()
     hotbar._diagnostics_window.close()

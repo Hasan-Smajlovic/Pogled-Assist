@@ -50,8 +50,8 @@ class GazeCheckHistory:
         self._result_tabs = QTabWidget(card)
         self._result_tabs.setStyleSheet(
             "QTabBar::tab { min-height: 48px; min-width: 180px; padding: 0 12px; "
-            "color: #eef2f8; background: #262c38; font-size: 17px; } "
-            "QTabBar::tab:selected { background: #245f9f; }"
+            "color: #edf2f7; background: #334355; font-size: 17px; } "
+            "QTabBar::tab:selected { background: #1d242d; border-bottom: 3px solid #84c5d9; }"
             "QTabWidget::pane { border: none; }"
         )
         self._result_tabs.addTab(scroll_content(precision_page), "Preciznost")
@@ -97,9 +97,9 @@ class GazeCheckHistory:
         self._history_list = QListWidget(page)
         self._history_list.setAccessibleName("Sačuvani rezultati Provjere pogleda")
         self._history_list.setStyleSheet(
-            "QListWidget { background: #1c2029; color: #eef2f8; font-size: 17px; }"
+            "QListWidget { background: #283442; color: #edf2f7; font-size: 17px; }"
             "QListWidget::item { padding: 14px; min-height: 64px; }"
-            "QListWidget::item:selected { background: #245f9f; }"
+            "QListWidget::item:selected { background: #2e6478; }"
         )
         self._history_list.currentItemChanged.connect(self._history_selected)
         columns.addWidget(self._history_list, 1)
@@ -138,6 +138,8 @@ class GazeCheckHistory:
         self._primary_button.show()
         self._repeat_button.setText("Nazad na provjeru")
         self._repeat_button.show()
+        self._device_group.hide()
+        self._flow_title.hide()
         self._calibration_button.hide()
         self._free_button.hide()
         self._reports.load()

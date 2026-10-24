@@ -31,13 +31,15 @@ The top-right status uses an icon, color, and visible text. **Praćenje spremno*
 
 Missing eye-status delivery pauses input. A prolonged interruption in the x86 bridge or a closed bridge starts automatic reconnection; normal invalid-eye samples do not restart the connection. A direct native connection stays paused until fresh data returns. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
 
+The action overlay uses a steady cyan progress ring with a transparent center on application controls. It freezes with a pause mark during a hold and shows a full ring for 220 ms after confirmation. This changes feedback, not selection timing or eye eligibility.
+
 The blue gaze marker follows fresh gaze allowed by the selected policy and expires after 500 ms without a new point. Restored eye indicators alone do not make an old marker position visible again.
 
 ## Tracking notifications in Speech
 
-**Postavke > Postavke pogleda > Odabir pogledom > Obavijesti o praćenju pogleda** is on by default, including when loading older settings. Turning it off hides Speech notifications without changing the selected eye-tracking policy or desktop input eligibility.
+**Postavke > Pogled i odabir > Odabir pogledom > Obavijesti o praćenju pogleda** is on by default, including when loading older settings. Turning it off hides Speech notifications without changing the selected eye-tracking policy or desktop input eligibility.
 
-Speech normally has no notification or reserved empty row. A tracking problem lasting about 0.8 seconds shows a notice in the message header, letter dialog, or deletion confirmation. It distinguishes missing eye data, missing fresh gaze and a disconnected device. Three eye-tracking interruptions of at least 0.35 seconds within 10 seconds can also show **Praćenje često prekida · provjerite položaj uređaja**. These presentation thresholds filter short interruptions; they do not delay cancellation of gaze selection or identify a medical cause.
+The message header normally has no notification or reserved empty row. Letter and deletion dialogs keep a 32-pixel notification row below the title and recording indicator, so a tracking change does not move their buttons. A tracking problem lasting about 0.8 seconds shows a notice in the message header, letter dialog, or deletion confirmation. It distinguishes missing eye data, missing fresh gaze and a disconnected device. Three eye-tracking interruptions of at least 0.35 seconds within 10 seconds can also show **Praćenje često prekida · provjerite položaj uređaja**. These presentation thresholds filter short interruptions; they do not delay cancellation of gaze selection or identify a medical cause.
 
 After eligible eyes and fresh gaze return, **Praćenje se vraća** appears while stability is checked. About half a second of continuous valid tracking changes it to green **Možete nastaviti** for two seconds, then it slides away. Another interruption updates the same notice. Green confirms returned tracking data, not calibration accuracy, and adds no delay to selection. During repeated interruptions, a warning can coexist with usable tracking; **odabir je zaustavljen** appears only while selection lacks eligible data.
 
@@ -45,7 +47,7 @@ The notice takes no focus and requires no acknowledgement. Buttons stay in place
 
 ## Gaze check
 
-Open **Postavke > Postavke pogleda > Pokazivač i provjera > Provjera pogleda** to adjust the display and check gaze. A helper operates this optional screen by mouse or keyboard; the gaze user looks at the targets. The selected eye policy is labeled throughout the test. Normal gaze input stays paused while the check is open, including while minimized. **Zatvori** or Escape returns to Settings; the speech message is retained.
+Open **Postavke > Pogled i odabir > Pokazivač i provjera > Provjera pogleda** to adjust the display and check gaze. A helper operates this optional screen by mouse or keyboard; the gaze user looks at the targets. The selected eye policy is labeled throughout the test. Normal gaze input stays paused while the check is open, including while minimized. **Zatvori** or Escape returns to Settings; the speech message is retained.
 
 1. **Položaj i praćenje** shows each eye, gaze delivery and recent tracking continuity. Adjust the screen with its attached tracker. When the runtime supplies positions, the frame shows the eyes and the bar shows depth from **Bliže uređaju** to **Dalje od uređaja**. A checkmark means inside the reported tracking area, not verified accuracy; a dash means unavailable or stale data. Depth is not measured in centimetres. Position guidance can work before valid gaze returns. If positions are unsupported, use the Tobii app's positioning display; the target tests remain available.
 2. **Provjeri preciznost** presents five automatic targets, about three seconds each, at the centre and near the screen corners. Look at each cross; no gaze click is required. Results distinguish **Pogled blizu mete**, **Pogled izvan mete** and **Premalo podataka**. Missing data is not a measured miss. The advice directs the helper to positioning, profile calibration or the button trial. **Prikaži mjerenja** reveals data coverage, error and spread, with explanations. **Prekini i prikaži rezultat** keeps completed parts in an interrupted report; **Podesi položaj** returns to positioning and **Ponovi preciznost** starts a new dated attempt.
@@ -104,6 +106,8 @@ With precision zoom disabled, the radial menu opens directly at the stable gaze 
 
 ## Speech
 
+The prediction buttons and four equal-width utility buttons use larger targets. Dense keyboards show at most twelve keys per page, with **Prethodna** and **Sljedeća** for the remaining keys. Categories, answers and phrases show four entries per page. Selecting a letter returns to the same keyboard page; changing script or switching letters/symbols starts on page one. Letter dialogs use larger characters and fit their content; diagnostic recording stays beside the title.
+
 For **Standardni**, **Prirodni**, and **Efendija**, **Izgovori** becomes **Zaustavi** in the same position while preparing or speaking. A thin activity bar appears inside its lower edge, keeping the button aligned with **Fraze** and its text centered. The bar shows activity rather than a percentage and lets clicks reach the button. Select it again, or press Enter, to stop without submitting a second request. The message remains available. The stop action stays available while adding a phrase or answer; it does not speak the unfinished saved entry. Completion, failure and stopping remove the bar and restore **Izgovori**. Playback status alone does not verify audible sound.
 
 If a library file cannot be read, **Kategorije** and **Fraze** show **Biblioteka nije učitana** and **Učitaj ponovo**. Available entries still work for composing a message, but adding, deleting, and saving usage counts are blocked to protect the original files. Retry after restoring access to the file; a successful reload restores the library without changing your message. A damaged file must be repaired or restored from a backup before retrying.
@@ -132,7 +136,7 @@ Standardni uses eSpeak NG with the Bosnian `bs` voice. Prirodni uses `edge-playb
 
 ### Efendija voice and ElevenLabs setup
 
-Open **Postavke > Postavke govora**, choose **Efendija**, then **Podesi ElevenLabs**. The ElevenLabs account must have access to the intended ef. Fikret voice and a model supporting Bosnian. The app does not create or clone the voice.
+Open **Postavke > Govor i tastatura**, choose **Efendija**, then **Podesi ElevenLabs**. Voice and model choices are grouped with stability and similarity; test playback, credits and privacy information have a separate group. **Provjeri vezu** still checks the account. Its adjacent information button explains the check without making a speech request; open it by mouse, gaze, Space or Enter, and close it with Escape or the same button. Required warnings remain visible outside this help. The ElevenLabs account must have access to the intended ef. Fikret voice and a model supporting Bosnian. The app does not create or clone the voice.
 
 1. Create an ElevenLabs API key with **Text to Speech**, **Voices: Read**, and **Models: Read** enabled. Text to Speech alone cannot load the voice/model choices. **User: Read** is optional for reading the credit balance.
 2. Enter the key and select **Sačuvaj ključ**. A successful save hides the input and shows **Ključ je sačuvan**, **Zamijeni ključ**, and **Ukloni ključ**. **Zamijeni ključ** opens an empty masked editor. **Odustani** discards the new input and retains the previous key; **Ukloni ključ** deletes it and opens an empty editor. Windows Credential Manager retains the saved key for the current Windows user across application restarts and updates. A failed save keeps the input masked for retry and preserves the previous credential. Save a replacement before checking it or testing speech; both actions use the saved key.
@@ -154,7 +158,7 @@ After a quota failure, uncached messages use fallback for 60 seconds before retr
 
 ### Arabic keyboard
 
-Choose **Arapski** under **Postavke govora > Pismo tastature**, or select `Arapski` on Speech, Keyboard, or the Controller keyboard. The choice applies to all three keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
+Choose **Arapski** under **Govor i tastatura > Pismo tastature**, or select `Arapski` on Speech, Keyboard, or the Controller keyboard. The choice applies to all three keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
 
 Arabic uses the same group-then-letter selection. Letters and the message read right to left, with normal Unicode shaping. `Brojevi i znakovi` in Speech and the Numbers and Symbols tabs in the side panels include both `0123456789` and Arabic-Indic digits, Arabic punctuation, vowel and tanwin marks, shadda, sukun, dagger alif, extended marks, and combining Quranic signs. Symbols in Arabic Speech are grouped, and long group lists in side panels use `Prethodna` and `Sljedeća` to keep gaze targets large. A dotted circle makes standalone marks visible on buttons; only the actual mark is entered. `Obriši slovo` removes the last entered character, so a mark can be corrected without removing its letter. Mixed Arabic and Latin text is preserved.
 
@@ -176,11 +180,13 @@ Controller opens a right-side panel with General, Keyboard, Speech, and Settings
 
 ## Settings
 
+The four navigation choices are **Aplikacija**, **Pogled i odabir**, **Govor i tastatura** and **Podrška**. The gaze page groups notification and action-progress switches under **Povratne informacije**. Switches sit next to their labels.
+
 Changes apply immediately. If saving fails, **Postavke \*** on the hotbar and a persistent notice in Settings indicate that the current values are only active until the app closes. **Pokušaj sačuvati** retries saving the latest values. Changing tabs or reopening Settings keeps the notice until saving succeeds. This also applies to settings changed from the sidebars or Speech.
 
 Windows startup queries and changes run in the background, so other settings remain usable. The startup checkbox follows the latest requested choice while a change is pending. Closing Settings keeps requested Windows changes running while the application remains open. Reopening Settings reads the state after those changes finish. A launcher-window choice made during the initial query also applies to an existing enabled startup task.
 
-General settings controls startup, logging, and whether the PowerShell launcher window stays visible. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
+**Aplikacija** controls startup, updates, and whether the PowerShell launcher window stays visible. **Podrška** contains ordinary logging, diagnostic recording and the gaze check. **Gore** and **Dolje** scroll the active Settings page without changing its values. Scrolling cancels an unfinished gaze selection; clipped controls cannot be selected through the surrounding window. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
 
 Gaze settings uses these values:
 
@@ -194,13 +200,13 @@ Gaze settings uses these values:
 | Delay between actions | 350 ms | 100 to 5000 ms |
 | Pointer smoothing | 1.00 | 0.05 to 1.00 |
 
-**Postavke pogleda** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Pointer actions use three equal columns with 58-pixel controls. Existing saved timing values remain unchanged when installing a version with new defaults.
+**Pogled i odabir** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Pointer actions use three equal columns with 58-pixel controls. Existing saved timing values remain unchanged when installing a version with new defaults.
 
 The edge duration applies when gaze moves just beyond a button. The short eye-tracking interruption applies when one eye loses valid tracking in **Oba oka uz kratke prekide**. They are separate settings; neither fills progress or permits activation while paused. Neither corrects calibration or establishes which setting is best for a person.
 
 ### Selection stability near edges
 
-Use **Postavke > Postavke pogleda > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's local button trial copies this setting when opened.
+Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's local button trial copies this setting when opened.
 
 While gaze is briefly outside A but still near its edge, the pause or ring freezes. Only returning inside the same unchanged A before expiry can resume it; outside time, including the interval up to the first returning point, earns no progress. If gaze stays on a nearby B until expiry, A is discarded and B starts its full pause and dwell from the first eligible sample after expiry. B earns no time while A is frozen. Moving farther away switches immediately. Changing the duration cancels an unfinished selection; completed buttons still require departure before repetition. A tracking interruption cannot extend an already running edge deadline.
 
@@ -208,7 +214,7 @@ Longer retention can preserve progress through longer small departures, but it a
 
 ### Eye-tracking policy
 
-Choose **Režim praćenja očiju** in **Postavke > Postavke pogleda > Odabir pogledom**:
+Choose **Režim praćenja očiju** in **Postavke > Pogled i odabir > Odabir pogledom**:
 
 | Choice | Behavior |
 | --- | --- |
@@ -226,7 +232,7 @@ Speech settings controls eSpeak speed (155 words per minute by default, 80 to 32
 
 ## Update
 
-In the installed Windows application, open **Postavke > Opće postavke**. The current version is always shown separately from **Verzija za instalaciju**. Settings checks the official stable release list when opened; **Provjeri verzije** refreshes it. A notice identifies a newer stable version. A failed check does not mean your installed version is the latest.
+In the installed Windows application, open **Postavke > Aplikacija**. The current version is always shown separately from **Verzija za instalaciju**. Settings checks the official stable release list when opened; **Provjeri verzije** refreshes it. A notice identifies a newer stable version. A failed check does not mean your installed version is the latest.
 
 Choose an older or newer version in the dropdown, then select **Instaliraj i ponovo pokreni**. With gaze, dwelling on the dropdown cycles through its values. Selection alone does not install anything. Internet access is required for the list and package download. The app stays open while the package is downloaded and verified. If a message or entry is unfinished, choose **Odustani** to keep it or **Odbaci unos i ponovo pokreni** to continue. Unsaved drafts are not restored after restart. Closing Settings cancels a pending installation.
 
@@ -273,7 +279,7 @@ Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets
 
 #### Record a problem
 
-1. Open **Postavke > Opće postavke > Dijagnostičko snimanje**, or use the same shortcut in **Provjera pogleda** when no precision/button measurement is active. A caregiver operates this screen by mouse or keyboard; normal gaze input is paused while it is open.
+1. Open **Postavke > Podrška > Dijagnostičko snimanje**, or use the same shortcut in **Provjera pogleda** when no precision/button measurement is active. A caregiver operates this screen by mouse or keyboard; normal gaze input is paused while it is open.
 2. Choose **1, 2, 5 or 10 min** (default 2), then **Pokreni snimanje**. Explicit recording works even with **Uključi zapisivanje** off and never changes that setting. It also works after an ordinary log session reaches its size cap.
 3. Return to the application, reproduce the problem and note the approximate time and intended control. Closing the recording window keeps recording active. Returning to a gaze check preserves its result and keeps normal input paused until the check closes; no measurement continues hidden behind diagnostics.
 4. Wait for the duration or 32 MiB limit, or reopen the screen and choose **Zaustavi snimanje**. Wait for saving to finish before exporting or starting another recording.

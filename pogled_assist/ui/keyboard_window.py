@@ -29,6 +29,7 @@ from ..speech.speech_service import SpeechSettings
 from .keyboard_grid import KeyboardGrid
 from .recording_badge import RecordingBadge
 from .sidebar_panel import SidebarPanel
+from .theme import apply_theme
 
 logger = logging.getLogger(__name__)
 
@@ -51,26 +52,26 @@ BUTTON_HEIGHTS = {
 
 KEYBOARD_STYLESHEET = """
             QWidget#keyboardWindow {
-                background: #111318;
-                color: #f6f7fb;
+                background: #15191f;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 13px;
             }
             QToolButton {
-                background: #1c2029;
-                border: 1px solid #303747;
+                background: #283442;
+                border: 1px solid #71869b;
                 border-radius: 8px;
-                color: #eef2f8;
+                color: #edf2f7;
                 font-weight: 700;
                 padding: 6px;
             }
             QToolButton:hover {
-                background: #262c38;
-                border-color: #4c5970;
+                background: #334355;
+                border-color: #84c5d9;
             }
             QToolButton:checked {
-                background: #245f9f;
-                border-color: #67b7dc;
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
             }
             QToolButton#tabButton {
@@ -86,16 +87,6 @@ KEYBOARD_STYLESHEET = """
                 background: #2b1f27;
                 border-color: #684354;
                 font-size: 16px;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 3px solid #ffe58a;
-                color: #111318;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 3px solid #bbf7d0;
-                color: #ffffff;
             }
             """
 
@@ -190,7 +181,7 @@ class KeyboardWindow(SidebarPanel):
         self._trigger_action(action)
 
     def _build_ui(self) -> None:
-        self.setStyleSheet(KEYBOARD_STYLESHEET)
+        apply_theme(self, KEYBOARD_STYLESHEET)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
@@ -249,7 +240,6 @@ class KeyboardWindow(SidebarPanel):
         utility_row.addWidget(self._backspace_button, 2)
 
         self._recording_badge = RecordingBadge(self)
-        root.addWidget(self._recording_badge)
         root.addLayout(tab_row)
         self._script_button = self._make_button(
             switch_label(self._settings.keyboard_script),
@@ -260,6 +250,7 @@ class KeyboardWindow(SidebarPanel):
         root.addWidget(self._script_button)
         root.addWidget(self._key_host, 1)
         root.addLayout(utility_row)
+        root.addWidget(self._recording_badge)
 
     def _show_letter_groups(self) -> None:
         self._active_tab = TAB_LETTERS
@@ -385,7 +376,6 @@ class KeyboardWindow(SidebarPanel):
         button.setMinimumHeight(BUTTON_HEIGHTS[role])
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
-        button.setProperty("gazePulse", "")
         button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(lambda _checked=False, item=action: self._trigger_action(item))
         self._action_buttons[action] = button

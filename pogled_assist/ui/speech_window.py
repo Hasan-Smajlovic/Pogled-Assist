@@ -48,6 +48,7 @@ MULTI_CHARACTER_LETTERS = ("DŽ", "LJ", "NJ")
 SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 PHRASE_BUTTON_MIN_HEIGHT = 64
 GROUP_GRID_MAX_COLUMNS = 6
+KEYS_PER_PAGE = 12
 
 
 class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
@@ -82,6 +83,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._speech.playback_changed.connect(self._playback_changed)
         self._speech.voice_changed.connect(self._voice_changed)
         self._speech_settings = initial_settings
+        self._keyboard_page = 0
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         self._letter_groups = _group_letters(
             letters_for_script(initial_settings.keyboard_script), self._letters_per_group
@@ -160,6 +162,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._letters_per_group != old_letters_per_group
             or old_script != settings.keyboard_script
         ):
+            self._keyboard_page = 0
             self._close_dialog()
             self._letter_groups = _group_letters(
                 letters_for_script(settings.keyboard_script), self._letters_per_group
@@ -252,15 +255,16 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._editor_title() if self._editor is not None else "Odaberite grupu slova"
         )
 
-        group_count = len(self._letter_groups)
+        visible = self._keyboard_items(self._letter_groups)
+        group_count = min(KEYS_PER_PAGE, len(self._letter_groups))
         columns = _group_column_count(group_count)
         if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
             columns = max(columns, math.ceil(group_count / 5))
         self._set_grid_stretch(group_count, columns)
-        for index, group in enumerate(self._letter_groups):
+        for position, (index, group) in enumerate(visible):
             action = self._action(f"group:{index}")
             button = self._make_dynamic_button(" ".join(group), action, "groupButton")
-            self._key_grid.addWidget(button, index // columns, index % columns)
+            self._key_grid.addWidget(button, position // columns, position % columns)
 
         self._update_view_controls()
         self._set_status("")
@@ -281,15 +285,17 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         )
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
         keys = self._symbol_groups if arabic else self._symbols
-        columns = _group_column_count(len(keys)) if arabic else 4
-        self._set_grid_stretch(len(keys), columns)
-        for index, symbol in enumerate(keys):
+        visible = self._keyboard_items(keys)
+        count = min(KEYS_PER_PAGE, len(keys))
+        columns = _group_column_count(count) if arabic else 4
+        self._set_grid_stretch(count, columns)
+        for position, (index, symbol) in enumerate(visible):
             action = self._action(f"symbol-group:{index}" if arabic else f"symbol:{index}")
             label = " ".join(key_label(key) for key in symbol) if arabic else symbol
             button = self._make_dynamic_button(
                 label, action, "groupButton" if arabic else "symbolButton"
             )
-            self._key_grid.addWidget(button, index // columns, index % columns)
+            self._key_grid.addWidget(button, position // columns, position % columns)
 
         self._update_view_controls()
         self._set_status("")
@@ -313,7 +319,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             )
             empty.setObjectName("phraseButton")
             empty.setEnabled(False)
-            self._key_grid.addWidget(empty, 0, 0, 3, 2)
+            self._key_grid.addWidget(empty, 0, 0, 2, 2)
             self._set_status("")
         else:
             page_start = self._list_page * ITEMS_PER_PAGE
@@ -381,6 +387,11 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         for row in range(5):
             self._dialogs.letter_grid.setRowStretch(row, 1 if row < rows else 0)
 
+        self._dialogs.letter_grid_host.setLayoutDirection(
+            Qt.RightToLeft
+            if self._speech_settings.keyboard_script == ARABIC_SCRIPT
+            else Qt.LeftToRight
+        )
         for index, letter in enumerate(group):
             action = self._action(
                 f"symbol:{group_index * max(5, self._letters_per_group) + index}"
@@ -392,14 +403,10 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 action,
                 "dialogCompactLetterButton" if compact else "dialogLetterButton",
                 parent=self._dialogs.letter,
-                minimum_height=100 if compact else 120,
+                minimum_height=110 if compact else 128,
             )
             self._dialogs.letter_actions.add(action)
-            column = index % columns
-            if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
-                row_keys = min(columns, len(group) - (index // columns) * columns)
-                column = row_keys - 1 - column
-            self._dialogs.letter_grid.addWidget(button, index // columns, column)
+            self._dialogs.letter_grid.addWidget(button, index // columns, index % columns)
 
         back_action = self._action("letters:close")
         back = self._make_button(
@@ -407,7 +414,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             back_action,
             "dialogCompactBackButton" if compact else "dialogBackButton",
             parent=self._dialogs.letter,
-            minimum_height=100 if compact else 120,
+            minimum_height=110 if compact else 128,
         )
         self._dialogs.letter_actions.add(back_action)
         back_index = len(group)
@@ -422,7 +429,10 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         item_count = len(groups[group_index]) + 1
         columns = 3 if item_count <= 6 else 4
         rows = math.ceil(item_count / columns)
-        self._open_dialog(self._dialogs.letter, min(820, 210 + rows * 150))
+        self._open_dialog(
+            self._dialogs.letter,
+            40 + 68 + 18 + rows * (110 if rows >= 4 else 128) + (rows - 1) * 16,
+        )
 
     def _open_clear_dialog(self) -> None:
         if not self._input.text():
@@ -561,14 +571,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._delete_mode_button.setEnabled(bool(self._list_items()) or self._deletion_mode)
         self._save_item_button.setVisible(editor_mode)
         self._cancel_editor_button.setVisible(editor_mode)
-        self._previous_page_button.setVisible(list_mode)
-        self._previous_page_button.setEnabled(self._list_page > 0)
-        self._next_page_button.setVisible(list_mode)
-        self._next_page_button.setEnabled(self._list_page < self._list_page_count() - 1)
-        self._page_label.setVisible(list_mode)
-        self._page_label.setText(
-            f"{self._list_page + 1} / {self._list_page_count()}" if list_mode else ""
-        )
+        self._refresh_paging(list_mode)
+        self._view_title.setVisible(list_mode or editor_mode)
         self._message_label.setText(self._editor_title() if editor_mode else "Vaša poruka")
         self._input.setPlaceholderText(
             "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
@@ -643,8 +647,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             "editor:cancel": self._cancel_editor,
             "list:back": self._show_categories_from_answers,
             "list:delete-mode": self._toggle_deletion_mode,
-            "list:page:previous": lambda: self._change_list_page(-1),
-            "list:page:next": lambda: self._change_list_page(1),
+            "list:page:previous": lambda: self._change_page(-1),
+            "list:page:next": lambda: self._change_page(1),
         }
         handler = handlers.get(command)
         if handler is not None:
@@ -700,6 +704,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._show_list_level()
 
     def _toggle_keyboard_view(self) -> None:
+        self._keyboard_page = 0
         if self._is_list_mode():
             self._show_keyboard_from_list()
         elif self._symbols_mode:
@@ -765,6 +770,33 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._list_page = self._page_for_saved_item("phrase", phrase.text)
         self._show_list_level()
         self._set_status("Fraza je dodana u poruku.")
+
+    def _keyboard_items(self, keys):
+        self._keyboard_pages = max(1, math.ceil(len(keys) / KEYS_PER_PAGE))
+        self._keyboard_page = min(self._keyboard_page, self._keyboard_pages - 1)
+        start = self._keyboard_page * KEYS_PER_PAGE
+        return list(enumerate(keys))[start : start + KEYS_PER_PAGE]
+
+    def _refresh_paging(self, list_mode: bool) -> None:
+        count = self._list_page_count() if list_mode else self._keyboard_pages
+        page = self._list_page if list_mode else self._keyboard_page
+        visible = list_mode or count > 1
+        self._previous_page_button.setVisible(visible)
+        self._next_page_button.setVisible(visible)
+        self._page_label.setVisible(visible)
+        self._previous_page_button.setEnabled(page > 0)
+        self._next_page_button.setEnabled(page < count - 1)
+        self._page_label.setText(f"{page + 1} / {count}")
+
+    def _change_page(self, delta: int) -> None:
+        if self._is_list_mode():
+            self._change_list_page(delta)
+            return
+        self._keyboard_page = max(0, min(self._keyboard_pages - 1, self._keyboard_page + delta))
+        if self._symbols_mode:
+            self._show_symbols_level()
+        else:
+            self._show_group_level()
 
     def _change_list_page(self, delta: int) -> None:
         old_page = self._list_page
@@ -872,4 +904,4 @@ def _group_column_count(item_count: int) -> int:
         return 1
     if item_count <= 8:
         return 2
-    return min(GROUP_GRID_MAX_COLUMNS, math.ceil(item_count / 5))
+    return min(GROUP_GRID_MAX_COLUMNS, math.ceil(item_count / 2))

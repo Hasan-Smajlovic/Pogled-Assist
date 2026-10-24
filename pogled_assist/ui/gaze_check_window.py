@@ -12,6 +12,7 @@ from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -64,26 +65,36 @@ from .gaze_check_text import (
     precision_feedback,
     visible_eyes,
 )
-from .gaze_check_views import COLORS, TARGETS, CheckTargetView, EyePositionView, ResultMapView
+from .gaze_check_views import (
+    COLORS,
+    TARGETS,
+    CheckTargetView,
+    EyePositionView,
+    PrecisionSummary,
+    ResultMapView,
+)
+from .information_button import InformationButton
 from .recording_badge import RecordingBadge
+from .theme import apply_theme
 
 STYLESHEET = """
-QWidget#gazeCheck { background: #111318; color: #eef2f8; font-family: Segoe UI; }
-QLabel { color: #eef2f8; background: transparent; font-size: 17px; }
-QLabel#checkTitle { font-size: 30px; font-weight: 650; }
+QWidget#gazeCheck { background: #15191f; color: #edf2f7; font-family: Segoe UI; }
+QLabel { color: #edf2f7; background: transparent; font-size: 17px; }
+QLabel#checkTitle { font-size: 29px; font-weight: 650; }
 QLabel#cardTitle { font-size: 23px; font-weight: 600; }
-QLabel#checkHint { font-size: 15px; color: #bac5d4; }
-QFrame#checkCard { background: #1c2029; border: 1px solid #394253; border-radius: 12px; }
-QPushButton { background: #1c2029; color: #eef2f8; border: 1px solid #58647a;
+QLabel#checkHint { font-size: 15px; color: #b8c5d2; }
+QFrame#checkCard { background: #1d242d; border: 1px solid #394959; border-radius: 12px; }
+QPushButton { background: #283442; color: #edf2f7; border: 1px solid #71869b;
     border-radius: 9px; padding: 10px 16px; font-size: 18px; font-weight: 600; }
-QPushButton:hover { background: #262c38; border-color: #8bd5f5; }
-QPushButton:focus { border: 2px solid #8bd5f5; }
-QPushButton#checkPrimary { background: #245f9f; border-color: #8bd5f5; }
-QProgressBar { background: #394253; border: none; border-radius: 3px; }
-QProgressBar::chunk { background: #8bd5f5; border-radius: 3px; }
-QScrollArea, QScrollArea QWidget { background: #1c2029; border: none; }
-QComboBox { background: #262c38; color: #eef2f8; padding: 8px; font-size: 17px; }
-QComboBox QAbstractItemView { background: #262c38; color: #eef2f8; }
+QPushButton:hover { background: #334355; border-color: #84c5d9; }
+QPushButton:focus { border: 2px solid #84c5d9; }
+QFrame#checkResources, QFrame#checkDeviceActions { border: 0; border-right: 1px solid #394959; }
+QPushButton#checkPrimary { background: #2e6478; border-color: #84c5d9; }
+QProgressBar { background: #394959; border: none; border-radius: 3px; }
+QProgressBar::chunk { background: #84c5d9; border-radius: 3px; }
+QScrollArea, QScrollArea QWidget { background: #1d242d; border: none; }
+QComboBox { background: #334355; color: #edf2f7; padding: 8px; font-size: 17px; }
+QComboBox QAbstractItemView { background: #334355; color: #edf2f7; }
 """
 
 
@@ -112,7 +123,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self.setWindowTitle("Provjera pogleda")
         self.setObjectName("gazeCheck")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
-        self.setStyleSheet(STYLESHEET)
+        apply_theme(self, STYLESHEET)
         self._settings = replace(settings)
         self._simulated = simulated
         self._reports = reports or GazeCheckReports(
@@ -167,26 +178,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 18, 24, 18)
         layout.setSpacing(12)
-        header = QHBoxLayout()
-        copy = QVBoxLayout()
-        self._title_label = _label("Provjera pogleda", self, "checkTitle")
-        copy.addWidget(self._title_label)
-        self._policy_text = dict(EYE_TRACKING_POLICY_CHOICES)[self._settings.eye_tracking_policy]
-        self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
-        copy.addWidget(self._policy_label)
-        self._simulation_label = _label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint")
-        self._simulation_label.setVisible(self._simulated)
-        copy.addWidget(self._simulation_label)
-        self._recording_badge = RecordingBadge(self)
-        copy.addWidget(self._recording_badge)
-        header.addLayout(copy, 1)
-        self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
-        header.addWidget(self._diagnostics_button)
-        self._history_button = self._button("Sačuvani rezultati", self._open_history)
-        header.addWidget(self._history_button)
-        self._close_button = self._button("Zatvori · Esc", self.close)
-        header.addWidget(self._close_button)
-        layout.addLayout(header)
+        layout.addLayout(self._build_header())
         self._step = _label("1 · Položaj i praćenje", self, "cardTitle")
         layout.addWidget(self._step)
         self._pages = QStackedWidget(self)
@@ -201,21 +193,72 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             "checkHint",
         )
         layout.addWidget(self._notice)
+        layout.addLayout(self._build_footer())
+
+    def _build_header(self) -> QHBoxLayout:
+        header = QHBoxLayout()
+        header.setSpacing(16)
+        copy = QVBoxLayout()
+        copy.setSpacing(4)
+        title = QHBoxLayout()
+        self._title_label = _label("Provjera pogleda", self, "checkTitle")
+        title.addWidget(self._title_label, 1)
+        self._recording_badge = RecordingBadge(self)
+        title.addWidget(self._recording_badge)
+        copy.addLayout(title)
+        self._policy_text = dict(EYE_TRACKING_POLICY_CHOICES)[self._settings.eye_tracking_policy]
+        self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
+        copy.addWidget(self._policy_label)
+        self._simulation_label = _label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint")
+        self._simulation_label.setVisible(self._simulated)
+        copy.addWidget(self._simulation_label)
+        header.addLayout(copy, 1)
+        resources = QFrame(self)
+        resources.setObjectName("checkResources")
+        grid = QGridLayout(resources)
+        grid.setContentsMargins(0, 0, 24, 0)
+        grid.setHorizontalSpacing(12)
+        grid.addWidget(_label("Rezultati i podrška", resources, "checkHint"), 0, 0, 1, 2)
+        self._history_button = self._button("Sačuvani rezultati", self._open_history)
+        self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
+        for column, button in enumerate((self._history_button, self._diagnostics_button)):
+            button.setMinimumHeight(48)
+            button.setStyleSheet("font-size: 16px;")
+            grid.addWidget(button, 1, column)
+        header.addWidget(resources)
+        self._close_button = self._button("Zatvori · Esc", self.close)
+        header.addWidget(self._close_button)
+        return header
+
+    def _build_footer(self) -> QHBoxLayout:
         footer = QHBoxLayout()
+        footer.setSpacing(24)
+        self._device_group = QFrame(self)
+        self._device_group.setObjectName("checkDeviceActions")
+        device = QVBoxLayout(self._device_group)
+        device.setContentsMargins(0, 0, 24, 0)
+        device.setSpacing(6)
+        self._device_title = _label("Podešavanje uređaja", self, "checkHint")
+        device.addWidget(self._device_title)
         self._calibration_button = self._button("Otvori Tobii postavke", self._calibrate)
+        device.addWidget(self._calibration_button)
+        footer.addWidget(self._device_group, 1)
+        flow = QVBoxLayout()
+        flow.setSpacing(6)
+        self._flow_title = _label("Sljedeći korak", self, "checkHint")
+        flow.addWidget(self._flow_title)
+        actions = QHBoxLayout()
+        actions.setSpacing(16)
         self._free_button = self._button("Slobodna provjera", self._start_free)
         self._primary_button = self._button("Provjeri preciznost", self._next)
         self._primary_button.setObjectName("checkPrimary")
         self._repeat_button = self._button("Ponovi preciznost", self._repeat)
         self._repeat_button.hide()
-        for button in (
-            self._calibration_button,
-            self._free_button,
-            self._primary_button,
-            self._repeat_button,
-        ):
-            footer.addWidget(button, 1)
-        layout.addLayout(footer)
+        for button in (self._free_button, self._primary_button, self._repeat_button):
+            actions.addWidget(button, 1)
+        flow.addLayout(actions)
+        footer.addLayout(flow, 2)
+        return footer
 
     def _button(self, text: str, callback) -> QPushButton:
         button = QPushButton(text, self)
@@ -238,7 +281,18 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         columns = QHBoxLayout(page)
         columns.setContentsMargins(0, 0, 0, 0)
         columns.setSpacing(16)
-        card, layout = self._card(page, "Položaj očiju uživo")
+        card, layout = self._card(page, "")
+        heading = QHBoxLayout()
+        heading.addWidget(_label("Položaj očiju uživo", card, "cardTitle"), 1)
+        self._position_help = InformationButton(
+            "O položaju i udaljenosti",
+            "Prikaz pokazuje položaj očiju unutar područja koje Tobii može pratiti. "
+            "Udaljenost nije mjerenje u centimetrima. Preciznost provjerite na metama.",
+            card,
+        )
+        self._position_help.setFixedSize(44, 44)
+        heading.addWidget(self._position_help)
+        layout.addLayout(heading)
         layout.addWidget(_label("Polako pomjerajte ekran s pričvršćenim Tobijem.", card))
         self._eyes_view = EyePositionView(card)
         self._eyes_view.setToolTip(
@@ -304,6 +358,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._test_progress.setAccessibleName("Napredak provjere preciznosti")
         layout.addWidget(self._test_progress)
         buttons = QHBoxLayout()
+        buttons.setSpacing(16)
         self._test_back_button = self._button("Prekini i prikaži rezultat", self._stop_test)
         self._test_close_button = self._button("Zatvori · Esc", self.close)
         buttons.addWidget(self._test_back_button)
@@ -322,8 +377,11 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._result_detail.setStyleSheet("font-size: 16px;")
         self._result_detail.setTextFormat(Qt.RichText)
         columns = QHBoxLayout()
+        columns.setSpacing(24)
         map_column = QVBoxLayout()
         self._result_map = ResultMapView(card)
+        self._result_map.setMinimumHeight(110)
+        self._result_map.setMaximumHeight(130)
         map_column.addWidget(self._result_map, 1)
         map_column.addWidget(
             _label(
@@ -333,17 +391,28 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             )
         )
         columns.addLayout(map_column, 1)
-        columns.addWidget(self._result_detail, 3)
+        details = QVBoxLayout()
+        details.setSpacing(6)
+        details.addWidget(self._result_detail)
+        details.addStretch(1)
+        columns.addLayout(details, 3)
         self._result_advice = _label("", card)
         self._trial_summary = _label("", card)
         self._trial_summary.hide()
-        precision_layout.addWidget(self._result_summary)
+        summary = QHBoxLayout()
+        summary.setSpacing(20)
+        summary.addWidget(self._result_summary, 1)
+        self._precision_counts = PrecisionSummary(precision)
+        summary.addWidget(self._precision_counts, 2)
+        precision_layout.addLayout(summary)
         precision_layout.addLayout(columns, 1)
         precision_layout.addWidget(self._result_advice)
         precision_layout.addWidget(self._trial_summary)
         self._details_button = self._button("Prikaži mjerenja", self._render_result_details)
         self._details_button.setCheckable(True)
-        precision_layout.addWidget(self._details_button, 0, Qt.AlignLeft)
+        self._details_button.setMinimumHeight(44)
+        self._details_button.setStyleSheet("font-size: 16px; padding: 6px 12px;")
+        map_column.addWidget(self._details_button)
         self._metrics_hint = _label(
             "Podaci: dio vremena s važećim pogledom. Odstupanje: udaljenost od mete. "
             "Rasipanje: koliko se pogled pomjerao. Vrijednosti su u pikselima prikaza (px).",
@@ -356,7 +425,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             "najmanje 60% podataka. Promjena položaja može promijeniti rezultat."
         )
         self._metrics_hint.hide()
-        precision_layout.addWidget(self._metrics_hint)
+        details.insertWidget(1, self._metrics_hint)
         self._build_report_controls(card, layout, precision)
         self._pages.addWidget(card)
 
@@ -644,6 +713,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._primary_button.show()
         self._primary_button.setEnabled(True)
         self._repeat_button.hide()
+        self._device_group.show()
+        self._device_title.show()
+        self._flow_title.show()
         self._calibration_button.show()
         self._calibration_button.setText("Otvori Tobii postavke")
         self._free_button.show()
@@ -683,6 +755,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._test_progress.setValue(0)
         self._check = None
         self._primary_button.hide()
+        self._device_group.hide()
+        self._flow_title.hide()
         self._calibration_button.hide()
         self._repeat_button.setText("Prekini test")
         self._repeat_button.show()
@@ -993,8 +1067,10 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 f"Prekinuto · završeno {len(results)} od {len(self._view_report.precision)} meta."
             )
         mark = {True: "✓", False: "!", None: "—"}[state]
+        total = len(self._view_report.precision) if self._view_report else len(TARGETS)
+        self._precision_counts.set_results(results, total)
         self._result_summary.setText(f"{mark} {summary}")
-        self._result_summary.setStyleSheet(f"color: {COLORS[state]}; font-size: 23px;")
+        self._result_summary.setStyleSheet(f"color: {COLORS[state]}; font-size: 19px;")
 
     def _render_trial_summary(self, selected, losses, wrong) -> None:
         trial_finished = len(selected) == 3
@@ -1017,6 +1093,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         if self._view_report is not None:
             self._primary_button.setEnabled(self._view_report.state == "completed")
         self._primary_button.setVisible(not self._archived)
+        self._device_group.setVisible(not self._archived)
+        self._device_title.hide()
+        self._flow_title.hide()
         self._calibration_button.setVisible(not self._archived)
         self._calibration_button.setText("Podesi položaj")
         self._free_button.hide()
@@ -1113,6 +1192,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._trial_ready_at = time.monotonic()
         self._set_trial_deadline(self._trial_ready_at)
         self._primary_button.hide()
+        self._device_group.hide()
+        self._flow_title.hide()
         self._calibration_button.hide()
         self._repeat_button.setText("Prekini test")
         self._target.update()

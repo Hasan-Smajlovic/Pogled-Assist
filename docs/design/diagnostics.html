@@ -94,6 +94,7 @@
     <p>Paket sadrži strukturirane događaje izabranog snimka, dozvoljene postavke pogleda i njihove promjene, logičke i fizičke dimenzije prikaza, skaliranje, dostupni backend/SDK/model i oznaku aplikacije. Build treba označiti punom revizijom i stanjem lokalnih izmjena; nepoznata vrijednost ostaje nepoznata. Pakovanje treba ugraditi oznaku izvora u artefakt, umjesto da se instalirana aplikacija oslanja na lokalni Git. Postojeća <a href="../ARCHITECTURE.md#diagnostic-logging">pravila dijagnostike</a> i dalje određuju značenje događaja, satova i ograničenja.</p>
     <p>Manifest navodi verziju formata, identitet i stanje snimka, razlog završetka, prisustvo početnog/završnog zapisa, gubitak događaja, greške, skraćivanje i SHA-256 svake datoteke. Sažetak ne pretvara broj tehničkih pokušaja u stopu uspješnosti korisnika i ne zaključuje šta je korisnik namjeravao izabrati. Paket ne sadrži cijeli tekstualni log, cijele postavke, tajne, serijski broj, sadržaj poruka ili biblioteke, audio ni snimke ekrana. Izvoz je lokalni, tek nakon izbora odredišta u Windows dijalogu; odustajanje ne mijenja snimak, a greška dopušta ponovni pokušaj.</p>
     <p>Prikaz se pregleda na 1280 × 720 logičkih piksela. Alati pregleda su ispod prozora. Windows dijalog, mjerenje uticaja zapisivanja i stvarno ponašanje na Tobii 4C provjeravaju se odvojeno od ovog HTML nacrta.</p>
+  <p>Qt koristi podvučene kartice odvojene od radnji snimanja i izvoza. Vlasništvo snimanja, privatnost i izvoz ostaju isti.</p>
   </details>
 </body>
 </html>

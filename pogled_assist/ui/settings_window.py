@@ -6,11 +6,10 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
 from ..interaction.eye_tracking_policy import EyeTrackingGate
 from ..interaction.gaze_selection import (
@@ -48,27 +47,30 @@ from .gaze_settings_page import GazeSettingsPage
 from .general_settings_page import GeneralSettingsPage
 from .learned_words_page import LearnedWordsPage
 from .recording_badge import RecordingBadge
+from .settings_content import SettingsContent
 from .settings_controls import GazeCallback, SettingsControls, global_rect, styled_label
 from .speech_settings_page import SpeechSettingsPage
+from .support_settings_page import SupportSettingsPage
+from .theme import apply_theme
 
 logger = logging.getLogger(__name__)
 
 
 SETTINGS_STYLESHEET = """
             QWidget#settingsRoot {
-                background: #111312;
-                color: #f4f1ea;
+                background: #15191f;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
             }
-            QWidget#settingsRoot QLabel { color: #f4f1ea; background: transparent; }
+            QWidget#settingsRoot QLabel { color: #edf2f7; background: transparent; }
             QLabel#titleLabel {
                 color: #ffffff;
                 font-size: 25px;
                 font-weight: 650;
             }
             QLabel#statusLabel {
-                color: #b8c5c0;
+                color: #b8c5d2;
                 font-size: 14px;
             }
             QLabel#sectionTitle {
@@ -77,16 +79,16 @@ SETTINGS_STYLESHEET = """
                 font-weight: 650;
             }
             QLabel#sectionDescription {
-                color: #aeb9b3;
+                color: #b8c5d2;
                 font-size: 14px;
             }
             QLabel#navSectionLabel, QLabel#groupLabel {
-                color: #8fa099;
+                color: #b8c5d2;
                 font-size: 12px;
                 font-weight: 700;
             }
             QLabel#navNote {
-                color: #8fa099;
+                color: #b8c5d2;
                 font-size: 13px;
             }
             QLabel#settingTitle {
@@ -95,7 +97,7 @@ SETTINGS_STYLESHEET = """
                 font-weight: 600;
             }
             QLabel#settingHint {
-                color: #b9b2a5;
+                color: #b8c5d2;
                 font-size: 13px;
             }
             QLabel#updateStatusLabel {
@@ -103,8 +105,8 @@ SETTINGS_STYLESHEET = """
                 font-size: 15px;
             }
             QWidget#settingsRoot QLabel#valueLabel {
-                background: #0f1110;
-                border: 1px solid #3a3d3b;
+                background: #15191f;
+                border: 1px solid #394959;
                 border-radius: 10px;
                 color: #ffffff;
                 font-size: 22px;
@@ -112,36 +114,36 @@ SETTINGS_STYLESHEET = """
                 padding: 4px 12px;
             }
             QFrame#navPanel, QFrame#contentPanel {
-                background: #191c1a;
-                border: 1px solid #343a36;
+                background: #1d242d;
+                border: 1px solid #394959;
                 border-radius: 14px;
             }
             QFrame#settingRow {
-                background: #222522;
-                border: 1px solid #3a403c;
+                background: #222d38;
+                border: 1px solid #394959;
                 border-radius: 10px;
             }
             QToolButton, QCheckBox {
-                background: #272a28;
-                border: 1px solid #414742;
+                background: #283442;
+                border: 1px solid #71869b;
                 border-radius: 10px;
-                color: #f5f3ef;
+                color: #edf2f7;
                 font-size: 15px;
-                font-weight: 600;
-                padding: 10px 14px;
+                font-weight: 500;
+                padding: 8px 10px;
             }
             QToolButton:hover, QCheckBox:hover {
-                background: #323633;
-                border-color: #69736d;
+                background: #334355;
+                border-color: #84c5d9;
             }
             QToolButton:disabled, QCheckBox:disabled {
-                background: #242624;
-                border-color: #363a37;
-                color: #747b76;
+                background: #222b35;
+                border-color: #455363;
+                color: #8595a6;
             }
-            QToolButton:checked, QCheckBox:checked {
-                background: #1d6f68;
-                border-color: #74d3c6;
+            QToolButton:checked {
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
             }
             QToolButton#navButton {
@@ -150,70 +152,27 @@ SETTINGS_STYLESHEET = """
                 text-align: left;
             }
             QToolButton#navButton:hover {
-                background: #252a27;
-                border-color: #3c4540;
+                background: #283442;
+                border-color: #394959;
             }
-            QToolButton#navButton:checked, QToolButton#primaryButton {
-                background: #1d6f68;
-                border-color: #74d3c6;
+            QToolButton#primaryButton {
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
+            }
+            QToolButton#navButton:checked {
+                background: #283442; border-left: 3px solid #84c5d9;
             }
             QToolButton#adjustButton {
-                background: #242825;
-            }
-            QToolButton[gazeTarget="true"], QCheckBox[gazeTarget="true"] {
-                background: #3a3420;
-                border: 3px solid #f0c84a;
-                color: #ffffff;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="0"],
-            QCheckBox[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #14140f;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="1"],
-            QCheckBox[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #bbf7d0;
-                color: #ffffff;
+                background: #283442;
             }
             QToolButton#dangerButton {
-                background: #492326;
-                border-color: #804047;
-            }
-            QToolButton#dangerButton[gazeTarget="true"] {
-                background: #5d3422;
-                border: 3px solid #f0c84a;
-            }
-            QToolButton#dangerButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #14140f;
-            }
-            QToolButton#dangerButton[gazeTarget="true"][gazePulse="1"] {
-                background: #dc2626;
-                border: 4px solid #fecaca;
-                color: #ffffff;
-            }
-            QCheckBox {
-                spacing: 10px;
-            }
-            QCheckBox::indicator {
-                width: 24px;
-                height: 24px;
-                border: 2px solid #8b938d;
-                border-radius: 6px;
-                background: #101010;
-            }
-            QCheckBox::indicator:checked {
-                background: #1d6f68;
-                border-color: #74d3c6;
-                image: url("__CHECKBOX_X_IMAGE__");
+                background: #442b33;
+                border-color: #af7a86;
             }
             QComboBox {
-                background: #0f1110;
-                border: 1px solid #4c534e;
+                background: #15191f;
+                border: 1px solid #71869b;
                 border-radius: 10px;
                 color: #ffffff;
                 font-size: 20px;
@@ -221,8 +180,8 @@ SETTINGS_STYLESHEET = """
                 padding: 10px 14px;
             }
             QLineEdit {
-                background: #0f1110;
-                border: 1px solid #4c534e;
+                background: #15191f;
+                border: 1px solid #71869b;
                 border-radius: 10px;
                 color: #ffffff;
                 font-size: 18px;
@@ -230,33 +189,18 @@ SETTINGS_STYLESHEET = """
             }
             QComboBox:hover {
                 background: #181a18;
-                border-color: #69736d;
+                border-color: #84c5d9;
             }
             QComboBox::drop-down {
                 border: 0;
                 width: 42px;
             }
             QComboBox QAbstractItemView {
-                background: #1e1f1e;
-                border: 1px solid #4c534e;
+                background: #1d242d;
+                border: 1px solid #71869b;
                 color: #ffffff;
-                selection-background-color: #1d6f68;
+                selection-background-color: #2e6478;
                 selection-color: #ffffff;
-            }
-            QComboBox[gazeTarget="true"] {
-                background: #3a3420;
-                border: 3px solid #f0c84a;
-                color: #ffffff;
-            }
-            QComboBox[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #14140f;
-            }
-            QComboBox[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #bbf7d0;
-                color: #ffffff;
             }
             """
 
@@ -357,6 +301,7 @@ class SettingsWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         logger.info("Settings window closed.")
+        self._controls.close_help()
         self._startup_closed = True
         self._startup_tasks.close()
         self._eleven_page.clear_input()
@@ -400,9 +345,7 @@ class SettingsWindow(QWidget):
         self._general_page._update_row.confirm_restart()
 
     def _build_ui(self) -> None:
-        self.setStyleSheet(
-            SETTINGS_STYLESHEET.replace("__CHECKBOX_X_IMAGE__", _checkbox_x_image_url())
-        )
+        apply_theme(self, SETTINGS_STYLESHEET)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 8, 16, 8)
@@ -414,13 +357,15 @@ class SettingsWindow(QWidget):
         root.addLayout(body, 1)
         body.addWidget(self._build_nav_panel(), 0)
 
-        self._stack = QStackedWidget(self)
+        self._stack = SettingsContent(self)
         self._general_page = GeneralSettingsPage(self)
         self._stack.addWidget(self._general_page)
         self._gaze_page = GazeSettingsPage(self)
         self._stack.addWidget(self._gaze_page)
         self._speech_page = SpeechSettingsPage(self)
         self._stack.addWidget(self._speech_page)
+        self._support_page = SupportSettingsPage(self)
+        self._stack.addWidget(self._support_page)
         self._learning_page = LearnedWordsPage(self._controls, self._suggestions, self)
         self._learning_page.back_requested.connect(lambda: self._select_tab(2))
         self._learning_page.status_changed.connect(self._set_status)
@@ -435,7 +380,19 @@ class SettingsWindow(QWidget):
         self._audio_page = SavedAudioPage(self._controls, self._clear_audio, self)
         self._audio_page.back_requested.connect(lambda: self._select_tab(2))
         self._stack.addWidget(self._audio_page)
-        body.addWidget(self._stack, 1)
+        self._scroll = QScrollArea(self)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setStyleSheet("QScrollArea { background: #15191f; border: 0; }")
+        self._scroll.viewport().setObjectName("settingsViewport")
+        self._scroll.viewport().setStyleSheet("QWidget#settingsViewport { background: #15191f; }")
+        self._scroll.setWidget(self._stack)
+        self._stack.setAutoFillBackground(False)
+        for bar in (self._scroll.verticalScrollBar(), self._scroll.horizontalScrollBar()):
+            bar.valueChanged.connect(
+                lambda _value: self.cancel_gaze_interaction(require_leave=True)
+            )
+        body.addWidget(self._scroll, 1)
 
         self._select_tab(0)
 
@@ -454,45 +411,53 @@ class SettingsWindow(QWidget):
 
         self._status_label = styled_label("Spremno", "statusLabel", self)
         self._status_label.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
-        self._status_label.setMinimumWidth(360)
+        self._status_label.setMinimumWidth(180)
         top_bar.addWidget(self._status_label, 0)
         self._exit_button = self._controls.button(
             "Zatvori", self.close, QSize(128, 58), "fa5s.times"
         )
-        self._exit_button.setObjectName("dangerButton")
         top_bar.addWidget(self._exit_button, 0, Qt.AlignRight)
         return top_bar
 
     def _build_nav_panel(self) -> QFrame:
         nav_panel = QFrame(self)
         nav_panel.setObjectName("navPanel")
-        nav_panel.setFixedWidth(250)
+        nav_panel.setFixedWidth(224)
         nav_layout = QVBoxLayout(nav_panel)
         nav_layout.setContentsMargins(12, 12, 12, 12)
         nav_layout.setSpacing(8)
 
-        nav_label = styled_label("KATEGORIJE", "navSectionLabel", nav_panel)
+        nav_label = styled_label("Postavke", "navSectionLabel", nav_panel)
         nav_label.setContentsMargins(8, 4, 8, 2)
         nav_layout.addWidget(nav_label)
 
         self._general_tab_button = self._controls.toggle_button(
-            "Opće postavke", lambda: self._select_tab(0), QSize(224, 66), "fa5s.sliders-h"
+            "Aplikacija", lambda: self._select_tab(0), QSize(200, 66), ""
         )
         self._gaze_tab_button = self._controls.toggle_button(
-            "Postavke pogleda", lambda: self._select_tab(1), QSize(224, 66), "fa5s.eye"
+            "Pogled i odabir", lambda: self._select_tab(1), QSize(200, 66), ""
         )
         self._speech_tab_button = self._controls.toggle_button(
-            "Postavke govora", lambda: self._select_tab(2), QSize(224, 66), "fa5s.volume-up"
+            "Govor i tastatura", lambda: self._select_tab(2), QSize(200, 66), ""
+        )
+        self._support_tab_button = self._controls.toggle_button(
+            "Podrška", lambda: self._select_tab(3), QSize(200, 66)
         )
         self._tab_buttons = (
             self._general_tab_button,
             self._gaze_tab_button,
             self._speech_tab_button,
+            self._support_tab_button,
         )
         for button in self._tab_buttons:
             button.setObjectName("navButton")
             nav_layout.addWidget(button)
         nav_layout.addStretch(1)
+        for text, direction in (("Gore", -1), ("Dolje", 1)):
+            button = self._controls.button(
+                text, lambda direction=direction: self._scroll_page(direction), QSize(200, 58)
+            )
+            nav_layout.addWidget(button)
         self._save_note = styled_label(
             "Promjene se primjenjuju i čuvaju automatski.", "navNote", nav_panel
         )
@@ -500,7 +465,7 @@ class SettingsWindow(QWidget):
         self._save_note.setContentsMargins(8, 0, 8, 6)
         nav_layout.addWidget(self._save_note)
         self._retry_save_button = self._controls.button(
-            "Pokušaj sačuvati", self.save_retry_requested.emit, QSize(224, 66)
+            "Pokušaj sačuvati", self.save_retry_requested.emit, QSize(200, 66)
         )
         self._retry_save_button.hide()
         nav_layout.addWidget(self._retry_save_button)
@@ -562,11 +527,18 @@ class SettingsWindow(QWidget):
 
     def _select_tab(self, index: int) -> None:
         self.cancel_gaze_interaction(require_leave=True)
+        self._controls.close_help()
         self._eleven_page.clear_input()
         self._stack.setCurrentIndex(index)
+        self._scroll.verticalScrollBar().setValue(0)
         for tab, button in enumerate(self._tab_buttons):
             button.setChecked(tab == index)
         self._set_status(self._tab_buttons[index].text())
+
+    def _scroll_page(self, direction: int) -> None:
+        self.cancel_gaze_interaction(require_leave=True)
+        bar = self._scroll.verticalScrollBar()
+        bar.setValue(bar.value() + direction * max(58, bar.pageStep() - 58))
 
     def _toggle_move_pointer(self) -> None:
         checked = not self._gaze_settings.move_mouse
@@ -753,6 +725,7 @@ class SettingsWindow(QWidget):
 
     def _refresh_values(self) -> None:
         self._gaze_page.refresh(self._gaze_settings)
+        self._support_page.refresh(self._gaze_settings)
         self._general_page.refresh(self._gaze_settings, self._startup_desired_enabled)
         self._speech_page.refresh(
             self._speech_settings, self._speech_playback_state, self._eleven_account
@@ -853,20 +826,26 @@ class SettingsWindow(QWidget):
         target = self._controls.action_at(point)
         now_ms = time.monotonic() * 1000
         if target is None:
-            if self._gaze_still_on_blocked_target(point):
-                # A disabled action under unchanged gaze is not a departure.
-                self.pause_gaze_interaction()
-            else:
-                self.cancel_gaze_interaction()
+            self._handle_missing_gaze_target(point)
             return
 
         widget, action = target
-        if self._gaze_selection.tracking_held and (
-            widget is not self._gaze_selection.target
-            or global_rect(widget) != self._tracking_hold_rect
-        ):
+        if self._gaze_selection.tracking_held and self._tracking_target_changed(widget):
             self.pause_gaze_interaction()
         self._update_gaze(widget, action, now_ms)
+
+    def _handle_missing_gaze_target(self, point: QPoint) -> None:
+        if self._gaze_still_on_blocked_target(point):
+            # A disabled action under unchanged gaze is not a departure.
+            self.pause_gaze_interaction()
+        else:
+            self.cancel_gaze_interaction()
+
+    def _tracking_target_changed(self, widget: QWidget) -> bool:
+        return (
+            widget is not self._gaze_selection.target
+            or global_rect(widget) != self._tracking_hold_rect
+        )
 
     def _update_gaze(self, widget, action, now_ms):
         update = self._gaze_selection.update(
@@ -959,7 +938,3 @@ class SettingsWindow(QWidget):
 
         self._interaction_active = False
         self.interaction_cancelled.emit()
-
-
-def _checkbox_x_image_url() -> str:
-    return (Path(__file__).resolve().parents[1] / "assets" / "checkbox_x.svg").as_posix()

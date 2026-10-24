@@ -30,6 +30,7 @@ from .recording_badge import RecordingBadge
 from .settings_controls import busy_indicator
 from .speech_buttons import WrappedButton, button_bounds
 from .speech_dialogs import SpeechDialogs
+from .theme import apply_theme
 from .tracking_feedback import MessageTrackingHeader
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
@@ -73,10 +74,10 @@ class SpeechSurface(QWidget):
         self._dialogs.closed.connect(lambda _dialog: self._render_tracking_notice())
 
     def _build_ui(self, keyboard_script: str) -> None:
-        self.setStyleSheet(SPEECH_STYLE)
+        apply_theme(self, SPEECH_STYLE)
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 7, 12, 7)
-        root.setSpacing(9)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(12)
         root.addLayout(self._build_topbar())
         root.addLayout(self._build_predictions())
         root.addLayout(self._build_workspace(), 1)
@@ -107,7 +108,7 @@ class SpeechSurface(QWidget):
         self._playback_progress.setFocusPolicy(Qt.NoFocus)
         self._playback_progress.setStyleSheet(
             "QProgressBar { background: #123750; border: 0; border-radius: 2px; } "
-            "QProgressBar::chunk { background: #91dec0; border-radius: 2px; }"
+            "QProgressBar::chunk { background: #a3d5ba; border-radius: 2px; }"
         )
         self._play_button.installEventFilter(self)
         self._phrases_button = self._make_button(
@@ -184,23 +185,24 @@ class SpeechSurface(QWidget):
         self._prediction_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        predictions.addWidget(self._prediction_label)
+        self._prediction_label.setFixedHeight(0)
+        self._prediction_label.hide()
         prediction_row = QHBoxLayout()
         prediction_row.setContentsMargins(0, 0, 0, 0)
         prediction_row.setSpacing(10)
         self._prediction_buttons = []
         for index in range(5):
             button = self._make_button(
-                "·", f"suggestion:{index}", "predictionButton", minimum_height=71
+                "·", f"suggestion:{index}", "predictionButton", minimum_height=96
             )
             button.setEnabled(False)
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             self._prediction_buttons.append(button)
             prediction_row.addWidget(button, 1)
         self._undo_word_button = self._make_button(
-            "Poništi riječ", "suggestion-undo", "utilityButton", minimum_height=66
+            "Poništi riječ", "suggestion-undo", "utilityButton", minimum_height=96
         )
-        self._undo_word_button.setFixedWidth(170)
+        self._undo_word_button.setMinimumWidth(150)
         self._undo_word_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._undo_word_button.setEnabled(False)
         prediction_row.addWidget(self._undo_word_button)
@@ -208,12 +210,21 @@ class SpeechSurface(QWidget):
 
         return predictions
 
-    def _build_workspace(self) -> QHBoxLayout:
-        workspace = QHBoxLayout()
+    def _build_workspace(self) -> QVBoxLayout:
+        workspace = QVBoxLayout()
         workspace.setContentsMargins(0, 0, 0, 0)
-        workspace.setSpacing(10)
-        workspace.addWidget(self._build_main_panel(), 3)
-        workspace.addWidget(self._build_system_panel(), 1)
+        workspace.setSpacing(8)
+        status = QHBoxLayout()
+        status.addStretch(1)
+        self._recording_badge = RecordingBadge(self)
+        self._recording_badge.setFixedHeight(24)
+        status.addWidget(self._recording_badge)
+        workspace.addLayout(status)
+        panels = QHBoxLayout()
+        panels.setSpacing(12)
+        panels.addWidget(self._build_main_panel(), 3)
+        panels.addWidget(self._build_system_panel(), 1)
+        workspace.addLayout(panels, 1)
         return workspace
 
     def _build_main_panel(self) -> QWidget:
@@ -306,7 +317,7 @@ class SpeechSurface(QWidget):
             "Prethodna",
             "list:page:previous",
             "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
+            minimum_height=72,
         )
         self._page_label = QLabel("", main_panel)
         self._page_label.setObjectName("sectionLabel")
@@ -315,7 +326,7 @@ class SpeechSurface(QWidget):
             "Sljedeća",
             "list:page:next",
             "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
+            minimum_height=72,
         )
         self._previous_page_button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
         self._next_page_button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
@@ -333,17 +344,6 @@ class SpeechSurface(QWidget):
         system_layout = QVBoxLayout(system_panel)
         system_layout.setContentsMargins(0, 0, 0, 0)
         system_layout.setSpacing(8)
-        heading = QWidget(system_panel)
-        heading.setFixedHeight(54)
-        heading_layout = QVBoxLayout(heading)
-        heading_layout.setContentsMargins(0, 0, 0, 0)
-        heading_layout.setSpacing(2)
-        controls_label = QLabel("Kontrole", heading)
-        controls_label.setObjectName("sectionLabel")
-        self._recording_badge = RecordingBadge(heading)
-        heading_layout.addWidget(controls_label)
-        heading_layout.addWidget(self._recording_badge)
-        system_layout.addWidget(heading)
         for title, subtitle, command, object_name in (
             ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
             ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
@@ -365,24 +365,24 @@ class SpeechSurface(QWidget):
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(10)
         self._space_button = self._make_button(
-            "Razmak", "space", "utilityButton", minimum_height=81
+            "Razmak", "space", "utilityButton", minimum_height=95
         )
         self._backspace_button = self._make_button(
-            "Obriši slovo", "backspace", "utilityButton", minimum_height=81
+            "Obriši slovo", "backspace", "utilityButton", minimum_height=95
         )
         self._keyboard_toggle_button = self._make_button(
-            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=81
+            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=95
         )
-        utility_row.addWidget(self._space_button, 14)
-        utility_row.addWidget(self._backspace_button, 10)
-        utility_row.addWidget(self._keyboard_toggle_button, 10)
+        utility_row.addWidget(self._space_button, 1)
+        utility_row.addWidget(self._backspace_button, 1)
+        utility_row.addWidget(self._keyboard_toggle_button, 1)
         self._script_button = self._make_button(
             switch_label(keyboard_script),
             "script-toggle",
             "utilityButton",
-            minimum_height=76,
+            minimum_height=95,
         )
-        utility_row.addWidget(self._script_button, 8)
+        utility_row.addWidget(self._script_button, 1)
 
         return utility_row
 
@@ -618,7 +618,6 @@ class SpeechSurface(QWidget):
     def _register_button(self, action: str, button: QPushButton) -> None:
         self._action_buttons[action] = button
         button.setProperty("gazeTarget", False)
-        button.setProperty("gazePulse", "")
         button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(lambda _checked=False, item=action: self.action_requested.emit(item))
 
@@ -634,7 +633,7 @@ class SpeechSurface(QWidget):
             return
         button = self._action_buttons.get(action)
         if button is not None:
-            set_gaze_feedback(button, selected, pulsing=False)
+            set_gaze_feedback(button, selected)
 
     def _context_changed(self) -> None:
         previous = self._diagnostic_context
@@ -718,93 +717,93 @@ def _utf16_length(text: str) -> int:
 
 SPEECH_STYLE = """
             QWidget#speechWindow {
-                background: #111318;
-                color: #f6f7fb;
+                background: #15191f;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 15px;
             }
             QLabel#sectionLabel, QLabel#messageLabel, QLabel#statusLabel {
-                color: #bac5d4;
+                color: #b8c5d2;
                 font-weight: 500;
             }
             QLabel#sectionLabel { font-size: 16px; }
             QLabel#messageLabel, QLabel#statusLabel { font-size: 13px; }
             QLineEdit#speechInput {
-                background: #0b0d11;
-                border: 2px solid #465268;
+                background: #15191f;
+                border: 2px solid #71869b;
                 border-radius: 8px;
                 color: #ffffff;
                 font-size: 28px;
                 padding: 6px 12px;
                 placeholder-text-color: #a0adbf;
-                selection-background-color: #245f9f;
+                selection-background-color: #2e6478;
             }
             QPushButton {
-                border: 1px solid #303747;
+                border: 1px solid #71869b;
                 border-radius: 8px;
-                background: #1c2029;
-                color: #eef2f8;
+                background: #283442;
+                color: #edf2f7;
                 font-size: 20px;
-                font-weight: 700;
+                font-weight: 500;
                 padding: 8px;
             }
-            QPushButton:hover { background: #262c38; border-color: #4c5970; }
+            QPushButton:hover { background: #334355; border-color: #84c5d9; }
             QPushButton:pressed, QPushButton:checked {
-                background: #245f9f;
-                border-color: #67b7dc;
+                background: #2e6478;
+                border-color: #84c5d9;
             }
             QPushButton:disabled {
-                background: #171a22;
-                border-color: #2a303d;
-                color: #667184;
+                background: #222b35;
+                border-color: #455363;
+                color: #8595a6;
             }
             QPushButton#clearButton {
-                border-color: #67b7dc;
+                border-color: #84c5d9;
                 background: #252b36;
-                color: #ffe58a;
+                color: #efd092;
             }
             QPushButton#primaryButton {
-                background: #2d68a8;
-                border-color: #67b7dc;
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
                 font-size: 23px;
             }
             QPushButton#primaryButton:disabled {
-                background: #171a22;
-                border-color: #2a303d;
-                color: #667184;
+                background: #222b35;
+                border-color: #455363;
+                color: #8595a6;
             }
             QPushButton#predictionButton {
-                background: #173447;
-                border-color: #366c8d;
-                color: #eef2f8;
+                background: #283442;
+                border-color: #71869b;
+                color: #edf2f7;
                 font-size: 27px;
                 padding: 2px 8px;
             }
-            QPushButton#predictionButton:disabled { color: #667184; background: #171a22; }
+            QPushButton#predictionButton:disabled { color: #8595a6; background: #222b35; }
             QPushButton#groupButton {
-                background: #1c2029;
+                background: #283442;
                 font-size: 29px;
                 letter-spacing: 2px;
             }
             QPushButton#symbolButton { font-size: 32px; }
             QPushButton#utilityButton { font-size: 22px; }
             QPushButton#systemAlarm {
-                background: #552326;
-                border-color: #94434a;
-                color: #ffd5d7;
+                background: #442b33;
+                border-color: #af7a86;
+                color: #f7d9dc;
                 font-size: 27px;
             }
             QPushButton#systemSleep {
-                background: #202538;
-                border-color: #5b658c;
-                color: #e0e5ff;
+                background: #283442;
+                border-color: #71869b;
+                color: #edf2f7;
                 font-size: 27px;
             }
             QPushButton#systemExit {
-                background: #1c2029;
-                border-color: #303747;
-                color: #eef2f8;
+                background: #283442;
+                border-color: #71869b;
+                color: #edf2f7;
                 font-size: 24px;
             }
             QPushButton#phraseButton {
@@ -819,43 +818,37 @@ SPEECH_STYLE = """
             QPushButton#headerActionButton { font-size: 18px; }
             QFrame#modalBackdrop { background: rgba(0, 0, 0, 190); }
             QDialog#speechDialog {
-                background: #111318;
-                border: 2px solid #67b7dc;
+                background: #15191f;
+                border: 2px solid #84c5d9;
                 border-radius: 12px;
-                color: #eef2f8;
+                color: #edf2f7;
             }
             QDialog#speechDialog QLabel#dialogTitle {
-                color: #eef2f8;
+                color: #edf2f7;
                 font-size: 30px;
                 font-weight: 500;
             }
             QDialog#speechDialog QLabel#dialogCopy { color: #dce6f3; font-size: 22px; }
             QDialog#speechDialog QPushButton#dialogLetterButton {
-                font-size: 38px;
-                min-height: 120px;
+                font-size: 56px;
             }
             QDialog#speechDialog QPushButton#dialogBackButton {
                 font-size: 22px;
-                min-height: 120px;
             }
             QDialog#speechDialog QPushButton#dialogCompactLetterButton {
-                font-size: 38px;
-                min-height: 100px;
+                font-size: 44px;
             }
             QDialog#speechDialog QPushButton#dialogCompactBackButton {
                 font-size: 22px;
-                min-height: 100px;
             }
             QDialog#speechDialog QPushButton#dialogConfirmButton {
-                background: #552326;
-                border-color: #94434a;
-                color: #ffd5d7;
+                background: #442b33;
+                border-color: #af7a86;
+                color: #f7d9dc;
                 font-size: 22px;
-                min-height: 128px;
             }
             QDialog#speechDialog QPushButton#dialogCancelButton {
                 font-size: 22px;
-                min-height: 128px;
             }
             QDialog#sleepDialog { background: #000000; }
             QDialog#sleepDialog QPushButton#wakeButton {
@@ -866,12 +859,12 @@ SPEECH_STYLE = """
                 min-height: 140px;
             }
             QDialog#sleepDialog QPushButton#wakeButton:hover {
-                background: #111318;
+                background: #15191f;
                 border-color: #657084;
-                color: #bac5d4;
+                color: #b8c5d2;
             }
             QWidget#speechWindow QPushButton[gazeTarget="true"],
             QWidget#speechWindow QDialog QPushButton[gazeTarget="true"] {
-                border-color: #9bc9f3;
+                border-color: #84c5d9;
             }
             """

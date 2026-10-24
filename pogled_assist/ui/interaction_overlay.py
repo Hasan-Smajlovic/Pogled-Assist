@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ctypes
 import logging
-import math
 import sys
 import time
 from ctypes import wintypes
@@ -31,18 +30,15 @@ class InteractionOverlayWindow(QWidget):
     """Click-through progress marker for a gaze dwell action."""
 
     OVERLAY_SIZE = 138
-    FIRED_DURATION_MS = 360
+    FIRED_DURATION_MS = 220
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._enabled = True
         self._active = False
         self._mode = "progress"
-        self._calm = False
-        self._calm_feedback = False
         self._progress = 0.0
         self._label = ""
-        self._phase = 0.0
         self._fired_started_ms = 0.0
         self._last_progress_point: QPoint | None = None
         self._last_progress_update_ms = 0.0
@@ -72,10 +68,6 @@ class InteractionOverlayWindow(QWidget):
         if not enabled:
             self._hide_now()
 
-    def set_calm(self, calm: bool) -> None:
-        """Choose the style for the next progress or completion update."""
-        self._calm = calm
-
     def show_progress(self, point: QPoint, progress: float, label: str) -> None:
         if not self._enabled:
             return
@@ -88,7 +80,6 @@ class InteractionOverlayWindow(QWidget):
 
         self._active = True
         self._mode = "progress"
-        self._calm_feedback = self._calm
         self._progress = clamped_progress
         self._label = compact_label
         self._last_progress_point = QPoint(point)
@@ -103,7 +94,6 @@ class InteractionOverlayWindow(QWidget):
 
         self._active = True
         self._mode = "fired"
-        self._calm_feedback = self._calm
         self._progress = 1.0
         self._label = _compact_label(label)
         self._last_progress_point = QPoint(point)
@@ -130,61 +120,12 @@ class InteractionOverlayWindow(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        if self._calm_feedback:
-            self._paint_calm(painter)
-            return
-
-        pulse = 0.5 if self._mode == "paused" else (math.sin(self._phase) + 1.0) / 2.0
-        fired = self._mode == "fired"
-        base_rect = QRectF(15, 15, self.width() - 30, self.height() - 30)
-        arc_rect = QRectF(21, 21, self.width() - 42, self.height() - 42)
-        center = self.rect().center()
-
-        if fired:
-            fill = QColor(34, 197, 94, 48 + int(42 * pulse))
-            outer = QColor(34, 197, 94, 150 + int(70 * pulse))
-            arc = QColor(255, 255, 255, 235)
-            text = "Done"
-        else:
-            fill = QColor(245, 158, 11, 34 + int(28 * pulse))
-            outer = QColor(245, 158, 11, 125 + int(70 * pulse))
-            arc = QColor(255, 255, 255, 235)
-            text = self._label
-
-        painter.setPen(QPen(outer, 5 + int(2 * pulse)))
-        painter.setBrush(fill)
-        painter.drawEllipse(base_rect)
-
-        painter.setPen(QPen(QColor(15, 23, 42, 125), 10))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(arc_rect)
-
-        painter.setPen(QPen(arc, 10, Qt.SolidLine, Qt.RoundCap))
-        painter.drawArc(arc_rect, 90 * 16, int(-360 * 16 * self._progress))
-
-        dot_radius = 10 + int(4 * pulse)
-        painter.setPen(QPen(QColor(255, 255, 255, 220), 2))
-        painter.setBrush(QColor(15, 23, 42, 185))
-        painter.drawEllipse(center, dot_radius, dot_radius)
-        if self._mode == "paused":
-            painter.setPen(QPen(QColor(255, 255, 255), 3))
-            for offset in (-3, 3):
-                painter.drawLine(
-                    center.x() + offset, center.y() - 5, center.x() + offset, center.y() + 5
-                )
-            text = "Na čekanju"
-
-        if text:
-            painter.setPen(QColor(255, 255, 255, 238))
-            font = QFont("Segoe UI", 10)
-            font.setBold(True)
-            painter.setFont(font)
-            painter.drawText(self.rect().adjusted(12, 92, -12, -12), Qt.AlignCenter, text)
+        self._paint_calm(painter)
 
     def _paint_calm(self, painter: QPainter) -> None:
         center = QRectF(self.rect()).center()
         arc_rect = QRectF(center.x() - 30.5, center.y() - 30.5, 61, 61)
-        color = QColor("#9bc9f3")
+        color = QColor("#84c5d9")
         track = QColor(color)
         track.setAlpha(51)
         painter.setBrush(Qt.NoBrush)
@@ -198,12 +139,9 @@ class InteractionOverlayWindow(QWidget):
             painter.drawText(QRectF(center.x() - 10, center.y() + 36, 20, 18), Qt.AlignCenter, "Ⅱ")
 
     def _tick(self) -> None:
-        if self._mode != "paused" and not self._calm_feedback:
-            self._phase += 0.24
         if self._mode == "fired":
             elapsed_ms = time.monotonic() * 1000 - self._fired_started_ms
-            duration_ms = 220 if self._calm_feedback else self.FIRED_DURATION_MS
-            if elapsed_ms >= duration_ms:
+            if elapsed_ms >= self.FIRED_DURATION_MS:
                 self._hide_now()
                 return
 
@@ -222,9 +160,6 @@ class InteractionOverlayWindow(QWidget):
     ) -> bool:
         if not self._active or self._mode != "progress":
             return False
-        if self._calm_feedback != self._calm:
-            return False
-
         if self._label != label:
             return False
 

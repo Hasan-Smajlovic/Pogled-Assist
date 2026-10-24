@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QStackedWidget, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QVBoxLayout,
+)
 
 from ..interaction.eye_tracking_policy import (
     BRIEF_INTERRUPTION,
@@ -11,6 +17,7 @@ from ..interaction.eye_tracking_policy import (
     policy_description,
 )
 from ..settings_limits import EDGE_HOLD_MS_STEP
+from .settings_content import SettingsContent
 from .settings_controls import action_grid, content_layout, setting_row, styled_label
 
 
@@ -24,11 +31,13 @@ class GazeSettingsPage(QFrame):
     def _build(self):
         page = self
         layout = content_layout(page)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(6)
         header = QGridLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.setVerticalSpacing(4)
         header.setColumnStretch(0, 1)
-        header.addWidget(styled_label("Postavke pogleda", "sectionTitle", page), 0, 0)
+        header.addWidget(styled_label("Pogled i odabir", "sectionTitle", page), 0, 0)
         header.addWidget(
             styled_label(
                 "Podesite odabir pogledom, pokazivač i provjeru praćenja.",
@@ -48,15 +57,16 @@ class GazeSettingsPage(QFrame):
             button = self._controls.toggle_button(
                 title, lambda index=index: self.show_tab(index), QSize(220, 58)
             )
+            button.setObjectName("sectionTab")
             tabs.addWidget(button, 1)
             self._tabs.append(button)
         layout.addLayout(tabs)
-        self._stack = QStackedWidget(self)
+        self._stack = SettingsContent(self)
         layout.addWidget(self._stack, 1)
         selection_page = QFrame(self)
         selection = QVBoxLayout(selection_page)
         selection.setContentsMargins(0, 0, 0, 0)
-        selection.setSpacing(8)
+        selection.setSpacing(6)
         self._stack.addWidget(selection_page)
         row, grid, self._policy_hint = setting_row(self, "Režim praćenja očiju", " ")
         self._policy_combo = self._controls.choice(
@@ -65,7 +75,7 @@ class GazeSettingsPage(QFrame):
             self._owner._cycle_eye_tracking_policy,
             "Režim praćenja očiju",
         )
-        self._policy_combo.setFixedWidth(360)
+        self._policy_combo.setFixedWidth(320)
         grid.addWidget(self._policy_combo, 0, 1, 2, 1)
         selection.addWidget(row)
         self._hold_row, self._hold_value = self._controls.adjust_row(
@@ -97,21 +107,23 @@ class GazeSettingsPage(QFrame):
             50,
         )
         selection.addWidget(row)
-        feedback = QHBoxLayout()
+        feedback_group = QGroupBox("Povratne informacije", self)
+        feedback = QHBoxLayout(feedback_group)
+        feedback.setContentsMargins(12, 18, 12, 12)
         self._tracking_notifications_checkbox = self._controls.checkbox(
             "Obavijesti o praćenju pogleda",
             self._owner._toggle_tracking_notifications,
             QSize(300, 58),
         )
-        self._interaction_overlay_button = self._controls.toggle_button(
+        self._interaction_overlay_button = self._controls.checkbox(
             "Prikaži napredak radnje",
             self._owner._toggle_interaction_overlay,
             QSize(210, 58),
-            "fa5s.circle-notch",
         )
         feedback.addWidget(self._tracking_notifications_checkbox)
         feedback.addWidget(self._interaction_overlay_button)
-        selection.addLayout(feedback)
+        selection.addSpacing(8)
+        selection.addWidget(feedback_group)
         scope = styled_label(
             "Režim važi za kontrole aplikacije. Direktni desktop unos zahtijeva oba oka.",
             "settingHint",
