@@ -140,6 +140,7 @@ class GazeCheckHistory:
         self._repeat_button.show()
         self._calibration_button.hide()
         self._free_button.hide()
+        self._eyes_button.hide()
         self._reports.load()
         self._refresh_history()
 

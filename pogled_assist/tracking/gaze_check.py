@@ -17,8 +17,16 @@ MEASURE_SECONDS = 2.0
 TARGET_SECONDS = SETTLE_SECONDS + MEASURE_SECONDS
 MIN_COVERAGE = 0.6
 COVERAGE_INTERVAL_SECONDS = 0.1
+EYE_RUN_SECONDS = 30.0
+EYE_LOW_FRACTION = 0.85
+EYE_GAP_FRACTION = 0.2
+AGREEMENT_MIN_FRACTION = 0.8
+MIN_AGREEMENT_SAMPLES = 12
 
 Position = tuple[float, float, float]
+Point = tuple[float, float]
+# Left and right gaze points on the display area, normalized, and their time.
+EyeGazePair = tuple[float, float, float, float, float]
 
 
 def _fresh(sample, now: float) -> bool:
@@ -38,6 +46,15 @@ class CheckSnapshot:
     longest_loss_seconds: float = 0.0
     gaze_interruptions: int = 0
     position_supported: bool | None = None
+    # Cumulative time-weighted availability since the telemetry started.
+    measured_at: float | None = None
+    telemetry_started_at: float | None = None
+    left_seconds: float = 0.0
+    right_seconds: float = 0.0
+    both_seconds: float = 0.0
+    # Per-eye gaze points exist only where the backend reports them separately.
+    eye_gaze_supported: bool | None = None
+    eye_gaze_pairs: tuple[EyeGazePair, ...] = ()
 
     @property
     def stable(self) -> bool | None:
@@ -76,12 +93,19 @@ class CheckTelemetry:
         self.gaze: tuple[float, float, float] | None = None
         self.gaze_interruptions = 0
         self.position_supported: bool | None = None
+        self.eye_gaze_supported: bool | None = None
+        self.started_at: float | None = None
         self._history: deque[tuple[float, bool]] = deque(maxlen=4096)
+        self._eye_seconds = (0.0, 0.0, 0.0)
+        self._eye_gaze_pairs: deque[EyeGazePair] = deque(maxlen=4096)
 
     def record_eyes(self, left: bool, right: bool, now: float) -> None:
         if self.eyes is not None and self.eyes[:2] != (left, right):
             self.gaze = None
         self._record_eye_history(left and right, now)
+        self._eye_seconds = self._eye_seconds_at(now)
+        if self.started_at is None:
+            self.started_at = now
         self.eyes = left, right, now
         if not eyes_usable(self.policy, left, right):
             self.record_gaze_invalid()
@@ -93,6 +117,30 @@ class CheckTelemetry:
             self._history.append((now, both_valid))
         while len(self._history) > 1 and self._history[1][0] < now - HISTORY_SECONDS:
             self._history.popleft()
+
+    def _eye_seconds_at(self, now: float) -> tuple[float, float, float]:
+        """Add the last report's time, which ends after FRESH_SECONDS without a sample."""
+        if self.eyes is None:
+            return self._eye_seconds
+        left, right, at = self.eyes
+        duration = max(0.0, min(now - at, FRESH_SECONDS))
+        total_left, total_right, total_both = self._eye_seconds
+        return (
+            total_left + duration * left,
+            total_right + duration * right,
+            total_both + duration * (left and right),
+        )
+
+    def record_eye_gaze(self, left: Point | None, right: Point | None, now: float) -> None:
+        """Record per-eye gaze for the check only; input keeps the combined point."""
+        self.eye_gaze_supported = True
+        if left is None or right is None:
+            return
+        if not all(math.isfinite(value) for value in (*left, *right)):
+            return
+        self._eye_gaze_pairs.append((*left, *right, now))
+        while self._eye_gaze_pairs and self._eye_gaze_pairs[0][-1] < now - HISTORY_SECONDS:
+            self._eye_gaze_pairs.popleft()
 
     def record_gaze_invalid(self) -> None:
         self.gaze = None
@@ -116,6 +164,7 @@ class CheckTelemetry:
         if eyes_usable(self.policy, left, right) and _fresh(self.gaze, now):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
         observed, fraction, longest = self._availability(now)
+        left_seconds, right_seconds, both_seconds = self._eye_seconds_at(now)
         return CheckSnapshot(
             left,
             right,
@@ -128,6 +177,13 @@ class CheckTelemetry:
             longest,
             self.gaze_interruptions,
             self.position_supported,
+            measured_at=None if self.started_at is None else now,
+            telemetry_started_at=self.started_at,
+            left_seconds=left_seconds,
+            right_seconds=right_seconds,
+            both_seconds=both_seconds,
+            eye_gaze_supported=self.eye_gaze_supported,
+            eye_gaze_pairs=tuple(pair for pair in self._eye_gaze_pairs if pair[-1] <= now),
         )
 
     def _availability(self, now: float) -> tuple[float, float, float]:
@@ -282,4 +338,107 @@ class FixationCheck:
             spread[p90],
             errors[p90] <= self.radius,
             (center[0] / max(1, width - 1), center[1] / max(1, height - 1)),
+        )
+
+
+@dataclass(frozen=True)
+class EyeTrackingResult:
+    """Per-eye tracking availability and left/right gaze agreement for one run."""
+
+    observed_seconds: float
+    left: float
+    right: float
+    both: float
+    agreement_supported: bool | None
+    agreement_samples: int
+    median_separation: float | None
+    agreement_fraction: float | None
+    threshold: float
+    completed: bool
+
+
+class EyeTrackingRun:
+    """A fixed run measured from cumulative telemetry.
+
+    Time without a snapshot, including a telemetry restart, counts as not tracked.
+    """
+
+    def __init__(
+        self,
+        screen_size: tuple[int, int],
+        threshold: float,
+        now: float,
+        duration: float = EYE_RUN_SECONDS,
+    ) -> None:
+        self.screen_size = screen_size
+        self.threshold = threshold
+        self.started_at = now
+        self.duration = duration
+        self._closed = (0.0, 0.0, 0.0)
+        self._origin: float | None = None
+        self._base = self._last = (0.0, 0.0, 0.0)
+        self._agreement_supported: bool | None = None
+        self._last_pair_at = now
+        self._separations: list[float] = []
+
+    @property
+    def deadline(self) -> float:
+        return self.started_at + self.duration
+
+    def finished(self, now: float) -> bool:
+        return now >= self.deadline
+
+    def add(self, snapshot: CheckSnapshot) -> None:
+        if snapshot.eye_gaze_supported is not None:
+            self._agreement_supported = snapshot.eye_gaze_supported
+        at, origin = snapshot.measured_at, snapshot.telemetry_started_at
+        if at is None or origin is None or not self.started_at <= at <= self.deadline:
+            return
+        totals = (snapshot.left_seconds, snapshot.right_seconds, snapshot.both_seconds)
+        if origin != self._origin:
+            self._closed = self._valid_seconds()
+            self._origin = origin
+            # Telemetry that began during the run has measured all of its time.
+            self._base = (0.0, 0.0, 0.0) if origin >= self.started_at else totals
+        self._last = totals
+        self._add_pairs(snapshot.eye_gaze_pairs)
+
+    def _valid_seconds(self) -> tuple[float, float, float]:
+        return tuple(
+            closed + max(0.0, last - base)
+            for closed, last, base in zip(self._closed, self._last, self._base, strict=True)
+        )
+
+    def _add_pairs(self, pairs: tuple[EyeGazePair, ...]) -> None:
+        width, height = self.screen_size
+        for left_x, left_y, right_x, right_y, at in pairs:
+            if not self._last_pair_at < at <= self.deadline:
+                continue
+            self._last_pair_at = at
+            self._separations.append(
+                math.hypot((left_x - right_x) * (width - 1), (left_y - right_y) * (height - 1))
+            )
+
+    def result(self, now: float) -> EyeTrackingResult:
+        observed = max(0.0, min(now, self.deadline) - self.started_at)
+        left, right, both = (
+            min(1.0, seconds / observed) if observed > 0 else 0.0
+            for seconds in self._valid_seconds()
+        )
+        separations = self._separations
+        median_separation = agreement = None
+        if self._agreement_supported and len(separations) >= MIN_AGREEMENT_SAMPLES:
+            median_separation = median(separations)
+            agreement = sum(value <= self.threshold for value in separations) / len(separations)
+        return EyeTrackingResult(
+            observed,
+            left,
+            right,
+            both,
+            self._agreement_supported,
+            len(separations),
+            median_separation,
+            agreement,
+            self.threshold,
+            self.finished(now),
         )

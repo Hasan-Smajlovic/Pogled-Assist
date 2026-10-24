@@ -388,8 +388,11 @@ class TobiiGazeProvider(QObject):
                 self._check_telemetry.position_supported = getattr(
                     self._stream_engine, "eye_position_supported", None
                 )
+                # Stream Engine delivers one combined gaze point, never one per eye.
+                self._check_telemetry.eye_gaze_supported = False
             elif self._check_active and self._backend_name == "tobii-research":
                 self._check_telemetry.position_supported = True
+                self._check_telemetry.eye_gaze_supported = True
             return self._check_telemetry.snapshot(time.monotonic())
 
     def set_check_active(self, active: bool) -> None:
@@ -505,6 +508,8 @@ class TobiiGazeProvider(QObject):
                 ),
                 time.monotonic(),
             )
+            # Measured before the eye gate; input below still uses the averaged point.
+            self._check_telemetry.record_eye_gaze(left, right, time.monotonic())
 
         if not eyes_usable(self._eye_tracking_policy, left_open, right_open):
             self._metrics.count("rejected:" + diagnostics.eye_state(left_open, right_open))

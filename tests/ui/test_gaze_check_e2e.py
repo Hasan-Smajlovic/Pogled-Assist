@@ -928,3 +928,87 @@ def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, 
     assert "Pogled je na drugom dugmetu" in window._test_hint.text()
     assert "Odabrano" not in window._test_hint.text()
     assert window._trial_wrong_selections == 0
+
+
+def _eye_snapshot(now, left, right, *, origin=0.0, supported=False, pairs=()):
+    return CheckSnapshot(
+        left > 0,
+        right > 0,
+        measured_at=now,
+        telemetry_started_at=origin,
+        left_seconds=left,
+        right_seconds=right,
+        both_seconds=min(left, right),
+        eye_gaze_supported=supported,
+        eye_gaze_pairs=pairs,
+    )
+
+
+def test_eye_check_reports_one_tracked_eye_and_no_agreement_without_eye_gaze(gaze_check, qtbot):
+    window, now, _screen = gaze_check
+    window._eyes_button.click()
+    assert window._phase == "eyes"
+    assert window._pages.currentWidget() is window._eye_panel
+    assert window._repeat_button.text() == "Prekini test"
+    assert window._primary_button.isHidden()
+    assert not window._diagnostics_button.isEnabled()
+    for second in range(31):
+        now[0] = 10 + second
+        window.handle_snapshot(_eye_snapshot(now[0], second, 0))
+        window._tick()
+    panel = window._eye_panel
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 100%"
+    assert panel.eye_labels["right"].text() == "Desno oko · 0%"
+    assert panel.eye_labels["both"].text() == "Oba oka istovremeno · 0%"
+    assert panel.advice_label.text().startswith("Desno oko se često gubi.")
+    assert "samo zajedničku tačku pogleda" in panel.agreement_label.text()
+    assert panel.status_label.text() == "Završeno · izmjereno 30 s."
+    assert window._primary_button.text() == "Ponovi provjeru očiju"
+    assert window._repeat_button.text() == "Nazad na položaj"
+    assert window._diagnostics_button.isEnabled()
+    window._repeat_button.click()
+    assert window._phase == "position"
+    assert not window._eyes_button.isHidden()
+
+
+def test_eye_check_without_any_eye_data_shows_zero_for_both(gaze_check):
+    window, now, _screen = gaze_check
+    window._start_eye_tracking()
+    now[0] += 30
+    window._tick()
+    panel = window._eye_panel
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 0%"
+    assert panel.eye_labels["right"].text() == "Desno oko · 0%"
+    assert panel.advice_label.text().startswith("Uređaj nije javio nijedno oko.")
+    assert "nije dostupno" in panel.agreement_label.text()
+
+
+def test_eye_check_shows_agreement_and_can_be_stopped_and_repeated(gaze_check):
+    window, now, _screen = gaze_check
+    window._start_eye_tracking()
+    pairs = tuple((0.5, 0.5, 0.51, 0.5, 10 + index * 0.05) for index in range(1, 101))
+    now[0] = 15
+    window.handle_snapshot(_eye_snapshot(15, 5, 5, origin=10, supported=True, pairs=pairs))
+    window._tick()
+    panel = window._eye_panel
+    assert panel.status_label.text().startswith("Mjerim · još 25 s.")
+    assert panel.advice_label.text() == ""
+    window._repeat_button.click()
+    assert window._phase == "eyes"
+    assert panel.status_label.text() == "Prekinuto nakon 5 s · rezultat je djelimičan."
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 100%"
+    assert panel.agreement_label.text() == (
+        "Isto mjesto · 100% uzoraka unutar 36 px · razmak 13 px"
+    )
+    assert panel.advice_label.text().startswith("Oba oka se uglavnom prate.")
+    window._primary_button.click()
+    assert panel.status_label.text().startswith("Mjerim · još 30 s.")
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 0%"
+
+
+def test_eye_check_is_reset_when_tracking_is_lost(gaze_check):
+    window, _now, _screen = gaze_check
+    window._start_eye_tracking()
+    window.tracking_unavailable()
+    assert window._phase == "position"
+    assert window._eye_run is None

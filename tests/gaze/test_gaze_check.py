@@ -9,6 +9,7 @@ from _clock import freeze_monotonic
 from pogled_assist.tracking.gaze_check import (
     CheckSnapshot,
     CheckTelemetry,
+    EyeTrackingRun,
     FixationCheck,
     TrialGazeCoverage,
 )
@@ -324,3 +325,192 @@ def test_position_expiry_is_independent_of_fresh_eye_and_gaze_stream(qapp, monke
     assert snapshot.gaze == (0.5, 0.5)
     assert snapshot.left_position is None
     assert replace(snapshot, observed_seconds=4).in_box((2,)) is None
+
+
+def _record_eyes(telemetry, start, end, state, step=0.01):
+    for index in range(round((end - start) / step)):
+        now = start + index * step
+        telemetry.record_eyes(*state(now), now)
+
+
+def _eye_run(telemetry, now, *, started_at=0.0, duration=10.0):
+    run = EyeTrackingRun((1280, 720), 36, started_at, duration)
+    run.add(telemetry.snapshot(started_at))
+    run.add(telemetry.snapshot(now))
+    return run.result(now)
+
+
+@pytest.mark.parametrize(
+    "state,expected",
+    [
+        (lambda _now: (True, True), (1.0, 1.0, 1.0)),
+        (lambda _now: (True, False), (1.0, 0.0, 0.0)),
+        (lambda _now: (False, True), (0.0, 1.0, 0.0)),
+        (lambda _now: (False, False), (0.0, 0.0, 0.0)),
+    ],
+)
+def test_eye_run_reports_each_eye_separately(state, expected):
+    telemetry = CheckTelemetry()
+    _record_eyes(telemetry, 0, 10.01, state)
+    result = _eye_run(telemetry, 10)
+    assert (result.left, result.right, result.both) == pytest.approx(expected, abs=0.002)
+    assert result.observed_seconds == 10
+    assert result.completed is True
+
+
+def test_eye_run_time_weights_alternating_losses():
+    telemetry = CheckTelemetry()
+    _record_eyes(
+        telemetry,
+        0,
+        10.01,
+        lambda now: (not 2.0 <= now < 3.0, not 5.0 <= now < 5.5),
+    )
+    result = _eye_run(telemetry, 10)
+    assert result.left == pytest.approx(0.9, abs=0.002)
+    assert result.right == pytest.approx(0.95, abs=0.002)
+    assert result.both == pytest.approx(0.85, abs=0.002)
+
+
+def test_eye_run_is_time_weighted_not_a_sample_count():
+    telemetry = CheckTelemetry()
+    _record_eyes(telemetry, 0, 5, lambda _now: (True, True), step=0.01)
+    _record_eyes(telemetry, 5, 10.01, lambda _now: (False, False), step=0.25)
+    result = _eye_run(telemetry, 10)
+    assert result.left == pytest.approx(0.5, abs=0.002)
+
+
+def test_eye_run_counts_stale_and_missing_eye_data_as_not_tracked():
+    telemetry = CheckTelemetry()
+    _record_eyes(telemetry, 0, 4.01, lambda _now: (True, True))
+    # The last report stays valid only for FRESH_SECONDS without a new sample.
+    assert _eye_run(telemetry, 10).left == pytest.approx(0.45, abs=0.002)
+    empty = EyeTrackingRun((1280, 720), 36, 0, 10)
+    empty.add(CheckTelemetry().snapshot(10))
+    assert (empty.result(10).left, empty.result(10).right) == (0.0, 0.0)
+
+
+def test_eye_run_excludes_time_before_start_and_after_deadline():
+    telemetry = CheckTelemetry()
+    _record_eyes(telemetry, 0, 5.01, lambda now: (now >= 5, True))
+    run = EyeTrackingRun((1280, 720), 36, 5, 10)
+    stopped = EyeTrackingRun((1280, 720), 36, 5, 10)
+    run.add(telemetry.snapshot(5))
+    stopped.add(telemetry.snapshot(5))
+    _record_eyes(telemetry, 5.01, 7.01, lambda _now: (True, True))
+    stopped.add(telemetry.snapshot(7))
+    _record_eyes(telemetry, 7.01, 15.01, lambda _now: (True, True))
+    run.add(telemetry.snapshot(15))
+    _record_eyes(telemetry, 15.01, 16.01, lambda _now: (False, False))
+    run.add(telemetry.snapshot(16))  # After the deadline; never counted.
+    assert stopped.result(7).observed_seconds == 2
+    assert stopped.result(7).left == pytest.approx(1.0, abs=0.002)
+    assert stopped.result(7).completed is False
+    result = run.result(16)
+    assert result.left == pytest.approx(1.0, abs=0.002)
+    assert result.observed_seconds == 10
+
+
+def test_eye_run_does_not_bridge_a_telemetry_restart():
+    first = CheckTelemetry()
+    _record_eyes(first, 0, 4.01, lambda _now: (True, True))
+    run = EyeTrackingRun((1280, 720), 36, 0, 10)
+    run.add(first.snapshot(0))
+    run.add(first.snapshot(4))
+    second = CheckTelemetry()
+    _record_eyes(second, 6, 10.01, lambda _now: (True, True))
+    run.add(second.snapshot(10))
+    # Two seconds between the streams were not measured.
+    assert run.result(10).left == pytest.approx(0.8, abs=0.002)
+
+
+def _record_pairs(telemetry, left, right, start=0.0, end=10.0, step=0.02):
+    for index in range(round((end - start) / step)):
+        now = start + index * step
+        telemetry.record_eyes(left is not None, right is not None, now)
+        telemetry.record_eye_gaze(left, right, now)
+
+
+@pytest.mark.parametrize(
+    "right,median_px,fraction",
+    [((0.5, 0.5), 0.0, 1.0), ((0.6, 0.5), 127.9, 0.0), ((0.52, 0.5), 25.58, 1.0)],
+)
+def test_eye_run_measures_left_right_gaze_agreement(right, median_px, fraction):
+    telemetry = CheckTelemetry()
+    _record_pairs(telemetry, (0.5, 0.5), right)
+    run = EyeTrackingRun((1280, 720), 36, 0, 10)
+    for now in range(11):
+        run.add(telemetry.snapshot(now))
+    result = run.result(10)
+    assert result.agreement_supported is True
+    assert result.agreement_samples == 499
+    assert result.median_separation == pytest.approx(median_px, abs=0.01)
+    assert result.agreement_fraction == fraction
+
+
+def test_eye_run_agreement_needs_both_eyes_and_per_eye_gaze():
+    one_eye = CheckTelemetry()
+    _record_pairs(one_eye, (0.5, 0.5), None)
+    run = EyeTrackingRun((1280, 720), 36, 0, 10)
+    run.add(one_eye.snapshot(10))
+    result = run.result(10)
+    assert result.agreement_supported is True
+    assert result.median_separation is result.agreement_fraction is None
+    assert result.left == pytest.approx(1.0, abs=0.002) and result.right == 0
+    combined = CheckTelemetry()
+    _record_eyes(combined, 0, 10.01, lambda _now: (True, True))
+    combined.eye_gaze_supported = False
+    run = EyeTrackingRun((1280, 720), 36, 0, 10)
+    run.add(combined.snapshot(10))
+    assert run.result(10).agreement_supported is False
+    assert run.result(10).median_separation is None
+
+
+def test_eye_gaze_pairs_reject_nonfinite_points_and_expire():
+    telemetry = CheckTelemetry()
+    telemetry.record_eye_gaze((float("nan"), 0.5), (0.5, 0.5), 1)
+    assert telemetry.snapshot(1).eye_gaze_pairs == ()
+    telemetry.record_eye_gaze((0.5, 0.5), (0.5, 0.5), 1)
+    telemetry.record_eye_gaze((0.5, 0.5), (0.5, 0.5), 12)
+    assert [pair[-1] for pair in telemetry.snapshot(12).eye_gaze_pairs] == [12]
+
+
+def test_research_check_records_both_gaze_points_but_input_keeps_average(qapp):
+    provider = TobiiGazeProvider()
+    provider._backend_name = "tobii-research"
+    provider.set_check_active(True)
+    delivered = []
+    provider.gaze_updated.connect(lambda x, y, _t: delivered.append((x, y)))
+    sample = {
+        "left_gaze_point_validity": 1,
+        "left_gaze_point_on_display_area": (0.4, 0.5),
+        "right_gaze_point_validity": 1,
+        "right_gaze_point_on_display_area": (0.6, 0.5),
+        "system_time_stamp": 1,
+    }
+    provider._on_gaze_data(sample)
+    provider._emit_latest_gaze_sample()
+    snapshot = provider.check_snapshot()
+    assert delivered == [pytest.approx((0.5, 0.5))]
+    assert snapshot.gaze == pytest.approx((0.5, 0.5))
+    assert snapshot.eye_gaze_supported is True
+    assert [pair[:4] for pair in snapshot.eye_gaze_pairs] == [(0.4, 0.5, 0.6, 0.5)]
+    provider._on_gaze_data({**sample, "right_gaze_point_validity": 0})
+    provider._emit_latest_gaze_sample()
+    snapshot = provider.check_snapshot()
+    # One valid eye is measured but never delivered as input under the both-eye rule.
+    assert delivered == [pytest.approx((0.5, 0.5))]
+    assert (snapshot.left, snapshot.right) == (True, False)
+    assert len(snapshot.eye_gaze_pairs) == 1
+
+
+def test_stream_engine_check_reports_no_per_eye_gaze(qapp):
+    provider = TobiiGazeProvider()
+    provider._stream_engine = SimpleNamespace(eye_position_supported=True)
+    provider.set_check_active(True)
+    provider._on_stream_engine_eye_status(True, True, 1)
+    provider._on_stream_engine_gaze(0.5, 0.5, 1)
+    snapshot = provider.check_snapshot()
+    assert snapshot.eye_gaze_supported is False
+    assert snapshot.eye_gaze_pairs == ()
+    assert snapshot.left is True

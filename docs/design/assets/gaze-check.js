@@ -20,6 +20,16 @@
   let attemptSequence = 0;
   let activeAttemptId = null;
   let returnMode = 'position';
+  const eyeRows = [['left', 'Lijevo oko'], ['right', 'Desno oko'], ['both', 'Oba oka istovremeno']];
+  const eyeExamples = {
+    'eyes-running': { left: 96, right: 41, both: 40, remaining: 18, agreement: 'combined' },
+    'eyes-one': { left: 92, right: 0, both: 0, seconds: 30, agreement: 'combined' },
+    'eyes-agreement': { left: 98, right: 97, both: 96, seconds: 30, agreement: { fraction: 94, median: 12 } },
+    'eyes-drift': { left: 97, right: 96, both: 95, seconds: 30, agreement: { fraction: 41, median: 58 } },
+    'eyes-none': { left: 0, right: 0, both: 0, seconds: 30, agreement: 'combined' },
+    'eyes-stopped': { left: 95, right: 93, both: 91, seconds: 12, stopped: true, agreement: 'combined' },
+  };
+  let eyeExample = null;
 
   function policyLabel(policy = ReferenceEyePolicy.read(), holdMs = ReferenceEyePolicy.holdMs()) {
     return policyNames[policy] + (policy === 'hold' ? ' · prekid do ' + holdMs + ' ms' : '');
@@ -91,12 +101,23 @@
     const history = checkMode === 'history';
     const position = checkMode === 'position';
     const stage = ['precision', 'trial', 'free'].includes(checkMode);
+    const eyes = checkMode === 'eyes';
+    const eyesRunning = eyes && eyeExample.remaining !== undefined;
     checkEl('check-live').hidden = !position;
+    checkEl('check-eyes-view').hidden = !eyes;
+    checkEl('check-eyes').hidden = !position;
+    checkEl('check-eyes-stop').hidden = !eyesRunning;
+    checkEl('check-eyes-again').hidden = !eyes || eyesRunning;
+    checkEl('check-eyes-back').hidden = !eyes || eyesRunning;
+    checkEl('check-diagnostics').disabled = eyesRunning;
     checkEl('check-results').hidden = !results;
     checkEl('check-history-view').hidden = !history;
     checkEl('check-test').hidden = !stage;
     renderCheckHeading(results, history);
     renderCheckActions(results, history, position);
+    checkEl('check-step').hidden = !position && !eyes;
+    checkEl('check-step').textContent = eyes ? 'Provjera očiju · lijevo i desno oko' : '1 · Položaj i praćenje';
+    if (eyes) checkEl('check-next').hidden = true;
   }
   function renderCheckHeading(results, history) {
     checkEl('check-heading').textContent = history ? 'Sačuvani rezultati' : viewingArchive ? 'Raniji rezultat provjere' : 'Provjera pogleda';
@@ -347,6 +368,46 @@
     renderCheckTracking();
   }
 
+  function showEyes(view) {
+    checkMode = 'eyes';
+    viewingArchive = false;
+    eyeExample = eyeExamples[view];
+    renderFrame();
+    renderEyes();
+  }
+
+  function renderEyes() {
+    const example = eyeExample;
+    const running = example.remaining !== undefined;
+    checkEl('check-eyes-status').textContent = running
+      ? 'Mjerim · još ' + example.remaining + ' s. Korisnik neka gleda ekran kao i inače.'
+      : example.stopped ? 'Prekinuto nakon ' + example.seconds + ' s · rezultat je djelimičan.'
+        : 'Završeno · izmjereno ' + example.seconds + ' s.';
+    for (const [key, name] of eyeRows) {
+      const label = checkEl('check-eye-' + key + '-label');
+      label.textContent = name + ' · ' + example[key] + '%';
+      label.className = running ? 'muted' : example[key] >= 85 ? 'check-pass' : 'check-attention';
+      checkEl('check-eye-' + key).value = example[key];
+    }
+    checkEl('check-eyes-agreement').textContent = example.agreement === 'combined'
+      ? 'Isto mjesto · nije dostupno: uređaj šalje samo zajedničku tačku pogleda oba oka.'
+      : 'Isto mjesto · ' + example.agreement.fraction + '% uzoraka unutar 36 px · razmak ' + example.agreement.median + ' px';
+    const [advice, ok] = running ? ['', true] : eyeAdvice(example);
+    checkEl('check-eyes-advice').textContent = advice;
+    checkEl('check-eyes-advice').className = ok ? 'check-pass' : 'check-attention';
+  }
+
+  function eyeAdvice({ left, right, agreement }) {
+    if (Math.max(left, right) === 0) return ['Uređaj nije javio nijedno oko. Provjerite vezu, položaj i osvjetljenje.', false];
+    const low = Math.min(left, right);
+    if (low < 85 && Math.abs(left - right) >= 20) return [(left < right ? 'Lijevo' : 'Desno') + ' oko se često gubi. Podesite položaj i ponovite provjeru.', false];
+    if (low < 85) return ['Oba oka se često gube. Podesite položaj i ponovite provjeru.', false];
+    if (agreement !== 'combined' && agreement.fraction < 80) {
+      return ['Lijevo i desno oko često ne gledaju u istu tačku. Jedno oko možda odlazi ili kalibracija više ne odgovara.', false];
+    }
+    return ['Oba oka se uglavnom prate. Ako slova i dalje ne pogađate, odaberite „Provjeri preciznost“ za kalibraciju i položaj.', true];
+  }
+
   function checkStage(mode) {
     if (checkMode !== mode) {
       checkTrialIndex = 0;
@@ -432,6 +493,7 @@
       rememberReport(currentReport);
     }
     if (view === 'history-error') historyItems.unshift({ id: 'provjera-016', date: '22.10.2026. · 14:40', unreadable: true });
+    if (view.startsWith('eyes')) { currentReport = null; showEyes(view); return; }
     if (['history', 'empty', 'history-error'].includes(view)) showHistory();
     else if (currentReport) { reportTab = view.startsWith('trial') ? 'trial' : 'precision'; showReport(currentReport); }
   }
@@ -446,6 +508,10 @@
 
   checkEl('check-next').addEventListener('click', () => checkStage(checkMode === 'results' ? 'trial' : 'precision'));
   checkEl('check-free').addEventListener('click', () => checkStage('free'));
+  checkEl('check-eyes').addEventListener('click', () => showEyes('eyes-running'));
+  checkEl('check-eyes-again').addEventListener('click', () => showEyes('eyes-running'));
+  checkEl('check-eyes-stop').addEventListener('click', () => showEyes('eyes-stopped'));
+  checkEl('check-eyes-back').addEventListener('click', checkReset);
   checkEl('check-repeat').addEventListener('click', () => checkStage('precision'));
   checkEl('check-test-next').addEventListener('click', () => {
     if (checkMode === 'trial' && checkTrialIndex < 2) { checkTrialIndex++; checkStage('trial'); }

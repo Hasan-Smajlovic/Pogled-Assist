@@ -6,7 +6,12 @@ from dataclasses import replace
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
 
-from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
+from pogled_assist.tracking.gaze_check import (
+    CheckSnapshot,
+    EyeTrackingRun,
+    FixationCheck,
+    FixationResult,
+)
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui.gaze_check_views import TARGETS
 from pogled_assist.ui.gaze_check_window import GazeCheckWindow
@@ -80,6 +85,7 @@ class CaptureGazeCheck:
         self._capture_trial(window, size)
         self._capture_reports(window, size)
         self._capture_free(window, size)
+        self._capture_eyes(window, size)
         single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
         self.widgets.append(single)
         single.resize(*size)
@@ -208,6 +214,43 @@ class CaptureGazeCheck:
         self.capture(
             window, "gaze-check-trial-no-gaze", "Gaze check: trial without gaze data", size=size
         )
+
+    def _capture_eyes(self, window, size):
+        window.reset_check()
+        window._start_eye_tracking()
+        started = window._eye_run.started_at
+        window._eye_run.add(
+            CheckSnapshot(
+                measured_at=started + 30,
+                telemetry_started_at=started,
+                left_seconds=27.6,
+                right_seconds=0.0,
+                eye_gaze_supported=False,
+            )
+        )
+        window._finish_eye_tracking(started + 30)
+        self.capture(window, "gaze-check-eyes-one-eye", "Gaze check: one eye tracked", size=size)
+        window._eye_run = EyeTrackingRun(size, window._target.radius, started)
+        pairs = tuple(
+            (0.5, 0.5, 0.5 + (0.004 if index % 4 else 0.04), 0.5, started + index * 0.05)
+            for index in range(1, 600)
+        )
+        window._eye_run.add(
+            CheckSnapshot(
+                measured_at=started + 30,
+                telemetry_started_at=started,
+                left_seconds=29.4,
+                right_seconds=29.1,
+                both_seconds=28.9,
+                eye_gaze_supported=True,
+                eye_gaze_pairs=pairs,
+            )
+        )
+        window._finish_eye_tracking(started + 30)
+        self.capture(
+            window, "gaze-check-eyes-agreement", "Gaze check: left/right agreement", size=size
+        )
+        window.reset_check()
 
     def _capture_free(self, window, size):
         window._start_free()

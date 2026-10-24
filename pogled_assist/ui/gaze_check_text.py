@@ -5,7 +5,14 @@ from __future__ import annotations
 import math
 
 from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES, eyes_usable
-from ..tracking.gaze_check import FRESH_SECONDS, CheckSnapshot
+from ..tracking.gaze_check import (
+    AGREEMENT_MIN_FRACTION,
+    EYE_GAP_FRACTION,
+    EYE_LOW_FRACTION,
+    FRESH_SECONDS,
+    CheckSnapshot,
+    EyeTrackingResult,
+)
 from ..tracking.status import TrackingState
 
 
@@ -106,3 +113,48 @@ def _missing_eye_feedback(snapshot: CheckSnapshot) -> str | None:
 
 def _gaze_in_bounds(gaze: tuple[float, float]) -> bool:
     return all(math.isfinite(value) and 0 <= value <= 1 for value in gaze)
+
+
+def eye_tracking_status(result: EyeTrackingResult, remaining: int | None) -> str:
+    if remaining is not None:
+        return f"Mjerim · još {remaining} s. Korisnik neka gleda ekran kao i inače."
+    if result.completed:
+        return f"Završeno · izmjereno {result.observed_seconds:.0f} s."
+    return f"Prekinuto nakon {result.observed_seconds:.0f} s · rezultat je djelimičan."
+
+
+def eye_agreement_text(result: EyeTrackingResult) -> str:
+    if result.agreement_supported is False:
+        return "Isto mjesto · nije dostupno: uređaj šalje samo zajedničku tačku pogleda oba oka."
+    if not result.agreement_supported:
+        return "Isto mjesto · nije dostupno za ovaj uređaj."
+    if result.median_separation is None:
+        return "Isto mjesto · nije izmjereno: oba oka nisu dovoljno dugo praćena istovremeno."
+    return (
+        f"Isto mjesto · {result.agreement_fraction:.0%} uzoraka unutar "
+        f"{result.threshold:.0f} px · razmak {result.median_separation:.0f} px"
+    )
+
+
+def eye_tracking_advice(result: EyeTrackingResult) -> tuple[str, bool]:
+    """Name what was measured; the values do not establish a cause."""
+    if max(result.left, result.right) < 0.005:
+        return "Uređaj nije javio nijedno oko. Provjerite vezu, položaj i osvjetljenje.", False
+    low = min(result.left, result.right)
+    if low < EYE_LOW_FRACTION and abs(result.left - result.right) >= EYE_GAP_FRACTION:
+        eye = "Lijevo" if result.left < result.right else "Desno"
+        return f"{eye} oko se često gubi. Podesite položaj i ponovite provjeru.", False
+    if low < EYE_LOW_FRACTION:
+        return "Oba oka se često gube. Podesite položaj i ponovite provjeru.", False
+    agreement = result.agreement_fraction
+    if agreement is not None and agreement < AGREEMENT_MIN_FRACTION:
+        return (
+            "Lijevo i desno oko često ne gledaju u istu tačku. "
+            "Jedno oko možda odlazi ili kalibracija više ne odgovara.",
+            False,
+        )
+    return (
+        "Oba oka se uglavnom prate. Ako slova i dalje ne pogađate, "
+        "odaberite „Provjeri preciznost“ za kalibraciju i položaj.",
+        True,
+    )

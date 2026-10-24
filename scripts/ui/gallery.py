@@ -84,6 +84,7 @@ GROUPS = {
             "gaze-check-trial-held",
             "gaze-check-trial-wrong",
             "gaze-check-free",
+            "gaze-check-eyes-one-eye",
             "diagnostics-ready",
             "diagnostics-recording",
             "diagnostics-history",
