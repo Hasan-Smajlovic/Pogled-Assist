@@ -16,26 +16,29 @@
     <header><h1>Napredak odabira</h1><p id="selection-mode-label"></p><p id="selection-preview-copy" role="status"></p></header>
     <div class="selection-preview-buttons" aria-label="Izmišljena dugmad za pregled napretka">
       <button type="button">Drugo</button>
-      <div class="selection-preview-target"><button id="selection-button" type="button">Pogledaj</button>
+      <div class="selection-preview-target"><button id="selection-button" type="button">H</button>
         <div id="selection-progress-ring" class="selection-progress-ring" data-state="held" role="img" aria-label="Napredak na čekanju: 65 posto">
-          <span class="selection-progress-arc"></span><span id="selection-progress-symbol" class="selection-progress-symbol">Ⅱ</span><span id="selection-progress-label" class="selection-progress-label">Na čekanju</span>
+          <span class="selection-progress-arc"></span><span id="selection-progress-symbol" class="selection-progress-symbol" aria-hidden="true">Ⅱ</span>
         </div>
       </div>
       <button type="button">Drugo</button>
     </div>
-    <p class="selection-preview-note">Nacrt prikazuje dugme i postojeći krug napretka. Oznaka pauze ostaje na cilju, bez pulsiranja i bez pomjeranja dugmadi.</p>
+    <p class="selection-preview-note">Svi prikazi koriste isti mirni krug i stalni okvir dugmeta. Oznaka pauze ostaje uz cilj, bez pulsiranja i bez pomjeranja dugmadi.</p>
   </main>
   <details class="reference-tools" open><summary>Opcije pregleda · izmišljeni podaci</summary>
+    <label>Visina dugmeta <select id="selection-target-height"><option value="112">Govor · 112 px</option><option value="58">Postavke i alatna traka · 58 px</option><option value="42">Malo dugme · 42 px</option></select></label>
     <label>Režim <select id="selection-policy-preview"></select></label>
-    <label>Stanje <select id="selection-state-preview"><option value="active">Aktivno punjenje</option><option value="held" selected>Jedno oko izgubljeno, rok još traje</option><option value="resumed">Oba oka i svjež pogled na istom cilju</option><option value="expired">Rok je istekao</option><option value="both-lost">Oba oka izgubljena</option><option value="switch">Promijenjeno jedino praćeno oko</option><option value="no-gaze">Oko se prati, nema svježeg pogleda</option></select></label>
+    <label>Stanje <select id="selection-state-preview"><option value="active">Aktivno punjenje</option><option value="held" selected>Jedno oko izgubljeno, rok još traje</option><option value="resumed">Oba oka i svjež pogled na istom cilju</option><option value="fired">Odabir je potvrđen</option><option value="expired">Rok je istekao</option><option value="both-lost">Oba oka izgubljena</option><option value="switch">Promijenjeno jedino praćeno oko</option><option value="no-gaze">Oko se prati, nema svježeg pogleda</option></select></label>
     <label><input id="selection-progress-visible" type="checkbox" checked> Prikaži napredak radnje</label>
   </details>
   <details class="design-notes"><summary>Pravila napretka i nastavka</summary>
+    <p>Prikaz je krug prečnika do 64 logička piksela, debljine 3 px, boje var(--cyan) i s prozirnom sredinom. Prečnik se smanjuje prema manjoj dimenziji dugmeta, uz najmanje 8 px do svakog ruba: dugme visine 58 px ima krug od 42 px. Isto važi za usku dugmad u svim prozorima i dijalozima. Nema pulsiranja, središnje tačke ni dodatnog naziva radnje preko teksta. Stalni okvir dugmeta čuva njegove boje i geometriju. Potvrda zadržava pun krug tokom 220 ms, a pauza zamrzava luk i prikazuje oznaku unutar kruga. Prikazani završetak je zaustavljen radi pregleda. <a href="speech.html">Govor</a>, tastatura i alatna traka koriste isti stil u HTML simulaciji.</p>
     <p>Primjeri stanja su zaustavljeni radi pregleda dizajna. U aplikaciji rok ističe automatski, i bez novog pogleda. Primjer kratkog prekida vidljiv je samo u režimu Oba oka uz kratke prekide; režim promijenite ovdje ili u Postavkama. Ovo nije mjerenje Tobii uređaja.</p>
-    <p>Pri gubitku jednog oka krug ostaje na istom dugmetu s istim popunjenim dijelom, oznakom pauze i tekstom Na čekanju. I krug i isticanje dugmeta prestaju pulsirati. Tokom početne pauze krug se ne pojavljuje ranije nego inače; već istaknuto dugme može dobiti oznaku pauze. Ako je Prikaži napredak radnje isključeno, krug ostaje skriven.</p>
+    <p>Pri gubitku jednog oka u režimu Oba oka uz kratke prekide krug ostaje na istom dugmetu s istim popunjenim dijelom i oznakom pauze. Tokom početne pauze krug se ne pojavljuje ranije nego inače. Ako je Prikaži napredak radnje isključeno, krug ostaje skriven.</p>
     <p>Nastavak traži oba oka i novi validan pogled unutar istog nepromijenjenog cilja prije isteka roka. Prvi povratni uzorak vraća sačuvani napredak, bez dopisivanja vremena prekida ili trenutne aktivacije. Promjena teksta, cilja, dijaloga ili geometrije poništava pokušaj. Postojeća tolerancija uz rub ne produžava rok prekida oka i ne dopušta nastavak izvan dugmeta.</p>
     <p>Oba izgubljena oka, promjena jedinog praćenog oka bez svježeg pogleda s oba oka između, promjena režima, prekid veze, odmor ili zatvaranje prikaza poništavaju pokušaj. Nedostajući ili zastarjeli pogled nikad ne puni krug. Gubitak praćenja ne otključava već dovršen izbor: za ponavljanje i dalje treba skloniti pogled.</p>
     <p>Probni režim dopušta početak i završetak uz najmanje jedno oko i svjež validan pogled. Prelazak s oba na jedno oko prolazi uobičajenu provjeru cilja; promjena položaja pogleda ne čuva prethodno dugme na silu. <a href="settings.html#gaze-settings">Postavke pogleda</a> i <a href="gaze-check.html">Provjera pogleda</a> prikazuju isti režim.</p>
+  <p>Qt koristi isti mirni krug za sve ciljeve prikazane ovom referencom. Stari pulsirajući prikaz više se ne bira prema ekranu; pravila za početak, prekid i potvrdu odabira ostaju ista.</p>
   </details>
 </body>
 </html>

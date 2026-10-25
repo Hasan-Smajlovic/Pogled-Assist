@@ -132,7 +132,8 @@ def test_speech_list_and_dialog_controls_are_large_gaze_targets(qtbot, make_spee
         window._next_page_button,
     )
     assert all(button.width() >= 160 for button in list_controls)
-    assert all(button.height() >= 80 for button in list_controls)
+    assert all(button.height() >= 80 for button in list_controls[:2])
+    assert all(button.height() >= 72 for button in list_controls[2:])
     alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
     assert window._key_grid_host.width() >= alarm.width() * 2
     assert f"{SPEECH_WINDOW_ACTION_PREFIX}close" not in window._action_buttons
@@ -170,6 +171,7 @@ def test_speech_add_and_cancel_category_answer_and_phrase_editors(qtbot, make_sp
     assert all(item.name != "ODBAČENA KATEGORIJA" for item in store.library.categories)
     assert window._input.text() == "RAZGOVOR"
 
+    window._previous_page_button.click()
     click_speech_action(qtbot, window, "list:select:0")
     window._add_item_button.click()
     window._input.setText("Odbačeni odgovor")

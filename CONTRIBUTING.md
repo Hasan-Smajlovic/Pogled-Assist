@@ -156,7 +156,7 @@ This process prevents unfinished development work from entering an urgent releas
 
 ## Repository protection
 
-The active `Protect development` and `Protect master releases` rulesets each target only their named branch. Both block deletion and force-pushes and require a pull request, one approving review, dismissal of stale approvals after new commits, resolved review conversations, and successful `code-quality`, `tests`, and `windows-package` checks on an up-to-date branch. GitHub's secure default also requires an extra human approval for unattributed Copilot changes.
+Repository policy uses `Protect development` and `Protect master releases`, each targeting its named branch. Verify the live GitHub configuration before relying on enforcement. Both block deletion and force-pushes and require a pull request, one approving review, dismissal of stale approvals after new commits, resolved review conversations, and successful `code-quality`, `tests`, and `windows-package` checks on an up-to-date branch. GitHub's secure default also requires an extra human approval for unattributed Copilot changes.
 
 | Branch | History and allowed merge method |
 | --- | --- |
@@ -174,7 +174,7 @@ Pull requests targeting `development` or `master` run these checks:
 - `tests`: the hardware-independent pytest suite with the Qt offscreen backend and enforced coverage floor.
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable and isolated installer smoke tests.
 
-The active branch rulesets, checked on 23 September 2026, require `code-quality`, `tests`, and `windows-package`. Verify the live rulesets before relying on this list. `dependency-review` is an additional CI check; Hasan decides whether to add it to the required checks after its first successful run. **Publish release** repeats the software and packaging checks after a merge to `master`; it is not a pull request check and must not be selected as a required status check.
+The required checks under this policy are `code-quality`, `tests`, and `windows-package`. Verify the live rulesets before relying on this list. `dependency-review` is an additional CI check; Hasan decides whether to add it to the required checks after its first successful run. **Publish release** repeats the software and packaging checks after a merge to `master`; it is not a pull request check and must not be selected as a required status check.
 
 Dependency review requires the GitHub dependency graph. A repository administrator must enable the dependency graph and Dependabot alerts in the repository's security settings, or run this command with an administrator account:
 

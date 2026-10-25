@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLineEdit, QProgressBar, QSlider
+from PySide6.QtWidgets import (
+    QBoxLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QProgressBar,
+    QSizePolicy,
+    QSlider,
+    QVBoxLayout,
+)
 
 from ..settings_limits import (
     ELEVENLABS_PERCENT_RANGE,
@@ -45,29 +56,58 @@ class ElevenLabsPage(QFrame):
         self._playback_state = "stopped"
         layout = content_layout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(12)
         self._layout = layout
         self._build_header()
         self._build_key_row()
+        self._groups = QBoxLayout(QBoxLayout.LeftToRight)
+        self._groups.setSpacing(16)
+        voice_group = QGroupBox("Glas i način izgovora", self)
+        voice_layout = QVBoxLayout(voice_group)
+        voice_layout.setContentsMargins(16, 24, 16, 16)
+        voice_layout.setSpacing(16)
+        self._layout = voice_layout
         self._build_choices()
         self._build_stability()
+        voice_layout.addStretch(1)
+        preview_group = QFrame(self)
+        preview_group.setObjectName("settingsGroup")
+        self._layout = QVBoxLayout(preview_group)
+        self._layout.setContentsMargins(16, 16, 16, 16)
+        self._layout.setSpacing(12)
+        self._layout.addWidget(styled_label("Proba i potrošnja", "settingTitle", self))
         self._build_credits()
         self._build_test_row()
         self._build_privacy()
+        self._groups.addWidget(voice_group, 6)
+        self._groups.addWidget(preview_group, 5)
+        self._layout = layout
+        layout.addLayout(self._groups)
+        layout.addStretch(1)
+        self._reflow_controls(False)
         self.refresh(account.state)
 
     def _build_header(self):
-        header = QHBoxLayout()
-        header.addWidget(self._controls.button("Nazad", self._back, QSize(120, 58)))
-        header.addWidget(styled_label("ElevenLabs · Efendija", "sectionTitle", self), 1)
+        self._header = QGridLayout()
+        self._header.setHorizontalSpacing(12)
+        self._header.setVerticalSpacing(12)
+        self._back_button = self._controls.button("Nazad", self._back, QSize(120, 58))
+        self._title = styled_label("ElevenLabs · Efendija", "sectionTitle", self)
         self.check_button = self._controls.button(
             "Provjeri vezu", self._check_connection, QSize(150, 58)
         )
-        header.addWidget(self.check_button)
-        self._layout.addLayout(header)
+        self.connection_help = self._controls.info_button(
+            "O provjeri veze",
+            "Provjera čita podatke o računu, glasovima i modelima. "
+            "Ne izgovara tekst i ne troši kredite za govor. "
+            "Za probu glasa odaberite Isprobaj Efendiju.",
+        )
+        self._layout.addLayout(self._header)
 
     def _build_key_row(self):
         row, grid, _hint = setting_row(self, "API ključ")
+        self._key_grid = grid
+        self._key_title = grid.itemAtPosition(0, 0).widget()
         self.key_input = QLineEdit(row)
         self.key_input.setAccessibleName("ElevenLabs API ključ")
         self.key_input.setEchoMode(QLineEdit.Password)
@@ -106,10 +146,14 @@ class ElevenLabsPage(QFrame):
         )
         choices_layout = QHBoxLayout()
         for title, combo in (("Moji glasovi", self.voice), ("Model", self.model)):
-            row, grid, _hint = setting_row(self, title)
-            grid.setHorizontalSpacing(6)
-            grid.addWidget(combo, 0, 1, 2, 1)
-            choices_layout.addWidget(row, 1)
+            column = QVBoxLayout()
+            column.setSpacing(8)
+            column.addWidget(styled_label(title, "settingTitle", self))
+            combo.setMinimumWidth(100)
+            combo.setMaximumWidth(16777215)
+            combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            column.addWidget(combo)
+            choices_layout.addLayout(column, 1)
         self._layout.addLayout(choices_layout)
 
     def _build_stability(self):
@@ -128,10 +172,12 @@ class ElevenLabsPage(QFrame):
             choices.addWidget(button)
             self.stability_buttons[value] = button
         tuning.addLayout(choices, 1, 0)
-        self.similarity, self.similarity_value = self._tuning_control(
-            tuning, 1, "Sličnost glasa", ELEVENLABS_SIMILARITY_DEFAULT
-        )
         self._layout.addLayout(tuning)
+        similarity = QGridLayout()
+        self.similarity, self.similarity_value = self._tuning_control(
+            similarity, 0, "Sličnost glasa", ELEVENLABS_SIMILARITY_DEFAULT
+        )
+        self._layout.addLayout(similarity)
 
     def _build_credits(self):
         self.credits_label = styled_label(CREDITS_UNAVAILABLE, "settingTitle", self)
@@ -147,21 +193,27 @@ class ElevenLabsPage(QFrame):
         self._layout.addWidget(self.credits_note)
 
     def _build_test_row(self):
-        row, grid, _hint = setting_row(
-            self,
-            VOICE_TEST_TEXT,
+        self._layout.addSpacing(8)
+        self._layout.addWidget(styled_label(VOICE_TEST_TEXT, "settingTitle", self))
+        warning = styled_label(
             "Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.",
+            "settingHint",
+            self,
         )
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #efd092;")
+        self._layout.addWidget(warning)
+        actions = QHBoxLayout()
         self.test_button = self._controls.button(
-            "Isprobaj Efendiju", self._test_voice, QSize(200, 58), "fa5s.play"
+            "Isprobaj Efendiju", self._test_voice, QSize(150, 58), "fa5s.play"
         )
         self.test_button.setObjectName("primaryButton")
-        grid.addWidget(self.test_button, 0, 1, 2, 1)
+        actions.addWidget(self.test_button, 1)
         self.stop_button = self._controls.button(
-            "Zaustavi", self.stop_requested.emit, QSize(120, 58), "fa5s.stop"
+            "Zaustavi", self.stop_requested.emit, QSize(150, 58), "fa5s.stop"
         )
-        grid.addWidget(self.stop_button, 0, 2, 2, 1)
-        self._layout.addWidget(row)
+        actions.addWidget(self.stop_button, 1)
+        self._layout.addLayout(actions)
         self.playback_progress = busy_indicator(self)
         self._layout.addWidget(self.playback_progress)
         retain_size_when_hidden(self.stop_button)
@@ -177,6 +229,72 @@ class ElevenLabsPage(QFrame):
         note.setWordWrap(True)
         self._layout.addWidget(note)
         self._layout.addStretch(1)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        direction = QBoxLayout.TopToBottom if self.width() < 820 else QBoxLayout.LeftToRight
+        if direction != self._groups.direction():
+            self._controls.interrupt_gaze()
+            self._groups.setDirection(direction)
+            self._reflow_controls(direction == QBoxLayout.TopToBottom)
+
+    def _reflow_controls(self, narrow):
+        header_widgets = (self._back_button, self._title, self.check_button, self.connection_help)
+        key_widgets = (
+            self._key_title,
+            self.key_input,
+            self.saved_key,
+            self.show_key,
+            self.save_key,
+            self.cancel_key,
+            self.replace_key,
+            self.remove_key,
+        )
+        for layout, widgets in ((self._header, header_widgets), (self._key_grid, key_widgets)):
+            for widget in widgets:
+                layout.removeWidget(widget)
+            for column in range(layout.columnCount()):
+                layout.setColumnStretch(column, 0)
+                layout.setColumnMinimumWidth(column, 0)
+        # Explicit spacer columns keep gaps when hidden controls span different cells.
+        self._key_grid.setHorizontalSpacing(0)
+        for column in range(1, 11 if narrow else 9, 2):
+            self._key_grid.setColumnMinimumWidth(column, 12)
+        if narrow:
+            header_positions = ((0, 0, 1, 1), (0, 1, 1, 2), (1, 1, 1, 1), (1, 2, 1, 1))
+            key_positions = (
+                (0, 0, 1, 11),
+                (1, 0, 1, 11),
+                (1, 0, 1, 11),
+                (2, 0, 1, 3),
+                (2, 4, 1, 3),
+                (2, 8, 1, 3),
+                (2, 0, 1, 5),
+                (2, 6, 1, 5),
+            )
+            self._header.setColumnStretch(1, 1)
+            for column in range(0, 11, 2):
+                self._key_grid.setColumnStretch(column, 1)
+        else:
+            header_positions = tuple((0, column, 1, 1) for column in range(4))
+            key_positions = tuple((0, column, 2, 1) for column in (0, 2, 2, 4, 6, 8, 4, 6))
+            self._header.setColumnStretch(1, 1)
+            self._key_grid.setColumnStretch(0, 1)
+            self._key_grid.setColumnStretch(2, 2)
+        for layout, widgets, positions in (
+            (self._header, header_widgets, header_positions),
+            (self._key_grid, key_widgets, key_positions),
+        ):
+            for widget, position in zip(widgets, positions, strict=True):
+                layout.addWidget(widget, *position)
+        self._align_key_actions(narrow)
+
+    def _align_key_actions(self, narrow):
+        self._key_grid.setContentsMargins(12, 0, 12 if narrow else 0, 0)
+        # A hidden Cancel must not leave its preceding spacer at the right edge.
+        self._key_grid.setColumnMinimumWidth(
+            7, 12 if narrow or not self.cancel_key.isHidden() else 0
+        )
 
     def configure(self, settings) -> None:
         self._settings = settings
@@ -258,14 +376,15 @@ class ElevenLabsPage(QFrame):
                 f"Preostalo {number(subscription.remaining)} / {number(subscription.limit)} kredita ({percent}%)"
             )
             self.credits.setValue(percent)
-            color = "#e48c80" if percent < 10 else "#edc779" if percent < 20 else "#91dec0"
+            color = "#e48c80" if percent < 10 else "#edc779" if percent < 20 else "#a3d5ba"
             self.credits.setStyleSheet(
-                f"QProgressBar {{ background: #343a36; border: 0; border-radius: 4px; }} QProgressBar::chunk {{ background: {color}; border-radius: 4px; }}"
+                f"QProgressBar {{ background: #394959; border: 0; border-radius: 4px; }} QProgressBar::chunk {{ background: {color}; border-radius: 4px; }}"
             )
 
     def _render_playback(self, state):
         active = self._playback_state in ACTIVE_PLAYBACK_STATES
-        self.stop_button.setVisible(active)
+        self.stop_button.setVisible(True)
+        self.stop_button.setEnabled(active)
         self.playback_progress.setVisible(active)
         label = PLAYBACK_LABELS.get(self._playback_state, "Isprobaj Efendiju")
         self.test_button.setText(label)
@@ -297,14 +416,14 @@ class ElevenLabsPage(QFrame):
             combo.clear()
             if combo is self.voice:
                 combo.setPlaceholderText(
-                    "Odaberite sačuvani glas"
+                    "Odaberite glas"
                     if choices
                     else "Nema glasova"
                     if checked
-                    else "Odaberite nakon provjere veze"
+                    else "Provjerite vezu"
                 )
             else:
-                combo.addItem("Odaberite nakon provjere veze", "")
+                combo.addItem("Provjerite vezu", "")
             for identifier, name in choices:
                 combo.addItem(name, identifier)
             if _missing_model_choice(combo is self.voice, combo.findData(current), current):
@@ -337,6 +456,7 @@ class ElevenLabsPage(QFrame):
         )
         for control in (self.replace_key, self.remove_key):
             control.setVisible(state.has_key and not state.environment_key and not editing)
+        self._align_key_actions(self._groups.direction() == QBoxLayout.TopToBottom)
 
     def _replace_key(self) -> None:
         self._controls.interrupt_gaze()

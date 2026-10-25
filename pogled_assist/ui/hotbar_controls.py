@@ -22,6 +22,7 @@ from ..interaction.mouse_controller import (
     SHOW_HOTBAR,
     SPEECH,
 )
+from .theme import CONTROL_STATES
 from .tracking_status import TrackingStatusWidget
 
 logger = logging.getLogger(__name__)
@@ -63,25 +64,25 @@ class HotbarControls:
         self.window.setStyleSheet(
             """
             QWidget {
-                background: #111318;
-                color: #f6f7fb;
+                background: #15191f;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 12px;
             }
             QToolButton {
-                background: #1c2029;
-                border: 1px solid #303747;
+                background: #283442;
+                border: 1px solid #71869b;
                 border-radius: 8px;
-                color: #eef2f8;
+                color: #edf2f7;
                 padding: 5px;
             }
             QToolButton:hover {
-                background: #262c38;
-                border-color: #4c5970;
+                background: #334355;
+                border-color: #84c5d9;
             }
             QToolButton:checked {
-                background: #245f9f;
-                border-color: #67b7dc;
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
             }
             QToolButton#hideButton {
@@ -93,17 +94,8 @@ class HotbarControls:
                 background: #3a2933;
                 border-color: #9d647c;
             }
-            QToolButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 3px solid #ffe58a;
-                color: #111318;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 3px solid #bbf7d0;
-                color: #ffffff;
-            }
             """
+            + CONTROL_STATES
         )
 
         layout = QGridLayout(self.window)
@@ -158,7 +150,6 @@ class HotbarControls:
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setCheckable(definition.checkable)
         button.setProperty("gazeTarget", False)
-        button.setProperty("gazePulse", "")
         button.pressed.connect(self.cancel_mouse_gaze)
         button.clicked.connect(
             lambda checked=False: self.run_action(
@@ -182,35 +173,25 @@ class HotbarControls:
         button.setFixedSize(86, 76)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setProperty("gazeTarget", False)
-        button.setProperty("gazePulse", "")
         button.pressed.connect(self.cancel_mouse_gaze)
         button.setStyleSheet(
             """
             QToolButton#restoreHotbarButton {
-                background: #111318;
-                border: 2px solid #67b7dc;
+                background: #15191f;
+                border: 2px solid #84c5d9;
                 border-radius: 8px;
-                color: #eef2f8;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 13px;
                 font-weight: 700;
                 padding: 7px;
             }
             QToolButton#restoreHotbarButton:hover {
-                background: #1c2029;
+                background: #283442;
                 border-color: #a6e7ff;
             }
-            QToolButton#restoreHotbarButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 4px solid #ffe58a;
-                color: #111318;
-            }
-            QToolButton#restoreHotbarButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 4px solid #bbf7d0;
-                color: #ffffff;
-            }
             """
+            + CONTROL_STATES
         )
         button.clicked.connect(
             lambda checked=False: self.run_action(

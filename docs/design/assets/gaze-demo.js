@@ -15,6 +15,7 @@ window.createReferenceGaze = () => {
   let clickFromGaze = false;
   let lastGazeClick = { target: null, time: 0 };
   let blockedGaze = null;
+  let firedTimer = 0;
   function enabledButton(button) {
     return button?.isConnected && !button.disabled;
   }
@@ -77,7 +78,7 @@ window.createReferenceGaze = () => {
     const held = gazeAwayStart !== null;
     if (!held) gazeLastSeen = now;
     const elapsed = gazeLastSeen - gazeStart;
-    if (elapsed >= GAZE_PAUSE_MS) renderGazeRing(elapsed);
+    if (elapsed >= GAZE_PAUSE_MS) renderGazeRing(elapsed, held);
     if (!held && elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
       activateGaze(now);
       return;
@@ -85,8 +86,11 @@ window.createReferenceGaze = () => {
     gazeFrame = requestAnimationFrame(tickGaze);
   }
 
-  function renderGazeRing(elapsed) {
+  function renderGazeRing(elapsed, held) {
+    clearTimeout(firedTimer);
+    ring.dataset.state = held ? 'held' : 'active';
     const rect = gazeTarget.getBoundingClientRect();
+    ring.style.setProperty('--ring-size', `${Math.max(0, Math.min(64, rect.width - 16, rect.height - 16))}px`);
     (gazeTarget.closest('dialog') || document.body).append(ring);
     ring.style.left = `${rect.left + rect.width / 2}px`;
     ring.style.top = `${rect.top + rect.height / 2}px`;
@@ -101,11 +105,16 @@ window.createReferenceGaze = () => {
     clickFromGaze = true;
     target.click();
     clickFromGaze = false;
+    (document.querySelector('dialog[open]') || document.body).append(ring);
+    ring.dataset.state = 'fired';
+    ring.hidden = false;
+    firedTimer = setTimeout(() => { ring.hidden = true; }, 220);
     // Require leaving the target before another dwell can start.
     gazeTarget = target;
   }
 
   function resetGaze() {
+    clearTimeout(firedTimer);
     cancelAnimationFrame(gazeFrame);
     gazeFrame = 0;
     gazeAwayStart = null;

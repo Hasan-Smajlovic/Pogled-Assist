@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import ctypes
 import logging
-import math
 import sys
 import time
 from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QWidget
 
 from ..windows.windows_z_order import force_window_topmost
 
@@ -31,7 +30,7 @@ class InteractionOverlayWindow(QWidget):
     """Click-through progress marker for a gaze dwell action."""
 
     OVERLAY_SIZE = 138
-    FIRED_DURATION_MS = 360
+    FIRED_DURATION_MS = 220
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,8 +38,8 @@ class InteractionOverlayWindow(QWidget):
         self._active = False
         self._mode = "progress"
         self._progress = 0.0
+        self._ring_diameter = 64.0
         self._label = ""
-        self._phase = 0.0
         self._fired_started_ms = 0.0
         self._last_progress_point: QPoint | None = None
         self._last_progress_update_ms = 0.0
@@ -76,17 +75,21 @@ class InteractionOverlayWindow(QWidget):
 
         clamped_progress = _clamp(progress, 0.0, 1.0)
         compact_label = _compact_label(label)
+        center, diameter = _ring_geometry_at(point)
         now_ms = time.monotonic() * 1000
-        if self._progress_update_skippable(point, clamped_progress, compact_label, now_ms):
+        if diameter == self._ring_diameter and self._progress_update_skippable(
+            point, clamped_progress, compact_label, now_ms
+        ):
             return
 
         self._active = True
         self._mode = "progress"
         self._progress = clamped_progress
+        self._ring_diameter = diameter
         self._label = compact_label
         self._last_progress_point = QPoint(point)
         self._last_progress_update_ms = now_ms
-        self._move_center_to(point)
+        self._move_center_to(center)
         self._ensure_visible()
         self.update()
 
@@ -97,11 +100,12 @@ class InteractionOverlayWindow(QWidget):
         self._active = True
         self._mode = "fired"
         self._progress = 1.0
+        center, self._ring_diameter = _ring_geometry_at(point)
         self._label = _compact_label(label)
         self._last_progress_point = QPoint(point)
         self._last_progress_update_ms = time.monotonic() * 1000
         self._fired_started_ms = time.monotonic() * 1000
-        self._move_center_to(point)
+        self._move_center_to(center)
         self._ensure_visible()
         self.update()
 
@@ -122,57 +126,31 @@ class InteractionOverlayWindow(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
+        self._paint_calm(painter)
 
-        pulse = 0.5 if self._mode == "paused" else (math.sin(self._phase) + 1.0) / 2.0
-        fired = self._mode == "fired"
-        base_rect = QRectF(15, 15, self.width() - 30, self.height() - 30)
-        arc_rect = QRectF(21, 21, self.width() - 42, self.height() - 42)
-        center = self.rect().center()
-
-        if fired:
-            fill = QColor(34, 197, 94, 48 + int(42 * pulse))
-            outer = QColor(34, 197, 94, 150 + int(70 * pulse))
-            arc = QColor(255, 255, 255, 235)
-            text = "Done"
-        else:
-            fill = QColor(245, 158, 11, 34 + int(28 * pulse))
-            outer = QColor(245, 158, 11, 125 + int(70 * pulse))
-            arc = QColor(255, 255, 255, 235)
-            text = self._label
-
-        painter.setPen(QPen(outer, 5 + int(2 * pulse)))
-        painter.setBrush(fill)
-        painter.drawEllipse(base_rect)
-
-        painter.setPen(QPen(QColor(15, 23, 42, 125), 10))
+    def _paint_calm(self, painter: QPainter) -> None:
+        center = QRectF(self.rect()).center()
+        diameter = self._ring_diameter - 3
+        if diameter <= 0:
+            return
+        arc_rect = QRectF(center.x() - diameter / 2, center.y() - diameter / 2, diameter, diameter)
+        color = QColor("#84c5d9")
+        track = QColor(color)
+        track.setAlpha(51)
         painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(track, 3))
         painter.drawEllipse(arc_rect)
-
-        painter.setPen(QPen(arc, 10, Qt.SolidLine, Qt.RoundCap))
+        painter.setPen(QPen(color, 3, Qt.SolidLine, Qt.RoundCap))
         painter.drawArc(arc_rect, 90 * 16, int(-360 * 16 * self._progress))
-
-        dot_radius = 10 + int(4 * pulse)
-        painter.setPen(QPen(QColor(255, 255, 255, 220), 2))
-        painter.setBrush(QColor(15, 23, 42, 185))
-        painter.drawEllipse(center, dot_radius, dot_radius)
         if self._mode == "paused":
-            painter.setPen(QPen(QColor(255, 255, 255), 3))
-            for offset in (-3, 3):
-                painter.drawLine(
-                    center.x() + offset, center.y() - 5, center.x() + offset, center.y() + 5
-                )
-            text = "Na čekanju"
-
-        if text:
-            painter.setPen(QColor(255, 255, 255, 238))
-            font = QFont("Segoe UI", 10)
-            font.setBold(True)
+            painter.setPen(color)
+            font = QFont("Segoe UI")
+            font.setPixelSize(min(12, int(diameter / 2)))
             painter.setFont(font)
-            painter.drawText(self.rect().adjusted(12, 92, -12, -12), Qt.AlignCenter, text)
+            pause_rect = QRectF(center.x() - 10, center.y() + self._ring_diameter / 2 - 14, 20, 14)
+            painter.drawText(pause_rect, Qt.AlignCenter, "Ⅱ")
 
     def _tick(self) -> None:
-        if self._mode != "paused":
-            self._phase += 0.24
         if self._mode == "fired":
             elapsed_ms = time.monotonic() * 1000 - self._fired_started_ms
             if elapsed_ms >= self.FIRED_DURATION_MS:
@@ -194,7 +172,6 @@ class InteractionOverlayWindow(QWidget):
     ) -> bool:
         if not self._active or self._mode != "progress":
             return False
-
         if self._label != label:
             return False
 
@@ -309,6 +286,23 @@ def _compact_label(label: str) -> str:
     if normalized in {"Dvostruki klik", "Dvostruki lijevi klik"}:
         return "Dvostruki"
     return normalized[:13]
+
+
+def _ring_geometry_at(point: QPoint) -> tuple[QPoint, float]:
+    # Walk Qt children so native click-through overlays cannot hide the target control.
+    for window in QApplication.topLevelWidgets():
+        if not window.isVisible() or window.testAttribute(Qt.WA_TransparentForMouseEvents):
+            continue
+        widget = window.childAt(window.mapFromGlobal(point)) or window
+        while widget is not None:
+            if isinstance(widget, (QAbstractButton, QComboBox)) and point == widget.mapToGlobal(
+                widget.rect().center()
+            ):
+                center = widget.mapToGlobal(QPoint(widget.width() // 2, widget.height() // 2))
+                diameter = max(0, min(64, widget.width() - 16, widget.height() - 16))
+                return center, diameter
+            widget = widget.parentWidget()
+    return point, 64
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

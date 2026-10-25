@@ -76,7 +76,7 @@ def test_tracking_notice_preserves_targets_message_and_focus(
         notice_rect = QRect(widget.mapToGlobal(widget.rect().topLeft()), widget.size())
         badge.set_status({"busy": True, "state": "recording", "remaining_seconds": 119})
         qtbot.wait(1)
-        assert widget.geometry().height() == 60
+        assert widget.geometry().height() == 32
         assert QRect(widget.mapToGlobal(widget.rect().topLeft()), widget.size()) == notice_rect
         badge_rect = QRect(badge.mapToGlobal(badge.rect().topLeft()), badge.size())
         assert not notice_rect.intersects(badge_rect)

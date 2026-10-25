@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGridLayout
 
 from .release_update_row import ReleaseUpdateRow
 from .settings_controls import action_grid, content_layout, styled_label
@@ -25,9 +25,9 @@ class GeneralSettingsPage(QFrame):
         header.setHorizontalSpacing(16)
         header.setVerticalSpacing(4)
         header.setColumnStretch(0, 1)
-        title = styled_label("Opće postavke", "sectionTitle", page)
+        title = styled_label("Aplikacija", "sectionTitle", page)
         description = styled_label(
-            "Pokretanje, zapisivanje i ažuriranje aplikacije.", "sectionDescription", page
+            "Pokretanje i ažuriranje aplikacije.", "sectionDescription", page
         )
         header.addWidget(title, 0, 0, Qt.AlignVCenter | Qt.AlignLeft)
         header.addWidget(description, 1, 0, Qt.AlignVCenter | Qt.AlignLeft)
@@ -38,39 +38,14 @@ class GeneralSettingsPage(QFrame):
         header.addWidget(self._quit_button, 0, 1, 2, 1, Qt.AlignVCenter | Qt.AlignRight)
         layout.addLayout(header)
 
-        layout.addWidget(styled_label("POKRETANJE I DIJAGNOSTIKA", "groupLabel", page))
+        layout.addWidget(styled_label("Pokretanje", "groupLabel", page))
         self._startup_checkbox = self._controls.checkbox(
             "Pokreni uz Windows", self._owner._toggle_start_with_windows, QSize(240, 58)
-        )
-        self._logging_checkbox = self._controls.checkbox(
-            "Uključi zapisivanje", self._owner._toggle_logging_enabled, QSize(240, 58)
         )
         self._launcher_window_checkbox = self._controls.checkbox(
             "Prikaži PowerShell", self._owner._toggle_show_launcher_window, QSize(240, 58)
         )
-        layout.addLayout(
-            action_grid(
-                (self._startup_checkbox, self._logging_checkbox, self._launcher_window_checkbox)
-            )
-        )
-
-        self._diagnostics_button = self._controls.button(
-            "Dijagnostičko snimanje",
-            self._owner.diagnostics_requested.emit,
-            QSize(270, 58),
-            "fa5s.file-medical-alt",
-        )
-        diagnostic_row = QHBoxLayout()
-        copy = QVBoxLayout()
-        copy.addWidget(styled_label("Snimite problem s pogledom", "groupLabel", page))
-        copy.addWidget(
-            styled_label(
-                "Kratak dijagnostički snimak i paket za podršku.", "sectionDescription", page
-            )
-        )
-        diagnostic_row.addLayout(copy, 1)
-        diagnostic_row.addWidget(self._diagnostics_button)
-        layout.addLayout(diagnostic_row)
+        layout.addLayout(action_grid((self._startup_checkbox, self._launcher_window_checkbox)))
 
         layout.addWidget(styled_label("VERZIJA APLIKACIJE", "groupLabel", page))
         self._update_row = ReleaseUpdateRow(self._controls, self._owner._update_manager, page)
@@ -85,5 +60,4 @@ class GeneralSettingsPage(QFrame):
         self._startup_checkbox.setChecked(
             settings.start_with_windows if startup_desired is None else startup_desired
         )
-        self._logging_checkbox.setChecked(settings.logging_enabled)
         self._launcher_window_checkbox.setChecked(settings.show_launcher_window)

@@ -130,7 +130,7 @@ class SpeechDialogs(QObject):
     def _build_letter_dialog(self) -> None:
         self.letter = self._new_dialog()
         letter_layout = QVBoxLayout(self.letter)
-        letter_layout.setContentsMargins(28, 24, 28, 24)
+        letter_layout.setContentsMargins(24, 20, 24, 20)
         letter_layout.setSpacing(18)
         self.letter_title = QLabel("Odaberite slovo", self.letter)
         self.letter_title.setObjectName("dialogTitle")
@@ -143,7 +143,7 @@ class SpeechDialogs(QObject):
             self._recording_title(self.letter_title, self.letter), self.letter
         )
         letter_layout.addWidget(header)
-        letter_layout.addWidget(self.letter_grid_host, 1)
+        letter_layout.addWidget(self.letter_grid_host)
         self.letter.finished.connect(
             lambda _result, dialog=self.letter: self._dialog_finished(dialog)
         )
@@ -279,16 +279,8 @@ class SpeechDialogs(QObject):
         )
 
     def _recording_title(self, title: QLabel, parent: QWidget) -> QWidget:
-        heading = QWidget(parent)
-        heading.setFixedHeight(60)
-        layout = QVBoxLayout(heading)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(title, 1)
-        badge = RecordingBadge(heading)
-        badge.setFixedHeight(24)
-        self.recording_badges.append(badge)
-        layout.addWidget(badge)
+        heading = self._recording_header(title, parent)
+        heading.setFixedHeight(36)
         return heading
 
     def _recording_header(self, title: QWidget, parent: QWidget) -> QWidget:

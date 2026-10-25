@@ -125,7 +125,7 @@ def test_hold_freezes_feedback_and_first_return_cannot_activate(hotbar_gaze):
     controller.handle_eye_status(True, False)
     assert hotbar._interaction_overlay._mode == "paused"
     assert button.property("gazePaused")
-    assert not button._gaze_feedback_timer.isActive()
+    assert not hasattr(button, "_gaze_feedback_timer")
     feed(point, 950)
     assert progress[-1] == before
     controller.handle_eye_status(True, True)
