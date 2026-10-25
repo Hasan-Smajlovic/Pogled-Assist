@@ -426,11 +426,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         button = QPushButton("H", scene)
         button.setObjectName("groupButton")
         button.setGeometry(200, 120, 240, 120)
-        set_gaze_feedback(button, True, pulsing=False)
+        set_gaze_feedback(button, True)
         overlay = InteractionOverlayWindow()
         overlay.setParent(scene, Qt.Widget)
         overlay._timer.timeout.disconnect(overlay._tick)
-        overlay.set_calm(True)
         overlay.show_progress(QPoint(320, 180), 0.65, "Pogledaj")
         self.capture(scene, "selection-progress", "Speech selection: calm ring", size=(640, 360))
         overlay.set_paused(True)
@@ -456,6 +455,7 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             (0, "settings-general", "Settings: general"),
             (1, "settings-gaze", "Settings: gaze"),
             (2, "settings-speech", "Settings: speech"),
+            (3, "settings-support", "Settings: support"),
         ):
             self.settings._select_tab(index)
             self.capture(self.settings, name, title, size=size)
@@ -695,6 +695,7 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
         small_groups = replace(self.speech_settings, letters_per_group=2)
         self.keyboard.update_settings(small_groups)
+        self.keyboard._show_letter_groups()
         self.controller.update_speech_settings(small_groups)
         self.controller._show_keyboard_tab()
         for widget, name, title in (

@@ -7,7 +7,7 @@ from ..speech.speech_library import CategoryRecord, PhraseRecord, clean_text, sa
 from ..suggestions.composition import Composition
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
 
-ITEMS_PER_PAGE = 6
+ITEMS_PER_PAGE = 4
 
 
 class SpeechLibraryActions:
@@ -36,6 +36,7 @@ class SpeechLibraryActions:
         self._view_mode = "editor"
         self._deletion_mode = False
         self._symbols_mode = False
+        self._keyboard_page = 0
         self._show_group_level()
         self._view_title.setText(self._editor_title())
         self._update_view_controls()

@@ -2,30 +2,15 @@
 .selection-preview h1 { margin: 0 0 16px; font-size: 28px; }
 .selection-preview header p { margin: 8px 0; color: #bec9d9; }
 .selection-preview-buttons { display: flex; align-items: center; justify-content: center; gap: 24px; flex: 1; }
-.selection-preview-buttons > button, .selection-preview-target { width: 240px; }
-.selection-preview-buttons button { width: 100%; height: 112px; }
+.selection-preview-buttons > button, .selection-preview-target { flex:1; max-width:280px; min-width:0; }
+.selection-preview-buttons button { width: 100%; height: var(--target-height, 112px); min-height: 0; }
 .selection-preview-target { position: relative; }
 .selection-preview-note { margin: auto 0 12px; max-width: 850px; color: #bec9d9; line-height: 1.5; }
-.selection-progress-ring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 138px; height: 138px; pointer-events: none; display: grid; place-items: center; }
-.selection-progress-ring::before { content: ''; position: absolute; inset: 15px; border: 5px solid #f59e0bba; border-radius: 50%; background: #f59e0b20; animation: selection-pulse 1.2s ease-in-out infinite; }
-.selection-progress-arc { position: absolute; inset: 21px; border-radius: 50%; background: conic-gradient(#fffffff0 65%, #0f172a7d 0); mask: radial-gradient(transparent 54%, #000 56%); }
-.selection-progress-symbol { z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid #fff; border-radius: 50%; background: #0f172ad0; color: #fff; font-size: 18px; font-weight: 700; }
-.selection-progress-label { position: absolute; top: 96px; width: 130px; text-align: center; color: #fff; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px #000; }
-.selection-progress-ring[data-state="held"]::before { animation: none; border-color: #f2ce76; background: #b8851929; }
-.selection-progress-ring[data-state="fired"]::before { border-color: #22c55eba; background: #22c55e40; }
-.selection-progress-ring[data-state="fired"] .selection-progress-arc { background: #fffffff0; }
-.selection-preview-target[data-state="active"] > button { animation: selection-button-pulse 1.2s ease-in-out infinite; }
-.selection-preview-target[data-state="held"] > button { border: 2px solid #f2ce76; background: #43381d; }
-@keyframes selection-pulse { 50% { opacity: .65; } }
-/* The calm style belongs to Speech; the default overlay remains unchanged. */
-.selection-progress-ring[data-surface="speech"] { width: 64px; height: 64px; }
-.selection-progress-ring[data-surface="speech"]::before { inset: 0; border: none; background: none; animation: none; }
-.selection-progress-ring[data-surface="speech"] .selection-progress-arc { inset: 0; background: conic-gradient(#9bc9f3 65%, #9bc9f333 0); mask: radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
-.selection-progress-ring[data-surface="speech"][data-state="fired"] .selection-progress-arc { background: #9bc9f3; }
-.selection-progress-ring[data-surface="speech"] .selection-progress-symbol { display: none; }
-.selection-progress-ring[data-surface="speech"][data-state="held"] .selection-progress-symbol { position: absolute; display: grid; top: 68px; width: 20px; height: 18px; border: none; border-radius: 0; background: none; color: #9bc9f3; }
-.selection-progress-ring[data-surface="speech"] .selection-progress-label { display: none; }
-.selection-preview-target[data-surface="speech"][data-state] > button { animation: none; border: 1px solid #9bc9f3; background: #1c2029; }
-.selection-preview-target[data-surface="speech"][data-state="idle"] > button { border-color: #394253; }
-@keyframes selection-button-pulse { 50% { border-color: #8bd5f5; background: #245f9f; } }
-@media (prefers-reduced-motion: reduce) { .selection-progress-ring::before, .selection-preview-target > button { animation: none !important; } }
+.selection-progress-ring { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:var(--ring-size, 64px); height:var(--ring-size, 64px); pointer-events:none; }
+.selection-progress-arc { position:absolute; inset:0; border-radius:50%; background:conic-gradient(var(--cyan) 65%, #84c5d933 0); mask:radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
+.selection-progress-ring[data-state="fired"] .selection-progress-arc { background:var(--cyan); }
+.selection-progress-symbol { display:none; }
+.selection-progress-ring[data-state="held"] .selection-progress-symbol { position:absolute; display:block; bottom:0; width:100%; height:14px; text-align:center; line-height:14px; color:var(--cyan); font-size:12px; }
+.selection-preview-target[data-state] > button { border:1px solid var(--cyan); background:var(--panel); }
+.selection-preview-target[data-state="idle"] > button { border-color:var(--border); }
+@media (max-width:560px) { .selection-preview-buttons { gap:12px; } .selection-preview-buttons > button, .selection-preview-target { min-width:0; flex:1; } }

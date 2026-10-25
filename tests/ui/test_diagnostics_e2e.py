@@ -54,6 +54,18 @@ def recording_ui(qtbot, tmp_path, monkeypatch, request):
 
 
 @pytest.mark.parametrize("recording_ui", [True], indirect=True, ids=["default-polling"])
+def test_footer_action_spacing_stays_aligned_across_tabs(recording_ui, qtbot):
+    window, _recordings, _reports, _writer, _context = recording_ui
+    for index in (0, 1, 0):
+        window._tabs.setCurrentIndex(index)
+        qtbot.wait(1)
+        back, primary = window._return.geometry(), window._primary.geometry()
+        assert primary.left() - back.right() - 1 == 16
+        assert primary.top() == back.top()
+        assert primary.height() == back.height() == 58
+
+
+@pytest.mark.parametrize("recording_ui", [True], indirect=True, ids=["default-polling"])
 def test_default_timer_observes_completed_recording(recording_ui, qtbot, monkeypatch):
     from pogled_assist.diagnostic_recording import RecordingSink
 
@@ -253,7 +265,8 @@ def test_settings_and_check_shortcuts_preserve_input_suspension_and_result(
     )
     hotbar._open_settings()
     settings = hotbar._settings_window
-    settings._general_page._diagnostics_button.click()
+    settings._select_tab(3)
+    settings._support_page._diagnostics_button.click()
     assert hotbar._diagnostics_window is not None and controller._input_suspended
     assert not settings.isVisible()
     hotbar._diagnostics_window.close()

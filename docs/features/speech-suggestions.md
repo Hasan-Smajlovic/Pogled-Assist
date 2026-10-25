@@ -1,8 +1,8 @@
 # Bosnian speech suggestions
 
-The five `Brzi izbor` buttons in the Speech screen help a person compose their own Bosnian message in Latin script with fewer gaze selections. They complete the word being typed or suggest the next word. Prediction runs offline from bundled language data; the person's learned words stay on the local machine.
+The five suggestion buttons in the Speech screen help a person compose their own Bosnian message in Latin script with fewer gaze selections. They complete the word being typed or suggest the next word. Prediction runs offline from bundled language data; the person's learned words stay on the local machine.
 
-This document defines the feature's behaviour and acceptance criteria. The [user guide](../USER_GUIDE.md#speech) explains how to use it. The [architecture](../ARCHITECTURE.md) owns runtime responsibilities and persistent data. The [development guide](../DEVELOPMENT.md) owns automated checks, the [UI development guide](../UI_DEVELOPMENT.md) owns visual and manual review, and the [Bosnian language guide](../../language/bs/README.md#preparation-and-evaluation) owns model preparation and evaluation commands. The [Windows release guide](../WINDOWS_RELEASE.md) owns installation and rollback. The [HTML design reference](../design/speech-keyboard-reference.html) owns visible layout and interaction states.
+This document defines the feature's behaviour and acceptance criteria. The [user guide](../USER_GUIDE.md#speech) explains how to use it. Use [architecture](../ARCHITECTURE.md) for runtime/storage contracts, [language data](../../language/bs/README.md#preparation-and-evaluation) for rebuilds and evaluation, and [UI development](../UI_DEVELOPMENT.md) for design and manual validation.
 
 ## Where suggestions appear
 
@@ -90,7 +90,7 @@ An unavailable speech action or empty input adds no learning. Earlier submitted 
 
 ### Forgetting a word
 
-`Zaboravi naučenu riječ` in Settings removes the selected word's personal entry and associated ranking contribution. Other learned words, the current message, and saved phrases or answers remain unchanged. Forgetting persists after restart. A base-model word may still appear without its personal boost; a word known only from learning disappears until later qualifying use teaches it again. Existing saved text alone must not recreate the removed entry.
+`Zaboravi riječ` in Settings removes the selected word's personal entry and associated ranking contribution. Other learned words, the current message, and saved phrases or answers remain unchanged. Forgetting persists after restart. A base-model word may still appear without its personal boost; a word known only from learning disappears until later qualifying use teaches it again. Existing saved text alone must not recreate the removed entry.
 
 ### Storage failure
 

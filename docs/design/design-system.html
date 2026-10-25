@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Boje i komponente</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/design-system.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/design-system.js" defer></script>
+</head>
+<body data-reference-page="design-system">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main class="system-review">
+    <header class="system-heading">
+      <div><h1>Mirniji Pogled Assist</h1><p>Referenca boja, tipografije i kontrola. Velike kontrole, jasna stanja i manje boje u pozadini.</p></div>
+      <a class="review-link" href="settings.html" data-reference-link="settings">Otvori Postavke →</a>
+    </header>
+    <section class="system-type" aria-labelledby="type-title">
+      <div class="sample-heading"><div><h2 id="type-title">Font koji olakšava čitanje</h2><p>Isti sadržaj i veličine za poređenje. Izbor se prenosi u ostale nacrte.</p></div>
+        <label>Font za pregled<select id="preview-font"><option value="segoe">Segoe UI Variable</option><option value="inter">Inter, ako je instaliran</option></select></label>
+      </div>
+      <div class="type-samples"><div><h3>Šta želite reći?</h3><p>Čujem te. Želim čaj i šetnju.</p><p class="type-numbers">250 ms · 850 ms · 155 riječi/min</p></div><div><p class="arabic-sample" lang="ar" dir="rtl">السَّلَامُ عَلَيْكُمْ</p><p>Arapski uz Segoe UI. Provjeriti oblikovanje slova i harekata.</p></div></div>
+      <p class="system-note">Fontovi se ne preuzimaju. Ako izabrani font nije instaliran, koristi se Segoe UI, zatim Arial. Konačni izbor treba provjeriti i u Qt prikazu.</p>
+    </section>
+    <section aria-labelledby="color-title"><h2 id="color-title">Jedna mirna paleta</h2><p>Plava označava glavnu radnju i fokus. Zelena, žuta i crvena ostaju za poruke s određenim značenjem.</p>
+      <div class="swatch-grid">
+        <div><i style="background:var(--canvas)"></i><strong>Pozadina</strong><code>#15191F</code></div>
+        <div><i style="background:var(--panel)"></i><strong>Panel</strong><code>#1D242D</code></div>
+        <div><i style="background:var(--surface)"></i><strong>Kontrola</strong><code>#283442</code></div>
+        <div><i style="background:var(--blue)"></i><strong>Glavna radnja</strong><code>#2E6478</code></div>
+        <div><i style="background:var(--cyan)"></i><strong>Fokus i odabir</strong><code>#84C5D9</code></div>
+        <div><i style="background:var(--muted)"></i><strong>Pomoćni tekst</strong><code>#B8C5D2</code></div>
+      </div>
+      <p class="system-note">Izračunati kontrast: glavni tekst na panelu 13,89 : 1; pomoćni tekst 8,91 : 1; tekst glavne radnje 5,81 : 1, pri prelasku miša 5,10 : 1; rub kontrole 3,36 : 1. Tamna tema je odabrani smjer; udobnost treba provjeriti u stvarnoj upotrebi.</p>
+    </section>
+    <section aria-labelledby="controls-title"><h2 id="controls-title">Različite uloge, različit izgled</h2>
+      <div class="component-comparison">
+        <article><h3>Navigacija</h3><p>Pokazuje gdje ste. Oznaka ostaje nakon odabira.</p><nav class="sample-navigation" aria-label="Primjer kategorija"><button type="button" aria-current="page">Pogled i odabir</button><button type="button">Govor i tastatura</button></nav></article>
+        <article><h3>Tabovi</h3><p>Mijenjaju sadržaj istog područja.</p><div class="sample-tabs" role="tablist" aria-label="Primjer tabova"><button id="sample-selection-tab" role="tab" aria-selected="true" aria-controls="sample-selection" type="button">Odabir</button><button id="sample-pointer-tab" role="tab" aria-selected="false" aria-controls="sample-pointer" tabindex="-1" type="button">Pokazivač</button></div><p id="sample-selection" role="tabpanel" aria-labelledby="sample-selection-tab">Vrijeme odabira i režim praćenja očiju.</p><p id="sample-pointer" role="tabpanel" aria-labelledby="sample-pointer-tab" hidden>Pokazivač, kalibracija i provjera pogleda.</p></article>
+        <article><h3>Prekidač</h3><p>Cijeli red je meta za pogled. Stanje je napisano.</p><label class="sample-switch"><input id="sample-switch" type="checkbox" role="switch" checked><span>Obavijesti o praćenju</span><span id="sample-switch-state">Uključeno</span><i aria-hidden="true"></i></label></article>
+        <article><h3>Jedan izbor iz grupe</h3><p>Izbor glasa je postavka. Odabrani kružić razlikuje je od navigacijskih tabova.</p><div class="sample-choices" role="radiogroup" aria-label="Primjer glasa"><label><input type="radio" name="sample-voice" checked>Standardni</label><label><input type="radio" name="sample-voice">Prirodni</label><label><input type="radio" name="sample-voice">Efendija</label></div></article>
+      </div>
+    </section>
+    <section aria-labelledby="states-title"><h2 id="states-title">Radnja, fokus i napredak</h2><p>Odabrani tab, pogled na kontrolu i napredak zadržavanja imaju zasebne oznake. Nema pulsiranja ni bljeskanja boja.</p>
+      <div class="state-grid"><div><button type="button">Sačuvani zvuk</button><span>Obična radnja</span></div><div><button type="button" class="primary">Isprobaj govor</button><span>Glavna radnja</span></div><div><button type="button" disabled>Isprobaj govor</button><span>Nedostupno</span></div><div><button type="button" class="sample-focus">A B C Č Ć <i class="sample-ring" aria-hidden="true"></i></button><span>Pogled i krug napretka</span></div></div>
+      <div class="message-samples"><p class="sample-message success"><strong>✓ Postavke su sačuvane.</strong><span>Promjene su odmah primijenjene.</span></p><p class="sample-message warning-message"><strong>! Malo ElevenLabs kredita.</strong><span>Provjerite stanje prije novog izgovora.</span></p><p class="sample-message error-message"><strong>! Postavke nisu sačuvane.</strong><span>Važe do zatvaranja aplikacije. Pokušajte ponovo sačuvati.</span></p></div>
+    </section>
+    <section aria-labelledby="reading-title"><h2 id="reading-title">Čitanje i grupisanje</h2>
+      <p>Duže upute dijelimo u kratke blokove, ističemo početak svake upute i ograničavamo širinu. Važno ograničenje ostaje vidljivo, izvan sklopivih detalja. To primjenjuje <a href="https://www.w3.org/WAI/WCAG2/supplemental/objectives/o3-clear-content/">W3C smjernice za jasan sadržaj</a> i <a href="https://design-system.service.gov.uk/styles/layout/">GOV.UK smjernicu o dužini reda</a>; raspon nije univerzalna mjera za svaki kratki natpis.</p>
+      <p>Prekidač mijenja stanje odmah, radio opcije biraju jedan glas, tab mijenja prikaz, a dugme pokreće radnju. To su različite uloge prema Microsoftovim smjernicama za <a href="https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/toggles">prekidače</a> i <a href="https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/radio-button">radio opcije</a>. Dvije kolone u Postavkama su prijedlog za ovaj raspored, ne univerzalno pravilo.</p>
+      <p>Veličine meta i razmake provjeravamo pogledom na korisnikovom uređaju. Smjernice za miš, dodir ili HoloLens nisu dokaz udobnosti ili preciznosti na Tobii 4C. Ne smanjujemo mete da bismo dobili uredniji izgled.</p>
+    </section>
+    <section class="review-next" aria-labelledby="review-title"><h2 id="review-title">Pregled u stvarnom rasporedu</h2><p>Postavke, Govor, Provjera pogleda i Dijagnostičko snimanje koriste ovu referentnu paletu i raspored. Bočne tastature imaju označen izbor i raspored za prostor 380 × 640, a oznaka snimanja ostaje unutar dugmeta Postavke na početnoj traci. Nacrt ne mijenja instaliranu aplikaciju.</p><div><a class="review-link" href="settings.html?page=gaze-settings">Pogled i odabir →</a><a class="review-link" href="settings.html?page=speech-settings">Govor i tastatura →</a><a class="review-link" href="speech.html" data-reference-link="speech">Ekran Govor →</a></div>
+      <h3>Prikazi za pregled</h3>
+      <p>Otvorite svaki prikaz na 1280 × 720 logičkih piksela uz uvećanje preglednika 100%. Veze otvaraju HTML reference. Snimci stvarne aplikacije nalaze se u Qt galeriji. HTML slike označite „HTML referenca”; za provjeru implementacije koristite Qt galeriju sa pripadajućom revizijom.</p>
+      <ol class="review-captures">
+        <li><a href="#type-title">Font, bosanska slova i arapski tekst</a></li>
+        <li><a href="#controls-title">Navigacija, tabovi i stanja kontrola</a></li>
+        <li><a href="settings.html?page=general-settings">Postavke · Aplikacija</a></li>
+        <li><a href="settings.html?page=gaze-settings&amp;gaze-tab=selection&amp;policy=hold">Pogled · Odabir i kratak prekid</a></li>
+        <li><a href="settings.html?page=gaze-settings&amp;gaze-tab=pointer">Pogled · Pokazivač i provjera</a></li>
+        <li><a href="settings.html?page=gaze-settings&amp;gaze-tab=stability">Pogled · Stabilnost uz rub</a></li>
+        <li><a href="settings.html?page=speech-settings&amp;voice=efendija&amp;connection=connected">Govor i tastatura · Efendija</a></li>
+        <li><a href="settings.html?page=eleven-settings&amp;connection=connected">ElevenLabs · povezan račun</a></li>
+        <li><a href="settings.html?page=eleven-settings&amp;connection=permission">ElevenLabs · nedostaje dozvola</a></li>
+        <li><a href="settings.html?page=support-settings">Postavke · Podrška</a></li>
+        <li><a href="speech.html?state=keyboard&amp;script=latin">Govor · poravnanje tastature i kontrola</a></li>
+        <li><a href="speech.html?state=keyboard&amp;script=latin&amp;voice-demo=offline">Govor · obavijest o zamjenskom glasu</a></li>
+        <li><a href="speech.html?state=single&amp;script=latin">Govor · jedno slovo i stranice</a></li>
+        <li><a href="speech.html?state=editor-single&amp;script=latin">Govor · uređivanje uz pojedinačna slova</a></li>
+        <li><a href="speech.html?state=answers&amp;script=latin">Govor · odgovori kroz više stranica</a></li>
+        <li><a href="speech.html?state=keyboard&amp;script=arabic">Govor · arapsko pismo</a></li>
+        <li><a href="gaze-check.html">Provjera pogleda · priprema, rezultati i historija</a></li>
+        <li><a href="diagnostics.html">Dijagnostika · snimanje, historija i greške</a></li>
+        <li><a href="controller-keyboard.html?group-size=2&amp;script=latin">Upravljač · 380 × 640, 2 slova po grupi i stranice</a></li>
+        <li><a href="keyboard.html?group-size=2&amp;script=latin">Tastatura · 380 × 640, 2 slova po grupi i stranice</a></li>
+        <li><a href="hotbar.html?recording=demo">Početna traka · snimanje i status očiju</a></li>
+        <li><a href="selection-progress.html">Napredak · aktivno i na čekanju</a></li>
+        <li><a href="tracking.html">Praćenje · prekid i povratak iznad dijaloga</a></li>
+        <li><a href="installation.html">Provjera instalacije</a></li>
+      </ol>
+      <p class="system-note">Dodatno: u Govoru odaberite Arapski i provjerite slova i harekate; vratite Latinicu za poređenje ostalih prikaza. U opcijama Postavki uključite grešku čuvanja. Za svaki prikaz uporedite stanje bez snimanja i sa oznakom snimanja, te provjerite da mete ostaju na istom mjestu. Izbor pisma i neke opcije pregleda ostaju zapamćeni u pregledniku. Veze za Govor sa state i script unaprijed biraju prikaz; preview=clean skriva alate za pregled na svakoj stranici. Postavke dodatno provjerite na širini 800 px: unos ključa, sve tri kontrole podešavanja i pomjeranje sadržaja.</p>
+      <p class="system-note">Za svaku sliku provjeriti čitljivost, poravnanje gornjih i donjih rubova, duge nazive, dostupnost svih radnji i jasno odabranu opciju. Snimci Qt aplikacije služe za provjeru implementacije prema ovoj referenci. Windows fontove, skaliranje i Tobii provjeriti na ciljnom uređaju.</p>
+    </section>
+    <details class="system-sources"><summary>Izvori i provjera</summary><p>Rasporede pregledati na 1280 × 720 logičkih piksela. Provjeriti dugačke poruke, sva tri taba pogleda, onemogućene kontrole, arapsko pismo i grešku čuvanja. Prije Qt implementacije potvrditi čitljivost, veličinu meta i broj koraka s korisnikom i pomagačem.</p><ul><li><a href="https://www.tobii.com/resource-center/learn-articles/building-for-ux-connecting-eye-gaze-to-ui-objects">Tobii: velike mete, razmaci i sadržaj u sredini dugmeta</a></li><li><a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">W3C: kontrast teksta i u aktivnim stanjima</a></li><li><a href="https://learn.microsoft.com/windows/apps/design/signature-experiences/typography">Microsoft: tipografija</a></li><li><a href="https://learn.microsoft.com/en-us/windows/apps/design/app-settings/guidelines-for-app-settings">Microsoft: organizacija Postavki</a></li><li><a href="https://learn.microsoft.com/en-us/windows/mixed-reality/design/eye-gaze-interaction">Microsoft: nenametljiva povratna informacija pri upravljanju pogledom</a> — smjernice za drugi uređaj, polazna osnova za provjeru.</li><li><a href="https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html">W3C: značenje se ne prenosi samo bojom</a></li></ul></details>
+  </main>
+</body>
+</html>

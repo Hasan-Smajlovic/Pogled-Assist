@@ -17,9 +17,7 @@
 <body data-reference-page="sidebar">
   <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
   <main id="sidebar-screen">
-    <label>Pregled broja slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label>
     <section class="sidebar-reference" aria-label="Samostalna tastatura">
-      <div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div>
       <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
       <button type="button" data-script-toggle data-edge-control>Arapski</button>
       <div class="sidebar-reference-grid">
@@ -29,11 +27,13 @@
       </div>
       <nav class="sidebar-pages" hidden><button type="button" data-side-page="-1">Prethodna</button><button type="button" data-side-page="1">Sljedeća</button></nav>
       <footer><button type="button" data-side-back hidden>Grupe</button><button type="button" data-edge-control>Razmak</button><button type="button" data-edge-control>Obriši</button></footer>
+      <div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div>
     </section>
     <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice. Trajanje se podešava na kartici Stabilnost uz rub: zadano 120 ms, raspon 0 do 300 ms, korak 20 ms; nula isključuje čuvanje. Izvan dugmeta nema potvrde ni napretka. Novo dugme nakon isteka dobija puno vrijeme odabira; promjena grupe ili skrivanje poništava prethodni odabir. Gubitak oka prati izabrani režim i ne produžava rok čuvanja uz rub.</p>
     <p>Oba pisma prikazuju najviše osam grupa po stranici. Prethodna i Sljedeća pojavljuju se samo kada ima više stranica. Duže latinične grupe prikazuju se u više redova kako bi zadržale širinu bočne tastature od 380 px. Odabir znaka vraća istu stranicu; promjena pisma ili kartice vraća prvu stranicu. Isti raspored važi u Upravljaču i staje u radni prostor od 640 logičkih piksela ispod trake.</p>
   </main>
-  <details class="reference-tools"><summary>Opcije pregleda</summary><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
+  <details class="reference-tools"><summary>Opcije pregleda</summary><label>Broj slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
   <div id="gaze-ring" aria-hidden="true" hidden></div>
+<details class="design-notes"><summary>Qt prikaz</summary><p>Qt prikazuje snimanje u stalnom donjem statusnom redu, bez praznog reda iznad kartica.</p></details>
 </body>
 </html>

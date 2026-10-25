@@ -18,31 +18,31 @@
   <main id="settings-screen" class="settings-screen" aria-label="Pogled Assist postavke">
     <header class="settings-topbar">
       <div class="settings-heading"><h1>Postavke</h1><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
-      <p id="settings-status" class="settings-status" role="status" aria-live="polite">Spremno</p>
-      <button class="settings-danger" type="button">✕&nbsp;&nbsp;Zatvori</button>
+      <div class="settings-header-feedback">
+        <p id="settings-status" class="settings-status" role="status" aria-live="polite">Spremno</p>
+      </div>
+      <button type="button" class="settings-close" data-open-view="hotbar">Zatvori</button>
     </header>
     <div class="settings-body">
       <nav class="settings-nav settings-panel" aria-label="Grupe postavki">
-        <p class="settings-nav-label">Kategorije</p>
-        <button type="button" data-settings-action="general-settings" aria-pressed="true">Opće postavke</button>
-        <button type="button" data-settings-action="gaze-settings" aria-pressed="false">Postavke pogleda</button>
-        <button type="button" data-settings-action="speech-settings" aria-pressed="false">Postavke govora</button>
-        <p id="settings-save-note" class="settings-nav-note">Promjene se primjenjuju i čuvaju automatski.</p>
-        <button id="retry-settings" type="button" data-settings-action="retry-settings" hidden>Pokušaj sačuvati</button>
+        <p class="settings-nav-label">Postavke</p>
+        <button type="button" data-settings-action="general-settings" aria-current="page">Aplikacija</button>
+        <button type="button" data-settings-action="gaze-settings">Pogled i odabir</button>
+        <button type="button" data-settings-action="speech-settings">Govor i tastatura</button>
+        <button type="button" data-settings-action="support-settings">Podrška</button>
+        <div id="settings-save-state" class="settings-save-state" role="status" aria-live="polite"><p id="settings-save-note">Promjene se primjenjuju i čuvaju automatski.</p><button id="retry-settings" type="button" data-settings-action="retry-settings" hidden>Pokušaj sačuvati</button></div>
       </nav>
       <section id="general-settings" class="settings-page settings-panel" aria-labelledby="general-settings-title">
         <header class="settings-page-header">
-          <h2 id="general-settings-title">Opće postavke</h2>
-          <p>Pokretanje, zapisivanje i ažuriranje aplikacije.</p>
+          <h2 id="general-settings-title">Aplikacija</h2>
+          <p>Pokretanje i verzija aplikacije.</p>
           <button class="settings-danger" type="button">Isključi aplikaciju</button>
         </header>
-        <p class="settings-group-label">Pokretanje i dijagnostika</p>
+        <p class="settings-group-label">Pokretanje</p>
         <div class="settings-options">
-          <label class="settings-checkbox"><input id="startup-enabled" type="checkbox">Pokreni uz Windows</label>
-          <label class="settings-checkbox"><input id="logging-enabled" type="checkbox">Uključi zapisivanje</label>
-          <label class="settings-checkbox"><input id="startup-launcher" type="checkbox">Prikaži PowerShell</label>
+          <label class="settings-checkbox"><input id="startup-enabled" type="checkbox" role="switch"><span class="switch-label">Pokreni uz Windows</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+          <label class="settings-checkbox"><input id="startup-launcher" type="checkbox" role="switch"><span class="switch-label">Prikaži PowerShell</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
         </div>
-        <section class="settings-diagnostics-row" aria-labelledby="settings-diagnostics-title"><div><h3 id="settings-diagnostics-title">Snimite problem s pogledom</h3><p>Kratak dijagnostički snimak i paket za podršku.</p></div><button type="button" data-open-view="diagnostics">Dijagnostičko snimanje</button></section>
         <p class="settings-group-label">Verzija aplikacije</p>
         <section class="update-card" aria-labelledby="update-title">
           <div class="update-copy">
@@ -60,9 +60,18 @@
           </section>
         </section>
       </section>
+      <section id="support-settings" class="settings-page settings-panel" hidden aria-labelledby="support-settings-title">
+        <header class="settings-page-header"><h2 id="support-settings-title">Podrška</h2><p>Provjera pogleda, zapisivanje i dijagnostički snimci.</p></header>
+        <p class="settings-group-label">Zapisivanje</p>
+        <div class="settings-options support-options"><label class="settings-checkbox"><input id="logging-enabled" type="checkbox" role="switch"><span class="switch-label">Uključi zapisivanje</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label></div>
+        <p class="gaze-policy-scope">Ručno pokrenuto dijagnostičko snimanje radi i kada je opće zapisivanje isključeno.</p>
+        <p class="settings-group-label">Pomoć pri poteškoćama</p>
+        <section class="settings-diagnostics-row" aria-labelledby="settings-diagnostics-title"><div><h3 id="settings-diagnostics-title">Snimite problem s pogledom</h3><p>Kratak dijagnostički snimak i paket za podršku.</p></div><button type="button" data-open-view="diagnostics">Dijagnostičko snimanje</button></section>
+        <section class="settings-diagnostics-row"><div><h3>Provjerite pogled</h3><p>Položaj očiju, preciznost i proba odabira.</p></div><button type="button" data-open-view="gaze-check">Provjera pogleda</button></section>
+      </section>
       <section id="gaze-settings" class="settings-page settings-panel" hidden>
         <header class="settings-page-header">
-          <h2>Postavke pogleda</h2>
+          <h2>Pogled i odabir</h2>
           <p>Podesite odabir, pokazivač i provjerite pogled.</p>
         </header>
         <div class="gaze-settings-tabs" role="tablist" aria-label="Postavke pogleda">
@@ -72,50 +81,62 @@
         </div>
         <section id="gaze-selection-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-selection-tab">
         <div class="setting-row eye-policy-row"><div class="setting-copy"><h3><label for="eye-policy">Režim praćenja očiju</label></h3><p id="eye-policy-hint"></p></div><select id="eye-policy" aria-describedby="eye-policy-hint"></select></div>
-        <div id="eye-hold-row" class="setting-row"><div class="setting-copy"><h3>Trajanje kratkog prekida</h3><p>Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.</p></div><button id="eye-hold-less" type="button" aria-label="Kraće čuvanje napretka">−&nbsp; Manje</button><strong id="eye-hold-value" class="setting-value">150 ms</strong><button id="eye-hold-more" type="button" aria-label="Duže čuvanje napretka">+&nbsp; Više</button></div>
+        <div id="eye-hold-row" class="setting-row"><div class="setting-copy"><h3>Trajanje kratkog prekida</h3><p id="eye-hold-hint">Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.</p></div><button id="eye-hold-less" type="button" aria-label="Kraće čuvanje napretka" aria-describedby="eye-hold-hint">−&nbsp; Manje</button><strong id="eye-hold-value" class="setting-value">150 ms</strong><button id="eye-hold-more" type="button" aria-label="Duže čuvanje napretka" aria-describedby="eye-hold-hint">+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Pauza prije odabira</h3><p>Vrijeme čekanja prije nego što se krug napretka počne puniti.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">250 ms</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Vrijeme zadržavanja pogleda</h3><p>Vrijeme punjenja kruga napretka nakon početne pauze.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">850 ms</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Pauza između radnji</h3><p>Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">350 ms</strong><button>+&nbsp; Više</button></div>
-        <div class="gaze-feedback-options">
-          <label class="settings-checkbox"><input id="show-tracking-feedback" type="checkbox" checked>Obavijesti o praćenju pogleda</label>
-          <button class="settings-primary" type="button" aria-pressed="true">Prikaži napredak radnje</button>
-        </div>
-        <p class="gaze-policy-scope">Režim važi za kontrole aplikacije, uključujući Upravljač. Pomjeranje pokazivača i direktni klikovi na desktopu zahtijevaju oba oka.</p>
+        <fieldset class="gaze-feedback-group">
+          <legend class="visually-hidden">Obavijesti i prikaz napretka</legend>
+          <div class="gaze-feedback-options">
+          <label class="settings-checkbox"><input id="show-tracking-feedback" type="checkbox" role="switch" checked><span class="switch-label">Obavijesti o praćenju pogleda</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+          <label class="settings-checkbox"><input id="show-selection-progress" type="checkbox" role="switch" checked><span class="switch-label">Prikaži napredak radnje</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+          </div>
+        </fieldset>
+        <p class="settings-guidance settings-guidance-compact"><strong>Primjena režima.</strong> Režim važi za kontrole aplikacije, uključujući Upravljač. Pomjeranje pokazivača i direktni klikovi na desktopu zahtijevaju oba oka.</p>
         </section>
         <section id="gaze-pointer-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-pointer-tab" hidden>
         <div class="setting-row"><div class="setting-copy"><h3>Radijus stabilnog pogleda</h3><p>Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">48 px</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Uglađivanje pokazivača</h3><p>Niže vrijednosti su mirnije, a više brže prate pogled.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">1.00</strong><button>+&nbsp; Više</button></div>
-        <p class="settings-group-label">Ponašanje i kalibracija</p>
-        <div class="settings-action-grid">
-          <button class="settings-primary" type="button">Pomjeraj pokazivač pogledom</button>
-          <button class="settings-primary" type="button">Prikaži oznaku pogleda</button>
-          <label class="settings-checkbox"><input type="checkbox" checked>Koristi precizno uvećanje</label>
+        <div class="settings-split">
+        <section class="settings-control-group" aria-labelledby="pointer-behavior-title"><h3 id="pointer-behavior-title">Ponašanje pokazivača</h3>
+          <label class="settings-checkbox"><input id="move-pointer" type="checkbox" role="switch" checked><span class="switch-label">Pomjeraj pokazivač pogledom</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+          <label class="settings-checkbox"><input id="show-gaze-marker" type="checkbox" role="switch" checked><span class="switch-label">Prikaži oznaku pogleda</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+          <label class="settings-checkbox"><input type="checkbox" role="switch" checked><span class="switch-label">Koristi precizno uvećanje</span><span class="switch-state" aria-hidden="true"></span><i class="switch-track" aria-hidden="true"></i></label>
+        </section>
+        <section class="settings-control-group" aria-labelledby="calibration-actions-title"><h3 id="calibration-actions-title">Kalibracija i provjera</h3>
           <button type="button">Pokreni Tobii kalibraciju</button>
           <button type="button" data-open-view="gaze-check">Provjera pogleda</button>
+        </section>
         </div>
-        <p class="gaze-policy-scope">Pokazivač, Brze radnje i precizno uvećanje zahtijevaju oba oka u svakom režimu. Provjera pogleda koristi izabrani režim i ne šalje unos drugim programima.</p>
+        <p class="settings-guidance settings-guidance-compact"><strong>Pokazivač i provjera.</strong> Pokazivač, Brze radnje i precizno uvećanje zahtijevaju oba oka u svakom režimu. Provjera pogleda koristi izabrani režim i ne šalje unos drugim programima.</p>
         </section>
         <section id="gaze-stability-settings" class="gaze-settings-content" role="tabpanel" aria-labelledby="gaze-stability-tab" hidden>
           <div class="setting-row"><div class="setting-copy"><h3>Čuvanje odabira uz rub</h3><p>Govor, Tastatura i gornja traka. 0 isključuje čuvanje.</p></div><button id="edge-hold-less" type="button">−&nbsp; Manje</button><strong id="edge-hold-value" class="setting-value">120 ms</strong><button id="edge-hold-more" type="button">+&nbsp; Više</button></div>
-          <p class="gaze-policy-scope">Kratak izlazak blizu ruba zamrzava napredak. Nastavak traži povratak na isto dugme prije isteka. Izvan dugmeta nema napretka ni potvrde.</p>
-          <p class="gaze-policy-scope">Ako pogled ostane na susjednom dugmetu, ono nakon isteka počinje od nule. Duže čuvanje zato usporava prelazak na susjedno dugme. Udaljeniji odlazak odmah prekida čuvanje.</p>
-          <p class="gaze-policy-scope">Raspon za probu: 0 do 300 ms, korak 20 ms; zadano 120 ms. Prostorna tolerancija ostaje ista. Ovo ne mijenja režim praćenja očiju niti ispravlja kalibraciju.</p>
+          <section class="settings-guidance" aria-labelledby="edge-help-title">
+            <h3 id="edge-help-title">Kako djeluje čuvanje uz rub</h3>
+            <ul>
+              <li><strong>Kratak izlazak:</strong> napredak se zamrzne. Povratak na isto dugme prije isteka nastavlja odabir. Izvan dugmeta nema napretka ni potvrde.</li>
+              <li><strong>Prelazak na drugo dugme:</strong> ako pogled ostane na susjednom dugmetu, ono nakon isteka počinje od nule. Duže čuvanje usporava taj prelazak. Udaljeniji odlazak odmah prekida čuvanje.</li>
+            </ul>
+            <p><strong>Raspon:</strong> 0 do 300 ms, korak 20 ms; zadano 120 ms. Prostorna tolerancija ostaje ista.</p>
+            <p>Ovo ne mijenja režim praćenja očiju niti ispravlja kalibraciju.</p>
+          </section>
         </section>
       </section>
       <section id="speech-settings" class="settings-page settings-panel" hidden>
         <header class="settings-page-header">
-          <h2>Postavke govora</h2>
+          <h2>Govor i tastatura</h2>
           <p>Podesite glas i raspored tastature za komunikaciju.</p>
         </header>
         <div class="setting-row setting-choice"><div class="setting-copy"><h3>Pismo tastature</h3></div><button id="settings-script-preview" type="button" data-script-toggle>Latinica</button></div>
         <div class="setting-row voice-choice-row">
-          <div id="voice-choices" class="voice-choices" role="group" aria-label="Glas">
-            <button type="button" data-voice="standard" aria-pressed="true">Standardni</button>
-            <button type="button" data-voice="natural" aria-pressed="false">Prirodni</button>
-            <button type="button" data-voice="efendija" aria-pressed="false">Efendija</button>
+          <div id="voice-choices" class="voice-choices" role="radiogroup" aria-label="Glas">
+            <label class="voice-option"><input type="radio" name="voice" data-voice="standard" checked><span>Standardni</span></label>
+            <label class="voice-option"><input type="radio" name="voice" data-voice="natural"><span>Prirodni</span></label>
+            <label class="voice-option"><input type="radio" name="voice" data-voice="efendija"><span>Efendija</span></label>
           </div>
+          <div id="arabic-voice-preview" class="active-voice-card" hidden><span>Glas za arapski</span><strong>Prirodni · Hamed</strong><span>Potreban je internet</span></div>
           <p id="voice-hint">Standardni radi bez interneta. Prirodni i Efendija trebaju internet.</p>
-          <button id="arabic-voice-preview" type="button" disabled hidden>Prirodni · Hamed</button>
         </div>
         <div id="eleven-summary" class="eleven-summary">
           <div><p class="connection-label"><span id="eleven-connection-dot" class="connection-dot" aria-hidden="true"></span><strong id="eleven-summary-title">Efendija · ElevenLabs</strong></p><p id="eleven-summary-copy">ElevenLabs je povezan.</p><p class="fallback-note">Zamjenski glasovi: Prirodni → Standardni.</p></div>
@@ -123,16 +144,20 @@
         </div>
         <div id="standard-speed" class="setting-row"><div class="setting-copy"><h3>Brzina govora</h3><p>Podešava samo Standardni glas.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">155 riječi/min</strong><button>+&nbsp; Više</button></div>
         <div class="setting-row"><div class="setting-copy"><h3>Broj slova u grupi</h3><p>Broj slova u svakoj grupi na ekranima za govor i tastaturu.</p></div><button>−&nbsp; Manje</button><strong class="setting-value">5</strong><button>+&nbsp; Više</button></div>
-        <div class="settings-action-grid"><button id="test-selected-voice" class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button type="button" data-settings-action="audio-settings">Sačuvani zvuk</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div>
-        <button id="stop-selected-voice" type="button" hidden>■ Zaustavi</button>
+        <div class="settings-split speech-tools">
+        <section class="settings-control-group" aria-labelledby="speech-test-title"><h3 id="speech-test-title">Proba glasa</h3>
+        <div class="speech-test-actions"><button id="test-selected-voice" class="settings-primary" type="button">▶&nbsp;&nbsp;Isprobaj govor</button><button id="stop-selected-voice" type="button" disabled>■ Zaustavi</button></div>
         <p id="selected-voice-test-status" class="speech-test-status" role="status" aria-live="polite"></p>
         <progress id="selected-voice-progress" aria-label="Govor je aktivan" hidden></progress>
+        </section>
+        <section class="settings-control-group" aria-labelledby="speech-library-title"><h3 id="speech-library-title">Biblioteka</h3><div class="speech-library-actions"><button type="button" data-settings-action="audio-settings">Sačuvani zvuk</button><button type="button" data-settings-action="learning-settings">Naučene riječi</button></div></section>
+        </div>
       </section>
       <section id="eleven-settings" class="settings-page settings-panel" hidden aria-labelledby="eleven-settings-title">
         <header class="settings-page-header">
           <button type="button" data-settings-action="speech-settings">←&nbsp; Nazad</button>
           <h2 id="eleven-settings-title">ElevenLabs · Efendija</h2>
-          <button id="check-eleven-connection" type="button">Provjeri vezu</button>
+          <div class="connection-actions"><button id="check-eleven-connection" type="button">Provjeri vezu</button><details class="info-help"><summary aria-label="O provjeri veze"><span aria-hidden="true">i</span></summary><div><strong>Šta provjera radi?</strong><p>Provjerava dostupnost računa, glasova i modela. Ne generiše govor i ne troši kredite za izgovor.</p><p>Za probu odabranog glasa koristite „Isprobaj Efendiju“.</p></div></details></div>
         </header>
         <section class="eleven-key-card" aria-labelledby="eleven-key-label">
           <div class="field-heading"><label id="eleven-key-label" for="eleven-api-key">API ključ</label></div>
@@ -149,23 +174,31 @@
           </div>
         </section>
         <p id="eleven-connection-status" role="status" aria-live="polite">ElevenLabs je povezan.</p>
-        <div class="eleven-selects">
-          <label for="eleven-voice">Moji glasovi<select id="eleven-voice"><option value="preview-voice">Efendija Fikret</option></select></label>
-          <label for="eleven-model">Model<select id="eleven-model"><option value="eleven_v4">Eleven v4</option><option value="eleven_v3">Eleven v3</option></select></label>
-        </div>
-        <div class="voice-tuning">
+        <div class="eleven-layout">
+        <fieldset class="eleven-voice-group">
+          <legend>Glas i način izgovora</legend>
+          <div class="eleven-selects">
+          <div class="eleven-field"><label for="eleven-voice">Moji glasovi</label><select id="eleven-voice"><option value="preview-voice">Efendija Fikret</option></select></div>
+          <div class="eleven-field"><label for="eleven-model">Model</label><select id="eleven-model"><option value="eleven_v4">Eleven v4</option><option value="eleven_v3">Eleven v3</option></select></div>
+          </div>
+          <div class="voice-tuning">
           <div class="stability-control"><strong>Stabilnost</strong><div class="stability-choices" role="group" aria-label="Stabilnost"><button type="button" data-stability="0" aria-pressed="false">Kreativno</button><button type="button" data-stability="50" aria-pressed="true">Prirodno</button><button type="button" data-stability="100" aria-pressed="false">Stabilno</button></div></div>
-          <label>Sličnost glasa <output id="similarity-value">80%</output><span>Sličnost odabranom glasu</span><div><button type="button" data-tune="similarity" data-step="-5">−</button><input id="similarity" type="range" min="0" max="100" value="80" aria-label="Sličnost glasa"><button type="button" data-tune="similarity" data-step="5">+</button></div></label>
-        </div>
+          <div class="similarity-control"><div class="tuning-heading"><label for="similarity">Sličnost glasa</label><output id="similarity-value" for="similarity">80%</output></div><div class="similarity-actions"><button type="button" data-tune="similarity" data-step="-5" aria-label="Smanji sličnost glasa">−</button><input id="similarity" type="range" min="0" max="100" value="80" aria-label="Sličnost glasa"><button type="button" data-tune="similarity" data-step="5" aria-label="Povećaj sličnost glasa">+</button></div></div>
+          </div>
+        </fieldset>
+        <section class="eleven-preview" aria-labelledby="eleven-preview-title">
+        <h3 id="eleven-preview-title">Proba i potrošnja</h3>
         <section class="credit-balance" aria-label="ElevenLabs krediti"><strong id="credit-label">Preostalo 24.000 / 30.000 kredita (80%)</strong><progress id="credit-progress" max="100" value="80" aria-label="Preostali krediti"></progress><span id="credit-note">Posljednje provjereno stanje računa. Osvježava se pri otvaranju i nakon govora.</span></section>
         <section class="eleven-test-card" aria-labelledby="eleven-test-title">
-          <div><h3 id="eleven-test-title">SELAM. DOBRO MI DOŠLI.</h3><p class="credit-note">Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.</p></div>
+          <div><h3 id="eleven-test-title">Selam. Dobro mi došli.</h3><p class="credit-note">Proba troši ElevenLabs kredite. Priprema može trajati do 30 sekundi.</p></div>
           <button id="test-eleven-voice" type="button" class="settings-primary">▶&nbsp; Isprobaj Efendiju</button>
-          <button id="stop-test-voice" type="button" hidden>■ Zaustavi</button>
+          <button id="stop-test-voice" type="button" disabled>■ Zaustavi</button>
           <progress id="test-voice-progress" aria-label="Govor je aktivan" hidden></progress>
           <p id="eleven-test-status" class="speech-test-status" role="status" aria-live="polite"></p>
         </section>
-        <div class="eleven-privacy-note"><p>Dozvole: izgovor, čitanje glasova i modela; podaci o računu za kredite.<br>Izgovor šalje tekst ElevenLabsu. ElevenLabs može sačuvati poslani tekst; rad bez čuvanja postoji samo za Enterprise. Zamjenski glasovi: Prirodni → Standardni.</p></div>
+        <div class="eleven-privacy-note"><p>Dozvole: izgovor, čitanje glasova i modela; podaci o računu za kredite.</p><p>Izgovor šalje tekst ElevenLabsu. ElevenLabs može sačuvati poslani tekst; rad bez čuvanja postoji samo za Enterprise.</p><p>Zamjenski glasovi: Prirodni → Standardni.</p></div>
+        </section>
+        </div>
       </section>
       <section id="audio-settings" class="settings-page settings-panel" hidden aria-labelledby="audio-settings-title">
         <header class="settings-page-header"><h2 id="audio-settings-title">Sačuvani zvuk</h2><p>Preuzeti snimci spremljenih fraza i odgovora.</p><button type="button" data-settings-action="speech-settings">←&nbsp; Nazad</button></header>
@@ -201,21 +234,27 @@
     <a id="tracking-setting-preview" href="tracking.html">Pregled obavijesti o praćenju</a>
   </details>
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
-    <p>Stavka 5 ticketa #92: Odabir pogledom i Pokazivač i provjera su dva taba unutar postojeće kategorije Postavke pogleda. Kontrole ostaju visoke 58 px, bez skrolanja na 1280 × 720 logičkih piksela. Pogledom se prolazi kroz tri izbora režima, kao kroz postojeće izbore verzija; miš otvara dropdown.</p>
+    <p>Provjeri vezu ostaje radnja; zasebno info dugme objašnjava da provjera ne generiše govor. Pomoć se otvara klikom ili tastaturom, a Escape je zatvara i vraća fokus. Greške, potrošnja kredita i privatnost ostaju vidljivi. Dodatno objašnjenje prati <a href="https://design-system.service.gov.uk/components/details/">GOV.UK smjernice za pomoć koja nije potrebna svakom korisniku</a>.</p>
+    <p>Hamed je informacija o glasu za arapski, a ne onemogućeno dugme. ElevenLabs odvaja grupu Glas i način izgovora od grupe Proba i potrošnja; na užem panelu grupe idu jedna ispod druge. Nazivi Moji glasovi i Model stoje iznad svojih kontrola. Prekidač je uz lijevu stranu naziva, a cijeli red ostaje cilj odabira. Obavijesti i prikaz napretka odvojeni su linijom ispod podešavanja vremena. Raspored prati <a href="https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/forms">Microsoft smjernice za oznake i raspored obrazaca</a> i <a href="https://www.w3.org/WAI/tutorials/forms/grouping/">W3C smjernice za povezane grupe kontrola</a>.</p>
+    <p>Četiri kategorije razdvajaju aplikaciju, pogled, govor i podršku. Tabovi imaju podvučen aktivni prikaz; izbor glasa koristi radio opcije. Prekidači pokazuju napisano stanje, a cijeli red je meta. Na stranici pokazivača prekidači su lijevo, kalibracija i provjera desno. Proba glasa i Biblioteka imaju odvojene grupe radnji. Zaustavi ostaje vidljivo na istom mjestu, ali je onemogućeno dok nema aktivne probe. Duža objašnjenja koriste ograničenu širinu i odvojene korake; sigurnosna ograničenja ostaju vidljiva. Greška čuvanja ostaje u zaglavlju. <a href="design-system.html">Boje, font i komponente</a> definišu zajednički smjer. HTML je referenca rasporeda; Qt prikaz provjerava se u generisanoj galeriji.</p>
+    <p>Odabir pogledom, Pokazivač i provjera te Stabilnost uz rub su tri taba unutar kategorije Pogled i odabir. Kontrole ostaju visoke najmanje 58 px. Raspored provjeriti na 1280 × 720 logičkih piksela. Pogledom se prolazi kroz tri izbora režima, kao kroz postojeće izbore verzija; miš otvara dropdown.</p>
     <p>Oba oka je početni režim, uključujući stare ili neispravne postavke. Čuvanje napretka je 50–500 ms, korak 50 ms, početno 150 ms. Red ostaje na istom mjestu, onemogućen izvan režima kratkih prekida; sačuvano trajanje se ne mijenja pri promjeni režima. Promjena režima ili trajanja poništava tekući pokušaj. Izbor drugog taba također prekida pokušaj na prethodnom prikazu.</p>
     <p>U probnom režimu jedno oko dopušta novi i završeni izbor samo uz svježe, validne podatke o pogledu. Nedostatak pogleda prikazuje čekanje, bez automatske promjene režima. Sva postojeća dugmad aplikacije, tastature, dijalozi i Controller klikovi prate režim. Direktno pomjeranje pokazivača, desktop klikovi, Brze radnje i precizno uvećanje zadržavaju oba oka. Početna pauza, zadržavanje, ponavljanje i postojeće potvrde ostaju na snazi.</p>
     <p>Referenca koristi probne podatke; kvalitet glasa potvrđuje se slušanjem u aplikaciji. Glas Efendija je treći izbor uz Standardni i Prirodni. Izbor se čuva odvojeno od glasa koji se privremeno koristi.</p>
     <p>API ključ se čuva tek odabirom Sačuvaj ključ, u Windows Credential Manageru trenutnog korisnika. Ne ulazi u JSON postavke, instalater niti zapisnike. Sačuvani ključ prikazuje potvrdu i dugmad Zamijeni ključ i Ukloni ključ; polje je skriveno. Zamjena otvara prazan, maskiran unos; Odustani zadržava stari ključ. Uspješno čuvanje zatvara unos; neuspješno čuvanje zadržava unos skriven za ponovni pokušaj. Provjeri vezu i Isprobaj Efendiju zahtijevaju čuvanje zamjene ili Odustani. Uklanjanje otvara prazan unos. Ovaj HTML ne čuva uneseni ključ. Postavke glasa i modela u aplikaciji se čuvaju automatski; promjena modela prekida prethodni izgovor i zahtijeva novu probu. Neuspjela provjera ne briše prethodno sačuvan ključ ili glas.</p>
     <p>Lista glasova sadrži samo sačuvane glasove s ElevenLabs računa, preko filtera voice_type=saved; ne dodaje podrazumijevane glasove ili ranije sačuvani ID izvan kolekcije. Ako prethodni glas nije u listi, odaberite sačuvani glas prije probe. Prazna kolekcija prikazuje Nema glasova. Za izbor glasa i modela potrebne su dozvole Čitanje glasova i Čitanje modela uz Pretvaranje teksta u govor za izgovor. Nedostajuća dozvola ima zasebnu poruku i ne znači da je ključ neispravan. Čitanje podataka o računu je neobavezan za stanje kredita; nakon isteka pauze novi Izgovori može ponovo pokušati Efendiju i bez te dozvole. Pritisak na već odabrani glas zadržava njegovu oznaku.</p>
-    <p>Stabilnost koristi tri dugmeta: Kreativno, Prirodno i Stabilno. Sličnost glasa koristi klizač i dugmad −/+. <a href="../USER_GUIDE.md#efendija-voice-and-elevenlabs-setup">Korisnički vodič</a> definiše zadane vrijednosti, kredite i čuvanje zvuka.</p>
+    <p>Stabilnost koristi tri dugmeta: Kreativno, Prirodno i Stabilno. Sličnost glasa koristi klizač i dugmad −/+. <a href="../features/elevenlabs.md">Korisnički vodič</a> definiše zadane vrijednosti, kredite i čuvanje zvuka.</p>
     <p>Provjeri vezu čita dostupnost računa, glasa i modela bez generisanja. Isprobaj Efendiju troši kredite i mora potvrditi rezultat baš tog glasa; uspješan zamjenski glas ne predstavlja uspješnu probu Efendije. Dok priprema ili izgovor traju, test je onemogućen, indikator je animiran i dostupno je Zaustavi. Završetak, prekid i greška vraćaju test. Obavijest o nedostupnosti upućuje na Prirodni, pa Standardni, bez promjene odabranog glasa. Arapski i dalje koristi Hamed i čuva izbor bosanskog glasa za povratak.</p>
     <p>Preuzeti snimak cijele spremljene fraze ili odgovora zadržava se nakon zaustavljanja ili greške reprodukcije, osim kada je zvuk nečitljiv. Kombinacije više stavki se ne čuvaju. Brisanje, izmjena stavke i Obriši sačuvani zvuk uklanjaju odgovarajući zvuk i sprečavaju naknadni upis starog zahtjeva. Greška čuvanja ne sprečava izgovor; prikazuje Zvuk nije sačuvan uz upozorenje da ponavljanje može trošiti kredite.</p>
     <ul>
-      <li>Pri visini prikaza od 720 px Postavke koriste uže gornju i donju marginu, ali dugmad za pogled zadržavaju svoje visine. Cijela stranica s kalibracijom staje unutar ekrana.</li>
-<li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Svi redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px.</li>
+      <li>Raspored zadržava visinu kontrola od najmanje 58 px. Akcije za verzije i Podršku koriste desnu kolonu od 290 px uz razmak 12 px. Sadržaj stranice može se pomicati kada dugačke poruke zauzmu više prostora. Navigacija i Zatvori ostaju na istom mjestu.</li>
+<li>Akcije u Postavkama koriste tri jednake kolone i visinu 58 px; kalibracija zauzima jednu ćeliju. Glas je odmah ispod pisma tastature. Na širokom panelu redovi za podešavanje koriste iste širine: Manje 104 px, vrijednost 216 px i Više 104 px, uz razmak 12 px. Na užem panelu opis prelazi u zaseban red, a sve tri kontrole ostaju dostupne. Unos ključa zauzima cijeli red iznad svojih radnji.</li>
 <li>Opće postavke provjeravaju sva službena stabilna izdanja s Windows paketom. Trenutna verzija je uvijek odvojena od izbora za instalaciju. Odabir sam po sebi ne mijenja instalaciju. Pogledom se prolazi kroz izbore; miš otvara dropdown.</li>
 <li>Instaliraj i ponovo pokreni prvo preuzima i provjerava paket dok aplikacija radi. Prije zatvaranja upozorava na nesačuvan unos i omogućava odustajanje. Greška ostavlja aplikaciju i podatke dostupnim. Nema automatske instalacije.</li>
 <li>Provjera i promjena pokretanja uz Windows rade u pozadini. Ostale kontrole ostaju dostupne. Dok promjena traje, označeno stanje prati posljednji izbor. Zatvaranje Postavki ne odbacuje zatražene promjene dok aplikacija radi; ponovo otvorene Postavke provjeravaju stanje nakon tih promjena. Izbor prikaza PowerShell prozora primjenjuje se i kada je napravljen prije završetka početne provjere.</li></ul>
-<p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p></details>
+<p>Postavke ostaju aktivne u ovoj sesiji ako čuvanje ne uspije. U Postavkama poruka ostaje vidljiva pri promjeni kartice, a Pokušaj sačuvati ponavlja upis. Promjene iz bočnih tastatura i Upravljača koriste isto upozorenje u Postavkama.</p><p>Qt prati raspored s četiri stranice. Skrolanje poništava nezavršen odabir; kontrole izvan vidljivog dijela ne mogu primiti pogled. Otvorena pomoć dopušta samo ponovno biranje njenog info dugmeta za zatvaranje.</p>
+<p>Krug odabira ostaje unutar dugmeta uz najmanje 8 px do rubova. Na karticama i kontrolama visine 58 px njegov prečnik je 42 px; oznaka pauze ostaje unutar kruga. Isti prilagodljivi prikaz važi za sve prozore i dijaloge, prema <a href="selection-progress.html">referenci napretka odabira</a>.</p>
+<p>Kartica glasa Hamed zadržava najmanje 58 px visine i kada se raspored ponovo računa nakon promjene pisma.</p>
+  </details>
 </body>
 </html>

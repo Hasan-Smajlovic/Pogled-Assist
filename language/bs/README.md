@@ -9,9 +9,7 @@ This directory keeps editable model inputs separate from evaluation data and gen
 - `model/core/starters.tsv` assigns additional weight to useful sentence starters.
 - `model/domains/islamic.tsv` contains project-authored Islamic terminology and conversation phrases for the separate Islamic model layer.
 
-These TSV files are maintained by hand. Rebuild the corresponding prepared model and rerun its tests and evaluations after changing one of them.
-
-The prepared models' metadata records the archive or reviewed source, inputs, preparation script, tokenizer, and model checksums used for each build. Compare those hashes with the current files before review. Refactoring or formatting a preparation script can require a rebuild even without an intended behavior change; follow the [preparation and evaluation commands](#preparation-and-evaluation) for the rebuild order and commands.
+Maintain these TSV files by hand and rebuild the affected model after editing them. Prepared-model metadata records source, input, script, tokenizer and model checksums. The [commands below](#preparation-and-evaluation) define rebuild order and evaluation.
 
 ## Evaluation
 
@@ -38,9 +36,7 @@ Reproduce the frozen Bosnian suggestion measurements from the repository root:
 .\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
 ```
 
-The development set is available for model decisions. Do not tune from the held-out result. The scoring contract and frozen hashes are under `tests\fixtures\speech_suggestions`.
-
-The original held-out messages have now been inspected in repeated reviews; keep their frozen text as a regression set, not a fresh blind quality estimate. The frozen fixture protocol records the rules used for the first comparison; its instruction to withhold those messages no longer describes their current status. An independently authored and reviewed set, withheld until model selection is complete, is still needed for that claim. Reports separate sentence starters, exact next-word hits before the first letter, and completion queries along the simulated typing path. Their percentages are not interchangeable.
+Use the development set for model decisions; do not tune from held-out results. The original held-out messages have been inspected in repeated reviews and now provide regression evidence, not a fresh blind estimate. `tests/fixtures/speech_suggestions/protocol.md` and its checksum are frozen records of the first comparison; do not rewrite that protocol to describe a later review. Fresh validation requires an independently authored set withheld until model selection is complete. Reports distinguish starters, next-word hits before typing and completions along the typing path; their percentages are not interchangeable.
 
 When changing the prepared language data, compare the supported vocabulary sizes in one corpus pass before rebuilding the bundled model:
 
@@ -52,11 +48,11 @@ When changing the prepared language data, compare the supported vocabulary sizes
 
 The ranking comparison holds language data fixed and compares the original fixed weights with adaptive discounts of 2, 10, and 40 on development messages only. It rejects latency or quality regressions, checks that sparse contexts back off while supported contexts remain useful, and records its selection rule and recommendation. If changing the chosen discount, update `WordModel.context_discount` and rerun the vocabulary comparison before evaluating the regression set.
 
-The verified CLASSLA archive is a local development input and is not downloaded by setup or included in a release. Its source URL and integrity hashes are in the bundled model metadata. Candidate selection uses only the development set; run the held-out evaluation once after the model choice is fixed. The [model metadata](../../pogled_assist/assets/bosnian-model.meta.json) records the archive, inputs, preparation script, and tokenizer used for that build. Compare those recorded checksums with the files being reviewed; the presence of a bundled model does not establish that it was built from the current source. Keep the archive outside the repository's tracked files for future rebuilds.
+The CLASSLA archive is a local input, neither downloaded by setup nor bundled in releases. Keep it outside tracked files. Its URL and integrity hashes are in [model metadata](../../pogled_assist/assets/bosnian-model.meta.json). Choose candidates using development data, then run the held-out regression after fixing the choice.
 
-`language\bs\model\core\conversation.tsv`, `starters.tsv`, and `spelling.tsv` are build inputs that the installed application does not load. Rebuild the bundled model after changing them or the preparation script. Spelling replacements apply only to web training data; personal spelling and typed text are preserved. The vocabulary budget reserves space for reviewed words, and reviewed word combinations survive the web-only pruning limits. Run the commands above to refresh the generated model, metadata, and comparison reports before review. An old report does not validate a model with a different checksum.
+Spelling replacements affect web training data only; personal spelling and typed text stay intact. Reviewed words receive reserved vocabulary space and their combinations survive web-only pruning. Generated reports must match the reviewed model and source checksums.
 
-Preparation and tokenizer checksums cover the complete source files. A refactor or formatting change therefore requires rebuilding the affected model even when prediction behavior is intended to stay the same. Run `.\dev.ps1 format` before preparation so formatting cannot immediately invalidate the new metadata. Never replace a recorded checksum by hand to make a test pass.
+Run `.\dev.ps1 format` before preparation. Checksums cover complete preparation/tokenizer files, so even a formatting-only source change requires rebuilding the affected model and reports. Compare metadata to final source before review; never replace hashes by hand to make tests pass.
 
 The reviewed Islamic terminology is a separate offline layer, so it can be rebuilt without downloading the 2.63 GB CLASSLA archive:
 

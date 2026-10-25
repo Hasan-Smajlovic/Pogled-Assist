@@ -2,7 +2,6 @@ window.createReferenceGaze = () => {
   'use strict';
   const ring = document.getElementById('gaze-ring');
   const toggle = document.getElementById('gaze-demo');
-  const calm = document.body.dataset.referencePage === 'speech';
   const GAZE_PAUSE_MS = 250, GAZE_FILL_MS = 850, GAZE_EDGE_MARGIN = 24;
   const storedEdgeHold = Number(ReferenceDesign.readSession('edge-hold-ms', 120));
   const GAZE_LEAVE_GRACE_MS = Number.isFinite(storedEdgeHold) ? Math.min(300, Math.max(0, Math.round(storedEdgeHold / 20) * 20)) : 120;
@@ -79,7 +78,7 @@ window.createReferenceGaze = () => {
     const held = gazeAwayStart !== null;
     if (!held) gazeLastSeen = now;
     const elapsed = gazeLastSeen - gazeStart;
-    if (elapsed >= GAZE_PAUSE_MS) renderGazeRing(elapsed);
+    if (elapsed >= GAZE_PAUSE_MS) renderGazeRing(elapsed, held);
     if (!held && elapsed >= GAZE_PAUSE_MS + GAZE_FILL_MS) {
       activateGaze(now);
       return;
@@ -87,10 +86,11 @@ window.createReferenceGaze = () => {
     gazeFrame = requestAnimationFrame(tickGaze);
   }
 
-  function renderGazeRing(elapsed) {
+  function renderGazeRing(elapsed, held) {
     clearTimeout(firedTimer);
-    ring.dataset.state = 'active';
+    ring.dataset.state = held ? 'held' : 'active';
     const rect = gazeTarget.getBoundingClientRect();
+    ring.style.setProperty('--ring-size', `${Math.max(0, Math.min(64, rect.width - 16, rect.height - 16))}px`);
     (gazeTarget.closest('dialog') || document.body).append(ring);
     ring.style.left = `${rect.left + rect.width / 2}px`;
     ring.style.top = `${rect.top + rect.height / 2}px`;
@@ -105,12 +105,10 @@ window.createReferenceGaze = () => {
     clickFromGaze = true;
     target.click();
     clickFromGaze = false;
-    if (calm) {
-      (document.querySelector('dialog[open]') || document.body).append(ring);
-      ring.dataset.state = 'fired';
-      ring.hidden = false;
-      firedTimer = setTimeout(() => { ring.hidden = true; }, 220);
-    }
+    (document.querySelector('dialog[open]') || document.body).append(ring);
+    ring.dataset.state = 'fired';
+    ring.hidden = false;
+    firedTimer = setTimeout(() => { ring.hidden = true; }, 220);
     // Require leaving the target before another dwell can start.
     gazeTarget = target;
   }

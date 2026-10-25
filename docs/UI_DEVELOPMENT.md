@@ -1,6 +1,6 @@
 # UI development and review
 
-This guide owns mouse gaze simulation, the design surface map, rendered UI review, and manual Windows and Tobii checks. Use the [development guide](DEVELOPMENT.md) for setup, automated checks, and test fakes. For publication setup, permissions, and recovery, use the [UI gallery guide](UI_GALLERY.md).
+This guide owns mouse gaze simulation, the design surface map, rendered UI review, and manual Windows and Tobii checks. Use the [development guide](DEVELOPMENT.md) for setup and automated checks; use [Testing](TESTING.md) for boundary fakes. For publication setup, permissions, and recovery, use the [UI gallery guide](UI_GALLERY.md).
 
 Read the sections needed for the change:
 
@@ -38,10 +38,17 @@ Use this to inspect selection cancellation, the gaze marker, and the caregiver c
 
 ### Application design reference workflow
 
-The [application design reference](design/speech-keyboard-reference.html) is the design source of truth for the visible Pogled Assist interface. That historical filename is now the entry point; old fragments such as `#tracking` open the matching standalone page. Open the HTML files directly in a browser; they use local styles and classic scripts, without a server or build step.
+The [application design reference](design/speech-keyboard-reference.html) is the design source of truth for the visible Pogled Assist interface. That historical filename is now the entry point; old fragments such as `#tracking` open the matching standalone page. Serve the static files from the repository root, then open [the reference index](http://127.0.0.1:8000/speech-keyboard-reference.html) or [Settings](http://127.0.0.1:8000/settings.html):
+
+```powershell
+.\.venv\Scripts\python.exe -m http.server 8000 --bind 127.0.0.1 --directory docs/design
+```
+
+On macOS, use `python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/design`. No build step is needed. Keep the server in its terminal and stop it with Ctrl+C. Prefer HTTP when browser tools block `file://` URLs. After edits, use a hard refresh or disable the browser cache; cached CSS can show an older layout even when the HTML is current. If port 8000 is occupied, select a free port and use that port in the URL.
 
 | Surface | HTML document | Styles and interaction |
 | --- | --- | --- |
+| Visual direction, fonts and component states | [design-system.html](design/design-system.html) | `docs/design/assets/design-system.css`, `docs/design/assets/design-system.js`; palette, typography and control-state reference |
 | Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
 | Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
@@ -53,13 +60,33 @@ The [application design reference](design/speech-keyboard-reference.html) is the
 | Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
 | Installation summary | [installation.html](design/installation.html) | Shared styles; illustrative actions only |
 
-Shared navigation and preview session state live in `docs/design/assets/reference.js`; shared tokens and controls are in `docs/design/assets/reference.css`. `docs/design/assets/eye-policy.js` shares the eye-policy labels and preview choices across Settings, tracking feedback, the gaze check and selection progress. `docs/design/assets/diagnostic-preview.js` shares synthetic recording state, status badges and preview choices across Diagnostics, Settings, gaze check, Speech, tracking feedback, Keyboard, Controller and hotbar; it never records actual input or creates files. The [diagnostics reference](design/diagnostics.html) owns indicator states and placement. The tracking page also reuses Speech's layout styles. Keyboard data and the mouse gaze simulation have separate shared scripts, `docs/design/assets/keyboard-data.js` and `docs/design/assets/gaze-demo.js`. Preview state is separate from application data and settings. Each page owns its feature notes; the [reference notes](design/reference-notes.html) own shared language conventions. Other gaze overlays do not yet have their own pages. Add the relevant page before changing one of those surfaces.
+Every visible layout, copy, control-size, state or interaction change must update its matching reference and assets in the same pull request. Review the HTML at the target size before implementing Qt, then compare the generated gallery with it. This applies to every window, sidebar, overlay, dialog and system control. Add a reference before changing a surface absent from the map. Edit the index only when navigation changes. For changes with no visible or interaction impact, state that in the pull request instead of editing the reference.
 
-Every change to visible layout, copy, control sizes, states, or interaction flow must update the matching page and its assets in the same pull request. When instructions name `docs/design/speech-keyboard-reference.html`, they refer to this collection through its entry point; edit the index only when navigation changes. Update and review the reference first, then implement the matching PySide6 change so the reference never describes an older UI. This rule applies to every window, sidebar, overlay, dialog, and system control, not only the Speech window. If a code change has no visible or interaction impact, state that explicitly in the pull request instead of editing the reference unnecessarily.
+[Boje i komponente](design/design-system.html#review-title) owns the palette and control states; [O ovoj referenci](design/reference-notes.html) owns standard Bosnian terminology. Each feature page owns its detailed design notes. Platform fonts and native behavior still require the manual Windows checks below.
 
-Review the HTML reference at the target display size before generating the Qt gallery. The reference documents the intended result; the gallery and real application checks confirm that the implementation matches it.
+Use this review matrix alongside those notes:
 
-Application-owned labels and feedback use standard Bosnian. The [**O ovoj referenci** page](design/reference-notes.html) owns the UI terminology and language conventions; check these when adding or reviewing copy.
+| Surface | Required visual and interaction checks |
+| --- | --- |
+| Speech and Tracking | Dividers separate message, predictions, letters and utility actions. A vertical divider separates Space/Delete from keyboard/script changes. The first three utility buttons share the letter area; the script button aligns with the system column above, including its 280–480-pixel width limits. Utility height stays fixed in both scripts; letter groups take the remaining height. Dense editors, Arabic and library pages fit without overlap. Main controls reserve recording status space; letter/confirmation dialogs keep a 36-pixel title row and a 32-pixel tracking row. Recording and eye notices must not move targets. Letter characters are 56 pixels, or 44 for twelve-letter groups. Selection feedback is a steady cyan ring. |
+| Settings | The title, recording slot and Close share a header separated from the content. Help text stays with its control; adjustment columns and test/stop cells align. Only the active page determines scrolling. Scrolling cancels pending selection and clipped controls are excluded from hit testing. Review switches, the Arabic voice card and ElevenLabs voice/tuning versus preview/credits/privacy groups at 1280 × 720 and 800-pixel window width. Narrow key setup stacks its heading, input and actions, with no horizontal scrolling; reflow cancels pending selection. |
+| Optional help | Connection checking remains an action beside its information disclosure; Gaze check has a position/distance disclosure. Open help with mouse and keyboard, close with Escape and verify focus return and narrow containment. Required warnings remain outside disclosures. |
+| Gaze check | At 1280 × 720, review preparation, completed/interrupted results, all tabs, measurements, history and save/export failures. Distinguish insufficient/unmeasured data from measured misses; keep the five-target table in the first result view. Preserve the 760 × 168 measurement panel, target clearance and 16-pixel action gaps. Keep policy and simulation text beside the title, with the paused-input notice in the header. Archive/diagnostics and Close share a 60-pixel action row; separate them with a divider. Device setup stays separate from the next check. Calibration and recovery notices remain visible. |
+| Diagnostics | Underlined navigation tabs remain distinct from start/stop/export actions and support keyboard navigation. Recording states preserve action geometry. Privacy and incomplete-recording warnings remain visible. Check narrow HTML overflow as well. |
+| Keyboard and Controller | At a 380-pixel sidebar width, tab words stay intact. Recording uses a fixed bottom status slot without moving keys. |
+
+Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` checks painted bounds across the application, including the Settings gaze path; it does not establish native overlay stacking or Tobii behavior.
+
+For unobstructed screenshots, add `preview=clean`, for example `speech.html?preview=clean`. This hides reference menus and shared notes, while ordinary views retain preview tools. Repeatable Speech parameters are `state=keyboard`, `single`, `editor-single`, `phrases` or `answers`, and `script=latin` or `arabic`. Keyboard and Controller accept `group-size=1`, `2`, `5` or `12`. Dense Speech keyboards paginate at twelve keys; libraries at four entries. Preview controls never change application settings.
+
+Shared assets under `docs/design/assets/` have these owners:
+
+- `reference.js`: navigation and preview session state; `reference.css`: tokens and shared controls.
+- `eye-policy.js`: shared eye-policy choices and labels.
+- `diagnostic-preview.js`: synthetic recording states and badges; [Diagnostics](design/diagnostics.html) owns their placement. The preview records no real input and creates no files.
+- `keyboard-data.js`: keyboard data; `gaze-demo.js`: mouse gaze simulation. Tracking also reuses Speech layout styles.
+
+The reference describes intended behavior; it is not an implementation status report. Where a reference still differs from Qt, state the concrete difference in its notes. Verify Qt through the gallery, automated checks and applicable Windows/Tobii checks.
 
 ### Rendered UI gallery
 
@@ -69,7 +96,7 @@ Generate the gallery:
 .\dev.ps1 ui -Open
 ```
 
-The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The default 1280 × 720 gallery contains 69 representative screenshots; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
+The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots already rendered by `tests/ui/test_ui_rendering.py`. Once Pages is configured, the separate **UI gallery** workflow publishes a browser gallery and updates one PR bot comment with main screenshots, resolution link, the rendered commit, and a download link. Status reporting, setup, permissions and cleanup are defined in [UI gallery publication](UI_GALLERY.md). To review the artifact offline, download and extract it from the workflow run, then open `index.html` inside `1280x720`. The default 1280 × 720 gallery contains 72 representative screenshots; the artifact is kept for 14 days and any available screenshots are uploaded even when the test suite fails. CI sets `POGLED_ASSIST_UI_GALLERY` to the artifact directory. Without that variable, rendering tests continue to use pytest's temporary directories. The Pages site uses a separate generated index and only checked PNG files; it does not publish the HTML supplied by a PR's CI artifact. Available screenshots from a failed CI run can appear, with the failure shown in the comment. A gallery is visual evidence, not a passing test or a Windows/Tobii verification result.
 
 The local and published galleries share six review groups, a six-image Overview, thumbnail grids and full-size image links. Overview reuses existing PNGs. Groups show their screenshot counts and order representative states before extended variants; unknown images from older or newer CI artifacts appear under Other previews. Images load lazily. No application UI or interaction behavior changes when selecting a gallery profile.
 
@@ -79,10 +106,10 @@ The default `core` profile renders:
 | --- | --- | --- |
 | Speech (`speech`) | 13 | Main keyboard, categories, answers, phrases, editor, alarm/sleep/exit, Arabic letters/symbols/marks/editor |
 | Keyboard and Controller (`keyboards`) | 12 | All main tabs, narrow Latin pagination, Arabic keyboards and second symbols pages |
-| Settings (`settings`) | 10 | General, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
+| Settings (`settings`) | 11 | Application, Support, all three eye policies, pointer/check, edge stability enabled/disabled, speech, learned words and unsaved-input update warning |
 | Tracking and selection (`tracking`) | 8 | Hotbar normal/eye loss/disconnected/simulation/one-eye readiness/hold, calm active and paused Speech selection rings |
-| Gaze check and diagnostics (`gaze-check`) | 17 | Position, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback, free view, and diagnostic recording ready/active/history |
-| Voice and account (`voice`) | 9 | Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
+| Gaze check and diagnostics (`gaze-check`) | 18 | Position and its information disclosure, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback, free view, and diagnostic recording ready/active/history |
+| Voice and account (`voice`) | 10 | Connection-check information disclosure, Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
 The other 77 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:
 
@@ -94,10 +121,12 @@ The other 77 screenshots remain available through the `full` profile. Use extend
 
 `-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
 
-The full profile retains all 146 states:
+<details>
+<summary>Full profile: all 149 states</summary>
+
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
-- General, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
+- Application, Support, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
 - Diagnostic recording: ready, recording, finishing, saved history with optional report, incomplete with omitted events, write failure and export failure; passive badges in the hotbar, Settings, Speech and its letters dialog, Keyboard, Controller, gaze-check header and free view. Speech also previews finishing, saved, incomplete and error indicator states.
 - Speech selection progress: calm active ring and frozen ring with pause mark
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup (connected, replacing key, Nema glasova, missing key, invalid key, missing permission, credential save failure, quota, low/critical credits and preparation/playback), and saved-audio controls
@@ -112,13 +141,17 @@ The full profile retains all 146 states:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
+</details>
+
 PNG capture uses a fixed Qt quality of 80 for lossless compression with less encoding work. Keep the image and gallery byte limits enforced by the publication script, and review the generated gallery when changing encoding.
 
-The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check equal action cells, the single-cell calibration control, voice choices below keyboard script, and aligned adjustment columns. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
+The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check the four navigation choices, grouped switches, voice choices below keyboard script, aligned adjustment columns, equal test/stop buttons and the separate ElevenLabs groups. Keep 12 logical pixels between ordinary rows and between voice controls and their help, with 16 pixels from that help to the next setting. Titles and descriptions stay closer together; dense gaze adjustment rows retain 6 pixels between rows. Preserve 58-pixel controls and allow vertical scrolling when content needs more height. Check both information disclosures with mouse, gaze where supported, keyboard and Escape; optional help must not hide required warnings. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and covered by UI interaction tests; it is not part of either screenshot profile. Review it separately using `PogledAssist.exe --installation-check` after a build.
 
-Check the gallery at 100 percent and at the scale used by the target machine. Look for clipped labels, overlapping controls, inconsistent spacing, low contrast, missing icons, unexpected scrollbars, and controls that are too small for gaze.
+Check the gallery at 100 percent and at the scale used by the target machine. Look for clipped labels, overlapping controls, inconsistent spacing, low contrast, missing icons, unexpected scrollbars, and controls that are too small for gaze. Compact Settings rows end at their last control, with no trailing inset; preserve the 12-pixel gaps within adjustment groups. Hidden key actions must not leave an empty spacer at the end of the wide API-key row. Diagnostics uses 16 pixels between its footer actions and between content columns.
+
+Static gaze-setting guidance uses a left border, short bold lead-ins and wrapped paragraphs with a maximum width of 860 pixels. Keep it next to the setting it explains; retain the eye-policy scope, edge-hold limits and calibration caveat. Do not turn permanent instructions into dismissible alerts or hover-only help.
 
 ### Manual Windows checks
 
@@ -140,7 +173,7 @@ On a normal development machine, verify:
 - Settings survive an application restart.
 - ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed credentials, masked input after a failed save, and refusal to use an unsaved key.
 - The voice list matches My Voices. A missing selected ID requires explicit reselection before either Settings page can test it. An empty list says **Nema glasova**.
-- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) owns defaults, cache behavior and timing.
+- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [user guide](features/elevenlabs.md) owns defaults, cache behavior and timing.
 - Check credit warnings and unavailable balance without User: Read. A slow balance refresh leaves voice/model choices and an unrelated dwell usable.
 - During preparation/playback, check the indicator inside the lower part of the Speech button, alignment with Fraze, stable text/target geometry, Stop, preserved text and no repeated paid test until gaze leaves its completed button. Check the static activity mark when the platform style disables widget animations. Stop and immediately speak again; the new request must reach ElevenLabs without a false timeout.
 - Check missing catalog permissions. The read-only check must not generate speech. Separately listen to the intended Fikret clone, Eleven v4 and sentence-case text.
