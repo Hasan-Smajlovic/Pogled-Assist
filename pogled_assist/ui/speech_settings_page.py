@@ -1,13 +1,13 @@
 """General speech choices, tuning and test actions in Settings."""
 
 from PySide6.QtCore import QSignalBlocker, QSize
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS
 from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, FALLBACK_NOTE, PLAYBACK_LABELS
 from .settings_controls import (
-    action_grid,
+    CONTROL_HEIGHT,
     busy_indicator,
     content_layout,
     retain_size_when_hidden,
@@ -29,14 +29,15 @@ class SpeechSettingsPage(QFrame):
     def _build(self):
         page = self
         layout = content_layout(page)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(6)
-        layout.addWidget(styled_label("Postavke govora", "sectionTitle", page))
-        layout.addWidget(
+        header = QVBoxLayout()
+        header.setSpacing(4)
+        header.addWidget(styled_label("Govor i tastatura", "sectionTitle", page))
+        header.addWidget(
             styled_label(
                 "Podesite glas i raspored tastature za komunikaciju.", "sectionDescription", page
             )
         )
+        layout.addLayout(header)
 
         self._script_combo = self._controls.choice(
             KEYBOARD_SCRIPTS,
@@ -69,6 +70,10 @@ class SpeechSettingsPage(QFrame):
 
     def _build_voice_choices(self, layout):
         page = self
+        voice_group = QWidget(page)
+        voice_layout = QVBoxLayout(voice_group)
+        voice_layout.setContentsMargins(0, 0, 0, 4)
+        voice_layout.setSpacing(12)
         self._voice_choices = QWidget(page)
         voices = QHBoxLayout(self._voice_choices)
         voices.setContentsMargins(0, 0, 0, 0)
@@ -80,13 +85,21 @@ class SpeechSettingsPage(QFrame):
             )
             voices.addWidget(button, 1)
             self._voice_buttons[value] = button
-        layout.addWidget(self._voice_choices)
+        voice_layout.addWidget(self._voice_choices)
         self._voice_hint = styled_label(BOSNIAN_VOICE_HINT, "settingHint", page)
         self._voice_hint.setWordWrap(True)
-        layout.addWidget(self._voice_hint)
-        self._arabic_voice = styled_label("Prirodni · Hamed", "settingTitle", page)
-        self._arabic_voice.setFixedHeight(58)
-        layout.addWidget(self._arabic_voice)
+        self._arabic_voice = QFrame(page)
+        self._arabic_voice.setObjectName("settingRow")
+        self._arabic_voice.setMinimumHeight(CONTROL_HEIGHT)
+        arabic = QHBoxLayout(self._arabic_voice)
+        copy = QVBoxLayout()
+        copy.addWidget(styled_label("Glas za arapski", "settingTitle", page))
+        copy.addWidget(styled_label("Koristi se uz internet.", "settingHint", page))
+        arabic.addLayout(copy, 1)
+        arabic.addWidget(styled_label("Prirodni · Hamed", "settingTitle", page))
+        voice_layout.addWidget(self._arabic_voice)
+        voice_layout.addWidget(self._voice_hint)
+        layout.addWidget(voice_group)
         self._eleven_summary, grid, self._eleven_summary_hint = setting_row(
             self, "Efendija · ElevenLabs", FALLBACK_NOTE
         )
@@ -98,7 +111,6 @@ class SpeechSettingsPage(QFrame):
 
     def _build_speech_actions(self, layout):
         page = self
-        layout.addWidget(styled_label("AKCIJE", "groupLabel", page))
         self._test_speech_button = self._controls.button(
             "Isprobaj govor", self._owner._request_speech_test, QSize(240, 58), "fa5s.play"
         )
@@ -113,12 +125,24 @@ class SpeechSettingsPage(QFrame):
         self._saved_audio_button = self._controls.button(
             "Sačuvani zvuk", self._owner._open_audio, QSize(220, 58)
         )
-        layout.addLayout(
-            action_grid(
-                (self._test_speech_button, self._saved_audio_button, self._learned_words_button)
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(12)
+        actions.setVerticalSpacing(8)
+        actions.addWidget(styled_label("Proba glasa", "settingTitle", page), 0, 0, 1, 2)
+        actions.addWidget(styled_label("Biblioteka", "settingTitle", page), 0, 2, 1, 2)
+        for column, button in enumerate(
+            (
+                self._test_speech_button,
+                self._stop_speech_button,
+                self._saved_audio_button,
+                self._learned_words_button,
             )
-        )
-        layout.addWidget(self._stop_speech_button)
+        ):
+            button.setMinimumWidth(120)
+            actions.setColumnStretch(column, 1)
+            actions.addWidget(button, 1, column)
+        layout.addSpacing(12)
+        layout.addLayout(actions)
         self._speech_test_progress = busy_indicator(page)
         layout.addWidget(self._speech_test_progress)
         retain_size_when_hidden(self._stop_speech_button)
@@ -145,7 +169,8 @@ class SpeechSettingsPage(QFrame):
         test_label = PLAYBACK_LABELS.get(
             playback_state, "Isprobaj Efendiju" if efendija else "Isprobaj govor"
         )
-        self._stop_speech_button.setVisible(active)
+        self._stop_speech_button.setVisible(True)
+        self._stop_speech_button.setEnabled(active)
         self._speech_test_progress.setVisible(active)
         self._test_speech_button.setText(test_label)
         self._controls.rename(self._test_speech_button, test_label)

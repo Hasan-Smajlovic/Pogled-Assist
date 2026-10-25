@@ -1,18 +1,35 @@
 :root {
   color-scheme: dark;
-  font-family: "Segoe UI", Arial, sans-serif;
-  color: #eef2f8;
-  background: #111318;
-  --surface: #1c2029;
-  --border: #394253;
-  --blue: #245f9f;
-  --cyan: #8bd5f5;
+  --font-ui: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --canvas: #15191f;
+  --panel: #1d242d;
+  --surface: #283442;
+  --border: #71869b;
+  --divider: #394959;
+  --text: #edf2f7;
+  --muted: #b8c5d2;
+  --blue: #2e6478;
+  --cyan: #84c5d9;
+  --success: #a3d5ba;
+  --warning: #efd092;
+  --error: #f0b1b5;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--canvas);
   --gap: 12px;
 }
 * { box-sizing: border-box; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+body[data-preview-clean="true"] > .reference-switcher,
+body[data-preview-clean="true"] > .reference-tools,
+body[data-preview-clean="true"] > .check-preview-tools,
+body[data-preview-clean="true"] > .diagnostics-preview-tools,
+body[data-preview-clean="true"] > .design-notes { display: none; }
+body[data-preview-clean="true"] > #sidebar-screen > p,
+body[data-preview-clean="true"] > #controller-screen > p { display: none; }
 [hidden] { display: none !important; }
 body { margin: 0; padding: 12px; }
-button, input { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button {
   position: relative;
   min-width: 0;
@@ -21,30 +38,42 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  color: #f6f7fb;
+  color: var(--text);
   font-size: clamp(18px, 1.7vw, 26px);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
   cursor: pointer;
   touch-action: manipulation;
 }
-button:hover { border-color: var(--cyan); background: #262c38; }
+button:hover { border-color: var(--cyan); background: #334355; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
   outline: 3px solid var(--cyan);
   outline-offset: 3px;
 }
-button:disabled { opacity: .4; cursor: default; }
+button:disabled { opacity: 1; background: #222b35; border-color: #455363; color: #8595a6; cursor: default; box-shadow: none; }
 button[aria-pressed="true"], .primary {
-  border-color: #67b7dc;
+  border-color: var(--cyan);
   background: var(--blue);
-  color: #fff;
+  color: var(--text);
 }
-.primary:hover { background: #2e70b3; }
-.warning { background: #43381d; border-color: #927d40; color: #fde68a; }
-.danger { background: #4b2224; border-color: #a1535b; color: #ffd6d6; }
-.danger:hover { background: #663034; }
-.muted { color: #bac5d4; }
+.primary:hover { background: #346d82; }
+.warning { background: #3b3325; border-color: #a38b5d; color: var(--warning); }
+.danger { background: #442b33; border-color: #af7a86; color: #f7d9dc; }
+.danger:hover { background: #553640; }
+.muted { color: var(--muted); }
+.section-tabs { display:flex; align-items:stretch; gap:12px; border-bottom:1px solid var(--divider); flex-shrink:0; }
+.section-tabs button { min-height:52px; min-width:150px; padding:12px 20px; border:0; border-radius:6px 6px 0 0; background:transparent; font-size:17px; color:var(--muted); overflow-wrap:normal; }
+.section-tabs button:hover { background:var(--surface); color:var(--text); }
+.section-tabs [aria-selected="true"] { color:var(--text); font-weight:600; background:var(--panel); }
+.section-tabs [aria-selected="true"]::after { content:''; position:absolute; height:3px; bottom:-1px; left:12px; right:12px; background:var(--cyan); border-radius:3px; }
+@media (max-width:560px) {
+  .section-tabs { gap:8px; }
+  .section-tabs button { min-width:0; flex:1; padding:12px 8px; font-size:15px; }
+}
+html[data-preview-font="inter"] { --font-ui: Inter, "Segoe UI Variable", "Segoe UI", Arial, sans-serif; }
+[lang="ar"] { font-family: "Segoe UI", Tahoma, sans-serif; }
+button:disabled:hover { background: #222b35; border-color: #455363; color: #8595a6; }
 /* Prototype navigation stays outside application controls. */
 .reference-switcher, .reference-tools {
   position: fixed; bottom: 10px; z-index: 90;
@@ -77,6 +106,14 @@ button[aria-pressed="true"], .primary {
 .reference-cards span { display: block; margin-top: 8px; color: #bac5d4; font-size: 14px; }
 .design-notes { max-width: 1100px; margin: 20px auto 64px; line-height: 1.6; }
 .design-notes summary { cursor: pointer; color: #8bd5f5; }
+.info-help { position:relative; flex:0 0 auto; }
+.info-help > summary { width:58px; height:58px; display:grid; place-items:center; list-style:none; border:1px solid var(--border); border-radius:8px; color:var(--cyan); cursor:pointer; }
+.info-help > summary::-webkit-details-marker { display:none; }
+.info-help > summary span { display:grid; place-items:center; width:24px; height:24px; border:2px solid currentColor; border-radius:50%; font-size:17px; font-weight:700; font-family:Georgia, serif; }
+.info-help > summary:hover, .info-help[open] > summary { background:var(--surface); }
+.info-help > summary:focus-visible { outline:3px solid var(--cyan); outline-offset:3px; }
+.info-help > div { position:absolute; top:calc(100% + 8px); right:0; width:min(320px, 70vw); z-index:30; padding:16px; border:1px solid var(--cyan); border-radius:10px; background:var(--panel); box-shadow:0 8px 24px #0008; font-size:15px; line-height:1.5; }
+.info-help p { margin:8px 0 0; }
 
 @media (max-height: 760px) and (min-width: 901px) {
   body { padding: 8px; }
@@ -102,7 +139,11 @@ button[aria-pressed="true"], .primary {
 dialog .recording-dialog-header h2 { flex:1 1 250px; margin:0; }
 #letters-dialog .recording-dialog-header { margin-bottom:18px; }
 #letters-dialog .recording-dialog-header h2 { margin:0; }
-#letters-dialog .recording-dialog-header, #confirm-dialog .recording-dialog-header { display:grid; grid-template-columns:max-content minmax(0, 1fr); grid-template-rows:36px 24px; gap:0 12px; height:60px; }
+#letters-dialog .recording-dialog-header, #confirm-dialog .recording-dialog-header { display:grid; grid-template-columns:minmax(0, 1fr) auto; grid-template-rows:36px; gap:0 16px; min-height:36px; height:auto; }
 #letters-dialog .recording-dialog-header h2, #confirm-dialog .recording-dialog-header h2 { grid-column:1; grid-row:1; min-height:0; }
-#letters-dialog .recording-dialog-header .recording-slot, #confirm-dialog .recording-dialog-header .recording-slot { grid-column:1; grid-row:2; min-height:24px; }
+#letters-dialog .recording-dialog-header .recording-slot, #confirm-dialog .recording-dialog-header .recording-slot { grid-column:2; grid-row:1; min-height:24px; width:auto; justify-content:flex-end; }
 #letters-dialog .recording-dialog-header .recording-badge, #confirm-dialog .recording-dialog-header .recording-badge { padding:1px 4px; line-height:20px; }
+@media (max-width:560px) {
+  #letters-dialog .recording-dialog-header, #confirm-dialog .recording-dialog-header { grid-template-columns:minmax(0, 1fr); grid-template-rows:32px 24px; row-gap:6px; min-height:62px; }
+  #letters-dialog .recording-dialog-header .recording-slot, #confirm-dialog .recording-dialog-header .recording-slot { grid-column:1; grid-row:2; }
+}

@@ -43,6 +43,7 @@ GROUPS = {
         "Settings",
         (
             "settings-general",
+            "settings-support",
             "settings-gaze",
             "settings-gaze-hold",
             "settings-gaze-one-eye",
@@ -71,6 +72,7 @@ GROUPS = {
         "Gaze check and diagnostics",
         (
             "gaze-check-position",
+            "information-position",
             "gaze-check-precision",
             "gaze-check-results-details",
             "gaze-check-report-trials",
@@ -97,6 +99,7 @@ GROUPS = {
             "speech-voice-cached",
             "speech-voice-partial",
             "settings-elevenlabs-connected",
+            "information-connection",
             "settings-elevenlabs-replacing",
             "settings-elevenlabs-permission",
             "settings-elevenlabs-critical-credits",
@@ -117,6 +120,10 @@ CORE_NAMES = frozenset(name for _, names in GROUPS.values() for name in names)
 
 
 def group_for(name: str) -> str:
+    if name == "information-position":
+        return "gaze-check"
+    if name == "information-connection":
+        return "voice"
     if name.startswith(("keyboard-", "controller-")):
         return "keyboards"
     if name.startswith(("hotbar", "selection-", "speech-tracking-")):

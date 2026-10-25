@@ -36,7 +36,7 @@ The release pipeline currently has no Windows Authenticode signing step. Before 
 
 ## Update an installed release
 
-The installed app offers version selection in General Settings. See the [user flow](USER_GUIDE.md#update). It lists all official stable releases with the exact Windows ZIP and checksum assets, newest version first. It shows the installed version independently of the selection and checks again whenever Settings opens. No startup popup or automatic installation is used.
+The installed app offers version selection in **Postavke > Aplikacija**. See the [user flow](USER_GUIDE.md#update). It lists all official stable releases with the exact Windows ZIP and checksum assets, newest version first. It shows the installed version independently of the selection and checks again whenever Settings opens. No startup popup or automatic installation is used.
 
 The Settings action pins `-TargetVersion <major.minor.patch>` in the updater. That uses the official `/releases/tags/v<version>` endpoint and verifies the returned tag, stability flags, asset URLs, checksum and package `VERSION`. An explicit selection permits a downgrade. The app and updater use a private temporary request directory: the updater reports package readiness, and the app authorizes installation only after warning about unsaved input. The updater waits for that process to exit and refuses installation without the authorization or after cancellation. Closing Settings or the app cancels the request. Downloads and verification leave the running app available.
 
@@ -116,7 +116,7 @@ dist\PogledAssist-v<version>-windows-x64.zip
 
 The build downloads the pinned eSpeak MSI, Python x86 ZIP, and source archives into `.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without installing it globally, and freezes both Edge commands with a shared Python runtime. The first build needs internet; cached assets are rechecked on every build. A checksum mismatch fails the build before extraction.
 
-Each package also includes `BUILD_INFO.json`, generated from the source revision and local dirty state. The frozen smoke check validates that identity; recordings, normal logs and gaze-check reports use the same source. See the [build identity contract](ARCHITECTURE.md#build-identity). Verify the packaged revision/dirty state in a local support export before release. Logs and diagnostic recordings are preserved with the rest of `logs/` during installation and rollback.
+Each package also includes `BUILD_INFO.json`, generated from the source revision and local dirty state. The frozen smoke check validates that identity; recordings, normal logs and gaze-check reports use the same source. See the [build identity contract](DIAGNOSTICS.md#build-identity). Verify the packaged revision/dirty state in a local support export before release. Logs and diagnostic recordings are preserved with the rest of `logs/` during installation and rollback.
 
 No physical tracker, Tobii runtime, system speech installation, or network speech service is used by the package smoke test. It verifies bundled speech tools, MP3 decoder availability, the bundled Bosnian model checksum, and an offline prediction. Decoder availability does not prove audible playback.
 
@@ -131,7 +131,7 @@ Pull requests targeting `development` or `master` run:
 - `tests`
 - `windows-package`
 
-The active branch rulesets, checked on 23 September 2026, require `code-quality`, `tests`, and `windows-package`. Verify live rulesets before a release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules, hardware-independent UI rendering, and the enforced Python coverage floor. `dependency-review` additionally checks changed dependencies for known vulnerabilities. Its threshold and GitHub setup are documented in [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); it is not currently listed as a required branch check.
+Repository policy requires `code-quality`, `tests`, and `windows-package`. Verify live rulesets before a release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules, hardware-independent UI rendering, and the enforced Python coverage floor. `dependency-review` additionally checks changed dependencies for known vulnerabilities. Its threshold and GitHub setup are documented in [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); the documented required checks do not include it.
 
 The separate **UI gallery** workflow publishes screenshots after CI completes and keeps the existing PR comment current while CI runs or publication fails. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` jobs are not required PR checks. Pages setup and permissions are documented in [the UI gallery guide](UI_GALLERY.md#activation-and-recovery), and visual review is documented in [the UI development guide](UI_DEVELOPMENT.md#ui-review). Screenshots do not replace the software checks or manual Windows and Tobii validation.
 
@@ -147,13 +147,13 @@ Report software-only and Tobii hardware checks separately.
 
 For eye policies, edge selection stability, gaze-check reports, diagnostic recording/indicators and support export, use the [manual Windows checks](UI_DEVELOPMENT.md#manual-windows-checks) and [manual Tobii checks](UI_DEVELOPMENT.md#manual-tobii-checks) in the UI development guide. Record the tested build, settings and outcome. A valid package or readable support ZIP alone does not demonstrate improved tracking on the user's device.
 
-Software-only checks on a clean Windows x64 environment:
+Manual checks on a clean Windows x64 environment (including audible playback and online services):
 
 - Play Efendija MP3 audio through packaged Qt Multimedia, including decoder failure and stop/restart.
 - Exercise Prirodni fallback through packaged in-process `edge_tts`, then Standardni offline.
 - Confirm the Credential Manager key and saved settings survive update and rollback.
 - Listen to the Fikret clone with Eleven v4, sentence-case text and all three stability choices.
-- Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup).
+- Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](features/elevenlabs.md).
 - Verify the SHA-256 file before extraction.
 - Run `install_windows.ps1` and confirm installation under `C:\PogledAssist`.
 - From a verified downloaded ZIP with Internet marks retained, run install, update, rollback and the packaged launcher without an **Open File – Security Warning** prompt. Confirm UAC still appears when elevation is needed, the setup summary and main Qt window are visible, and unattended checks finish without user input. Separately record any SmartScreen, Smart App Control or organization policy result and verify the expected publisher/signatures when signing is introduced.
@@ -171,7 +171,7 @@ Software-only checks on a clean Windows x64 environment:
 - Confirm the setup summary distinguishes missing software, absent devices, detection failures, and unverified calibration. Check its download and calibration buttons and repeat check. Verify unattended installs show no UI.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
 - Open Settings, Speech, Keyboard, and Controller.
-- Disconnect networking before first Speech use and confirm `Brzi izbor` still offers starting words, completions, and next words.
+- Disconnect networking before first Speech use and confirm the suggestion row still offers starting words, completions, and next words.
 - Confirm suggestion selection and `Poništi riječ` produce the same text with mouse and simulated gaze, including Bosnian letters and punctuation spacing.
 - Open a phrase or answer editor, use a suggestion, cancel, and confirm the conversation and its undo state return unchanged. Repeat with a successful save.
 - Speak the same unchanged message twice, restart the app, and confirm personal learning was counted once and persists in `data\speech_learning.json`.

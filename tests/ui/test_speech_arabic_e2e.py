@@ -38,6 +38,9 @@ def test_arabic_speech_keys_marks_switching_and_stale_predictions(qtbot, make_sp
     window._show_symbols_level()
     for mark in ARABIC_MARKS:
         index = window._symbols.index(mark)
+        while window._keyboard_page < (index // 5) // 12:
+            window._next_page_button.click()
+            qtbot.wait(1)
         click_speech_action(qtbot, window, f"symbol-group:{index // 5}")
         button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}symbol:{index}"]
         assert button.text() == "◌" + mark

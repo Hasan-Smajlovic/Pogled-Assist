@@ -112,25 +112,20 @@
     document.querySelectorAll('.tracking-demo-target').forEach(button => {
       button.classList.remove('tracking-demo-target');
       button.style.removeProperty('--demo-progress');
-      button.removeAttribute('data-held');
-      button.querySelector('.tracking-gaze-dot')?.remove();
       button.querySelector('.tracking-hold-label')?.remove();
     });
     if ((!usable && !held) || context === 'message') return;
     const target = context === 'confirm' ? $('tracking-confirm') : $('tracking-letter-options').children[2];
     target.classList.add('tracking-demo-target');
+    target.style.setProperty('--demo-size', `${Math.max(0, Math.min(64, target.clientWidth - 16, target.clientHeight - 16))}px`);
     target.style.setProperty('--demo-progress', trackingPreviewProgress + '%');
     if (held) {
-      target.dataset.held = 'true';
       const pause = document.createElement('span');
-      pause.className = 'tracking-hold-label'; pause.textContent = 'Ⅱ Na čekanju';
+      pause.className = 'tracking-hold-label'; pause.textContent = 'Ⅱ';
+      pause.setAttribute('aria-hidden', 'true');
       target.append(pause);
       return;
     }
-    const dot = document.createElement('span');
-    dot.className = 'tracking-gaze-dot';
-    dot.setAttribute('aria-hidden', 'true');
-    target.append(dot);
   }
   function resizeTrackingPreview() {
     const stage = $('tracking-stage');

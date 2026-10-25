@@ -1,6 +1,9 @@
-.sidebar-reference { width: 380px; height: calc(100dvh - 110px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #171d29; }
+.sidebar-reference { width: min(380px, 100%); min-height: calc(100dvh - 16px); margin-left: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: var(--panel); }
+.sidebar-reference > :not(.sidebar-reference-grid) { flex-shrink: 0; }
+.sidebar-reference nav button[aria-pressed="true"], .sidebar-reference nav button[aria-current="page"] { background: var(--surface); border-color: var(--cyan); box-shadow: inset 0 -3px 0 var(--cyan); }
 .sidebar-reference nav, .sidebar-reference footer { display: flex; gap: 8px; }
-.sidebar-reference nav button, .sidebar-reference footer button { flex: 1; min-height: 52px; font-size: 18px; }
+.sidebar-reference nav button, .sidebar-reference footer button { flex: 1 1 0; min-width: 0; min-height: 52px; padding: 6px 4px; font-size: 16px; overflow-wrap: normal; word-break: normal; hyphens: none; }
+.sidebar-reference nav button { white-space: nowrap; }
 .sidebar-reference footer button { min-height: 58px; }
 .sidebar-reference-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .sidebar-reference-grid button { min-height: 54px; }
@@ -10,3 +13,6 @@
 #controller-screen .sidebar-reference nav, #controller-screen .sidebar-reference footer, #controller-screen .sidebar-reference-grid { width: 100%; min-width: 0; }
 #controller-screen .sidebar-reference nav button, #controller-screen .sidebar-reference footer button { flex: 1 1 0; }
 .system-actions button { white-space: normal; }
+@media (max-width: 360px) {
+  #controller-screen .sidebar-reference > nav:first-of-type { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

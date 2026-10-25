@@ -31,6 +31,45 @@ def gaze_check(qtbot, monkeypatch, request):
     return window, now, screen
 
 
+@pytest.mark.parametrize("simulated", [False, True])
+def test_header_context_and_actions_align_without_footer_notice(qtbot, simulated):
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+    window = GazeCheckWindow(GazeSettings(eye_tracking_policy="any"), simulated=simulated)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+
+    def rect(widget):
+        return QRect(widget.mapTo(window, QPoint()), widget.size())
+
+    def assert_header():
+        buttons = [window._history_button, window._diagnostics_button, window._close_button]
+        buttons = [button for button in buttons if button.isVisible()]
+        assert len({rect(button).top() for button in buttons}) == 1
+        assert all(button.height() == 60 for button in buttons)
+        assert rect(window._policy_label).left() > rect(window._title_label).right()
+        assert rect(window._notice).bottom() < rect(window._pages).top()
+        assert rect(window._notice).right() < rect(window._diagnostics_button).left()
+        assert all(window.rect().contains(rect(widget)) for widget in buttons)
+
+    qtbot.waitUntil(assert_header)
+    assert window._simulation_label.isVisible() == simulated
+    if simulated:
+        assert rect(window._simulation_label).left() > rect(window._title_label).right()
+        assert "Bez Tobii mjerenja" in window._simulation_label.text()
+    window._start_precision()
+    qtbot.waitUntil(lambda: window._check is not None)
+    window._stop_test()
+    qtbot.waitUntil(assert_header)
+    window._open_history()
+    qtbot.waitUntil(assert_header)
+    window.reset_check()
+    window.set_calibration_notice("Tobii postavke nisu dostupne.")
+    qtbot.waitUntil(assert_header)
+    assert "Tobii postavke nisu dostupne" in window._notice.text()
+
+
 def test_switching_check_modes_clears_previous_target_feedback(gaze_check, qtbot):
     window, _now, _screen = gaze_check
     for phase, start in (
@@ -52,6 +91,19 @@ def test_switching_check_modes_clears_previous_target_feedback(gaze_check, qtbot
         assert window._target.progress_target is None
         assert window._target.gaze_point is None
         assert window._test_progress.isVisible() == (phase == "precision")
+
+
+def test_precision_summary_keeps_missing_and_unmeasured_targets_distinct(gaze_check, qtbot):
+    window, _now, _screen = gaze_check
+    window._start_precision()
+    qtbot.waitUntil(lambda: window._check is not None)
+    window._check.results = [
+        FixationResult("Sredina", 90, 0.9, 12, 8, True, (0.5, 0.5)),
+        FixationResult("Gore lijevo", 90, 0.9, 80, 12, False, (0.3, 0.3)),
+        FixationResult("Gore desno", 2, 0.1, None, None, None, None),
+    ]
+    window._show_results()
+    assert [label.text() for label in window._precision_counts.counts] == ["1", "1", "1", "2"]
 
 
 def test_gaze_check_live_states_and_timeout_are_not_false_successes(gaze_check):
@@ -684,7 +736,9 @@ def _assert_fit_child(window, child, phase):
     bounds = QRect(child.mapTo(window, QPoint(0, 0)), child.size())
     assert window.rect().contains(bounds), (phase, child.text(), bounds)
     if isinstance(child, QPushButton):
-        assert child.height() >= 60
+        assert child.height() >= (
+            48 if child in (window._history_button, window._diagnostics_button) else 60
+        )
         assert child.fontMetrics().horizontalAdvance(child.text()) + 32 <= child.width()
     elif child.hasHeightForWidth():
         assert child.heightForWidth(child.width()) <= child.height(), (phase, child.text())
@@ -837,7 +891,7 @@ def test_gaze_check_feedback_precision_does_not_claim_stale_gaze_is_ready(gaze_c
     assert "Zadržite pogled" not in window._test_hint.text()
 
 
-@pytest.mark.parametrize("button,color", [(0, "#f0c84a"), (1, "#70dfa1")])
+@pytest.mark.parametrize("button,color", [(0, "#efd092"), (1, "#a3d5ba")])
 def test_gaze_check_feedback_trial_progress_distinguishes_neighbor(
     gaze_check, monkeypatch, button, color
 ):

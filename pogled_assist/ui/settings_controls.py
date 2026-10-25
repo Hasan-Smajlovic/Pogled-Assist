@@ -20,13 +20,29 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import themed_icon
+from .information_button import InformationButton
+from .settings_switch import SettingsSwitch
 
 GazeCallback = Callable[[], None]
 CONTROL_HEIGHT = 58
-ADJUST_BUTTON_WIDTH = 104
-VALUE_WIDTH = 216
+ADJUST_BUTTON_WIDTH = 84
+VALUE_WIDTH = 184
 CHOICE_WIDTH = 260
 CONTROL_SPACING = 12
+
+
+def guidance_note(parent: QWidget, text: str) -> QLabel:
+    """Keep static guidance readable and visually attached to its settings."""
+    note = styled_label(text, "settingGuidance", parent)
+    note.setTextFormat(Qt.RichText)
+    note.setWordWrap(True)
+    note.setMaximumWidth(860)
+    note.setStyleSheet(
+        "QLabel#settingGuidance { background: #283442; border: 0; "
+        "border-left: 3px solid #71869b; padding: 8px 14px; "
+        "color: #b8c5d2; font-size: 14px; }"
+    )
+    return note
 
 
 class SettingsControls:
@@ -44,10 +60,33 @@ class SettingsControls:
         self._interrupt_gaze()
 
     def action_at(self, point: QPoint) -> tuple[QWidget, GazeCallback] | None:
+        # Help opened with gaze must block actions behind its text.
+        disclosure = self._open_disclosure()
         for widget, action in self._actions.items():
-            if widget.isVisible() and widget.isEnabled() and global_rect(widget).contains(point):
+            if disclosure is not None and widget is not disclosure:
+                continue
+            if (
+                widget.isVisible()
+                and widget.isEnabled()
+                and widget.visibleRegion().contains(widget.mapFromGlobal(point))
+            ):
                 return widget, action
         return None
+
+    def _open_disclosure(self) -> InformationButton | None:
+        return next(
+            (
+                widget
+                for widget in self._actions
+                if isinstance(widget, InformationButton) and widget.popup.isVisible()
+            ),
+            None,
+        )
+
+    def close_help(self) -> None:
+        disclosure = self._open_disclosure()
+        if disclosure is not None:
+            disclosure.popup.close()
 
     def name(self, widget: QWidget) -> str:
         return self._names[widget]
@@ -77,8 +116,14 @@ class SettingsControls:
         button.setCheckable(True)
         return button
 
+    def info_button(self, title: str, text: str) -> InformationButton:
+        button = InformationButton(title, text, self._parent)
+        button.pressed.connect(self.interrupt_gaze)
+        self._register(button, button.click, title)
+        return button
+
     def checkbox(self, text: str, callback: GazeCallback, size: QSize) -> QCheckBox:
-        checkbox = QCheckBox(text, self._parent)
+        checkbox = SettingsSwitch(text, self._parent)
         _configure(checkbox, size)
         self._connect(checkbox, callback, text)
         return checkbox
@@ -103,8 +148,8 @@ class SettingsControls:
         self, title: str, hint: str, adjust: Callable[[float], None], step: float
     ) -> tuple[QFrame, QLabel]:
         row, layout, _hint = setting_row(self._parent, title, hint)
-        minus_button = self._adjust_button("Manje", "fa5s.minus", lambda: adjust(-step))
-        plus_button = self._adjust_button("Više", "fa5s.plus", lambda: adjust(step))
+        minus_button = self._adjust_button("Manje", lambda: adjust(-step))
+        plus_button = self._adjust_button("Više", lambda: adjust(step))
         value_label = _value_label(row)
 
         layout.addWidget(minus_button, 0, 1, 2, 1)
@@ -112,8 +157,12 @@ class SettingsControls:
         layout.addWidget(plus_button, 0, 3, 2, 1)
         return row, value_label
 
-    def _adjust_button(self, text: str, icon: str, callback: GazeCallback) -> QToolButton:
-        button = self.button(text, callback, QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT), icon)
+    def _adjust_button(self, text: str, callback: GazeCallback) -> QToolButton:
+        button = self.button(
+            ("- " if text == "Manje" else "+ ") + text,
+            callback,
+            QSize(ADJUST_BUTTON_WIDTH, CONTROL_HEIGHT),
+        )
         button.setObjectName("adjustButton")
         button.setFixedWidth(ADJUST_BUTTON_WIDTH)
         return button
@@ -137,14 +186,13 @@ class SettingsControls:
         self._actions[widget] = callback
         self._names[widget] = name
         widget.setProperty("gazeTarget", False)
-        widget.setProperty("gazePulse", "")
 
 
 def content_layout(page: QFrame) -> QVBoxLayout:
     page.setObjectName("contentPanel")
     layout = QVBoxLayout(page)
     layout.setContentsMargins(16, 16, 16, 16)
-    layout.setSpacing(8)
+    layout.setSpacing(12)
     return layout
 
 
@@ -159,7 +207,7 @@ def setting_row(parent: QWidget, title: str, hint: str = "") -> tuple[QFrame, QG
     row.setObjectName("settingRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     layout = QGridLayout(row)
-    layout.setContentsMargins(14, 4, 14, 4)
+    layout.setContentsMargins(12, 0, 0, 0)
     layout.setHorizontalSpacing(CONTROL_SPACING)
     layout.setVerticalSpacing(2)
     layout.setColumnStretch(0, 1)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from ..tracking.gaze_check import CheckSnapshot, FixationResult
 
@@ -15,7 +15,46 @@ TARGETS = (
     ("Dolje lijevo", 0.04, 0.94),
     ("Dolje desno", 0.96, 0.94),
 )
-COLORS = {True: "#70dfa1", False: "#f0c84a", None: "#bac5d4"}
+COLORS = {True: "#a3d5ba", False: "#efd092", None: "#b8c5d2"}
+
+
+class PrecisionSummary(QFrame):
+    """Keep missing measurements distinct from measured misses."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self.counts = []
+        for title in ("Blizu mete", "Izvan mete", "Premalo podataka", "Nije izmjereno"):
+            card = QFrame(self)
+            card.setStyleSheet("QFrame { background: #15191f; border-radius: 8px; }")
+            column = QVBoxLayout(card)
+            column.setContentsMargins(8, 6, 8, 6)
+            column.setSpacing(2)
+            value = QLabel("0", card)
+            value.setStyleSheet("font-size: 23px; font-weight: 600;")
+            value.setAccessibleName(title)
+            caption = QLabel(title, card)
+            caption.setStyleSheet("font-size: 13px; color: #b8c5d2;")
+            caption.setWordWrap(True)
+            column.addWidget(value)
+            column.addWidget(caption)
+            self.counts.append(value)
+            layout.addWidget(card, 1)
+
+    def set_results(self, results: list[FixationResult], total: int) -> None:
+        counts = [sum(result.near is state for result in results) for state in (True, False, None)]
+        counts.append(max(0, total - len(results)))
+        for label, count, color in zip(
+            self.counts,
+            counts,
+            (COLORS[True], COLORS[False], COLORS[None], COLORS[None]),
+            strict=True,
+        ):
+            label.setText(str(count))
+            label.setStyleSheet(f"font-size: 23px; font-weight: 600; color: {color};")
 
 
 class EyePositionView(QWidget):
@@ -30,7 +69,7 @@ class EyePositionView(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         box = QRectF(26, 24, max(1, self.width() - 52), max(1, self.height() - 88))
-        painter.setPen(QPen(QColor("#58647a"), 2, Qt.DashLine))
+        painter.setPen(QPen(QColor("#71869b"), 2, Qt.DashLine))
         painter.drawRoundedRect(box, 10, 10)
         positions = (self.snapshot.left_position, self.snapshot.right_position)
         markers = []
@@ -50,16 +89,16 @@ class EyePositionView(QWidget):
         for name, x, y, inside in markers:
             radius = 20 if name == "L/D" else 16
             painter.setPen(QPen(QColor(COLORS[inside]), 3))
-            painter.setBrush(QColor("#1c2029"))
+            painter.setBrush(QColor("#283442"))
             painter.drawEllipse(QPointF(x, y), radius, radius)
             painter.drawText(
                 QRectF(x - radius, y - radius, radius * 2, radius * 2), Qt.AlignCenter, name
             )
-        painter.setPen(QColor("#bac5d4"))
+        painter.setPen(QColor("#b8c5d2"))
         if all(position is None for position in positions):
             painter.drawText(box, Qt.AlignCenter, "Položaj očiju nije dostupan")
         depth = QRectF(26, self.height() - 43, max(1, self.width() - 52), 8)
-        painter.setBrush(QColor("#394253"))
+        painter.setBrush(QColor("#394959"))
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(depth, 4, 4)
         for position in positions:
@@ -73,7 +112,7 @@ class EyePositionView(QWidget):
                     6,
                     6,
                 )
-        painter.setPen(QColor("#bac5d4"))
+        painter.setPen(QColor("#b8c5d2"))
         font = QFont("Segoe UI")
         font.setPixelSize(15)
         painter.setFont(font)
@@ -124,9 +163,9 @@ class CheckTargetView(QWidget):
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#111318"))
-        painter.setPen(QPen(QColor("#8bd5f5"), 2))
-        painter.setBrush(QColor("#1c2029"))
+        painter.fillRect(self.rect(), QColor("#15191f"))
+        painter.setPen(QPen(QColor("#84c5d9"), 2))
+        painter.setBrush(QColor("#283442"))
         center = self.center()
         if self.trial:
             font = QFont("Segoe UI")
@@ -134,7 +173,7 @@ class CheckTargetView(QWidget):
             painter.setFont(font)
             for index in range(3):
                 rect = self.button_rect(index)
-                color = "#8bd5f5" if index == self.expected_button else "#58647a"
+                color = "#84c5d9" if index == self.expected_button else "#71869b"
                 painter.setPen(QPen(QColor(color), 2))
                 painter.drawRoundedRect(rect, 10, 10)
                 if index == self.progress_target:
@@ -145,22 +184,22 @@ class CheckTargetView(QWidget):
                             round((rect.width() - 8) * self.progress),
                             8,
                         ),
-                        QColor("#ffd36a" if self.paused else COLORS[index == self.expected_button]),
+                        QColor("#efd092" if self.paused else COLORS[index == self.expected_button]),
                     )
-                painter.setPen(QColor("#eef2f8"))
+                painter.setPen(QColor("#edf2f7"))
                 label = "Pogledaj" if index == self.expected_button else "Drugo"
                 if self.paused and index == self.progress_target:
                     label = "Ⅱ " + label
                 painter.drawText(rect, Qt.AlignCenter, label)
         else:
             for point in self.free_centers() if self.free else [center]:
-                painter.setPen(QPen(QColor("#8bd5f5"), 2))
+                painter.setPen(QPen(QColor("#84c5d9"), 2))
                 painter.drawEllipse(point, self.radius, self.radius)
-                painter.setPen(QPen(QColor("#eef2f8"), 3))
+                painter.setPen(QPen(QColor("#edf2f7"), 3))
                 painter.drawLine(point + QPoint(-9, 0), point + QPoint(9, 0))
                 painter.drawLine(point + QPoint(0, -9), point + QPoint(0, 9))
             if self.free and self.gaze_point is not None:
-                painter.setPen(QPen(QColor("#70dfa1"), 3))
+                painter.setPen(QPen(QColor("#a3d5ba"), 3))
                 painter.setBrush(Qt.NoBrush)
                 painter.drawEllipse(self.gaze_point, 10, 10)
 
@@ -176,8 +215,8 @@ class ResultMapView(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         box = QRectF(12, 12, self.width() - 24, self.height() - 24)
-        painter.fillRect(box, QColor("#111318"))
-        painter.setPen(QPen(QColor("#58647a"), 1))
+        painter.fillRect(box, QColor("#15191f"))
+        painter.setPen(QPen(QColor("#71869b"), 1))
         painter.drawRect(box)
         for result, (_, x, y) in zip(self.results, self.targets, strict=False):
             target = QPointF(box.left() + x * box.width(), box.top() + y * box.height())
