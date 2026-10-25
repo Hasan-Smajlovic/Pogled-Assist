@@ -75,6 +75,8 @@ Use this review matrix alongside those notes:
 | Diagnostics | Underlined navigation tabs remain distinct from start/stop/export actions and support keyboard navigation. Recording states preserve action geometry. Privacy and incomplete-recording warnings remain visible. Check narrow HTML overflow as well. |
 | Keyboard and Controller | At a 380-pixel sidebar width, tab words stay intact. Recording uses a fixed bottom status slot without moving keys. |
 
+Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` checks painted bounds across the application, including the Settings gaze path; it does not establish native overlay stacking or Tobii behavior.
+
 For unobstructed screenshots, add `preview=clean`, for example `speech.html?preview=clean`. This hides reference menus and shared notes, while ordinary views retain preview tools. Repeatable Speech parameters are `state=keyboard`, `single`, `editor-single`, `phrases` or `answers`, and `script=latin` or `arabic`. Keyboard and Controller accept `group-size=1`, `2`, `5` or `12`. Dense Speech keyboards paginate at twelve keys; libraries at four entries. Preview controls never change application settings.
 
 Shared assets under `docs/design/assets/` have these owners:

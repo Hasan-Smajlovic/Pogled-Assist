@@ -3,14 +3,14 @@
 .selection-preview header p { margin: 8px 0; color: #bec9d9; }
 .selection-preview-buttons { display: flex; align-items: center; justify-content: center; gap: 24px; flex: 1; }
 .selection-preview-buttons > button, .selection-preview-target { flex:1; max-width:280px; min-width:0; }
-.selection-preview-buttons button { width: 100%; height: 112px; }
+.selection-preview-buttons button { width: 100%; height: var(--target-height, 112px); min-height: 0; }
 .selection-preview-target { position: relative; }
 .selection-preview-note { margin: auto 0 12px; max-width: 850px; color: #bec9d9; line-height: 1.5; }
-.selection-progress-ring { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:64px; height:64px; pointer-events:none; }
+.selection-progress-ring { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:var(--ring-size, 64px); height:var(--ring-size, 64px); pointer-events:none; }
 .selection-progress-arc { position:absolute; inset:0; border-radius:50%; background:conic-gradient(var(--cyan) 65%, #84c5d933 0); mask:radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
 .selection-progress-ring[data-state="fired"] .selection-progress-arc { background:var(--cyan); }
 .selection-progress-symbol { display:none; }
-.selection-progress-ring[data-state="held"] .selection-progress-symbol { position:absolute; display:grid; place-items:center; top:68px; width:100%; height:18px; color:var(--cyan); font-size:18px; }
+.selection-progress-ring[data-state="held"] .selection-progress-symbol { position:absolute; display:block; bottom:0; width:100%; height:14px; text-align:center; line-height:14px; color:var(--cyan); font-size:12px; }
 .selection-preview-target[data-state] > button { border:1px solid var(--cyan); background:var(--panel); }
 .selection-preview-target[data-state="idle"] > button { border-color:var(--border); }
 @media (max-width:560px) { .selection-preview-buttons { gap:12px; } .selection-preview-buttons > button, .selection-preview-target { min-width:0; flex:1; } }

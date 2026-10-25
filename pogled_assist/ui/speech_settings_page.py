@@ -7,6 +7,7 @@ from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS
 from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, FALLBACK_NOTE, PLAYBACK_LABELS
 from .settings_controls import (
+    CONTROL_HEIGHT,
     busy_indicator,
     content_layout,
     retain_size_when_hidden,
@@ -89,6 +90,7 @@ class SpeechSettingsPage(QFrame):
         self._voice_hint.setWordWrap(True)
         self._arabic_voice = QFrame(page)
         self._arabic_voice.setObjectName("settingRow")
+        self._arabic_voice.setMinimumHeight(CONTROL_HEIGHT)
         arabic = QHBoxLayout(self._arabic_voice)
         copy = QVBoxLayout()
         copy.addWidget(styled_label("Glas za arapski", "settingTitle", page))

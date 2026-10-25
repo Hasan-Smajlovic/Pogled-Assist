@@ -117,6 +117,7 @@
     if ((!usable && !held) || context === 'message') return;
     const target = context === 'confirm' ? $('tracking-confirm') : $('tracking-letter-options').children[2];
     target.classList.add('tracking-demo-target');
+    target.style.setProperty('--demo-size', `${Math.max(0, Math.min(64, target.clientWidth - 16, target.clientHeight - 16))}px`);
     target.style.setProperty('--demo-progress', trackingPreviewProgress + '%');
     if (held) {
       const pause = document.createElement('span');

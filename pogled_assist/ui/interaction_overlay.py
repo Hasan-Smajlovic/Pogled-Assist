@@ -10,7 +10,7 @@ from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QWidget
 
 from ..windows.windows_z_order import force_window_topmost
 
@@ -38,6 +38,7 @@ class InteractionOverlayWindow(QWidget):
         self._active = False
         self._mode = "progress"
         self._progress = 0.0
+        self._ring_diameter = 64.0
         self._label = ""
         self._fired_started_ms = 0.0
         self._last_progress_point: QPoint | None = None
@@ -74,17 +75,21 @@ class InteractionOverlayWindow(QWidget):
 
         clamped_progress = _clamp(progress, 0.0, 1.0)
         compact_label = _compact_label(label)
+        center, diameter = _ring_geometry_at(point)
         now_ms = time.monotonic() * 1000
-        if self._progress_update_skippable(point, clamped_progress, compact_label, now_ms):
+        if diameter == self._ring_diameter and self._progress_update_skippable(
+            point, clamped_progress, compact_label, now_ms
+        ):
             return
 
         self._active = True
         self._mode = "progress"
         self._progress = clamped_progress
+        self._ring_diameter = diameter
         self._label = compact_label
         self._last_progress_point = QPoint(point)
         self._last_progress_update_ms = now_ms
-        self._move_center_to(point)
+        self._move_center_to(center)
         self._ensure_visible()
         self.update()
 
@@ -95,11 +100,12 @@ class InteractionOverlayWindow(QWidget):
         self._active = True
         self._mode = "fired"
         self._progress = 1.0
+        center, self._ring_diameter = _ring_geometry_at(point)
         self._label = _compact_label(label)
         self._last_progress_point = QPoint(point)
         self._last_progress_update_ms = time.monotonic() * 1000
         self._fired_started_ms = time.monotonic() * 1000
-        self._move_center_to(point)
+        self._move_center_to(center)
         self._ensure_visible()
         self.update()
 
@@ -124,7 +130,10 @@ class InteractionOverlayWindow(QWidget):
 
     def _paint_calm(self, painter: QPainter) -> None:
         center = QRectF(self.rect()).center()
-        arc_rect = QRectF(center.x() - 30.5, center.y() - 30.5, 61, 61)
+        diameter = self._ring_diameter - 3
+        if diameter <= 0:
+            return
+        arc_rect = QRectF(center.x() - diameter / 2, center.y() - diameter / 2, diameter, diameter)
         color = QColor("#84c5d9")
         track = QColor(color)
         track.setAlpha(51)
@@ -135,8 +144,11 @@ class InteractionOverlayWindow(QWidget):
         painter.drawArc(arc_rect, 90 * 16, int(-360 * 16 * self._progress))
         if self._mode == "paused":
             painter.setPen(color)
-            painter.setFont(QFont("Segoe UI", 12))
-            painter.drawText(QRectF(center.x() - 10, center.y() + 36, 20, 18), Qt.AlignCenter, "Ⅱ")
+            font = QFont("Segoe UI")
+            font.setPixelSize(min(12, int(diameter / 2)))
+            painter.setFont(font)
+            pause_rect = QRectF(center.x() - 10, center.y() + self._ring_diameter / 2 - 14, 20, 14)
+            painter.drawText(pause_rect, Qt.AlignCenter, "Ⅱ")
 
     def _tick(self) -> None:
         if self._mode == "fired":
@@ -274,6 +286,23 @@ def _compact_label(label: str) -> str:
     if normalized in {"Dvostruki klik", "Dvostruki lijevi klik"}:
         return "Dvostruki"
     return normalized[:13]
+
+
+def _ring_geometry_at(point: QPoint) -> tuple[QPoint, float]:
+    # Walk Qt children so native click-through overlays cannot hide the target control.
+    for window in QApplication.topLevelWidgets():
+        if not window.isVisible() or window.testAttribute(Qt.WA_TransparentForMouseEvents):
+            continue
+        widget = window.childAt(window.mapFromGlobal(point)) or window
+        while widget is not None:
+            if isinstance(widget, (QAbstractButton, QComboBox)) and point == widget.mapToGlobal(
+                widget.rect().center()
+            ):
+                center = widget.mapToGlobal(QPoint(widget.width() // 2, widget.height() // 2))
+                diameter = max(0, min(64, widget.width() - 16, widget.height() - 16))
+                return center, diameter
+            widget = widget.parentWidget()
+    return point, 64
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

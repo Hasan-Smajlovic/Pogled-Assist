@@ -1,6 +1,6 @@
 #gaze-ring {
   position:fixed; pointer-events:none; z-index:100; border-radius:50%;
-  width: 64px; height: 64px; margin: -32px 0 0 -32px;
+  width: var(--ring-size, 64px); height: var(--ring-size, 64px); transform: translate(-50%, -50%);
   background: none; mask: none;
 }
 button.gaze-target {
@@ -8,4 +8,4 @@ button.gaze-target {
 }
 #gaze-ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--cyan) var(--progress, 0deg), #84c5d933 0); mask: radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
 #gaze-ring[data-state="fired"]::before { background: var(--cyan); }
-#gaze-ring[data-state="held"]::after { content: 'Ⅱ'; position: absolute; top: 66px; width: 100%; text-align: center; color: var(--cyan); font-size: 18px; }
+#gaze-ring[data-state="held"]::after { content: 'Ⅱ'; position: absolute; bottom: 0; width: 100%; height: 14px; text-align: center; line-height: 14px; color: var(--cyan); font-size: 12px; }

@@ -2,6 +2,10 @@
   'use strict';
   const $ = id => document.getElementById(id);
   function render() {
+    const height = Number($('selection-target-height').value);
+    document.querySelector('.selection-preview-buttons').style.setProperty('--target-height', `${height}px`);
+    const width = $('selection-button').getBoundingClientRect().width;
+    $('selection-progress-ring').style.setProperty('--ring-size', `${Math.max(0, Math.min(64, width - 16, height - 16))}px`);
     const policy = ReferenceEyePolicy.read();
     const state = $('selection-state-preview').value;
     const active = state === 'active' || state === 'resumed' && policy !== 'both' || state === 'held' && policy === 'any';
@@ -30,5 +34,7 @@
   ReferenceEyePolicy.setupSelect($('selection-policy-preview'), render);
   $('selection-state-preview').addEventListener('change', render);
   $('selection-progress-visible').addEventListener('change', render);
+  $('selection-target-height').addEventListener('change', render);
+  window.addEventListener('resize', render);
   render();
 })();

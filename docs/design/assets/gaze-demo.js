@@ -90,6 +90,7 @@ window.createReferenceGaze = () => {
     clearTimeout(firedTimer);
     ring.dataset.state = held ? 'held' : 'active';
     const rect = gazeTarget.getBoundingClientRect();
+    ring.style.setProperty('--ring-size', `${Math.max(0, Math.min(64, rect.width - 16, rect.height - 16))}px`);
     (gazeTarget.closest('dialog') || document.body).append(ring);
     ring.style.left = `${rect.left + rect.width / 2}px`;
     ring.style.top = `${rect.top + rect.height / 2}px`;

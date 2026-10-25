@@ -327,7 +327,7 @@
 .speech-test-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .speech-library-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .settings-page button, .settings-page label { overflow-wrap: normal; word-break: normal; }
-.active-voice-card { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 72px; padding: 12px 16px; border-left: 3px solid var(--cyan); border-radius: 8px; background: var(--surface); }
+.active-voice-card { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 12px 16px; border-left: 3px solid var(--cyan); border-radius: 8px; background: var(--surface); }
 .active-voice-card > span { font-size: 14px; color: var(--muted); }
 .active-voice-card strong { font-size: 20px; font-weight: 600; }
 .gaze-feedback-group, .eleven-voice-group { min-width: 0; margin: 12px 0 0; padding: 12px; border: 1px solid var(--divider); border-radius: 12px; }

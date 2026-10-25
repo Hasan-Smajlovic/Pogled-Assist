@@ -61,8 +61,8 @@
 .tracking-stage:not([data-context="message"]) #tracking-background-feedback { visibility: hidden; }
 .tracking-stage[data-context="confirm"] #tracking-letter-options, .tracking-stage[data-context="letters"] #tracking-confirm-options { display: none; }
 .tracking-demo-target { border-color:var(--cyan); box-shadow:inset 0 0 0 1px var(--cyan); }
-.tracking-demo-target::after { content:''; position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:64px; height:64px; border-radius:50%; pointer-events:none; background:conic-gradient(var(--cyan) var(--demo-progress, 0%), #84c5d933 0); mask:radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
-.tracking-hold-label { position:absolute; top:calc(50% + 34px); left:0; width:100%; color:var(--cyan); font-size:18px; }
+.tracking-demo-target::after { content:''; position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:var(--demo-size, 64px); height:var(--demo-size, 64px); border-radius:50%; pointer-events:none; background:conic-gradient(var(--cyan) var(--demo-progress, 0%), #84c5d933 0); mask:radial-gradient(circle closest-side, transparent calc(100% - 3px), #000 calc(100% - 3px)); }
+.tracking-hold-label { position:absolute; top:calc(50% + var(--demo-size, 64px) / 2 - 14px); left:0; width:100%; height:14px; line-height:14px; color:var(--cyan); font-size:12px; pointer-events:none; }
 @media (max-width: 1000px) {
   .tracking-preview-tools { gap: 10px; }
 }
