@@ -56,7 +56,7 @@ class ElevenLabsPage(QFrame):
         self._playback_state = "stopped"
         layout = content_layout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(12)
         self._layout = layout
         self._build_header()
         self._build_key_row()
@@ -287,6 +287,14 @@ class ElevenLabsPage(QFrame):
         ):
             for widget, position in zip(widgets, positions, strict=True):
                 layout.addWidget(widget, *position)
+        self._align_key_actions(narrow)
+
+    def _align_key_actions(self, narrow):
+        self._key_grid.setContentsMargins(12, 0, 12 if narrow else 0, 0)
+        # A hidden Cancel must not leave its preceding spacer at the right edge.
+        self._key_grid.setColumnMinimumWidth(
+            7, 12 if narrow or not self.cancel_key.isHidden() else 0
+        )
 
     def configure(self, settings) -> None:
         self._settings = settings
@@ -408,14 +416,14 @@ class ElevenLabsPage(QFrame):
             combo.clear()
             if combo is self.voice:
                 combo.setPlaceholderText(
-                    "Odaberite sačuvani glas"
+                    "Odaberite glas"
                     if choices
                     else "Nema glasova"
                     if checked
-                    else "Odaberite nakon provjere veze"
+                    else "Provjerite vezu"
                 )
             else:
-                combo.addItem("Odaberite nakon provjere veze", "")
+                combo.addItem("Provjerite vezu", "")
             for identifier, name in choices:
                 combo.addItem(name, identifier)
             if _missing_model_choice(combo is self.voice, combo.findData(current), current):
@@ -448,6 +456,7 @@ class ElevenLabsPage(QFrame):
         )
         for control in (self.replace_key, self.remove_key):
             control.setVisible(state.has_key and not state.environment_key and not editing)
+        self._align_key_actions(self._groups.direction() == QBoxLayout.TopToBottom)
 
     def _replace_key(self) -> None:
         self._controls.interrupt_gaze()

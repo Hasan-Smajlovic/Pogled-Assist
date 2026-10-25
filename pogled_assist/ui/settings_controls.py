@@ -31,6 +31,20 @@ CHOICE_WIDTH = 260
 CONTROL_SPACING = 12
 
 
+def guidance_note(parent: QWidget, text: str) -> QLabel:
+    """Keep static guidance readable and visually attached to its settings."""
+    note = styled_label(text, "settingGuidance", parent)
+    note.setTextFormat(Qt.RichText)
+    note.setWordWrap(True)
+    note.setMaximumWidth(860)
+    note.setStyleSheet(
+        "QLabel#settingGuidance { background: #283442; border: 0; "
+        "border-left: 3px solid #71869b; padding: 8px 14px; "
+        "color: #b8c5d2; font-size: 14px; }"
+    )
+    return note
+
+
 class SettingsControls:
     """Build settings controls and remember the action gaze dwell selects on each one."""
 
@@ -178,7 +192,7 @@ def content_layout(page: QFrame) -> QVBoxLayout:
     page.setObjectName("contentPanel")
     layout = QVBoxLayout(page)
     layout.setContentsMargins(16, 16, 16, 16)
-    layout.setSpacing(8)
+    layout.setSpacing(12)
     return layout
 
 
@@ -193,7 +207,7 @@ def setting_row(parent: QWidget, title: str, hint: str = "") -> tuple[QFrame, QG
     row.setObjectName("settingRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     layout = QGridLayout(row)
-    layout.setContentsMargins(12, 0, 12, 0)
+    layout.setContentsMargins(12, 0, 0, 0)
     layout.setHorizontalSpacing(CONTROL_SPACING)
     layout.setVerticalSpacing(2)
     layout.setColumnStretch(0, 1)

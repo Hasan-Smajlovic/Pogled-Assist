@@ -3,12 +3,99 @@ from __future__ import annotations
 import pytest
 from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QAbstractButton, QLabel
+from PySide6.QtWidgets import QAbstractButton, QLabel, QStyle, QStyleOptionComboBox
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.settings_window import SettingsWindow
 from pogled_assist.windows.windows_startup import StartupTaskResult
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width", [800, 1280])
+def test_gaze_guidance_stays_with_active_tab_without_clipping(qtbot, monkeypatch, width):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(eye_tracking_policy="any"), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(width, 720)
+    window._select_tab(1)
+    window.show()
+    page = window._gaze_page
+    for index, expected in enumerate(("Primjena režima", "Pokazivač i provjera", "Kratak izlazak")):
+        page.show_tab(index)
+        notes = page.findChildren(QLabel, "settingGuidance")
+        qtbot.waitUntil(lambda notes=notes: len([note for note in notes if note.isVisible()]) == 1)
+        note = next(note for note in notes if note.isVisible())
+        assert expected in note.text()
+        assert note.wordWrap()
+        assert note.width() <= 860
+        assert note.height() >= note.heightForWidth(note.width())
+        assert note.mapTo(page, QPoint()).x() >= 0
+        assert note.mapTo(page, QPoint(note.width(), 0)).x() <= page.width()
+        if width == 1280:
+            qtbot.waitUntil(lambda: window._scroll.verticalScrollBar().maximum() == 0)
+            assert note.visibleRegion().boundingRect() == note.rect()
+        if index == 2:
+            assert "nema napretka ni potvrde" in note.text()
+            assert "niti ispravlja kalibraciju" in note.text()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("policy", ["both", "hold", "any"])
+def test_eye_policy_choice_shows_its_full_label(qtbot, monkeypatch, policy):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(eye_tracking_policy=policy), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window._select_tab(1)
+    window.show()
+    qtbot.wait(1)
+    combo = window._gaze_page._policy_combo
+    option = QStyleOptionComboBox()
+    combo.initStyleOption(option)
+    field = combo.style().subControlRect(
+        QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo
+    )
+    assert combo.fontMetrics().horizontalAdvance(combo.currentText()) <= field.width()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize("preset", ["default", "human_like", "efendija"])
+@pytest.mark.parametrize("width", [800, 1280])
+def test_voice_help_has_breathing_room_within_its_group(qtbot, monkeypatch, script, preset, width):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(
+        GazeSettings(), SpeechSettings(keyboard_script=script, voice_preset=preset)
+    )
+    qtbot.addWidget(window)
+    window.resize(width, 720)
+    window._select_tab(2)
+    window.show()
+    qtbot.wait(1)
+    page = window._speech_page
+    controls = page._arabic_voice if script == "arabic" else page._voice_choices
+    control_bottom = controls.mapTo(page, QPoint()).y() + controls.height()
+    hint_top = page._voice_hint.mapTo(page, QPoint()).y()
+    assert hint_top - control_bottom >= 12
+    hint_bottom = hint_top + page._voice_hint.height()
+    group_index = page.layout().indexOf(controls.parentWidget())
+    following = next(
+        page.layout().itemAt(index).widget()
+        for index in range(group_index + 1, page.layout().count())
+        if page.layout().itemAt(index).widget() is not None
+        and page.layout().itemAt(index).widget().isVisible()
+    )
+    assert following.mapTo(page, QPoint()).y() - hint_bottom >= 16
+    if width == 1280:
+        assert window._scroll.horizontalScrollBar().maximum() == 0
+    assert all(button.height() == 58 for button in page._voice_buttons.values())
 
 
 @pytest.mark.e2e
@@ -290,6 +377,7 @@ def _assert_speech_row(window, value):
     assert rects[1].width() == 184
     assert rects[0].right() + 13 == rects[1].left()
     assert rects[1].right() + 13 == rects[2].left()
+    assert row.mapTo(window, QPoint()).x() + row.width() - rects[2].right() - 1 <= 1
     assert value.fontMetrics().horizontalAdvance(value.text()) + 26 <= value.width()
     return tuple((rect.left(), rect.width()) for rect in rects)
 

@@ -59,7 +59,7 @@
 .recording-context-details dt { color:var(--muted); }
 .recording-context-details dd { margin:0; overflow-wrap:anywhere; }
 .recording-no-detail { display:flex; flex-direction:column; justify-content:center; text-align:center; gap:16px; }
-.diagnostics-footer { display:flex; align-items:center; gap:16px; padding-top:12px; border-top:1px solid var(--divider); }
+.diagnostics-footer { display:flex; align-items:center; gap:16px; padding-top:12px; border-top:1px solid var(--divider); } /* Keep action gaps explicit in the Qt footer too. */
 .diagnostics-footer p { flex:1; color:var(--muted); font-size:14px; }
 .diagnostics-footer button { flex:0 0 224px; width:224px; min-width:0; }
 .diagnostics-footer .danger { background:#4b2224; border-color:#a1535b; }

@@ -100,6 +100,7 @@
   }
   function renderCheckHeading(results, history) {
     checkEl('check-heading').textContent = history ? 'Sačuvani rezultati' : viewingArchive ? 'Raniji rezultat provjere' : 'Provjera pogleda';
+    document.querySelector('.check-simulation').hidden = history;
     checkEl('check-policy-summary').textContent = history ? 'Rezultati ovog uređaja · najnoviji su prvi'
       : 'Režim: ' + (results ? policyLabel(displayedReport.policy, displayedReport.holdMs) : policyLabel());
   }
@@ -121,7 +122,7 @@
     checkEl('check-back').hidden = !history && !viewingArchive;
     checkEl('check-back').textContent = viewingArchive ? 'Nazad na listu' : 'Nazad na provjeru';
     checkEl('check-open-result').hidden = !history;
-    checkEl('check-notice').textContent = 'Upravljanje pogledom je pauzirano. Ovim prozorom upravljajte mišem ili tastaturom.';
+    checkEl('check-notice').textContent = 'Upravljanje pogledom pauzirano · Koristite miš ili tastaturu.';
   }
 
   function nextCheckLabel(results) {

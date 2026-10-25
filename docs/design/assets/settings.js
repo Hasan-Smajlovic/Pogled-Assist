@@ -347,7 +347,9 @@
 
   function renderCatalogs(state) {
     for (const id of ['eleven-voice', 'eleven-model', 'test-eleven-voice']) $(id).disabled = ['missing', 'unverified', 'invalid', 'permission', 'save-failed'].includes(state);
-    $('eleven-voice').replaceChildren(new Option(state === 'empty' ? 'Nema glasova' : 'Efendija Fikret', state === 'empty' ? '' : 'preview-voice'));
+    const needsVoiceCheck = ['missing', 'unverified', 'invalid', 'permission', 'save-failed'].includes(state);
+    const voiceLabel = needsVoiceCheck ? 'Provjerite vezu' : state === 'empty' ? 'Nema glasova' : 'Efendija Fikret';
+    $('eleven-voice').replaceChildren(new Option(voiceLabel, needsVoiceCheck || state === 'empty' ? '' : 'preview-voice'));
     if (state === 'empty') {
       $('eleven-voice').disabled = true;
       $('test-eleven-voice').disabled = true;

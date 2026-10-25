@@ -278,7 +278,10 @@ def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
     before = [QRect(button.geometry()) for button in utility]
     assert len({rect.top() for rect in before}) == 1
     assert len({rect.height() for rect in before}) == 1
-    assert max(rect.width() for rect in before) - min(rect.width() for rect in before) <= 1
+    assert max(rect.width() for rect in before[:3]) - min(rect.width() for rect in before[:3]) <= 1
+    system = window._action_buttons[window._action("alarm:start")]
+    assert window._script_button.mapTo(window, QPoint()).x() == system.mapTo(window, QPoint()).x()
+    assert window._script_button.width() == system.width()
     divider = window.findChild(QFrame, "utilityDivider")
     assert divider is not None
     assert before[1].right() < divider.x() < before[2].left()

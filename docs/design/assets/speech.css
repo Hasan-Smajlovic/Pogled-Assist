@@ -1,4 +1,5 @@
 .speech-screen {
+  --system-column: clamp(280px, 25%, 480px);
   --prediction-height: 96px;
   display: grid;
   grid-template-rows: 96px auto minmax(0, 1fr) 102px;
@@ -53,7 +54,7 @@
 #undo-word { flex: 0 0 170px; min-height: var(--prediction-height, 83px); font-size: 20px; }
 .word { min-height: var(--prediction-height, 83px); padding: 2px 8px; font-size: 27px; border-color: var(--border); background: var(--surface); color: var(--text); }
 .word:hover { background: #334355; }
-.workspace { display: grid; grid-template-columns: minmax(0, 3fr) clamp(280px, 25%, 480px); gap: var(--gap); min-height: 0; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) var(--system-column, clamp(280px, 25%, 480px)); gap: var(--gap); min-height: 0; }
 .speech-screen > .workspace { grid-row: 3; position: relative; padding-top: 30px; }
 .main-panel { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
 .speech-screen .view-header { flex: 0 0 auto; min-height: 72px; }
@@ -81,6 +82,8 @@
 .sleep { background: var(--panel); border-color: var(--border); color: var(--text); }
 .utility-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 1px repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 .utility-divider { background: var(--divider); align-self: stretch; }
+.speech-screen > .utility-row { grid-template-columns: minmax(0, 1fr) var(--system-column); }
+.utility-main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 1px minmax(0, 1fr); gap: var(--gap); min-width: 0; }
 .speech-screen > .utility-row { grid-row: 4; border-top: 1px solid var(--divider); padding-top: 6px; }
 .utility-row button { min-height: 76px; }
 .utility-row [data-action], .speech-screen .utility-row button { min-height: 95px; }
@@ -130,7 +133,7 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .speech-screen { height: auto; min-height: calc(100dvh - 16px); grid-template-rows: auto auto minmax(350px, 1fr) auto; padding: 10px; }
   .topbar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .message-box { grid-column: 1 / -1; grid-row: 1; min-height: 88px; }
-  .workspace { grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr); }
+  .speech-screen { --system-column: 280px; }
   .view-header { flex-wrap: wrap; }
   .speech-screen .view-header { flex-basis: auto; min-height: 80px; }
   .view-header h1 { flex-basis: 100%; }
@@ -149,6 +152,8 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .system-actions button[data-action="exit"] { font-size: 21px; }
   .system-actions small { font-size: 12px; }
   .utility-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .speech-screen > .utility-row { grid-template-columns: 1fr; }
+  .utility-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .utility-divider { grid-column: 1 / -1; height: 1px; }
   #status { white-space: normal; }
   dialog { width: calc(100vw - 24px); padding: 16px; }

@@ -28,14 +28,15 @@ class SpeechSettingsPage(QFrame):
     def _build(self):
         page = self
         layout = content_layout(page)
-        layout.setContentsMargins(16, 8, 16, 8)
-        layout.setSpacing(6)
-        layout.addWidget(styled_label("Govor i tastatura", "sectionTitle", page))
-        layout.addWidget(
+        header = QVBoxLayout()
+        header.setSpacing(4)
+        header.addWidget(styled_label("Govor i tastatura", "sectionTitle", page))
+        header.addWidget(
             styled_label(
                 "Podesite glas i raspored tastature za komunikaciju.", "sectionDescription", page
             )
         )
+        layout.addLayout(header)
 
         self._script_combo = self._controls.choice(
             KEYBOARD_SCRIPTS,
@@ -68,6 +69,10 @@ class SpeechSettingsPage(QFrame):
 
     def _build_voice_choices(self, layout):
         page = self
+        voice_group = QWidget(page)
+        voice_layout = QVBoxLayout(voice_group)
+        voice_layout.setContentsMargins(0, 0, 0, 4)
+        voice_layout.setSpacing(12)
         self._voice_choices = QWidget(page)
         voices = QHBoxLayout(self._voice_choices)
         voices.setContentsMargins(0, 0, 0, 0)
@@ -79,10 +84,9 @@ class SpeechSettingsPage(QFrame):
             )
             voices.addWidget(button, 1)
             self._voice_buttons[value] = button
-        layout.addWidget(self._voice_choices)
+        voice_layout.addWidget(self._voice_choices)
         self._voice_hint = styled_label(BOSNIAN_VOICE_HINT, "settingHint", page)
         self._voice_hint.setWordWrap(True)
-        layout.addWidget(self._voice_hint)
         self._arabic_voice = QFrame(page)
         self._arabic_voice.setObjectName("settingRow")
         arabic = QHBoxLayout(self._arabic_voice)
@@ -91,7 +95,9 @@ class SpeechSettingsPage(QFrame):
         copy.addWidget(styled_label("Koristi se uz internet.", "settingHint", page))
         arabic.addLayout(copy, 1)
         arabic.addWidget(styled_label("Prirodni · Hamed", "settingTitle", page))
-        layout.addWidget(self._arabic_voice)
+        voice_layout.addWidget(self._arabic_voice)
+        voice_layout.addWidget(self._voice_hint)
+        layout.addWidget(voice_group)
         self._eleven_summary, grid, self._eleven_summary_hint = setting_row(
             self, "Efendija · ElevenLabs", FALLBACK_NOTE
         )

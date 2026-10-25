@@ -13,7 +13,7 @@ description: Apply when changing Pogled Assist UI, settings, bundled runtime ass
 2. Implement the change in the matching `pogled_assist/ui/` module or `pogled_assist/toolbar.py`.
 3. For a new window, tab, dialog, or view, render it in `capture_ui()` in `scripts/ui/capture_ui.py`.
 4. When rendered surfaces change, update the snapshot count in `tests/ui/test_ui_rendering.py` and the surface count and list in `docs/UI_DEVELOPMENT.md`.
-5. Cover the changed flow in the matching test module under `tests/ui/`. Reuse the shared fixtures and fakes in the [test strategy](../../../docs/DEVELOPMENT.md#test-strategy), rather than importing from another test module.
+5. Cover the changed flow in the matching test module under `tests/ui/`. Reuse the shared fixtures and fakes in the [test strategy](../../../docs/TESTING.md#test-boundary-map), rather than importing from another test module.
 6. Run `.\dev.ps1 test-ui`, then `.\dev.ps1 ui -Open`, and review the gallery using the [UI review guide](../../../docs/UI_DEVELOPMENT.md#rendered-ui-gallery). Record applicable manual Windows and Tobii results separately.
 
 ## Add a setting

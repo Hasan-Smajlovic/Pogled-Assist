@@ -12,7 +12,6 @@ from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -83,6 +82,9 @@ QLabel { color: #edf2f7; background: transparent; font-size: 17px; }
 QLabel#checkTitle { font-size: 29px; font-weight: 650; }
 QLabel#cardTitle { font-size: 23px; font-weight: 600; }
 QLabel#checkHint { font-size: 15px; color: #b8c5d2; }
+QLabel#checkSimulation { font-size: 13px; color: #efd092; }
+QFrame#checkHeader { border: 0; border-bottom: 1px solid #394959; }
+QFrame#checkContext { border: 0; border-left: 1px solid #394959; }
 QFrame#checkCard { background: #1d242d; border: 1px solid #394959; border-radius: 12px; }
 QPushButton { background: #283442; color: #edf2f7; border: 1px solid #71869b;
     border-radius: 9px; padding: 10px 16px; font-size: 18px; font-weight: 600; }
@@ -178,7 +180,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 18, 24, 18)
         layout.setSpacing(12)
-        layout.addLayout(self._build_header())
+        layout.addWidget(self._build_header())
         self._step = _label("1 · Položaj i praćenje", self, "cardTitle")
         layout.addWidget(self._step)
         self._pages = QStackedWidget(self)
@@ -187,48 +189,60 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._build_test_page()
         self._build_result_page()
         self._build_history_page()
-        self._notice = _label(
-            "Upravljanje pogledom je pauzirano tokom provjere.",
-            self,
-            "checkHint",
-        )
-        layout.addWidget(self._notice)
         layout.addLayout(self._build_footer())
 
-    def _build_header(self) -> QHBoxLayout:
-        header = QHBoxLayout()
-        header.setSpacing(16)
-        copy = QVBoxLayout()
-        copy.setSpacing(4)
+    def _build_header(self) -> QFrame:
+        frame = QFrame(self)
+        frame.setObjectName("checkHeader")
+        header = QVBoxLayout(frame)
+        header.setContentsMargins(0, 0, 0, 12)
+        header.setSpacing(12)
         title = QHBoxLayout()
+        title.setSpacing(16)
         self._title_label = _label("Provjera pogleda", self, "checkTitle")
-        title.addWidget(self._title_label, 1)
-        self._recording_badge = RecordingBadge(self)
-        title.addWidget(self._recording_badge)
-        copy.addLayout(title)
+        self._title_label.setWordWrap(False)
+        title.addWidget(self._title_label)
+        context = QFrame(frame)
+        context.setObjectName("checkContext")
+        copy = QVBoxLayout(context)
+        copy.setContentsMargins(16, 0, 0, 0)
+        copy.setSpacing(2)
         self._policy_text = dict(EYE_TRACKING_POLICY_CHOICES)[self._settings.eye_tracking_policy]
         self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
         copy.addWidget(self._policy_label)
-        self._simulation_label = _label("SIMULACIJA MIŠEM · Bez Tobii mjerenja.", self, "checkHint")
+        self._simulation_label = _label(
+            "Simulacija mišem · Bez Tobii mjerenja", self, "checkSimulation"
+        )
         self._simulation_label.setVisible(self._simulated)
         copy.addWidget(self._simulation_label)
-        header.addLayout(copy, 1)
+        title.addWidget(context, 1)
+        self._recording_badge = RecordingBadge(self)
+        title.addWidget(self._recording_badge)
+        header.addLayout(title)
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(16)
+        self._notice = _label(
+            "Upravljanje pogledom pauzirano · Koristite miš ili tastaturu.", self, "checkHint"
+        )
+        toolbar.addWidget(self._notice, 1)
         resources = QFrame(self)
         resources.setObjectName("checkResources")
-        grid = QGridLayout(resources)
+        grid = QHBoxLayout(resources)
         grid.setContentsMargins(0, 0, 24, 0)
-        grid.setHorizontalSpacing(12)
-        grid.addWidget(_label("Rezultati i podrška", resources, "checkHint"), 0, 0, 1, 2)
+        grid.setSpacing(12)
         self._history_button = self._button("Sačuvani rezultati", self._open_history)
         self._diagnostics_button = self._button("Dijagnostičko snimanje", self._request_diagnostics)
-        for column, button in enumerate((self._history_button, self._diagnostics_button)):
-            button.setMinimumHeight(48)
+        for button in (self._history_button, self._diagnostics_button):
+            button.setFixedHeight(60)
             button.setStyleSheet("font-size: 16px;")
-            grid.addWidget(button, 1, column)
-        header.addWidget(resources)
+            grid.addWidget(button)
+        toolbar.addWidget(resources)
         self._close_button = self._button("Zatvori · Esc", self.close)
-        header.addWidget(self._close_button)
-        return header
+        self._close_button.setFixedHeight(60)
+        self._close_button.setStyleSheet("font-size: 16px;")
+        toolbar.addWidget(self._close_button)
+        header.addLayout(toolbar)
+        return frame
 
     def _build_footer(self) -> QHBoxLayout:
         footer = QHBoxLayout()
@@ -719,7 +733,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._calibration_button.show()
         self._calibration_button.setText("Otvori Tobii postavke")
         self._free_button.show()
-        self._notice.setText("Upravljanje pogledom je pauzirano tokom provjere.")
+        self._notice.setText("Upravljanje pogledom pauzirano · Koristite miš ili tastaturu.")
         self._render_position()
 
     def _set_test_mode(self, phase: str) -> None:

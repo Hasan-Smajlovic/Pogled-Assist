@@ -24,6 +24,8 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
         ((1280, 720), "arabic", 12, True),
         ((1440, 900), "latin", 5, False),
         ((1440, 900), "arabic", 5, True),
+        ((1920, 1080), "latin", 5, False),
+        ((1920, 1080), "arabic", 5, True),
     ],
 )
 def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
@@ -60,6 +62,24 @@ def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
         assert window.action_at_global_point(point) == f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
 
     assert window._script_button.minimumHeight() == 95
+    alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
+    script_rect = QRect(window._script_button.mapTo(window, QPoint()), window._script_button.size())
+    alarm_rect = QRect(alarm.mapTo(window, QPoint()), alarm.size())
+    keys_rect = QRect(window._key_grid_host.mapTo(window, QPoint()), window._key_grid_host.size())
+    numbers_rect = QRect(
+        window._keyboard_toggle_button.mapTo(window, QPoint()),
+        window._keyboard_toggle_button.size(),
+    )
+    assert script_rect.left() == alarm_rect.left()
+    assert script_rect.right() == alarm_rect.right()
+    assert numbers_rect.right() == keys_rect.right()
+    assert script_rect.left() - numbers_rect.right() - 1 == 12
+    assert (
+        window.action_at_global_point(
+            window._script_button.mapToGlobal(window._script_button.rect().center())
+        )
+        == f"{SPEECH_WINDOW_ACTION_PREFIX}script-toggle"
+    )
     window._input.setText("ABC")
     for button, command in controls[:2]:
         _select_speech_control(window, button, command, use_gaze)

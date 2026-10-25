@@ -97,6 +97,7 @@ class DiagnosticsWindow(QWidget):
         self._build_new()
         self._build_history()
         footer = QHBoxLayout()
+        footer.setSpacing(16)
         self._status = text_label("Izaberite trajanje, zatim pokrenite snimanje.")
         footer.addWidget(self._status, 1)
         self._return = self._button(f"Vrati se u {origin}", self.close)
@@ -133,6 +134,7 @@ class DiagnosticsWindow(QWidget):
     def _build_new(self):
         page = QWidget()
         columns = QHBoxLayout(page)
+        columns.setSpacing(16)
         card, layout = self._card()
         layout.addWidget(text_label("Snimite problem tokom korištenja", title=True))
         layout.addWidget(
@@ -201,6 +203,7 @@ class DiagnosticsWindow(QWidget):
     def _build_history(self):
         page = QWidget()
         columns = QHBoxLayout(page)
+        columns.setSpacing(16)
         self._list = QListWidget()
         self._list.setFixedWidth(310)
         self._list.setAccessibleName("Sačuvani dijagnostički snimci")

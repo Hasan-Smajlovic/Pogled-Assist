@@ -8,7 +8,7 @@ from _clock import freeze_monotonic
 from _speech_fakes import FakeCredentials, FakeElevenClient
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QBoxLayout, QLineEdit
+from PySide6.QtWidgets import QBoxLayout, QLineEdit, QStyle, QStyleOptionComboBox
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.eleven_account import ElevenAccount
@@ -709,6 +709,59 @@ def test_missing_selected_model_cannot_start_paid_test(settings, qtbot):
     assert not window._speech_page._test_speech_button.isEnabled()
     window._open_eleven()
     assert not window._eleven_page.test_button.isEnabled()
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_voice_placeholder_fits_before_and_after_catalog_check(settings, qtbot, saved_key):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+        account.check()
+        qtbot.waitUntil(lambda: account.state.options is not None)
+    window.resize(1280, 720)
+    window._open_eleven()
+    qtbot.wait(1)
+    combo = window._eleven_page.voice
+    assert combo.currentIndex() == -1
+    option = QStyleOptionComboBox()
+    combo.initStyleOption(option)
+    field = combo.style().subControlRect(
+        QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo
+    )
+    assert combo.fontMetrics().horizontalAdvance(combo.placeholderText()) <= field.width()
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_wide_key_actions_end_at_the_row_edge(settings, qtbot, saved_key):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+    window.resize(1280, 720)
+    window._open_eleven()
+    page = window._eleven_page
+    for replacing in (False, True, False):
+        if replacing and saved_key:
+            page._replace_key()
+        else:
+            page.clear_input()
+        qtbot.wait(1)
+        actions = [
+            control
+            for control in (
+                page.show_key,
+                page.save_key,
+                page.cancel_key,
+                page.replace_key,
+                page.remove_key,
+            )
+            if control.isVisible()
+        ]
+        rightmost = max(actions, key=lambda control: control.geometry().right())
+        row = rightmost.parentWidget()
+        assert row.width() - rightmost.geometry().right() - 1 <= 1
+        for left, right in pairwise(sorted(actions, key=lambda control: control.x())):
+            assert right.x() - left.geometry().right() - 1 >= 12
+        assert all(control.height() == 58 for control in actions)
 
 
 @pytest.mark.parametrize("saved_key", [False, True])

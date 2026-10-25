@@ -31,6 +31,45 @@ def gaze_check(qtbot, monkeypatch, request):
     return window, now, screen
 
 
+@pytest.mark.parametrize("simulated", [False, True])
+def test_header_context_and_actions_align_without_footer_notice(qtbot, simulated):
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+    window = GazeCheckWindow(GazeSettings(eye_tracking_policy="any"), simulated=simulated)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+
+    def rect(widget):
+        return QRect(widget.mapTo(window, QPoint()), widget.size())
+
+    def assert_header():
+        buttons = [window._history_button, window._diagnostics_button, window._close_button]
+        buttons = [button for button in buttons if button.isVisible()]
+        assert len({rect(button).top() for button in buttons}) == 1
+        assert all(button.height() == 60 for button in buttons)
+        assert rect(window._policy_label).left() > rect(window._title_label).right()
+        assert rect(window._notice).bottom() < rect(window._pages).top()
+        assert rect(window._notice).right() < rect(window._diagnostics_button).left()
+        assert all(window.rect().contains(rect(widget)) for widget in buttons)
+
+    qtbot.waitUntil(assert_header)
+    assert window._simulation_label.isVisible() == simulated
+    if simulated:
+        assert rect(window._simulation_label).left() > rect(window._title_label).right()
+        assert "Bez Tobii mjerenja" in window._simulation_label.text()
+    window._start_precision()
+    qtbot.waitUntil(lambda: window._check is not None)
+    window._stop_test()
+    qtbot.waitUntil(assert_header)
+    window._open_history()
+    qtbot.waitUntil(assert_header)
+    window.reset_check()
+    window.set_calibration_notice("Tobii postavke nisu dostupne.")
+    qtbot.waitUntil(assert_header)
+    assert "Tobii postavke nisu dostupne" in window._notice.text()
+
+
 def test_switching_check_modes_clears_previous_target_feedback(gaze_check, qtbot):
     window, _now, _screen = gaze_check
     for phase, start in (

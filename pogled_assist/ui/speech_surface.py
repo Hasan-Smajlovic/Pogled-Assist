@@ -379,6 +379,9 @@ class SpeechSurface(QWidget):
         utility_row = QHBoxLayout()
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(12)
+        main = QHBoxLayout()
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(12)
         self._space_button = self._make_button(
             "Razmak", "space", "utilityButton", minimum_height=95
         )
@@ -388,16 +391,20 @@ class SpeechSurface(QWidget):
         self._keyboard_toggle_button = self._make_button(
             "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=95
         )
-        utility_row.addWidget(self._space_button, 1)
-        utility_row.addWidget(self._backspace_button, 1)
-        utility_row.addWidget(self._divider(vertical=True))
-        utility_row.addWidget(self._keyboard_toggle_button, 1)
+        main.addWidget(self._space_button, 1)
+        main.addWidget(self._backspace_button, 1)
+        main.addWidget(self._divider(vertical=True))
+        main.addWidget(self._keyboard_toggle_button, 1)
+        utility_row.addLayout(main, 3)
         self._script_button = self._make_button(
             switch_label(keyboard_script),
             "script-toggle",
             "utilityButton",
             minimum_height=95,
         )
+        # Match the system panel above, including its width limits on large screens.
+        self._script_button.setMinimumWidth(280)
+        self._script_button.setMaximumWidth(480)
         utility_row.addWidget(self._script_button, 1)
 
         return utility_row

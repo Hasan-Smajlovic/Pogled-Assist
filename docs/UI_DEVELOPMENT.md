@@ -1,6 +1,6 @@
 # UI development and review
 
-This guide owns mouse gaze simulation, the design surface map, rendered UI review, and manual Windows and Tobii checks. Use the [development guide](DEVELOPMENT.md) for setup, automated checks, and test fakes. For publication setup, permissions, and recovery, use the [UI gallery guide](UI_GALLERY.md).
+This guide owns mouse gaze simulation, the design surface map, rendered UI review, and manual Windows and Tobii checks. Use the [development guide](DEVELOPMENT.md) for setup and automated checks; use [Testing](TESTING.md) for boundary fakes. For publication setup, permissions, and recovery, use the [UI gallery guide](UI_GALLERY.md).
 
 Read the sections needed for the change:
 
@@ -48,7 +48,7 @@ On macOS, use `python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/des
 
 | Surface | HTML document | Styles and interaction |
 | --- | --- | --- |
-| Visual direction, fonts and component states | [design-system.html](design/design-system.html) | `docs/design/assets/design-system.css`, `docs/design/assets/design-system.js`; proposed calm dark theme for design review |
+| Visual direction, fonts and component states | [design-system.html](design/design-system.html) | `docs/design/assets/design-system.css`, `docs/design/assets/design-system.js`; palette, typography and control-state reference |
 | Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
 | Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
@@ -68,10 +68,10 @@ Use this review matrix alongside those notes:
 
 | Surface | Required visual and interaction checks |
 | --- | --- |
-| Speech and Tracking | Dividers separate message, predictions, letters and utility actions. A vertical divider separates Space/Delete from keyboard/script changes. Utility buttons have equal widths and fixed height in both scripts; letter groups take the remaining height. Dense editors, Arabic and library pages fit without overlap. Main controls reserve recording status space; letter/confirmation dialogs keep a 36-pixel title row and a 32-pixel tracking row. Recording and eye notices must not move targets. Letter characters are 56 pixels, or 44 for twelve-letter groups. Selection feedback is a steady cyan ring. |
+| Speech and Tracking | Dividers separate message, predictions, letters and utility actions. A vertical divider separates Space/Delete from keyboard/script changes. The first three utility buttons share the letter area; the script button aligns with the system column above, including its 280–480-pixel width limits. Utility height stays fixed in both scripts; letter groups take the remaining height. Dense editors, Arabic and library pages fit without overlap. Main controls reserve recording status space; letter/confirmation dialogs keep a 36-pixel title row and a 32-pixel tracking row. Recording and eye notices must not move targets. Letter characters are 56 pixels, or 44 for twelve-letter groups. Selection feedback is a steady cyan ring. |
 | Settings | The title, recording slot and Close share a header separated from the content. Help text stays with its control; adjustment columns and test/stop cells align. Only the active page determines scrolling. Scrolling cancels pending selection and clipped controls are excluded from hit testing. Review switches, the Arabic voice card and ElevenLabs voice/tuning versus preview/credits/privacy groups at 1280 × 720 and 800-pixel window width. Narrow key setup stacks its heading, input and actions, with no horizontal scrolling; reflow cancels pending selection. |
 | Optional help | Connection checking remains an action beside its information disclosure; Gaze check has a position/distance disclosure. Open help with mouse and keyboard, close with Escape and verify focus return and narrow containment. Required warnings remain outside disclosures. |
-| Gaze check | At 1280 × 720, review preparation, completed/interrupted results, all tabs, measurements, history and save/export failures. Distinguish insufficient/unmeasured data from measured misses; keep the five-target table in the first result view. Preserve the 760 × 168 measurement panel, target clearance and 16-pixel action gaps. Separate archive/diagnostics from Close and device setup from the next check. |
+| Gaze check | At 1280 × 720, review preparation, completed/interrupted results, all tabs, measurements, history and save/export failures. Distinguish insufficient/unmeasured data from measured misses; keep the five-target table in the first result view. Preserve the 760 × 168 measurement panel, target clearance and 16-pixel action gaps. Keep policy and simulation text beside the title, with the paused-input notice in the header. Archive/diagnostics and Close share a 60-pixel action row; separate them with a divider. Device setup stays separate from the next check. Calibration and recovery notices remain visible. |
 | Diagnostics | Underlined navigation tabs remain distinct from start/stop/export actions and support keyboard navigation. Recording states preserve action geometry. Privacy and incomplete-recording warnings remain visible. Check narrow HTML overflow as well. |
 | Keyboard and Controller | At a 380-pixel sidebar width, tab words stay intact. Recording uses a fixed bottom status slot without moving keys. |
 
@@ -84,7 +84,7 @@ Shared assets under `docs/design/assets/` have these owners:
 - `diagnostic-preview.js`: synthetic recording states and badges; [Diagnostics](design/diagnostics.html) owns their placement. The preview records no real input and creates no files.
 - `keyboard-data.js`: keyboard data; `gaze-demo.js`: mouse gaze simulation. Tracking also reuses Speech layout styles.
 
-The reference describes intended behavior. Gallery rendering, automated checks and real Windows/Tobii checks provide separate evidence of the implementation.
+The reference describes intended behavior; it is not an implementation status report. Where a reference still differs from Qt, state the concrete difference in its notes. Verify Qt through the gallery, automated checks and applicable Windows/Tobii checks.
 
 ### Rendered UI gallery
 
@@ -119,7 +119,9 @@ The other 77 screenshots remain available through the `full` profile. Use extend
 
 `-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
 
-The full profile retains all 149 states:
+<details>
+<summary>Full profile: all 149 states</summary>
+
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
 - Application, Support, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
@@ -137,13 +139,17 @@ The full profile retains all 149 states:
 - Arabic Speech, letters and vowel-mark dialogs, symbols, and phrase editor
 - Arabic Settings and both sidebar keyboards, including their second symbols page
 
+</details>
+
 PNG capture uses a fixed Qt quality of 80 for lossless compression with less encoding work. Keep the image and gallery byte limits enforced by the publication script, and review the generated gallery when changing encoding.
 
-The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check the four navigation choices, fixed scroll controls, grouped switches, voice choices below keyboard script, aligned adjustment columns, equal test/stop buttons and the separate ElevenLabs groups. Check both information disclosures with mouse, gaze where supported, keyboard and Escape; optional help must not hide required warnings. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
+The gallery uses 1280 × 720 logical pixels to review a 1920 × 1080 display at 150% scaling. In Settings, check the four navigation choices, grouped switches, voice choices below keyboard script, aligned adjustment columns, equal test/stop buttons and the separate ElevenLabs groups. Keep 12 logical pixels between ordinary rows and between voice controls and their help, with 16 pixels from that help to the next setting. Titles and descriptions stay closer together; dense gaze adjustment rows retain 6 pixels between rows. Preserve 58-pixel controls and allow vertical scrolling when content needs more height. Check both information disclosures with mouse, gaze where supported, keyboard and Escape; optional help must not hide required warnings. The Latin pagination snapshots use 380 × 640 logical pixels to check the sidebar below the 76-pixel hotbar at 150% scaling.
 
 The separate installation summary is documented in the HTML reference and covered by UI interaction tests; it is not part of either screenshot profile. Review it separately using `PogledAssist.exe --installation-check` after a build.
 
-Check the gallery at 100 percent and at the scale used by the target machine. Look for clipped labels, overlapping controls, inconsistent spacing, low contrast, missing icons, unexpected scrollbars, and controls that are too small for gaze.
+Check the gallery at 100 percent and at the scale used by the target machine. Look for clipped labels, overlapping controls, inconsistent spacing, low contrast, missing icons, unexpected scrollbars, and controls that are too small for gaze. Compact Settings rows end at their last control, with no trailing inset; preserve the 12-pixel gaps within adjustment groups. Hidden key actions must not leave an empty spacer at the end of the wide API-key row. Diagnostics uses 16 pixels between its footer actions and between content columns.
+
+Static gaze-setting guidance uses a left border, short bold lead-ins and wrapped paragraphs with a maximum width of 860 pixels. Keep it next to the setting it explains; retain the eye-policy scope, edge-hold limits and calibration caveat. Do not turn permanent instructions into dismissible alerts or hover-only help.
 
 ### Manual Windows checks
 
@@ -165,7 +171,7 @@ On a normal development machine, verify:
 - Settings survive an application restart.
 - ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed credentials, masked input after a failed save, and refusal to use an unsaved key.
 - The voice list matches My Voices. A missing selected ID requires explicit reselection before either Settings page can test it. An empty list says **Nema glasova**.
-- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [user guide](USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) owns defaults, cache behavior and timing.
+- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [user guide](features/elevenlabs.md) owns defaults, cache behavior and timing.
 - Check credit warnings and unavailable balance without User: Read. A slow balance refresh leaves voice/model choices and an unrelated dwell usable.
 - During preparation/playback, check the indicator inside the lower part of the Speech button, alignment with Fraze, stable text/target geometry, Stop, preserved text and no repeated paid test until gaze leaves its completed button. Check the static activity mark when the platform style disables widget animations. Stop and immediately speak again; the new request must reach ElevenLabs without a false timeout.
 - Check missing catalog permissions. The read-only check must not generate speech. Separately listen to the intended Fikret clone, Eleven v4 and sentence-case text.
