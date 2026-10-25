@@ -67,20 +67,20 @@
     const showFeedback = $('show-tracking-feedback').checked;
     const host = renderTrackingContext(context, showFeedback);
     const noticeVisible = showFeedback && trackingNoticeOpen;
-    document.querySelector('.tracking-app .message-box').dataset.notice = String(noticeVisible && context === 'message');
+    document.querySelector('.tracking-app .message-box').dataset.notice = String(noticeVisible && context !== 'confirm');
     renderTrackingNotice(host, state, stateKey, noticeVisible);
     renderTrackingTarget(context, usable, held);
   }
   function renderTrackingContext(context, showFeedback) {
     $('tracking-stage').dataset.context = context;
     $('tracking-stage').dataset.feedback = showFeedback ? 'on' : 'off';
-    document.querySelector('.tracking-app').inert = context !== 'message';
-    document.querySelector('.tracking-modal-layer').hidden = context === 'message';
+    document.querySelector('.tracking-app').inert = context === 'confirm';
+    document.querySelector('.tracking-modal-layer').hidden = context !== 'confirm';
     $('tracking-dialog-title').textContent = context === 'confirm' ? 'Obrisati cijelu poruku?' : 'Odaberite slovo';
     const background = $('tracking-background-feedback');
     const foreground = $('tracking-dialog-feedback');
-    const host = context === 'message' ? background : foreground;
-    (context === 'message' ? foreground : background).replaceChildren();
+    const host = context === 'confirm' ? foreground : background;
+    (context === 'confirm' ? background : foreground).replaceChildren();
     return host;
   }
   function renderTrackingNotice(host, state, stateKey, noticeVisible) {

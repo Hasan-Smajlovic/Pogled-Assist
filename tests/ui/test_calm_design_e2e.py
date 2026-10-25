@@ -117,8 +117,9 @@ def test_support_actions_and_scrolling_keep_hidden_settings_out_of_gaze(qtbot, m
 
 @pytest.mark.parametrize("script", ["latin", "arabic"])
 @pytest.mark.parametrize("group_size", [5, 12])
-def test_letter_dialog_targets_fit_and_recording_does_not_move_them(
-    qtbot, make_speech_window, script, group_size
+@pytest.mark.parametrize("editing", [False, True])
+def test_inline_letter_targets_fit_and_recording_does_not_move_them(
+    qtbot, make_speech_window, script, group_size, editing
 ):
     speech = FakeSpeech()
     speech._settings = SpeechSettings(keyboard_script=script)
@@ -127,24 +128,25 @@ def test_letter_dialog_targets_fit_and_recording_does_not_move_them(
     )
     window.resize(1280, 720)
     window.show()
-    window._open_letter_dialog(0)
-    dialog = window._dialogs.letter
-    qtbot.waitUntil(dialog.isVisible)
-    buttons = [window._action_buttons[action] for action in window._dialogs.letter_actions]
+    if editing:
+        window._phrases_button.click()
+        window._add_item_button.click()
+    window._show_letter_group(0)
+    host = window._key_grid_host
+    assert window._dialogs.active is None
+    buttons = [window._action_buttons[action] for action in window._main_dynamic_actions]
     qtbot.waitUntil(lambda: all(button.width() > 100 for button in buttons))
     before = [QRect(button.geometry()) for button in buttons]
-    assert dialog.height() < (640 if group_size == 12 else 430)
+    assert window.width() <= 1280 and window.height() <= 720
     assert max(rect.width() for rect in before) - min(rect.width() for rect in before) <= 1
     assert all(
-        dialog.rect().contains(QRect(button.mapTo(dialog, QPoint()), button.size()))
+        host.rect().contains(QRect(button.mapTo(host, QPoint()), button.size()))
         for button in buttons
     )
-    badge = window._dialogs.recording_badges[0]
+    badge = window._recording_badge
     badge.set_status({"busy": True, "state": "recording", "remaining_seconds": 80})
     qtbot.waitUntil(badge.isVisible)
     assert [button.geometry() for button in buttons] == before
-    title = window._dialogs.letter_title
-    assert badge.mapTo(dialog, QPoint()).x() > title.mapTo(dialog, QPoint()).x()
     first = window._action_buttons[window._action("letter:0:0")]
     second = window._action_buttons[window._action("letter:0:1")]
     assert (first.x() > second.x()) == (script == "arabic")

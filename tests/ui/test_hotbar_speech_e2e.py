@@ -10,6 +10,41 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
 @pytest.mark.e2e
+def test_inline_replacement_requires_leaving_before_selecting_a_letter(speech_gaze, qtbot):
+    window, _controller, _speech, feed, actions, _progress = speech_gaze
+    group = window._action_buttons[window._action("group:0")]
+    center = group.mapToGlobal(group.rect().center())
+    feed(center, 0)
+    feed(center, 1001)
+    assert actions == [window._action("group:0")]
+    qtbot.waitUntil(window._action_buttons[window._action("letter:0:0")].isVisible)
+    replacement = next(
+        action
+        for action in window._main_dynamic_actions
+        if window._action_buttons[action]
+        .rect()
+        .contains(window._action_buttons[action].mapFromGlobal(center))
+    )
+    assert replacement.startswith(window._action("letter:"))
+    assert window.action_at_global_point(center) is None
+    feed(center, 1400)
+    feed(center, 3000)
+    assert window._input.text() == ""
+    assert actions == [window._action("group:0")]
+    space = window._space_button.mapToGlobal(window._space_button.rect().center())
+    feed(space, 3100)
+    feed(center, 3200)
+    feed(center, 4201)
+    assert actions == [window._action("group:0"), replacement]
+    assert window._input.text()
+    feed(center, 4600)
+    feed(center, 6000)
+    assert actions == [window._action("group:0"), replacement]
+    click_speech_action(qtbot, window, "group:1")
+    assert window._active_group_index == 1
+
+
+@pytest.mark.e2e
 def test_efendija_failed_test_keeps_classified_reason_after_playback_event(
     hotbar_gaze, monkeypatch
 ):
@@ -57,7 +92,8 @@ def test_speech_gaze_keeps_progress_through_brief_edge_excursion(speech_gaze, qt
     elif command == "play":
         assert speech.requests[0][0] == "ŽELIM"
     else:
-        assert window._dialogs.active is window._dialogs.letter
+        assert window._active_group_index == 0
+        assert window._dialogs.active is None
 
 
 @pytest.mark.e2e
@@ -123,6 +159,8 @@ def test_speech_gaze_discards_held_progress_when_context_is_lost(speech_gaze, qt
     elif cancel == "mouse":
         click_speech_action(qtbot, window, "group:1")
         click_speech_action(qtbot, window, "letters:close")
+        button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"]
+        qtbot.waitUntil(button.isVisible)
     elif cancel == "resize":
         window.resize(window.width() - 20, window.height())
         qtbot.wait(1)
@@ -189,7 +227,8 @@ def test_speech_gaze_switch_during_cooldown_waits_before_starting_selection(spee
         f"{SPEECH_WINDOW_ACTION_PREFIX}play",
         f"{SPEECH_WINDOW_ACTION_PREFIX}group:0",
     ]
-    assert window._dialogs.active is window._dialogs.letter
+    assert window._active_group_index == 0
+    assert window._dialogs.active is None
 
 
 @pytest.mark.e2e

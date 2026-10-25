@@ -16,6 +16,7 @@
   let page = 0;
   let deleting = false;
   let symbols = false;
+  let selectedLetters = null;
   let editor = null;
   let savedMessage = '';
   let confirmAction = null;
@@ -125,7 +126,7 @@
   for (const button of document.querySelectorAll('[data-script-toggle]')) button.addEventListener('click', () => {
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
-    if ($('letters-dialog').open) closeDialog($('letters-dialog'));
+    selectedLetters = null;
     symbols = false; page = 0; render(); renderVoiceNotice(); restoreMessageFocus();
   });
 
@@ -165,6 +166,9 @@
   for (const event of ['click', 'keyup', 'select']) message.addEventListener(event, renderPredictions);
   document.addEventListener('keydown', event => {
     if (ignoreKey(event)) return;
+    if (event.key === 'Escape' && selectedLetters) {
+      event.preventDefault(); selectedLetters = null; render(); restoreMessageFocus(); return;
+    }
     if (messageTab(event)) { event.preventDefault(); return; }
     if (nativeKeyTarget(event)) return;
     if (event.key === 'Backspace') { event.preventDefault(); backspace(); }
@@ -273,6 +277,18 @@
   }
 
   function fillKeyboard() {
+    if (selectedLetters) {
+      $('paging').hidden = true;
+      const columns = selectedLetters.length < 6 ? 3 : 4;
+      const gridColumns = editor && selectedLetters.length === 12 ? 5 : columns;
+      content.className = 'key-grid inline-letters';
+      content.dir = arabic ? 'rtl' : 'ltr';
+      content.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(0, 1fr))`;
+      content.style.gridTemplateRows = `repeat(${Math.ceil((selectedLetters.length + 1) / gridColumns)}, minmax(72px, 1fr))`;
+      content.replaceChildren(...selectedLetters.map(letter => makeButton(keyLabel(letter), 'letter', letter)));
+      content.append(makeButton('Nazad na grupe', 'close-letters', '', 'back'));
+      return;
+    }
     const keys = symbols ? (arabic ? grouped(ARABIC_SPEECH_SYMBOLS) : SYMBOLS) : activeGroups;
     const paged = keys.length > KEY_PAGE_SIZE;
     const columns = paged ? 6 : symbols ? (arabic ? 3 : 4) : keys.length > 6 ? 3 : 2;
@@ -292,9 +308,9 @@
   const actionHandlers = {
     'group': value => { openLetters(Number(value)); },
     'symbol-group': value => { openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); },
-    'letter': value => { append(value); closeDialog($('letters-dialog')); },
+    'letter': value => { append(value); selectedLetters = null; render(); },
     'symbol': value => { append(value); },
-    'close-letters': value => { closeDialog($('letters-dialog')); },
+    'close-letters': value => { selectedLetters = null; render(); },
     'word': value => { appendWord(value, true); },
     'undo-word': value => { if (undoWord) { message.value = undoWord.text; autoSpace = undoWord.autoSpace; undoWord = null; renderPredictions(); updateSave(); } },
     'space': value => { append(' '); },
@@ -305,7 +321,7 @@
     'categories': value => { switchView(view === 'categories' ? 'keyboard' : 'categories'); },
     'phrases': value => { switchView(view === 'phrases' ? 'keyboard' : 'phrases'); },
     'keyboard-toggle': value => { if (view !== 'keyboard') switchView('keyboard');
-        else { symbols = !symbols; page = 0; render(); } },
+        else { selectedLetters = null; symbols = !symbols; page = 0; render(); } },
     'back': value => { category = null; page = 0; deleting = false; render(); },
     'previous': value => { page--; renderKeyboardGrid(); },
     'next': value => { page++; renderKeyboardGrid(); },
@@ -340,16 +356,12 @@
   function openLetters(index, previewSize = 0, groups = activeGroups) {
     const letters = previewSize ? groups.flat().slice(0, previewSize) : groups[index];
     if (!letters) return;
-    $('letters').classList.toggle('wide', letters.length >= 6);
-    $('letters-dialog').classList.toggle('compact', letters.length >= 12);
-    $('letters-title').textContent = symbols ? 'Odaberite znak' : 'Odaberite slovo';
-    $('letters').dir = arabic ? 'rtl' : 'ltr';
-    $('letters').replaceChildren(...letters.map(letter => makeButton(keyLabel(letter), 'letter', letter)));
-    $('letters').append(makeButton(letters.length >= 12 ? 'Nazad' : 'Nazad na grupe', 'close-letters', '', 'back'));
-    openDialog($('letters-dialog'));
+    selectedLetters = letters;
+    render();
   }
 
   function switchView(nextView) {
+    selectedLetters = null;
     view = nextView;
     category = null;
     page = 0;

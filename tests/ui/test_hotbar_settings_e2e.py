@@ -65,9 +65,11 @@ def test_arabic_script_gaze_switch_cannot_repeat_on_replacement_label(
     feed(group_point, 5599)
     assert window._dialogs.active is None
     feed(group_point, 5601)
-    assert window._dialogs.active is window._dialogs.letter
+    assert window._active_group_index == 0
+    assert window._dialogs.active is None
     qtbot.wait(1)
     letter = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"]
+    feed(window._space_button.mapToGlobal(window._space_button.rect().center()), 5900)
     feed(letter.mapToGlobal(letter.rect().center()), 6000)
     feed(letter.mapToGlobal(letter.rect().center()), 7001)
     assert window._input.text() == "\u0627"
