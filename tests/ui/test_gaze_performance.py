@@ -197,7 +197,7 @@ class _BenchmarkProbe:
         elif step in {2, 3}:
             self.window._switch_keyboard_script()
         elif step == 4:
-            self.window._open_letter_dialog(0)
+            self.window._show_letter_group(0)
         else:
             if self.window._dialogs.active is not None:
                 self.window._dialogs.active.done(0)

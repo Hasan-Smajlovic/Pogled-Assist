@@ -558,12 +558,6 @@ class SpeechSurface(QWidget):
         self._clear_layout(self._key_grid)
         self._set_grid_stretch(0, 1)
 
-    def _clear_letter_dialog(self) -> None:
-        for action in self._dialogs.letter_actions:
-            self._action_buttons.pop(action, None)
-        self._dialogs.letter_actions.clear()
-        self._clear_layout(self._dialogs.letter_grid)
-
     def _clear_layout(self, layout: QGridLayout | QHBoxLayout) -> None:
         while layout.count():
             item = layout.takeAt(0)
@@ -611,6 +605,7 @@ class SpeechSurface(QWidget):
             if object_name
             in (
                 "groupButton",
+                "lettersBackButton",
                 "phraseButton",
                 "deleteItemButton",
                 "predictionButton",
@@ -852,16 +847,10 @@ SPEECH_STYLE = """
                 font-weight: 500;
             }
             QDialog#speechDialog QLabel#dialogCopy { color: #dce6f3; font-size: 22px; }
-            QDialog#speechDialog QPushButton#dialogLetterButton {
+            QPushButton#letterButton {
                 font-size: 56px;
             }
-            QDialog#speechDialog QPushButton#dialogBackButton {
-                font-size: 22px;
-            }
-            QDialog#speechDialog QPushButton#dialogCompactLetterButton {
-                font-size: 44px;
-            }
-            QDialog#speechDialog QPushButton#dialogCompactBackButton {
+            QPushButton#lettersBackButton {
                 font-size: 22px;
             }
             QDialog#speechDialog QPushButton#dialogConfirmButton {

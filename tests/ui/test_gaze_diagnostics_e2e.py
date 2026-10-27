@@ -219,16 +219,17 @@ def test_letter_geometry_is_complete_and_uses_opaque_ids(diagnostic_mode, qtbot)
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window.show()
-    window._open_letter_dialog(0)
+    window._show_letter_group(0)
     qtbot.wait(1)
-    assert window._dialogs.active is window._dialogs.letter
-    expected = len(window._dialogs.actions)
+    assert window._dialogs.active is None
+    expected = {window._diagnostic_context.token(action) for action in window._main_dynamic_actions}
     if mode in {"basic", "trace"}:
         logging_setup.shutdown_application_logging()
         geometry = [
             item
             for item in records(latest)
-            if item["event"] == "target_geometry" and item["data"]["kind"] == "letter"
+            if item["event"] == "target_geometry"
+            and item["data"].get("context_id") == window._diagnostic_context.id
         ]
         if mode == "basic":
             assert geometry == []
@@ -239,8 +240,14 @@ def test_letter_geometry_is_complete_and_uses_opaque_ids(diagnostic_mode, qtbot)
 def _assert_letter_geometry(geometry, expected):
     assert geometry
     assert not any(item["data"].get("_snapshot_truncated") for item in geometry)
-    targets = [target for item in geometry for target in item["data"]["targets"]]
-    assert len(targets) == expected
+    targets = [
+        target
+        for item in geometry
+        for target in item["data"]["targets"]
+        if target["target_id"] in expected
+    ]
+    assert {target["target_id"] for target in targets} == expected
+    assert len(targets) == len(expected)
     for target in targets:
         _assert_target_geometry(target)
 

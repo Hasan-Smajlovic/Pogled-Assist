@@ -8,7 +8,6 @@ from PySide6.QtCore import QObject, QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -40,14 +39,12 @@ class SpeechDialogs(QObject):
         self._restore_focus = restore_focus
         self.active: QDialog | None = None
         self.actions: set[str] = set()
-        self.letter_actions: set[str] = set()
         self.recording_badges: list[RecordingBadge] = []
         self.backdrop = QFrame(parent)
         self.backdrop.setObjectName("modalBackdrop")
         self.backdrop.hide()
         self._build_dialogs()
         self.tracking_notices = {
-            self.letter: self.letter_notice,
             self.confirm: self.confirm_notice,
         }
 
@@ -59,7 +56,7 @@ class SpeechDialogs(QObject):
         self.backdrop.raise_()
         available_width = max(320, self._parent.width() - 64)
         width = min(1280, max(680, round(self._parent.width() * 0.68)), available_width)
-        if dialog in (self.letter, self.confirm):
+        if dialog is self.confirm:
             width = min(1000, available_width)
         dialog.resize(width, min(height, max(320, self._parent.height() - 64)))
         self._position_dialog(dialog)
@@ -111,7 +108,7 @@ class SpeechDialogs(QObject):
         QTimer.singleShot(0, self._parent, self._restore_focus)
 
     def kind(self, dialog: QDialog) -> str:
-        for name in ("letter", "confirm", "exit", "alarm", "sleep"):
+        for name in ("confirm", "exit", "alarm", "sleep"):
             if dialog is getattr(self, name):
                 return name
         return "unknown"
@@ -121,32 +118,10 @@ class SpeechDialogs(QObject):
         return context.id if context is not None else None
 
     def _build_dialogs(self) -> None:
-        self._build_letter_dialog()
         self._build_confirm_dialog()
         self._build_exit_dialog()
         self._build_alarm_dialog()
         self._build_sleep_dialog()
-
-    def _build_letter_dialog(self) -> None:
-        self.letter = self._new_dialog()
-        letter_layout = QVBoxLayout(self.letter)
-        letter_layout.setContentsMargins(24, 20, 24, 20)
-        letter_layout.setSpacing(18)
-        self.letter_title = QLabel("Odaberite slovo", self.letter)
-        self.letter_title.setObjectName("dialogTitle")
-        self.letter_grid_host = QWidget(self.letter)
-        self.letter_grid = QGridLayout(self.letter_grid_host)
-        self.letter_grid.setContentsMargins(0, 0, 0, 0)
-        self.letter_grid.setHorizontalSpacing(16)
-        self.letter_grid.setVerticalSpacing(16)
-        header, self.letter_notice = dialog_tracking_header(
-            self._recording_title(self.letter_title, self.letter), self.letter
-        )
-        letter_layout.addWidget(header)
-        letter_layout.addWidget(self.letter_grid_host)
-        self.letter.finished.connect(
-            lambda _result, dialog=self.letter: self._dialog_finished(dialog)
-        )
 
     def _build_confirm_dialog(self) -> None:
         self.confirm = self._new_dialog()

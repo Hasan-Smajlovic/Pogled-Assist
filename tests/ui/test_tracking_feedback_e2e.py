@@ -26,14 +26,14 @@ def test_tracking_notice_preserves_targets_message_and_focus(
     window._input.setText("TREBAM VODE")
     window._input.setSelection(0, 6)
     if context == "letters":
-        window._open_letter_dialog(0)
+        window._show_letter_group(0)
     elif context == "confirm":
         window._open_clear_dialog()
-    active_window = window if context == "message" else window._dialogs.active
+    active_window = window._dialogs.active if context == "confirm" else window
     qtbot.waitUntil(lambda: qapp.activeWindow() is active_window)
     widget = (
         window._message_header.notice
-        if context == "message"
+        if context != "confirm"
         else window._dialogs.tracking_notices[window._dialogs.active]
     )
     buttons = {
@@ -67,11 +67,9 @@ def test_tracking_notice_preserves_targets_message_and_focus(
     font.setPixelSize(11)
     font.setWeight(QFont.DemiBold)
     assert QFontMetrics(font).horizontalAdvance(notice.text) <= widget.width() - 152
-    if context != "message":
-        badge = window._dialogs.recording_badges[0 if context == "letters" else 1]
-        title = (
-            window._dialogs.letter_title if context == "letters" else window._dialogs.confirm_title
-        )
+    if context == "confirm":
+        badge = window._dialogs.recording_badges[0]
+        title = window._dialogs.confirm_title
         assert title.fontMetrics().height() <= title.contentsRect().height()
         notice_rect = QRect(widget.mapToGlobal(widget.rect().topLeft()), widget.size())
         badge.set_status({"busy": True, "state": "recording", "remaining_seconds": 119})
@@ -81,7 +79,7 @@ def test_tracking_notice_preserves_targets_message_and_focus(
         badge_rect = QRect(badge.mapToGlobal(badge.rect().topLeft()), badge.size())
         assert not notice_rect.intersects(badge_rect)
         assert badge.fontMetrics().horizontalAdvance(badge.text()) <= badge.contentsRect().width()
-    if context == "message":
+    if context != "confirm":
         assert window._input.height() == original_height - 20
         assert window._input.height() >= window._input.fontMetrics().height() + 16
     for action, rect in buttons.items():
@@ -106,16 +104,20 @@ def test_tracking_notice_follows_dialog_and_immediate_disable_restores_input(
     window.show()
     qtbot.wait(1)
     height = window._input.height()
+    window._input.setText("PORUKA")
     notice = TrackingNotice(
         "Lijevo oko se trenutno ne prati", "odabir je zaustavljen", eyes=(False, True)
     )
     window.set_tracking_notice(notice, immediate=True)
-    window._open_letter_dialog(0)
-    qtbot.waitUntil(lambda: window._dialogs.letter_notice.progress == 1)
+    window._show_letter_group(0)
+    assert window._dialogs.active is None
+    assert window._message_header.notice.progress == 1
+    window._open_clear_dialog()
+    qtbot.waitUntil(lambda: window._dialogs.confirm_notice.progress == 1)
     assert window._message_header.notice.isHidden()
     window._close_dialog()
     qtbot.waitUntil(lambda: window._message_header.notice.progress == 1)
-    assert window._dialogs.letter_notice.isHidden()
+    assert window._dialogs.confirm_notice.isHidden()
     window.set_tracking_notice(None, immediate=True)
     qtbot.wait(1)
     assert window._message_header.notice.isHidden()

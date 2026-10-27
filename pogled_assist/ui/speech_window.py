@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeyEvent
 from PySide6.QtWidgets import QDialog, QPushButton, QWidget
 
 from .. import diagnostics
@@ -84,6 +84,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._speech.voice_changed.connect(self._voice_changed)
         self._speech_settings = initial_settings
         self._keyboard_page = 0
+        self._active_group_index: int | None = None
+        self._last_gaze_point: QPoint | None = None
+        self._keyboard_departure_bounds: QRect | None = None
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         self._letter_groups = _group_letters(
             letters_for_script(initial_settings.keyboard_script), self._letters_per_group
@@ -186,7 +189,6 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         direction = Qt.RightToLeft if arabic else Qt.LeftToRight
         self._input.setLayoutDirection(direction)
         self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
-        self._dialogs.letter_grid_host.setLayoutDirection(Qt.LeftToRight)
         self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
         self._prediction_divider.setVisible(not arabic)
         for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
@@ -208,7 +210,24 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self.closed.emit()
         super().closeEvent(event)
 
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if (
+            event.key() == Qt.Key_Escape
+            and self._active_group_index is not None
+            and self._dialogs.active is None
+        ):
+            self._show_keyboard_groups()
+            self._restore_input_focus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def action_at_global_point(self, point: QPoint) -> str | None:
+        self._last_gaze_point = QPoint(point)
+        if self._keyboard_departure_bounds is not None:
+            if self._keyboard_departure_bounds.contains(point):
+                return None
+            self._keyboard_departure_bounds = None
         if not self._predictions.allows_gaze(point):
             return None
         actions = (
@@ -234,7 +253,21 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             if not self._predictions.allows_action(button):
                 return
         logger.info("Speech window gaze action requested: %s", diagnostics.safe_action(action))
+        keyboard_actions = set(self._main_dynamic_actions)
+        was_inline = self._active_group_index is not None
         self._trigger_action(action, source="gaze")
+        if (
+            (was_inline or self._active_group_index is not None)
+            and keyboard_actions != self._main_dynamic_actions
+            and self._last_gaze_point is not None
+            and self._dialogs.active is None
+        ):
+            # A new key can appear under the gaze that selected its group.
+            self._show_keyboard_buttons()
+            replacement = self._action_at_point(self._main_dynamic_actions, self._last_gaze_point)
+            self._keyboard_departure_bounds = (
+                self.action_bounds(replacement) if replacement is not None else None
+            )
 
     def _after_dialog_closed(self, dialog: QDialog) -> None:
         if dialog is self._dialogs.alarm:
@@ -243,6 +276,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._confirm_action = None
 
     def _show_group_level(self) -> None:
+        self._active_group_index = None
         self._key_grid_host.setLayoutDirection(
             Qt.RightToLeft
             if self._speech_settings.keyboard_script == ARABIC_SCRIPT
@@ -272,6 +306,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._context_changed()
 
     def _show_symbols_level(self) -> None:
+        self._active_group_index = None
         self._key_grid_host.setLayoutDirection(
             Qt.RightToLeft
             if self._speech_settings.keyboard_script == ARABIC_SCRIPT
@@ -303,6 +338,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._context_changed()
 
     def _show_list_level(self) -> None:
+        self._active_group_index = None
         self._key_grid_host.setLayoutDirection(Qt.LeftToRight)
         self._symbols_mode = False
         self._clamp_list_page()
@@ -374,21 +410,22 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             return None
         return self._library.categories[self._category_index]
 
-    def _populate_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
-        self._clear_letter_dialog()
-        group = (self._symbol_groups if symbols else self._letter_groups)[group_index]
-        self._dialogs.letter_title.setText("Odaberite znak" if symbols else "Odaberite slovo")
+    def _show_letter_group(self, group_index: int, *, symbols: bool = False) -> None:
+        groups = self._symbol_groups if symbols else self._letter_groups
+        if group_index < 0 or group_index >= len(groups):
+            return
+        self._active_group_index = group_index
+        self._symbols_mode = symbols
+        self._clear_main_grid()
+        group = groups[group_index]
+        title = "Odaberite znak" if symbols else "Odaberite slovo"
+        self._view_title.setText(self._editor_title() if self._editor is not None else title)
         item_count = len(group) + 1
         columns = 3 if item_count <= 6 else 4
-        rows = math.ceil(item_count / columns)
-        # Four rows of full-size buttons exceed a 720px display.
-        compact = rows >= 4
-        for column in range(4):
-            self._dialogs.letter_grid.setColumnStretch(column, 1 if column < columns else 0)
-        for row in range(5):
-            self._dialogs.letter_grid.setRowStretch(row, 1 if row < rows else 0)
-
-        self._dialogs.letter_grid_host.setLayoutDirection(
+        if self._editor is not None and item_count == 13:
+            columns = 5
+        self._set_grid_stretch(item_count, columns)
+        self._key_grid_host.setLayoutDirection(
             Qt.RightToLeft
             if self._speech_settings.keyboard_script == ARABIC_SCRIPT
             else Qt.LeftToRight
@@ -399,41 +436,35 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 if symbols
                 else f"letter:{group_index}:{index}"
             )
-            button = self._make_button(
+            button = self._make_dynamic_button(
                 key_label(letter),
                 action,
-                "dialogCompactLetterButton" if compact else "dialogLetterButton",
-                parent=self._dialogs.letter,
-                minimum_height=110 if compact else 128,
+                "letterButton",
             )
-            self._dialogs.letter_actions.add(action)
-            self._dialogs.letter_grid.addWidget(button, index // columns, index % columns)
+            self._key_grid.addWidget(button, index // columns, index % columns)
 
         back_action = self._action("letters:close")
-        back = self._make_button(
-            "Nazad" if compact else "Nazad na grupe",
+        back = self._make_dynamic_button(
+            "Nazad na grupe",
             back_action,
-            "dialogCompactBackButton" if compact else "dialogBackButton",
-            parent=self._dialogs.letter,
-            minimum_height=110 if compact else 128,
+            "lettersBackButton",
         )
-        self._dialogs.letter_actions.add(back_action)
         back_index = len(group)
-        self._dialogs.letter_grid.addWidget(back, back_index // columns, back_index % columns)
+        self._key_grid.addWidget(back, back_index // columns, back_index % columns)
+        self._update_view_controls()
+        self._show_keyboard_buttons()
+        self._context_changed()
 
-    def _open_letter_dialog(self, group_index: int, *, symbols: bool = False) -> None:
-        groups = self._symbol_groups if symbols else self._letter_groups
-        if group_index < 0 or group_index >= len(groups):
-            return
-        self._populate_letter_dialog(group_index, symbols=symbols)
-        self._dialogs.actions = set(self._dialogs.letter_actions)
-        item_count = len(groups[group_index]) + 1
-        columns = 3 if item_count <= 6 else 4
-        rows = math.ceil(item_count / columns)
-        self._open_dialog(
-            self._dialogs.letter,
-            40 + 68 + 18 + rows * (110 if rows >= 4 else 128) + (rows - 1) * 16,
-        )
+    def _show_keyboard_buttons(self) -> None:
+        for action in self._main_dynamic_actions:
+            self._action_buttons[action].show()
+        self._key_grid.activate()
+
+    def _show_keyboard_groups(self) -> None:
+        if self._symbols_mode:
+            self._show_symbols_level()
+        else:
+            self._show_group_level()
 
     def _open_clear_dialog(self) -> None:
         if not self._input.text():
@@ -602,6 +633,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         }[self._editor.kind]
 
     def _trigger_action(self, action: str, *, source: str = "button") -> None:
+        if source == "button":
+            self._keyboard_departure_bounds = None
         if self._available_button(action) is None:
             diagnostics.emit(
                 "ui_action_rejected",
@@ -642,7 +675,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             "backspace": self._backspace,
             "keyboard-toggle": self._toggle_keyboard_view,
             "script-toggle": self._switch_keyboard_script,
-            "letters:close": self._close_dialog,
+            "letters:close": self._show_keyboard_groups,
             "list:add": self._start_editor,
             "editor:save": self._save_editor,
             "editor:cancel": self._cancel_editor,
@@ -671,16 +704,17 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if kind == "suggestion":
             self._select_suggestion(int(value))
         elif kind == "group":
-            self._open_letter_dialog(int(value))
+            self._show_letter_group(int(value))
         elif kind == "letter":
             group_index, letter_index = (int(index) for index in value.split(":"))
             self._append_text(self._letter_groups[group_index][letter_index])
-            self._close_dialog()
+            self._show_group_level()
         elif kind == "symbol-group":
-            self._open_letter_dialog(int(value), symbols=True)
+            self._show_letter_group(int(value), symbols=True)
         elif kind == "symbol":
             self._append_text(self._symbols[int(value)])
-            self._close_dialog()
+            if self._active_group_index is not None:
+                self._show_symbols_level()
         elif command.startswith("list:select:"):
             self._select_list_item(int(command.rsplit(":", 1)[1]))
 
@@ -781,7 +815,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
     def _refresh_paging(self, list_mode: bool) -> None:
         count = self._list_page_count() if list_mode else self._keyboard_pages
         page = self._list_page if list_mode else self._keyboard_page
-        visible = list_mode or count > 1
+        visible = list_mode or (count > 1 and self._active_group_index is None)
         self._previous_page_button.setVisible(visible)
         self._next_page_button.setVisible(visible)
         self._page_label.setVisible(visible)

@@ -444,11 +444,10 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     hotbar._show_controller_sidebar()
     hotbar._open_speech()
     speech = hotbar._speech_window
-    speech._open_letter_dialog(0)
+    speech._show_letter_group(0)
     qtbot.wait(1)
     letter_targets = {
-        action: speech._action_buttons[action].geometry()
-        for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry() for action in speech._main_dynamic_actions
     }
     badges = [
         hotbar._keyboard_window._recording_badge,
@@ -464,10 +463,9 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     hotbar._recording_changed()
     qtbot.wait(1)
     assert letter_targets == {
-        action: speech._action_buttons[action].geometry()
-        for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry() for action in speech._main_dynamic_actions
     }
-    speech._close_dialog()
+    speech._show_group_level()
     monkeypatch.setattr(
         toolbar.SettingsWindow, "_sync_startup_setting_from_windows", lambda _: None
     )

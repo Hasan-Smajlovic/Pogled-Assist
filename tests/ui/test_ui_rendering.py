@@ -75,9 +75,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     unrelated.write_bytes(b"leave caller files alone")
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 72
+    assert len(snapshots) == 74
     assert {path.stem for path in snapshots} == CORE_NAMES
-    assert len(encountered) == 149  # Extended states remain available without PNG encoding.
+    assert len(encountered) == 151  # Extended states remain available without PNG encoding.
     assert not omitted.exists()
     assert unrelated.read_bytes() == b"leave caller files alone"
     unrelated.unlink()  # Keep the CI artifact limited to actual previews.

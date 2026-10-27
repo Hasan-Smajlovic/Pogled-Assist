@@ -8,6 +8,8 @@ GROUPS = {
         "Speech",
         (
             "speech",
+            "speech-letters",
+            "speech-letters-twelve",
             "speech-categories",
             "speech-answers",
             "phrases",

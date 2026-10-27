@@ -112,14 +112,14 @@ def test_arabic_speech_groups_and_dialog_fit_150_percent(
         if "group:" in action:
             assert window.rect().contains(QRect(button.mapTo(window, QPoint(0, 0)), button.size()))
             assert button.height() >= 72
-    window._open_letter_dialog(0)
+    window._show_letter_group(0)
     qtbot.wait(1)
-    dialog = window._dialogs.letter
-    assert dialog.width() <= 1280 and dialog.height() <= 720
+    assert window._dialogs.active is None
+    host = window._key_grid_host
     rects = []
-    for action in window._dialogs.letter_actions:
+    for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
-        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
-        assert dialog.rect().contains(rect)
+        rect = QRect(button.mapTo(host, QPoint(0, 0)), button.size())
+        assert host.rect().contains(rect)
         assert all(not rect.intersects(previous) for previous in rects)
         rects.append(rect)
