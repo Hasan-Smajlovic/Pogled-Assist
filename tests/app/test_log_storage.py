@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import threading
 import time
 import tracemalloc
@@ -120,12 +121,12 @@ def test_failed_rotation_preserves_source_and_reports_live_failure(tmp_path, mon
     latest = tmp_path / "logs/latest.txt"
     writer.start_segment(latest, None, trace=False)
     writer.record(logging.makeLogRecord({"msg": "original", "levelno": 20}))
-    wait_for(lambda: writer._file is not None)
+    wait_for(lambda: writer._output._file is not None)
 
     def fail(*_args):
         raise OSError("synthetic move failure")
 
-    monkeypatch.setattr(log_transport.os, "replace", fail)
+    monkeypatch.setattr(os, "replace", fail)
     for _ in range(10):
         writer.record(logging.makeLogRecord({"msg": "x" * 180, "levelno": 20}))
     assert writer.stop()
@@ -151,6 +152,28 @@ def test_failed_deletion_reports_real_usage_and_preserves_unsafe_paths(tmp_path,
     monkeypatch.setattr(type(old), "unlink", fail)
     state = store.maintain(budget_bytes=0)
     assert old.exists() and state["usage_bytes"] == 4
+    assert state["state"] == "cleanup_failed"
+
+
+def test_failed_deletions_still_bound_the_work_in_one_maintenance_pass(tmp_path, monkeypatch):
+    root = tmp_path / "logs"
+    root.mkdir()
+    for index in range(130):
+        (root / f"20261001_120000_{index:06}.txt").write_bytes(b"keep")
+    attempts = []
+    unlink = type(root).unlink
+
+    def fail(path, *args, **kwargs):
+        if path.parent == root:
+            attempts.append(path.name)
+            raise PermissionError("Synthetic deletion failure")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(type(root), "unlink", fail)
+    monkeypatch.setattr(recording, "disk_free", lambda _root: 20_000_000_000)
+    state = recording.RecordingStore(root / "recordings").maintain(budget_bytes=0)
+    assert len(attempts) == 128
+    assert state["usage_bytes"] == 130 * 4
     assert state["state"] == "cleanup_failed"
 
 

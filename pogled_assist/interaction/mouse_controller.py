@@ -289,8 +289,8 @@ class GazeMouseController(QObject):
 
     def cancel_gaze_interactions_for_mouse(self) -> None:
         self.cancel_toolbar_interaction(require_leave=True)
-        self._target_selection.cancel(require_leave=True)
-        self._quick_selection.cancel(require_leave=True)
+        self._target_selection.cancel(require_leave=True, reason="mouse_intervention")
+        self._quick_selection.cancel(require_leave=True, reason="mouse_intervention")
         self._cancel_interaction("target")
         self._cancel_interaction("quick")
 
@@ -579,7 +579,7 @@ class GazeMouseController(QObject):
                 hold_ms=self.settings.edge_hold_ms,
             )
             if not self._toolbar_selection.is_blocked:
-                self._toolbar_selection.cancel()
+                self._toolbar_selection.cancel(reason="target_departure")
         elif hit.action is None:
             self._reset_toolbar_dwell()
         self._cancel_interaction("toolbar")
@@ -862,7 +862,7 @@ class GazeMouseController(QObject):
             self._input.click(point.x(), point.y(), button="left", clicks=2, interval=0.04)
 
     def _reset_toolbar_dwell(self) -> None:
-        self._toolbar_selection.cancel()
+        self._toolbar_selection.cancel(reason="target_departure")
         self._cancel_interaction("toolbar")
         self._set_toolbar_gaze_target(None)
 
@@ -881,7 +881,7 @@ class GazeMouseController(QObject):
         self.toolbar_gaze_target_changed.emit(action)
 
     def _reset_target_dwell(self) -> None:
-        self._target_selection.cancel()
+        self._target_selection.cancel(reason="target_departure")
         self._cancel_interaction("target")
         self._target_anchor = None
 
@@ -891,7 +891,7 @@ class GazeMouseController(QObject):
         self._target_anchor = None
 
     def _reset_quick_dwell(self) -> None:
-        self._quick_selection.cancel()
+        self._quick_selection.cancel(reason="target_departure")
         self._cancel_interaction("quick")
         self._quick_anchor = None
 

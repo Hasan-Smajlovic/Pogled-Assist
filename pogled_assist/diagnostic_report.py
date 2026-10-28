@@ -89,16 +89,16 @@ class SessionAnalysis:
         self.settings = {}
         self.open_attempts = {}
         self.partial_attempts = 0
+        self.coverage_start = None
+        self.partial_holds = Counter()
+        self.hold_coverage = Counter()
+        self.partial_hold_duration = LatencySummary()
 
     def observe(self, item: dict) -> None:
         event, data = item["event"], item["data"]
         at = item.get("monotonic_s")
+        self._observe_item_context(event, data, at)
         self._observe_metrics(event, data)
-        if event == "segment_context" and isinstance(data.get("snapshot"), dict):
-            snapshot = data["snapshot"]
-            self._observe_context(snapshot.get("event"), snapshot.get("data", {}), copied=True)
-        else:
-            self._observe_context(event, data)
         if not finite_number(at):
             return
         evidence, interval = _event_evidence(event, data)
@@ -109,11 +109,22 @@ class SessionAnalysis:
             self._observe_selection_end(at, data)
         if event == "bridge_connection":
             self._observe_bridge(at, data)
+        self._observe_selection_details(event, data)
+
+    def _observe_item_context(self, event, data, at):
+        if event == "session_start" and finite_number(at):
+            self.coverage_start = (
+                min(at, self.coverage_start) if self.coverage_start is not None else at
+            )
+        if event == "segment_context" and isinstance(data.get("snapshot"), dict):
+            snapshot = data["snapshot"]
+            self._observe_context(snapshot.get("event"), snapshot.get("data", {}), copied=True)
+        else:
+            self._observe_context(event, data)
+
+    def _observe_selection_details(self, event, data):
         if event == "selection_hold_end":
-            outcome = data.get("outcome")
-            if outcome in {"resumed", "expired", "cancelled"}:
-                self.hold_outcomes[outcome] += 1
-            self.hold_duration.add(data.get("duration_ms"))
+            self._observe_hold(data)
         if event in {"selection_credit_discarded", "selection_end"}:
             self.discarded_credit_ms += _nonnegative(data.get("discarded_ms"), 0)
         if event in {"ui_action_requested", "ui_action_returned"}:
@@ -132,22 +143,45 @@ class SessionAnalysis:
                 }
             )
 
+    def _observe_hold(self, data):
+        started = data.get("hold_started_monotonic_s")
+        coverage = "unknown"
+        if finite_number(started) and self.coverage_start is not None:
+            coverage = "partial_start" if started < self.coverage_start else "observed_start"
+        self.hold_coverage[coverage] += 1
+        outcome = data.get("outcome")
+        if outcome not in ("resumed", "expired", "cancelled"):
+            return
+        if coverage == "partial_start":
+            self.partial_holds[outcome] += 1
+            self.partial_hold_duration.add(data.get("duration_ms"))
+        else:
+            self.hold_outcomes[outcome] += 1
+            self.hold_duration.add(data.get("duration_ms"))
+
     def _observe_context(self, event, data, *, copied=False):
         if not isinstance(data, dict):
             return
         if event == "selection_settings":
-            identity = data.get("settings_id")
-            if isinstance(identity, str) and len(self.settings) < 256:
-                self.settings[identity] = {
-                    key: data.get(key) for key in ("source", "pause_ms", "dwell_ms")
-                }
+            self._observe_settings(data)
         if event == "selection_state":
-            identity = data.get("attempt_id")
-            if isinstance(identity, str) and identity not in self.open_attempts:
-                if len(self.open_attempts) == 500:
-                    self.open_attempts.pop(next(iter(self.open_attempts)))
-                    self.details_truncated = True
-                self.open_attempts[identity] = not copied and data.get("attempt_started") is True
+            self._observe_attempt(data, copied)
+
+    def _observe_settings(self, data):
+        identity = data.get("settings_id")
+        if isinstance(identity, str) and len(self.settings) < 256:
+            self.settings[identity] = {
+                key: data.get(key) for key in ("source", "pause_ms", "dwell_ms")
+            }
+
+    def _observe_attempt(self, data, copied):
+        identity = data.get("attempt_id")
+        if not isinstance(identity, str) or identity in self.open_attempts:
+            return
+        if len(self.open_attempts) == 500:
+            self.open_attempts.pop(next(iter(self.open_attempts)))
+            self.details_truncated = True
+        self.open_attempts[identity] = not copied and data.get("attempt_started") is True
 
     def _observe_bridge(self, at: float, data: dict) -> None:
         self.details_truncated |= len(self.bridge_connections) == self.bridge_connections.maxlen
@@ -188,7 +222,7 @@ class SessionAnalysis:
         stream = data.get("observation_stream_id")
         counts = data.get("cumulative_counts")
         index = data.get("interval_index")
-        if not isinstance(stream, str) or not isinstance(counts, dict) or type(index) is not int:
+        if not all((isinstance(stream, str), isinstance(counts, dict), type(index) is int)):
             return
         if stream not in self._summary_counters and len(self._summary_counters) >= 256:
             self.details_truncated = True
@@ -197,15 +231,10 @@ class SessionAnalysis:
         if index <= previous_index:
             return
         self.missing_counter_intervals += max(0, index - previous_index - 1)
-        for key, value in counts.items():
-            if (
-                isinstance(key, str)
-                and key.startswith(("outcome:", "reason:"))
-                and type(value) is int
-                and value >= 0
-            ):
-                self.reason_totals[key] += max(0, value - previous.get(key, 0))
-        self._summary_counters[stream] = index, counts
+        valid = _reason_counts(counts)
+        for key, value in valid.items():
+            self.reason_totals[key] += max(0, value - previous.get(key, 0))
+        self._summary_counters[stream] = index, valid
 
     def _observe_suppressed(self, counts: object) -> None:
         if not isinstance(counts, dict):
@@ -236,49 +265,9 @@ class SessionAnalysis:
             "target_or_context_changed": "target_or_context_changed",
         }.get(reason, "other_or_unknown")
         self.outcomes[outcome] += 1
-        source = data.get("source")
-        if source not in (
-            "toolbar",
-            "desktop",
-            "quick_action",
-            "quick_menu",
-            "precision_zoom",
-            "settings",
-            "speech",
-            "keyboard",
-            "controller",
-            "gaze_check",
-        ):
-            source = "other"
-        surface = data.get("surface")
-        surface = (
-            surface
-            if surface
-            in {
-                "toolbar",
-                "hotbar",
-                "speech",
-                "Speech",
-                "keyboard",
-                "Keyboard",
-                "Controller",
-                "controller",
-                "settings",
-                "desktop",
-                "quick_action",
-                "quick_menu",
-                "precision_zoom",
-                "input",
-            }
-            else source
-        )
-        self.by_surface[f"{surface}:{reason if isinstance(reason, str) else 'unknown'}"] += 1
-        settings = data.get("settings_id")
-        if isinstance(settings, str):
-            if settings in self.settings_outcomes or len(self.settings_outcomes) < 256:
-                self.settings_outcomes.setdefault(settings, Counter())[reason or "unknown"] += 1
-            else:
-                self.details_truncated = True
+        source, surface = _selection_surface(data)
+        self.by_surface[f"{surface}:{reason or 'unknown'}"] += 1
+        self._observe_settings_outcome(data, reason)
         self.details_truncated |= len(self.attempts) == self.attempts.maxlen
         self.attempts.append(
             {
@@ -295,6 +284,15 @@ class SessionAnalysis:
                 else "unknown",
             }
         )
+
+    def _observe_settings_outcome(self, data, reason):
+        settings = data.get("settings_id")
+        if not isinstance(settings, str):
+            return
+        if settings not in self.settings_outcomes and len(self.settings_outcomes) >= 256:
+            self.details_truncated = True
+            return
+        self.settings_outcomes.setdefault(settings, Counter())[reason or "unknown"] += 1
 
     def result(self, *, complete: bool) -> dict:
         attempts = []
@@ -317,6 +315,9 @@ class SessionAnalysis:
                 key: dict(value) for key, value in self.settings_outcomes.items()
             },
             "hold_outcomes": dict(self.hold_outcomes),
+            "hold_coverage": dict(self.hold_coverage),
+            "partial_hold_outcomes": dict(self.partial_holds),
+            "partial_hold_duration": self.partial_hold_duration.result(),
             "hold_duration": self.hold_duration.result(),
             "discarded_credit_ms": self.discarded_credit_ms,
             "reason_totals_from_counters": dict(self.reason_totals),
@@ -370,3 +371,34 @@ def _timer_evidence(event: str, data: dict) -> tuple[str | None, float]:
     if finite_number(late) and late >= 100:
         return "qt_delay_at_least_100ms", _nonnegative(data.get("interval_s"), 0.0)
     return None, 0.0
+
+
+def _reason_counts(counts):
+    return {
+        key: value
+        for key, value in counts.items()
+        if isinstance(key, str)
+        and key.startswith(("outcome:", "reason:"))
+        and type(value) is int
+        and value >= 0
+    }
+
+
+def _selection_surface(data):
+    sources = (
+        "toolbar",
+        "desktop",
+        "quick_action",
+        "quick_menu",
+        "precision_zoom",
+        "settings",
+        "speech",
+        "keyboard",
+        "controller",
+        "gaze_check",
+    )
+    source = data.get("source")
+    source = source if source in sources else "other"
+    surface = data.get("surface")
+    surfaces = (*sources, "hotbar", "Speech", "Keyboard", "Controller", "input")
+    return source, surface if surface in surfaces else source

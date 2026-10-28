@@ -32,6 +32,9 @@ datas = [
     (str(repo_root / "pogled_assist" / "__init__.py"), "pogled_assist"),
     (str(repo_root / "pogled_assist" / "log_snapshot.py"), "pogled_assist"),
     (str(repo_root / "pogled_assist" / "log_transport.py"), "pogled_assist"),
+    (str(repo_root / "pogled_assist" / "log_context.py"), "pogled_assist"),
+    (str(repo_root / "pogled_assist" / "log_output.py"), "pogled_assist"),
+    (str(repo_root / "pogled_assist" / "log_reservations.py"), "pogled_assist"),
     (str(repo_root / "pogled_assist" / "tracking" / "__init__.py"), "pogled_assist/tracking"),
     (
         str(repo_root / "pogled_assist" / "tracking" / "tobii_stream_engine.py"),

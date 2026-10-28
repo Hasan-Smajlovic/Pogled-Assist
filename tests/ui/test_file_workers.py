@@ -18,6 +18,8 @@ class SlowIdleQueue(Queue):
         self.waiting = Event()
 
     def get(self, *args, **kwargs):
+        if kwargs.get("block") is False:
+            return super().get(*args, **kwargs)
         if self.empty():
             self.waiting.set()
         # Stretch polling so only an actual wakeup can satisfy the shutdown test.
@@ -126,7 +128,7 @@ def test_recording_shutdown_discards_queued_history_without_waiting_for_export(
     monkeypatch.setattr(recordings.store, "recover_and_load", lambda **kwargs: loads.append(kwargs))
     recordings.exported.connect(lambda *args: exported.append(args))
     try:
-        assert recordings.export("synthetic", tmp_path / "out.zip")
+        assert recordings.export("a" * 32, tmp_path / "out.zip")
         assert entered.wait(1)
         recordings.load()
         assert recordings._queue.full()

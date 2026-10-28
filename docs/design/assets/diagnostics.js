@@ -79,7 +79,14 @@
     const duration = (active ? active.minutes : minutes) * 60;
     renderDuration(active, elapsed, duration, finishing);
     renderLogging();
+    renderPersistence(value);
     renderRecordingState(active, finishing);
+  }
+  function renderPersistence(value) {
+    const text = value.persistenceFailure
+      ? 'Prekidi čuvanja: opći logovi · Greška zapisivanja · Početak 28.10.2026. 14:32:05 · Oporavak: još traje. Raniji prekid: ručni snimak · Greška završnog zapisa · Početak 28.10.2026. 14:30:00 · Oporavak 28.10.2026. 14:31:00. Prikaz je skraćen na posljednja 64 prekida.'
+      : 'Nema zabilježenih prekida čuvanja.';
+    setText('persistence-history', text);
   }
   function renderDuration(active, elapsed, duration, finishing) {
     for (const button of document.querySelectorAll('[data-duration]')) {

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from ..diagnostic_recording import DURATIONS
 from ..interaction.eye_tracking_policy import EYE_TRACKING_POLICY_CHOICES
+from .diagnostic_status import storage_text
 from .gaze_check_history import scroll_content
 from .gaze_check_window import STYLESHEET
 from .recording_badge import RecordingBadge
@@ -36,6 +37,7 @@ REASONS = {
     "shutdown": "Zatvorena aplikacija",
     "writer_error": "Greška zapisivanja",
     "missing_end": "Nedostaje potvrđeni završetak",
+    "missing_segments": "Nedostaju segmenti snimka",
 }
 
 
@@ -168,6 +170,10 @@ class DiagnosticsWindow(QWidget):
         layout.addWidget(self._storage)
         layout.addStretch(1)
         columns.addWidget(scroll_content(card), 6)
+        columns.addWidget(self._build_guide(), 5)
+        self._tabs.addTab(page, "Novo snimanje")
+
+    def _build_guide(self):
         guide, body = self._card()
         body.addWidget(text_label("Šta se bilježi", title=True))
         body.addWidget(
@@ -199,8 +205,7 @@ class DiagnosticsWindow(QWidget):
             )
         )
         body.addStretch(1)
-        columns.addWidget(scroll_content(guide), 5)
-        self._tabs.addTab(page, "Novo snimanje")
+        return scroll_content(guide)
 
     def _build_history(self):
         page = QWidget()
@@ -269,6 +274,17 @@ class DiagnosticsWindow(QWidget):
                 "Snimanje je završeno. Provjerite razlog i potpunost podataka uz snimak."
             )
         self._was_busy = service.busy
+        self._refresh_recording_state(state)
+        self._storage.setText(
+            storage_text(getattr(service, "storage", {}), getattr(service, "persistence", {}))
+        )
+        for button in self._durations.buttons():
+            button.setEnabled(not service.busy)
+        self._refresh_history()
+        self._refresh_primary(state)
+
+    def _refresh_recording_state(self, state):
+        service = self.recordings
         seconds = int(state.get("remaining_seconds", self._minutes * 60))
         self._state.setText(
             {
@@ -298,37 +314,9 @@ class DiagnosticsWindow(QWidget):
             f"Zadržavanje {settings.get('dwell_ms')} ms"
             + ("\nSIMULACIJA · Bez Tobii mjerenja." if context.get("simulated") else "")
         )
-        storage = getattr(service, "storage", {})
-        persistence = getattr(service, "persistence", {})
-        storage_state = {
-            "ready": "Prostor je dostupan.",
-            "protected_over_budget": "Zaštićeni podaci trenutno prelaze podešeni prostor.",
-            "low_space": "Na disku nema dovoljno slobodnog prostora.",
-            "cleanup_failed": "Brisanje starih logova nije uspjelo.",
-            "unavailable": "Stanje prostora nije dostupno.",
-        }.get(storage.get("state"), "Provjeravam prostor…")
-        failures = {item.get("output") for item in persistence.get("failures", [])}
-        failed_text = (
-            " Greška čuvanja: "
-            + ", ".join(
-                "opći logovi" if output == "ordinary" else "ručni snimak"
-                for output in sorted(failures)
-            )
-            + "."
-            if failures
-            else ""
-        )
-        self._storage.setText(
-            f"Svi logovi: {storage.get('usage_bytes', 0) / 1_000_000_000:.2f} / {storage.get('budget_bytes', 4_000_000_000) / 1_000_000_000:g} GB\n"
-            f"Najstariji poznati zapis: {storage.get('oldest_at') or 'Nije poznato'}\n{storage_state}{failed_text}"
-            + (
-                f"\nZabilježeni prekidi čuvanja: {len(persistence.get('gaps', []))}."
-                if persistence.get("gaps")
-                else ""
-            )
-        )
-        for button in self._durations.buttons():
-            button.setEnabled(not service.busy)
+
+    def _refresh_history(self):
+        service = self.recordings
         signature = (
             service.loading,
             service.history_error,
@@ -364,6 +352,9 @@ class DiagnosticsWindow(QWidget):
                     if service.history_error
                     else "Još nema snimaka. Otvorite „Novo snimanje“."
                 )
+
+    def _refresh_primary(self, state):
+        service = self.recordings
         self._primary.setText(
             ("Zaustavi snimanje" if service.busy else "Pokreni snimanje")
             if self._tabs.currentIndex() == 0

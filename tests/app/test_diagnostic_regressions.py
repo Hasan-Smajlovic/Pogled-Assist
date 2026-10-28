@@ -1,0 +1,341 @@
+"""Cross-destination regressions from the continuous diagnostics review."""
+
+import json
+import sys
+from queue import Empty, Queue
+from threading import Event, Thread
+from zipfile import ZipFile
+
+import pytest
+from _clock import freeze_monotonic
+from PySide6.QtCore import QObject, Signal
+
+from pogled_assist import diagnostics, logging_setup
+from pogled_assist.diagnostic_recording import RecordingStore, recording_context
+from pogled_assist.interaction.gaze_selection import GazeSelectionTimer
+from pogled_assist.log_reader import summarize
+from pogled_assist.log_transport import LogWriter
+from pogled_assist.ui.diagnostic_recordings import DiagnosticRecordings
+
+
+def record(path, session, event, at, **data):
+    item = dict(
+        schema_version=1,
+        process_instance="process",
+        session_id=session,
+        event=event,
+        monotonic_s=at,
+        data=data,
+    )
+    with path.open("a") as stream:
+        stream.write(json.dumps(item) + "\n")
+
+
+def test_overlapping_sessions_are_merged_in_observation_order(tmp_path):
+    ordinary, manual = tmp_path / "ordinary.jsonl", tmp_path / "manual.jsonl"
+    record(ordinary, "ordinary", "session_start", 0)
+    record(
+        ordinary,
+        "ordinary",
+        "selection_state",
+        1,
+        attempt_id="a",
+        attempt_started=True,
+        observation_id="start",
+    )
+    for index in (1, 3):
+        record(
+            ordinary,
+            "ordinary",
+            "selection_summary",
+            index,
+            observation_id=f"sum{index}",
+            observation_stream_id="stream",
+            interval_index=index,
+            cumulative_counts={"outcome:completed": index},
+        )
+    record(
+        ordinary,
+        "ordinary",
+        "selection_end",
+        4,
+        attempt_id="a",
+        reason="completed",
+        observation_id="end",
+        coverage="observed_start",
+    )
+    record(ordinary, "ordinary", "session_end", 6)
+    record(manual, "manual", "session_start", 1.5)
+    record(
+        manual,
+        "manual",
+        "segment_context",
+        1.5,
+        snapshot={"event": "selection_state", "data": {"attempt_id": "a"}},
+    )
+    record(
+        manual,
+        "manual",
+        "selection_summary",
+        2,
+        observation_id="sum2",
+        observation_stream_id="stream",
+        interval_index=2,
+        cumulative_counts={"outcome:completed": 2},
+    )
+    record(
+        manual,
+        "manual",
+        "selection_end",
+        4,
+        attempt_id="a",
+        reason="completed",
+        observation_id="end",
+        coverage="observed_start",
+    )
+    record(manual, "manual", "session_end", 5)
+    result = summarize(tmp_path)
+    assert result["deduplicated_observations"] == 1
+    assert result["analysis"]["partial_selection_attempts"] == 0
+    assert result["analysis"]["missing_counter_intervals"] == 0
+    assert result["analysis"]["reason_totals_from_counters"] == {"outcome:completed": 3}
+
+
+@pytest.mark.parametrize("field", ["attempt_id", "surface", "coverage", "outcome"])
+def test_malformed_optional_field_keeps_other_evidence(tmp_path, field):
+    path = tmp_path / "stream.jsonl"
+    record(path, "s", "session_start", 0)
+    record(path, "s", "selection_state", 1, attempt_id="known", attempt_started=True)
+    record(
+        path,
+        "s",
+        "selection_hold_end" if field == "outcome" else "selection_end",
+        2,
+        **{field: [], "reason": "completed"},
+    )
+    record(path, "s", "session_end", 3)
+    result = summarize(path)
+    assert not result["complete"]
+    assert result["parse_warnings"][0]["reason"] == "invalid_diagnostic_fields"
+    assert result["session_end_present"]
+
+
+def test_qt_slot_failure_is_not_reported_as_handler_returned(monkeypatch):
+    class Emitter(QObject):
+        fired = Signal()
+
+    events, errors = [], []
+    monkeypatch.setattr(diagnostics, "enabled", lambda: True)
+    monkeypatch.setattr(diagnostics, "emit", lambda event, **fields: events.append((event, fields)))
+    monkeypatch.setattr(sys, "excepthook", lambda *args: errors.append(args))
+
+    def fail():
+        raise RuntimeError("Synthetic handler failure")
+
+    emitter = Emitter()
+    emitter.fired.connect(lambda: diagnostics.invoke_action(fail))
+    diagnostics.invoke_action(emitter.fired.emit)
+    assert len(errors) == 1
+    assert [fields["outcome"] for event, fields in events if event == "ui_action_returned"] == [
+        "handler_failed"
+    ]
+
+
+def test_shutdown_can_race_with_worker_taking_the_last_job(qapp, tmp_path):
+    taken = Event()
+
+    class RacingQueue(Queue):
+        def empty(self):
+            result = super().empty()
+            if not result:
+                worker = Thread(target=lambda: (self.get(), taken.set()))
+                worker.start()
+                assert taken.wait(1)
+                worker.join()
+            return result
+
+        def get_nowait(self):
+            # Model the worker winning between the old empty()/get_nowait() calls.
+            if not taken.is_set():
+                self.empty()
+            return super().get_nowait()
+
+    recordings = DiagnosticRecordings(RecordingStore(tmp_path), qapp, writer=lambda: None)
+    recordings._queue = RacingQueue()
+    recordings._queue.put(("maintenance", "", None))
+    try:
+        recordings.shutdown()
+    except Empty:
+        pytest.fail("Shutdown let the queue race escape into Qt closeEvent")
+    finally:
+        recordings.deleteLater()
+
+
+def test_enabling_ordinary_during_manual_replays_context(tmp_path, monkeypatch):
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    writer.start_recording(tmp_path / "recordings", 1, recording_context({}, {}, simulated=True))
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("speech", 0, pause_ms=250, dwell_ms=1000)
+    timer.update("speech", 400, pause_ms=250, dwell_ms=1000)
+    writer.start_segment(tmp_path / "logs/latest.txt", None, trace=False)
+    timer.complete()
+    writer.stop_recording()
+    assert writer.stop()
+    result = summarize(tmp_path / "logs/diagnostics")
+    assert result["analysis"]["settings_intervals"]
+    assert result["analysis"]["recent_selection_ends"][0]["coverage"] == "partial_start"
+
+
+def test_edge_hold_expiry_during_tracking_keeps_its_actual_reason(monkeypatch):
+    events = []
+    monkeypatch.setattr(diagnostics, "enabled", lambda: True)
+    from types import SimpleNamespace
+
+    writer = SimpleNamespace(
+        _generation=1, trace=False, event=lambda event, fields, **kw: events.append((event, fields))
+    )
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("speech", 0, pause_ms=250, dwell_ms=1000)
+    timer.update("speech", 400, pause_ms=250, dwell_ms=1000)
+    timer.update(None, 410, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=100)
+    timer.hold_tracking(700, 900, eyes=(False, True))
+    timer.update("speech", 550, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=100)
+    assert (
+        next(fields["reason"] for event, fields in events if event == "selection_end")
+        == "edge_hold_expired"
+    )
+
+
+@pytest.mark.parametrize("missing", ["first", "middle", "last"])
+def test_missing_segment_is_partial_and_still_exportable(tmp_path, monkeypatch, missing):
+    from pogled_assist import diagnostic_recording
+
+    monkeypatch.setattr(diagnostic_recording, "SEGMENT_BYTES", 2500)
+    writer = LogWriter()
+    folder = tmp_path / "recordings"
+    key = writer.start_recording(folder, 1, recording_context({}, {}, simulated=True))
+    for index in range(20):
+        writer.event("synthetic", {"index": index, "padding": "x" * 600})
+    writer.stop_recording()
+    assert writer.stop()
+    traces = sorted(
+        (folder / key).glob("snimak*.jsonl"), key=lambda path: path.name != "snimak.jsonl"
+    )
+    target = {
+        "first": traces[0],
+        "middle": folder / key / "snimak-000001.jsonl",
+        "last": max(traces, key=lambda path: path.name if "-" in path.stem else ""),
+    }[missing]
+    missing_index = 0 if target.name == "snimak.jsonl" else int(target.stem.split("-")[-1])
+    target.unlink()
+    store = RecordingStore(folder)
+    entry = store.load()[0]
+    assert not entry["complete"]
+    assert entry["state"] == "interrupted"
+    destination = tmp_path / "partial.zip"
+    store.export(key, destination)
+    with ZipFile(destination) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["recording"]["segment_gaps"] == [missing_index]
+        assert f"Nedostajući segmenti: [{missing_index}]" in archive.read("sazetak.txt").decode()
+
+
+def test_manual_context_keeps_all_geometry_chunks(tmp_path, qtbot):
+    writer = LogWriter()
+    writer.start_segment(tmp_path / "logs/latest.txt", None, trace=True)
+    qtbot.waitUntil(lambda: ("runtime", None) in writer._context_snapshots)
+    for index in range(3):
+        writer.event(
+            "target_geometry",
+            {
+                "context_id": "context",
+                "kind": "speech",
+                "targets": [{"target_id": f"target-{index}", "rect": [0, 0, 40, 40]}],
+            },
+            trace=True,
+        )
+    key = writer.start_recording(
+        tmp_path / "recordings", 1, recording_context({}, {}, simulated=True)
+    )
+    writer.stop_recording()
+    assert writer.stop()
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "recordings" / key / "snimak.jsonl").read_text().splitlines()
+    ]
+    targets = [
+        target["target_id"]
+        for row in rows
+        if row["event"] == "segment_context"
+        for target in row["data"].get("snapshot", {}).get("data", {}).get("targets", [])
+    ]
+    assert targets == ["target-0", "target-1", "target-2"]
+    assert any(row["data"].get("snapshot", {}).get("event") == "runtime" for row in rows)
+
+
+def test_reader_separates_holds_started_before_recording(tmp_path):
+    path = tmp_path / "manual.jsonl"
+    record(path, "manual", "session_start", 10)
+    record(
+        path,
+        "manual",
+        "selection_hold_end",
+        11,
+        outcome="resumed",
+        duration_ms=2000,
+        hold_started_monotonic_s=9,
+    )
+    record(
+        path,
+        "manual",
+        "selection_hold_end",
+        12,
+        outcome="expired",
+        duration_ms=500,
+        hold_started_monotonic_s=11.5,
+    )
+    record(path, "manual", "session_end", 13)
+    analysis = summarize(path)["analysis"]
+    assert analysis["hold_outcomes"] == {"expired": 1}
+    assert analysis["hold_coverage"] == {"partial_start": 1, "observed_start": 1}
+    assert analysis["partial_hold_outcomes"] == {"resumed": 1}
+    assert analysis["partial_hold_duration"]["max_ms"] == 2000
+
+
+def test_recorded_hold_coverage_and_support_summary(tmp_path, monkeypatch):
+    now = freeze_monotonic(monkeypatch, 100)
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    writer.start_segment(tmp_path / "logs/latest.txt", None, trace=False)
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("speech", 0, pause_ms=250, dwell_ms=1000)
+    timer.update("speech", 400, pause_ms=250, dwell_ms=1000)
+    timer.hold_tracking(700, 900, eyes=(False, True))
+    now[0] = 110
+    folder = tmp_path / "recordings"
+    key = writer.start_recording(folder, 1, recording_context({}, {}, simulated=True))
+    now[0] = 111
+    timer.update("speech", 500, pause_ms=250, dwell_ms=1000)
+    timer.complete()
+    writer.stop_recording()
+    assert writer.stop()
+    store = RecordingStore(folder)
+    analysis = store.inspect(key)["analysis"]["analysis"]
+    assert analysis["partial_hold_outcomes"] == {"resumed": 1}
+    assert analysis["hold_outcomes"] == {}
+    assert analysis["partial_hold_duration"]["max_ms"] == 11000
+    destination = tmp_path / "support.zip"
+    store.export(key, destination)
+    with ZipFile(destination) as archive:
+        summary = archive.read("sazetak.txt").decode()
+    for label in (
+        "Ishodi po površini",
+        "Intervali postavki",
+        "Kašnjenja (ms)",
+        "Djelimično zabilježena zadržavanja",
+        "Odbačeni napredak (ms)",
+        "Nedostajući intervali brojača",
+    ):
+        assert label in summary

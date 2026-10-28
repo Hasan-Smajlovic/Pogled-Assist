@@ -87,7 +87,7 @@ class QuickActionZoomWindow(QWidget):
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason="context_changed")
         self._selection_emitted = False
         self._timer.start()
         self.show()
@@ -107,13 +107,13 @@ class QuickActionZoomWindow(QWidget):
             self._display_rect.height(),
         )
 
-    def close_zoom(self) -> None:
+    def close_zoom(self, *, reason: str = "window_closed") -> None:
         was_visible = self.isVisible()
         self._timer.stop()
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason=reason)
         self._selection_emitted = False
         self._last_topmost_ms = 0.0
         self.hide()
@@ -277,7 +277,10 @@ class QuickActionZoomWindow(QWidget):
 
     def _reset_gaze_candidate(self, *, notify: bool, require_leave: bool = False) -> None:
         had_candidate = self._candidate_anchor is not None
-        self._selection_timer.cancel(require_leave=require_leave)
+        self._selection_timer.cancel(
+            require_leave=require_leave,
+            reason="mouse_intervention" if require_leave else "target_departure",
+        )
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None

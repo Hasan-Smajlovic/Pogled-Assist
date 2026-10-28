@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import sqlite3
 from collections import Counter
 from pathlib import Path
 
-from .diagnostic_report import SessionAnalysis, finite_number
+from .diagnostic_report import SessionAnalysis
+from .log_validation import diagnostic_fields_valid
 
 
 def summarize(path: Path) -> dict:
     if path.is_dir():
-        return _summarize_folder(path)
+        from .log_folder import summarize_folder
+
+        return summarize_folder(path)
     session = _SessionReader()
     _read_file(path, session)
     return session.result()
@@ -36,120 +37,6 @@ def _read_file(path, session, observe=None):
                     observe(item)
     except OSError:
         session.warn(0, "file_unavailable")
-
-
-def _segment_order(path):
-    match = re.search(r"(?:part-|snimak-)(\d+)\.jsonl$", path.name)
-    return int(match[1]) if match else 0
-
-
-def _summarize_folder(root):
-    groups = {}
-    starts = {}
-    unavailable = 0
-    for path in root.rglob("*.jsonl"):
-        if path.is_symlink() or any(
-            parent.is_symlink() for parent in path.parents if parent != root.parent
-        ):
-            continue
-        try:
-            with path.open(encoding="utf-8", errors="replace") as stream:
-                for line in iter(lambda: stream.readline(65537), ""):
-                    try:
-                        first = json.loads(line)
-                    except ValueError:
-                        continue
-                    if (
-                        isinstance(first, dict)
-                        and isinstance(first.get("session_id"), str)
-                        and isinstance(first.get("process_instance"), str)
-                    ):
-                        groups.setdefault(
-                            (first["process_instance"], first["session_id"]), []
-                        ).append(path)
-                        key = first["process_instance"], first["session_id"]
-                        at = first.get("monotonic_s")
-                        if finite_number(at):
-                            starts[key] = min(at, starts.get(key, at))
-                        break
-                else:
-                    unavailable += 1
-        except OSError:
-            unavailable += 1
-    results, processes = [], {}
-    counts = Counter()
-    duplicates = 0
-    legacy = False
-    # A temporary SQLite identity index bounds RAM even for multi-GB overlapping copies.
-    with sqlite3.connect("") as identities:
-        identities.execute("PRAGMA cache_size=-1024")
-        identities.execute(
-            "CREATE TABLE seen (process TEXT, identity TEXT, PRIMARY KEY(process, identity)) WITHOUT ROWID"
-        )
-        for (process, _session_id), paths in sorted(
-            groups.items(),
-            key=lambda pair: (pair[0][0], starts.get(pair[0], float("inf")), pair[0][1]),
-        ):
-            session = _SessionReader()
-            analysis = processes.setdefault(process, SessionAnalysis())
-
-            def observe(item, process=process, analysis=analysis):
-                nonlocal duplicates, legacy
-                identity = item["data"].get("observation_id")
-                if isinstance(identity, str):
-                    inserted = identities.execute(
-                        "INSERT OR IGNORE INTO seen VALUES (?, ?)", (process, identity)
-                    ).rowcount
-                    if not inserted:
-                        duplicates += 1
-                        return
-                elif item["event"] not in {
-                    "session_start",
-                    "session_end",
-                    "segment_context",
-                    "recording_context",
-                    "runtime",
-                }:
-                    legacy = True
-                counts[item["event"]] += 1
-                analysis.observe(item)
-
-            indices = sorted(_segment_order(path) for path in paths)
-            if indices != list(range(len(indices))):
-                session.warn(0, "missing_or_duplicate_segments_unknown_cause")
-            for path in sorted(paths, key=lambda p: (_segment_order(p), p.name)):
-                _read_file(path, session, observe)
-            result = session.result()
-            result["process_instance"] = process
-            results.append(result)
-        identities.commit()
-    complete = bool(results) and all(result["complete"] for result in results) and not unavailable
-    if len(results) == 1:
-        result = results[0]
-    else:
-        result = dict(
-            schema_version=1,
-            session_id=None,
-            complete=complete,
-            sessions=results,
-            events=dict(counts),
-            parse_warnings=[],
-            lifecycle_complete=complete,
-        )
-    result.update(
-        complete=complete,
-        events=dict(counts),
-        deduplicated_observations=duplicates,
-        deduplication_limited=legacy,
-        unavailable_files=unavailable,
-        processes=[
-            dict(process_instance=process, analysis=analysis.result(complete=complete))
-            for process, analysis in processes.items()
-        ],
-    )
-    if len(processes) == 1:
-        result["analysis"] = next(iter(processes.values())).result(complete=complete)
-    return result
 
 
 class _SessionReader:
@@ -176,7 +63,7 @@ class _SessionReader:
     def read(self, line_number: int, line: str) -> dict | None:
         try:
             item = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             reason = "invalid_json" if line.endswith("\n") else "partial_last_line"
         else:
             reason = self._reject_reason(item)
@@ -200,6 +87,8 @@ class _SessionReader:
                 return mismatch
         if not isinstance(item.get("event"), str):
             return "missing_event"
+        if not diagnostic_fields_valid(item["data"]):
+            return "invalid_diagnostic_fields"
         return None
 
     def _identity_mismatch(self, item: dict) -> str | None:

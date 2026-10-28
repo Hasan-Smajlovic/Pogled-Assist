@@ -3,6 +3,7 @@ from __future__ import annotations
 import faulthandler
 import json
 import logging
+import os
 import threading
 import time
 
@@ -170,7 +171,6 @@ def test_writer_io_errors_do_not_escape_or_recurse(tmp_path, monkeypatch):
 
 
 def test_archive_failure_preserves_old_log_and_keeps_structured_logging(tmp_path, monkeypatch):
-    from pogled_assist import log_transport
 
     def fail(*_args, **_kwargs):
         raise OSError("archive unavailable")
@@ -178,7 +178,7 @@ def test_archive_failure_preserves_old_log_and_keeps_structured_logging(tmp_path
     latest = tmp_path / "logs/latest.txt"
     latest.parent.mkdir()
     latest.write_text("only copy of the previous session\n", encoding="utf-8")
-    monkeypatch.setattr(log_transport.os, "replace", fail)
+    monkeypatch.setattr(os, "replace", fail)
     writer = LogWriter()
     writer.start_segment(latest, None, trace=False)
     writer.event("new_session_observation", {})
@@ -297,7 +297,9 @@ def test_old_trace_limit_cannot_disable_a_new_trace_session(tmp_path, monkeypatc
 
     entered, release = threading.Event(), threading.Event()
     monkeypatch.setattr(log_transport, "TRACE_BYTES", 10)
-    real_write = LogWriter._write_event
+    from pogled_assist.log_output import OrdinaryOutput
+
+    real_write = OrdinaryOutput._write_event
 
     def wait_before_limit(self, sequence, data):
         if data[0] == "old_trigger":
@@ -305,7 +307,7 @@ def test_old_trace_limit_cannot_disable_a_new_trace_session(tmp_path, monkeypatc
             release.wait()
         real_write(self, sequence, data)
 
-    monkeypatch.setattr(LogWriter, "_write_event", wait_before_limit)
+    monkeypatch.setattr(OrdinaryOutput, "_write_event", wait_before_limit)
     writer = LogWriter()
     latest = tmp_path / "logs/latest.txt"
     writer.start_segment(latest, None, trace=True)

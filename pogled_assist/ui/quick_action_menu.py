@@ -132,7 +132,7 @@ class QuickActionRadialMenu(QWidget):
         self._candidate_anchor = None
         self._selected_action = None
         self._candidate_progress = 0.0
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason="context_changed")
         self._selection_emitted = False
         self._timer.start()
         self.show()
@@ -140,13 +140,13 @@ class QuickActionRadialMenu(QWidget):
         self._refresh_windows_topmost(force=True)
         logger.info("Quick action radial menu opened at %s,%s.", center.x(), center.y())
 
-    def close_menu(self) -> None:
+    def close_menu(self, *, reason: str = "window_closed") -> None:
         was_visible = self.isVisible()
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None
         self._candidate_progress = 0.0
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason=reason)
         self._selection_emitted = False
         self._last_topmost_ms = 0.0
         self._timer.stop()
@@ -334,7 +334,10 @@ class QuickActionRadialMenu(QWidget):
 
     def _reset_gaze_candidate(self, *, notify: bool, require_leave: bool = False) -> None:
         had_candidate = self._candidate_action is not None
-        self._selection_timer.cancel(require_leave=require_leave)
+        self._selection_timer.cancel(
+            require_leave=require_leave,
+            reason="mouse_intervention" if require_leave else "target_departure",
+        )
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None

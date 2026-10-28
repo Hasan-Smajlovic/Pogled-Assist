@@ -73,7 +73,24 @@ class CaptureDiagnostics:
             "diagnostics-recording",
             "Diagnostics: recording independently of normal logging",
         )
-        service.persistence = dict(failures=[dict(output="ordinary", reason="write")], gaps=[{}])
+        service.persistence = dict(
+            failures=[dict(output="ordinary", reason="json_write")],
+            gaps=[
+                dict(
+                    output="manual",
+                    reason="metadata",
+                    started_at=1_793_188_800,
+                    recovered_at=1_793_188_805,
+                ),
+                dict(
+                    output="ordinary",
+                    reason="json_write",
+                    started_at=1_793_188_806,
+                    recovered_at=None,
+                ),
+            ],
+            gaps_truncated=True,
+        )
         service.changed.emit()
         self.capture(
             window, "diagnostics-persistence-warning", "Diagnostics: log failure during recording"

@@ -179,14 +179,7 @@ class GazeSelectionTimer:
     def _resume_tracking(self, target, now_ms, *, restart, hold_ms):
         resume = self._can_resume_tracking(target, now_ms, restart=restart, hold_ms=hold_ms)
         if not resume:
-            reason = (
-                "tracking_hold_expired"
-                if now_ms >= self._tracking_deadline_ms
-                else "restart"
-                if restart
-                else "target_changed"
-            )
-            self.pause(reason=reason)
+            self.pause(reason=self._tracking_resume_failure(target, now_ms, restart))
             return None
         if now_ms >= self._tracking_full_deadline_ms and not self.retain_completed_pause():
             return None
@@ -198,6 +191,17 @@ class GazeSelectionTimer:
         self._away_since_ms = None
         progress = self._progress(now_ms, self._pause_ms, self._dwell_ms)
         return GazeSelectionUpdate(progress=progress.progress)
+
+    def _tracking_resume_failure(self, target, now_ms, restart):
+        if now_ms >= self._tracking_deadline_ms:
+            return "tracking_hold_expired"
+        if restart:
+            return "restart"
+        if target is None:
+            return "target_departure"
+        if target != self._target:
+            return "target_changed"
+        return "edge_hold_expired"
 
     def _can_resume_tracking(self, target, now_ms, *, restart, hold_ms):
         if restart or target is None or target != self._target:

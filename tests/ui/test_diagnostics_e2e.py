@@ -133,6 +133,32 @@ def dispose_recordings(recordings, qtbot):
     recordings.deleteLater()
 
 
+def test_persistence_history_keeps_reason_recovery_and_truncation(recording_ui):
+    window, recordings, _reports, _writer, _context = recording_ui
+    geometry = window._primary.geometry()
+    recordings.persistence = dict(
+        failures=[dict(output="ordinary", reason="json_write")],
+        gaps=[
+            dict(
+                output="ordinary",
+                reason="json_write",
+                started_at=1_793_188_800,
+                recovered_at=1_793_188_805,
+            ),
+            dict(output="manual", reason="metadata", started_at=1_793_188_806, recovered_at=None),
+        ],
+        gaps_truncated=True,
+    )
+    recordings.changed.emit()
+    text = window._storage.text()
+    assert "opći logovi · Greška strukturiranog zapisa" in text
+    assert "ručni snimak · Greška završnog zapisa" in text
+    assert text.count("Početak:") == text.count("Oporavak:") == 2
+    assert "još traje" in text
+    assert "posljednja 64 prekida" in text
+    assert window._primary.geometry() == geometry
+
+
 def test_window_close_keeps_recording_active_and_history_survives_restart(recording_ui, qtbot):
     window, recordings, reports, writer, context = recording_ui
     assert window._minutes == 2 and window._durations.checkedId() == 2

@@ -145,8 +145,11 @@ def control_role(action: object) -> str:
 
 def invoke_action(callback, *, context=None, action=None, source="unknown", selection=None):
     """Keep dispatch identity alive while a synchronous handler replaces its controls."""
-    if not enabled() or _action_origin.get() is not None:
+    if not enabled():
         return callback()
+    dispatch = _action_origin.get()
+    if dispatch is not None:
+        return _call_handler(callback, dispatch)
     origin = getattr(getattr(selection, "_observer", None), "completed", None)
     fields = dict(origin or {}) if source == "gaze" else {}
     if not fields:
@@ -159,18 +162,24 @@ def invoke_action(callback, *, context=None, action=None, source="unknown", sele
             attempt_id=None,
         )
     fields.update(action_id=uuid.uuid4().hex, origin=source, source=source)
-    token = _action_origin.set(fields)
+    dispatch = {"outcome": "handler_returned"}
+    token = _action_origin.set(dispatch)
     emit("ui_action_requested", priority=True, **fields)
     try:
-        result = callback()
-    except BaseException:
-        emit("ui_action_returned", priority=True, outcome="handler_failed", **fields)
-        raise
-    else:
-        emit("ui_action_returned", priority=True, outcome="handler_returned", **fields)
-        return result
+        return _call_handler(callback, dispatch)
     finally:
+        emit("ui_action_returned", priority=True, **dispatch, **fields)
         _action_origin.reset(token)
+
+
+def _call_handler(callback, dispatch):
+    try:
+        return callback()
+    except BaseException:
+        # Qt reports slot exceptions through sys.excepthook and returns from emit().
+        # Remember the failure at the handler boundary before Qt intercepts it.
+        dispatch["outcome"] = "handler_failed"
+        raise
 
 
 class StreamMetrics:
@@ -489,6 +498,7 @@ class SelectionObserver:
             **fields,
             kind=kind,
             duration_ms=max(0.0, time.monotonic() - started) * 1000,
+            hold_started_monotonic_s=started,
             outcome=outcome,
             reason=reason,
             retained_ms=credit,

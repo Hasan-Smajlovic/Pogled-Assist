@@ -28,25 +28,7 @@ class RecordingIndicator(QObject):
 
     def set_status(self, status):
         self._status = status
-        failures = self._persistence.get("failures", [])
-        if failures:
-            outputs = {failure.get("output") for failure in failures}
-            text = (
-                "Greška čuvanja svih logova"
-                if outputs == {"ordinary", "manual"}
-                else "Greška čuvanja snimka"
-                if "manual" in outputs
-                else "Greška čuvanja logova"
-            )
-            self._confirmation.stop()
-            self._key = ("persistence", text)
-            if (self.tone, self.text) != ("error", text):
-                self.tone, self.text, self.compact_text = (
-                    "error",
-                    text,
-                    "Snimak !" if outputs == {"manual"} else "Logovi !",
-                )
-                self.changed.emit()
+        if self._show_persistence_failure():
             return
         if not status:
             self._key = None
@@ -66,6 +48,29 @@ class RecordingIndicator(QObject):
         if (self.tone, self.text, self.compact_text) != (tone, text, compact):
             self.tone, self.text, self.compact_text = tone, text, compact
             self.changed.emit()
+
+    def _show_persistence_failure(self):
+        failures = self._persistence.get("failures", [])
+        if not failures:
+            return False
+        outputs = {failure.get("output") for failure in failures}
+        text = (
+            "Greška čuvanja svih logova"
+            if outputs == {"ordinary", "manual"}
+            else "Greška čuvanja snimka"
+            if "manual" in outputs
+            else "Greška čuvanja logova"
+        )
+        self._confirmation.stop()
+        self._key = ("persistence", text)
+        if (self.tone, self.text) != ("error", text):
+            self.tone, self.text, self.compact_text = (
+                "error",
+                text,
+                "Snimak !" if outputs == {"manual"} else "Logovi !",
+            )
+            self.changed.emit()
+        return True
 
     def set_persistence(self, persistence):
         self._persistence = persistence

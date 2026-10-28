@@ -859,9 +859,9 @@ class SettingsWindow(QWidget):
     def _handle_missing_gaze_target(self, point: QPoint) -> None:
         if self._gaze_still_on_blocked_target(point):
             # A disabled action under unchanged gaze is not a departure.
-            self.pause_gaze_interaction()
+            self.pause_gaze_interaction(reason="target_disabled")
         else:
-            self.cancel_gaze_interaction()
+            self.cancel_gaze_interaction(reason="target_departure")
 
     def _tracking_target_changed(self, widget: QWidget) -> bool:
         return (
@@ -895,8 +895,10 @@ class SettingsWindow(QWidget):
             and global_rect(blocked).contains(point)
         )
 
-    def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
-        self._gaze_selection.cancel(require_leave=require_leave)
+    def cancel_gaze_interaction(
+        self, *, require_leave: bool = False, reason: str = "context_changed"
+    ) -> None:
+        self._gaze_selection.cancel(require_leave=require_leave, reason=reason)
         self._set_gaze_target(None)
         self._cancel_interaction()
 
