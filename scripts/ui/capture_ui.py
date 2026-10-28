@@ -435,6 +435,14 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         overlay.set_paused(True)
         set_gaze_paused(button, True)
         self.capture(scene, "selection-held", "Speech selection: paused ring", size=(640, 360))
+        overlay.show_progress(QPoint(320, 180), 0.0, "Pogledaj")
+        overlay.set_paused(True)
+        self.capture(
+            scene,
+            "selection-pause-held",
+            "Speech selection: completed pause, zero fill",
+            size=(640, 360),
+        )
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()

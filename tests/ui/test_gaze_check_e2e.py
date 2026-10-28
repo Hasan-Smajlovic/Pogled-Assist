@@ -676,6 +676,54 @@ def test_trial_cancels_on_eye_loss_and_uses_fresh_samples_to_complete(gaze_check
     assert "3/3" in window._trial_summary.text()
 
 
+@pytest.mark.parametrize(
+    "gaze_check",
+    [
+        GazeSettings(
+            eye_tracking_policy="hold",
+            eye_tracking_hold_ms=300,
+            selection_pause_ms=850,
+            dwell_ms=650,
+        )
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize("credited_ms", [800, 1000])
+def test_trial_counts_only_discarded_progress_at_each_hold_stage(gaze_check, qtbot, credited_ms):
+    window, now, screen = gaze_check
+    window._start_trial()
+    qtbot.wait(1)
+    point = window._target.mapToGlobal(window._target.button_rect().center())
+    gaze = (
+        (point.x() - screen.left()) / (screen.width() - 1),
+        (point.y() - screen.top()) / (screen.height() - 1),
+    )
+    start = window._trial_ready_at + 0.01
+    for elapsed in range(0, credited_ms + 1, 100):
+        now[0] = start + elapsed / 1000
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
+    assert window._selection.target is not None
+    now[0] += 0.01
+    lost_at = now[0]
+    window.handle_eye_status(True, False)
+    assert window._target.paused
+    now[0] = lost_at + 0.301
+    window._eye_gate._deadline.timeout.emit()
+    assert window._trial_losses == (1 if credited_ms == 800 else 0)
+    if credited_ms == 800:
+        assert window._selection.target is None
+        assert "Praćenje je prekinuto" in window._test_hint.text()
+    else:
+        assert window._target.paused
+        assert window._target.progress == 0
+        assert "početna pauza završena" in window._test_hint.text()
+    now[0] = lost_at + 0.501
+    window._eye_gate._deadline.timeout.emit()
+    assert window._trial_losses == 1
+    assert window._selection.target is None
+    assert window._trial_results == []
+
+
 def test_check_disconnect_and_escape_require_no_valid_gaze(gaze_check, qtbot):
     window, _now, _screen = gaze_check
     window._start_precision()

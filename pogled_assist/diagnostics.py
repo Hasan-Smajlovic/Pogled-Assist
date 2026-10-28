@@ -328,6 +328,8 @@ class SelectionObserver:
     def _phase(snapshot: dict, pause_ms: int) -> str:
         if not snapshot["active"]:
             return "repeat_locked" if snapshot["blocked"] else "idle"
+        if snapshot.get("tracking_hold"):
+            return "tracking_" + snapshot["tracking_hold"] + "_hold"
         if snapshot["held"]:
             return "edge_hold"
         return "pause" if snapshot["credited_ms"] < pause_ms else "dwell"

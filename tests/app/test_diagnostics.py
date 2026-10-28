@@ -129,6 +129,26 @@ def test_offline_reader_marks_partial_line_and_missing_end(tmp_path):
     assert result["parse_warnings"] == [{"line": 2, "reason": "partial_last_line"}]
 
 
+def test_selection_diagnostics_distinguish_tracking_retention_stages(monkeypatch):
+    from pogled_assist.interaction.gaze_selection import GazeSelectionTimer
+
+    events = []
+    writer = SimpleNamespace(
+        _generation=1, trace=True, event=lambda name, data, **_: events.append((name, data))
+    )
+    monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("clear", 0, pause_ms=850, dwell_ms=650)
+    timer.update("clear", 1000, pause_ms=850, dwell_ms=650)
+    timer.hold_tracking(1310, 1510)
+    timer.retain_completed_pause()
+    states = [data for event, data in events if event == "selection_sample"]
+    assert states[-2]["phase"] == "tracking_full_progress_hold"
+    assert states[-2]["credited_ms"] == 1000
+    assert states[-1]["phase"] == "tracking_completed_pause_hold"
+    assert states[-1]["credited_ms"] == 850
+
+
 def test_offline_reader_does_not_sum_cumulative_writer_loss_twice(tmp_path):
     path = tmp_path / "session.jsonl"
     records = [

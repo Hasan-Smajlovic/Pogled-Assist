@@ -78,7 +78,7 @@
     $('eye-policy-hint').textContent = ReferenceEyePolicy.description();
     $('eye-hold-value').textContent = duration + ' ms';
     $('eye-hold-row').dataset.disabled = String(!holding);
-    $('eye-hold-hint').textContent = holding ? 'Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.' : 'Dostupno samo u režimu „Oba oka uz kratke prekide“. Sačuvano trajanje ostaje isto.';
+    $('eye-hold-hint').textContent = holding ? 'Čuvanje cijelog napretka pri gubitku jednog oka: 50 do 500 ms.' : 'Dostupno samo u režimu „Oba oka uz kratke prekide“. Sačuvano trajanje ostaje isto.';
     $('eye-hold-less').disabled = !holding || duration <= 50;
     $('eye-hold-more').disabled = !holding || duration >= 500;
   }
