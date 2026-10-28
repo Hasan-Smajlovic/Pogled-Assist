@@ -345,13 +345,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.interaction_finished.connect(self._interaction_overlay.show_fired)
         self._mouse.interaction_cancelled.connect(self._interaction_overlay.clear)
         self._mouse.interaction_hold_changed.connect(self._set_interaction_paused)
-        self._mouse._eye_gate.hold_started.connect(
-            lambda _at: self._tracking_status.set_holding(True)
-        )
-        self._mouse._eye_gate.hold_finished.connect(
-            lambda: self._tracking_status.set_holding(False)
-        )
-        self._mouse._eye_gate.interrupted.connect(lambda: self._tracking_status.set_holding(False))
+        self._mouse.interaction_hold_changed.connect(self._tracking_status.set_holding)
         self._mouse.toolbar_action_requested.connect(
             lambda action: self._run_toolbar_action(action, source="gaze")
         )

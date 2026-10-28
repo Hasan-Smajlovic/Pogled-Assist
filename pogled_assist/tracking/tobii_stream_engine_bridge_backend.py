@@ -65,6 +65,7 @@ class TobiiStreamEngineBridgeBackend:
         self.connection_generation = 0
         self._last_eye_delivery_at: float | None = None
         self._failure_observation: dict | None = None
+        self._shutdown_observed = False
         self._failure_lock = threading.Lock()
         self._label = "Tobii Stream Engine x86 bridge"
         self._python_path = ""
@@ -147,12 +148,7 @@ class TobiiStreamEngineBridgeBackend:
             self._stop_event.set()
             self._join_reader_threads()
             return
-        diagnostics.emit(
-            "bridge_connection",
-            priority=True,
-            decision="shutdown",
-            **self.process_observation("app_shutdown"),
-        )
+        self._observe_shutdown()
         self._stop_event.set()
 
         if process.poll() is None:
@@ -168,6 +164,17 @@ class TobiiStreamEngineBridgeBackend:
         self._join_reader_threads()
         self._process = None
         logger.info("Tobii Stream Engine x86 bridge stopped.")
+
+    def _observe_shutdown(self) -> None:
+        if self._shutdown_observed:
+            return
+        self._shutdown_observed = True
+        diagnostics.emit(
+            "bridge_connection",
+            priority=True,
+            decision="shutdown",
+            **self.process_observation("app_shutdown"),
+        )
 
     def request_stop(self) -> None:
         self._stop_event.set()

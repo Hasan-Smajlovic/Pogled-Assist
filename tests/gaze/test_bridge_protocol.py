@@ -199,6 +199,54 @@ def test_app_shutdown_is_observed_before_termination_without_an_unexpected_failu
     assert events[0]["native_eye_age_ms"] is None
 
 
+@pytest.mark.parametrize("failure", ["timeout", "os-error"])
+def test_shutdown_observation_is_not_repeated_when_cleanup_retries(monkeypatch, failure):
+    from pogled_assist.tracking import tobii_stream_engine_bridge_backend as module
+
+    events = []
+    monkeypatch.setattr(module.diagnostics, "emit", lambda _event, **fields: events.append(fields))
+    backend = TobiiStreamEngineBridgeBackend(lambda *_: None, lambda *_: None)
+    code = [None]
+    killed = []
+    retry_error = (
+        module.subprocess.TimeoutExpired("synthetic-bridge", 3)
+        if failure == "timeout"
+        else OSError("synthetic wait failure")
+    )
+    wait_errors = iter([module.subprocess.TimeoutExpired("synthetic-bridge", 3), retry_error, None])
+
+    def wait(**_kwargs):
+        error = next(wait_errors)
+        if error is not None:
+            raise error
+        code[0] = -9
+
+    process = SimpleNamespace(
+        poll=lambda: code[0],
+        terminate=lambda: None,
+        kill=lambda: killed.append(True),
+        wait=wait,
+    )
+    backend._process = process
+    backend.request_stop()
+    with pytest.raises((module.subprocess.TimeoutExpired, OSError)):
+        backend.stop()
+    assert backend._process is process
+    assert killed == [True]
+    assert len(events) == 1
+    observed = dict(events[0])
+    backend.stop()
+    backend.stop()
+    assert backend._process is None
+    assert backend.failure_observation is None
+    assert events == [observed]
+    assert observed["decision"] == "shutdown"
+    assert observed["reason"] == "app_shutdown"
+    assert observed["process_state"] == "running"
+    assert observed["exit_code"] is None
+    assert observed["shutdown_requested"]
+
+
 def test_cancel_during_python_discovery_never_launches_bridge(monkeypatch):
     from pogled_assist.tracking import tobii_stream_engine_bridge_backend as module
 

@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 from _clock import freeze_monotonic
+from _hotbar_fixtures import app_control
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QGuiApplication
@@ -50,7 +51,7 @@ def test_completed_pause_retention_through_application_selection(
             action = window._action("group:0")
         button = window._action_buttons[action]
     else:
-        action, button = _app_control(hotbar, surface)
+        action, button = app_control(hotbar, surface)
     qtbot.waitUntil(button.isVisible)
     qtbot.wait(1)
     point = button.mapToGlobal(button.rect().center())
@@ -164,31 +165,6 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
     assert updates[-1].eye_tracking_policy == "any"
 
 
-def _app_control(hotbar, surface):
-    if surface == "hotbar":
-        action = QUICK_ACTIONS
-        button = hotbar._buttons[action]
-    elif surface == "keyboard":
-        hotbar._show_keyboard_sidebar()
-        window = hotbar._keyboard_window
-        window.setGeometry(900, hotbar.BAR_HEIGHT, 380, 720 - hotbar.BAR_HEIGHT)
-        action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    elif surface == "speech":
-        hotbar._open_speech()
-        window = hotbar._speech_window
-        window.showNormal()
-        window.setGeometry(0, 0, 1280, 720)
-        action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    else:
-        hotbar._show_controller_sidebar()
-        window = hotbar._controller_window
-        action = next(key for key in window._action_buttons if key.endswith("left_click"))
-        button = window._action_buttons[action]
-    return action, button
-
-
 @pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
 @pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
@@ -205,7 +181,7 @@ def test_one_eye_selects_app_controls_including_controller_clicks(
             dwell_ms=850,
         )
     )
-    action, button = _app_control(hotbar, surface)
+    action, button = app_control(hotbar, surface)
     qtbot.wait(1)
     point = button.mapToGlobal(button.rect().center())
     provider = hotbar._gaze
