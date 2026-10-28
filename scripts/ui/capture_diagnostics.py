@@ -22,10 +22,19 @@ class PreviewRecordings(QObject):
 
     def __init__(self):
         super().__init__()
+        self.storage = dict(
+            usage_bytes=740_000_000,
+            budget_bytes=4_000_000_000,
+            oldest_at="2026-10-21T15:45:00+00:00",
+            state="ready",
+        )
+        self.persistence = {}
+
         self.indicator = RecordingIndicator(self)
         self.changed.connect(self._update_indicator)
 
     def _update_indicator(self):
+        self.indicator.set_persistence(self.persistence)
         self.indicator.set_status(self.status)
 
     @property
@@ -64,6 +73,12 @@ class CaptureDiagnostics:
             "diagnostics-recording",
             "Diagnostics: recording independently of normal logging",
         )
+        service.persistence = dict(failures=[dict(output="ordinary", reason="write")], gaps=[{}])
+        service.changed.emit()
+        self.capture(
+            window, "diagnostics-persistence-warning", "Diagnostics: log failure during recording"
+        )
+        service.persistence = {}
         service.status = {**service.status, "state": "finishing"}
         service.changed.emit()
         self.capture(window, "diagnostics-finishing", "Diagnostics: waiting for the writer")

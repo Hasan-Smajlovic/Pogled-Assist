@@ -164,6 +164,8 @@ class DiagnosticsWindow(QWidget):
         layout.addWidget(self._logging_copy)
         self._context = text_label()
         layout.addWidget(self._context)
+        self._storage = text_label()
+        layout.addWidget(self._storage)
         layout.addStretch(1)
         columns.addWidget(scroll_content(card), 6)
         guide, body = self._card()
@@ -211,7 +213,9 @@ class DiagnosticsWindow(QWidget):
         left = QVBoxLayout()
         left.addWidget(self._list, 1)
         left.addWidget(
-            text_label("Čuva se najnovijih 5, do 200 MiB. Ručno izvezeni ZIP-ovi ostaju sačuvani.")
+            text_label(
+                "Svi logovi dijele prostor podešen u Podršci. Najstariji zatvoreni logovi brišu se automatski. Izvezeni ZIP-ovi ostaju sačuvani."
+            )
         )
         self._reload = self._button("Osvježi listu", self.recordings.load)
         left.addWidget(self._reload)
@@ -276,7 +280,7 @@ class DiagnosticsWindow(QWidget):
         )
         self._metrics.setText(
             f"Preostalo vrijeme: {seconds // 60:02}:{seconds % 60:02}\n"
-            f"Zauzeti prostor: {state.get('bytes', 0) / 1048576:.2f} / 32 MiB"
+            f"Podaci ovog snimka: {state.get('bytes', 0) / 1048576:.2f} MiB"
         )
         duration = state.get("minutes", self._minutes) * 60 if service.busy else self._minutes * 60
         self._progress.setRange(0, duration)
@@ -293,6 +297,35 @@ class DiagnosticsWindow(QWidget):
             f"Trenutni režim: {policy} · Pauza {settings.get('selection_pause_ms')} ms · "
             f"Zadržavanje {settings.get('dwell_ms')} ms"
             + ("\nSIMULACIJA · Bez Tobii mjerenja." if context.get("simulated") else "")
+        )
+        storage = getattr(service, "storage", {})
+        persistence = getattr(service, "persistence", {})
+        storage_state = {
+            "ready": "Prostor je dostupan.",
+            "protected_over_budget": "Zaštićeni podaci trenutno prelaze podešeni prostor.",
+            "low_space": "Na disku nema dovoljno slobodnog prostora.",
+            "cleanup_failed": "Brisanje starih logova nije uspjelo.",
+            "unavailable": "Stanje prostora nije dostupno.",
+        }.get(storage.get("state"), "Provjeravam prostor…")
+        failures = {item.get("output") for item in persistence.get("failures", [])}
+        failed_text = (
+            " Greška čuvanja: "
+            + ", ".join(
+                "opći logovi" if output == "ordinary" else "ručni snimak"
+                for output in sorted(failures)
+            )
+            + "."
+            if failures
+            else ""
+        )
+        self._storage.setText(
+            f"Svi logovi: {storage.get('usage_bytes', 0) / 1_000_000_000:.2f} / {storage.get('budget_bytes', 4_000_000_000) / 1_000_000_000:g} GB\n"
+            f"Najstariji poznati zapis: {storage.get('oldest_at') or 'Nije poznato'}\n{storage_state}{failed_text}"
+            + (
+                f"\nZabilježeni prekidi čuvanja: {len(persistence.get('gaps', []))}."
+                if persistence.get("gaps")
+                else ""
+            )
         )
         for button in self._durations.buttons():
             button.setEnabled(not service.busy)

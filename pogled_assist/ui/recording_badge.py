@@ -19,12 +19,35 @@ class RecordingIndicator(QObject):
         self.tone = "recording"
         self._key = None
         self._announced = None
+        self._status = None
+        self._persistence = {}
         self._confirmation = QTimer(self)
         self._confirmation.setSingleShot(True)
         self._confirmation.setInterval(5000)
         self._confirmation.timeout.connect(self._clear)
 
     def set_status(self, status):
+        self._status = status
+        failures = self._persistence.get("failures", [])
+        if failures:
+            outputs = {failure.get("output") for failure in failures}
+            text = (
+                "Greška čuvanja svih logova"
+                if outputs == {"ordinary", "manual"}
+                else "Greška čuvanja snimka"
+                if "manual" in outputs
+                else "Greška čuvanja logova"
+            )
+            self._confirmation.stop()
+            self._key = ("persistence", text)
+            if (self.tone, self.text) != ("error", text):
+                self.tone, self.text, self.compact_text = (
+                    "error",
+                    text,
+                    "Snimak !" if outputs == {"manual"} else "Logovi !",
+                )
+                self.changed.emit()
+            return
         if not status:
             self._key = None
             self._announced = None
@@ -43,6 +66,10 @@ class RecordingIndicator(QObject):
         if (self.tone, self.text, self.compact_text) != (tone, text, compact):
             self.tone, self.text, self.compact_text = tone, text, compact
             self.changed.emit()
+
+    def set_persistence(self, persistence):
+        self._persistence = persistence
+        self.set_status(self._status)
 
     @staticmethod
     def _status_text(status):

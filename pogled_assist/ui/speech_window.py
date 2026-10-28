@@ -644,15 +644,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 reason="target_unavailable",
             )
             return
-        context = self._diagnostic_context
-        target_id = context.token(action)
-        diagnostics.emit(
-            "ui_action_requested",
-            priority=True,
-            context_id=context.id,
-            target_id=target_id,
+        diagnostics.invoke_action(
+            lambda: self._dispatch_action(action, source=source),
+            context=self._diagnostic_context,
+            action=action,
             source=source,
         )
+
+    def _dispatch_action(self, action: str, *, source: str) -> None:
         command = action.removeprefix(SPEECH_WINDOW_ACTION_PREFIX)
         handlers = {
             "clear": self._open_clear_dialog,
@@ -689,14 +688,6 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             handler()
         else:
             self._trigger_indexed_action(command)
-        diagnostics.emit(
-            "ui_action_returned",
-            priority=True,
-            context_id=context.id,
-            target_id=target_id,
-            source=source,
-            outcome="handler_returned",
-        )
         self._restore_input_focus()
 
     def _trigger_indexed_action(self, command: str) -> None:

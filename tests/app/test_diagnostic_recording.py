@@ -155,28 +155,25 @@ def test_deadline_finishes_without_another_event_and_shutdown_is_interrupted(
     assert_recording_complete(interrupted, False)
 
 
-def test_recording_limit_is_separate_from_an_exhausted_normal_session(
+def test_recording_and_normal_logging_continue_across_independent_rotations(
     writer, tmp_path, monkeypatch
 ):
     from pogled_assist import log_transport
 
-    monkeypatch.setattr(log_transport, "SESSION_BYTES", 9000)
+    monkeypatch.setattr(log_transport, "SEGMENT_BYTES", 2000)
+    monkeypatch.setattr(module, "SEGMENT_BYTES", 2000)
     latest = tmp_path / "logs/latest.txt"
     writer.start_segment(latest, None, trace=True)
-    writer.event("large", {"payload": "x" * 3000}, trace=True)
-    wait_for(lambda: writer._active is not None and writer._json is None)
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 2, context())
-    writer.event("new_trace", {"x": 0.5}, trace=True)
-    assert finish(writer, folder)["analysis"]["events"]["new_trace"] == 1
-    monkeypatch.setattr(module, "RECORDING_BYTES", 10000)
-    writer.start_recording(folder, 2, context())
-    for _ in range(5):
-        writer.event("large", {"payload": "x" * 2000}, trace=True)
-    item = finish(writer, folder, stop=False)
-    assert item["reason"] == "size"
-    assert item["bytes"] <= 10000 and item["session_end_present"]
-    assert_recording_complete(item, False)
+    for _ in range(15):
+        writer.event("large", {"payload": "x" * 200}, trace=True)
+    wait_for(lambda: writer._recording.pending == 0)
+    assert writer.recording_status()["busy"]
+    item = finish(writer, folder)
+    assert item["reason"] == "manual" and item["bytes"] > 2000
+    assert item["analysis"]["events"]["large"] == 15
+    assert_recording_complete(item, True)
 
 
 def test_blocked_recording_does_not_block_producers_and_prevents_a_second_start(
@@ -243,7 +240,6 @@ def test_write_error_and_bounded_snapshot_remain_explicit(writer, tmp_path, monk
 def test_retention_restart_and_partial_recordings_do_not_touch_other_files(
     writer, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(module, "MAX_RECORDINGS", 2)
     folder = tmp_path / "recordings"
     folder.mkdir()
     unrelated = folder / "manual.zip"
@@ -253,6 +249,9 @@ def test_retention_restart_and_partial_recordings_do_not_touch_other_files(
         ids.append(writer.start_recording(folder, 1, context()))
         finish(writer, folder)
     store = RecordingStore(folder)
+    sizes = [sum(path.stat().st_size for path in (folder / key).iterdir()) for key in ids]
+    store.budget_bytes = sum(sizes[-2:])
+    store.prune()
     assert {item["id"] for item in store.load()} == set(ids[-2:])
     assert unrelated.read_bytes() == b"keep"
     key = ids[-1]
@@ -455,19 +454,20 @@ def test_finishing_remains_published_until_final_file_work_acknowledges(
     writer, tmp_path, monkeypatch
 ):
     entered, release = threading.Event(), threading.Event()
-    original = RecordingStore.prune
+    original = module.atomic_bytes
 
-    def blocked(store, **kwargs):
-        entered.set()
-        release.wait()
-        return original(store, **kwargs)
+    def blocked(path, payload):
+        if path.name == "recording.json" and b'"completed"' in payload:
+            entered.set()
+            release.wait()
+        return original(path, payload)
 
-    monkeypatch.setattr(RecordingStore, "prune", blocked)
+    monkeypatch.setattr(module, "atomic_bytes", blocked)
     folder = tmp_path / "recordings"
     writer.start_recording(folder, 1, context())
     writer.stop_recording()
     try:
-        assert entered.wait(10), "Recording finalization did not reach retention cleanup"
+        assert entered.wait(10), "Recording finalization did not reach final metadata storage"
         state = writer.recording_status()
         assert state["busy"] and state["state"] == "finishing" and not state["complete"]
         assert writer.start_recording(folder, 1, context()) is None
@@ -480,7 +480,6 @@ def test_restart_recovers_over_budget_crash_remnants_without_touching_active_cap
     writer, tmp_path, monkeypatch
 ):
     folder = tmp_path / "recordings"
-    monkeypatch.setattr(module, "MAX_RECORDINGS", 100)
     ids = []
     for _ in range(3):
         ids.append(writer.start_recording(folder, 1, context()))
@@ -493,10 +492,12 @@ def test_restart_recovers_over_budget_crash_remnants_without_touching_active_cap
     trace.write_text(
         "\n".join(trace.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8"
     )
-    monkeypatch.setattr(module, "MAX_RECORDINGS", 2)
     active = writer.start_recording(folder, 1, context())
     wait_for(lambda: writer.recording_status()["state"] == "recording")
     store = RecordingStore(folder)
+    sizes = [sum(path.stat().st_size for path in (folder / key).iterdir()) for key in ids]
+    active_size = sum(path.stat().st_size for path in (folder / active).iterdir())
+    store.budget_bytes = sum(sizes[-2:]) + active_size + 128
     rows = store.recover_and_load()
     assert len(rows) == 2 and active not in {row["id"] for row in rows}
     recovered = next(row for row in rows if row["id"] == ids[-1])

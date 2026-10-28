@@ -111,7 +111,7 @@ The default `core` profile renders:
 | Gaze check and diagnostics (`gaze-check`) | 18 | Position and its information disclosure, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, three trial sizes, held trial, wrong-neighbor feedback, free view, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 10 | Connection-check information disclosure, Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
-The other 77 screenshots remain available through the `full` profile. Use extended groups when reviewing their layout or copy:
+The other 78 screenshots remain available through the `full` profile, including a persistence warning during an active diagnostic recording. Use extended groups when reviewing their layout or copy:
 
 ```powershell
 .\dev.ps1 ui -UiProfile full -Open

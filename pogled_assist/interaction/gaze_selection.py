@@ -32,6 +32,7 @@ class GazeSelectionTimer:
         self._tracking_deadline_ms: float | None = None
         self._tracking_full_deadline_ms: float | None = None
         self._tracking_pause_only = False
+        self._hold_eyes = None
         self._observer = (
             diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
         )
@@ -54,6 +55,11 @@ class GazeSelectionTimer:
             if self.tracking_held
             else None,
             "credited_ms": credited,
+            "affected_eye": diagnostics.eye_state(*self._hold_eyes)
+            if self._hold_eyes is not None
+            else None,
+            "full_hold_deadline_ms": self._tracking_full_deadline_ms,
+            "retention_deadline_ms": self._tracking_deadline_ms,
         }
 
     def set_diagnostic_context_getter(
@@ -151,7 +157,7 @@ class GazeSelectionTimer:
 
     def _select_target(self, target, now_ms) -> GazeSelectionUpdate:
         if target is None:
-            self.cancel()
+            self.cancel(reason="target_departure")
             return GazeSelectionUpdate()
 
         if target == self._blocked_target:
@@ -166,14 +172,21 @@ class GazeSelectionTimer:
         return self._progress(now_ms, self._pause_ms, self._dwell_ms)
 
     def _restart(self, target, now_ms) -> None:
-        self.cancel()
+        self.cancel(reason="restart")
         if target is not None:
             self._start(target, now_ms)
 
     def _resume_tracking(self, target, now_ms, *, restart, hold_ms):
         resume = self._can_resume_tracking(target, now_ms, restart=restart, hold_ms=hold_ms)
         if not resume:
-            self.pause(reason="tracking_hold_cancelled")
+            reason = (
+                "tracking_hold_expired"
+                if now_ms >= self._tracking_deadline_ms
+                else "restart"
+                if restart
+                else "target_changed"
+            )
+            self.pause(reason=reason)
             return None
         if now_ms >= self._tracking_full_deadline_ms and not self.retain_completed_pause():
             return None
@@ -196,7 +209,7 @@ class GazeSelectionTimer:
     def complete(self) -> None:
         if self._target is not None:
             self._blocked_target = self._target
-        self._clear_target()
+        self._clear_target(reason="completed")
         self._observe("completed")
 
     def cancel(self, *, require_leave: bool = False, reason: str = "cancelled") -> None:
@@ -207,17 +220,20 @@ class GazeSelectionTimer:
                 self._blocked_target = self._target
         else:
             self._blocked_target = None
-        self._clear_target()
+        self._clear_target(reason=reason)
         self._observe(reason)
 
     def pause(self, *, reason: str = "paused") -> None:
         """Drop pending progress without treating invalid gaze as leaving the target."""
 
-        self._clear_target()
+        self._clear_target(reason=reason)
         self._observe(reason)
 
-    def hold_tracking(self, deadline_ms: float, retention_deadline_ms: float | None = None) -> None:
+    def hold_tracking(
+        self, deadline_ms: float, retention_deadline_ms: float | None = None, *, eyes=None
+    ) -> None:
         if self._target is not None and self._tracking_deadline_ms is None:
+            self._hold_eyes = eyes
             self._tracking_full_deadline_ms = deadline_ms
             self._tracking_deadline_ms = (
                 deadline_ms if retention_deadline_ms is None else retention_deadline_ms
@@ -256,23 +272,35 @@ class GazeSelectionTimer:
             return
         expired = now_ms - self._away_since_ms >= hold_ms
         if expired:
+            self._end_observation("edge_hold_expired")
             # Departure can expire between samples, including on the return.
             self._blocked_target = None
         if target == self._target and target is not None:
             if expired:
-                self._clear_target()
+                self._clear_target(reason="edge_hold_expired")
             else:
                 # Exclude the interval up to the first returning sample.
                 self._started_ms += max(0.0, now_ms - self._last_seen_ms)
         self._away_since_ms = None
 
     def _start(self, target: object, now_ms: float) -> None:
+        if self._target is not None:
+            self._end_observation("target_changed")
         self._target = target
         self._started_ms = float(now_ms)
         self._last_seen_ms = float(now_ms)
         self._away_since_ms = None
 
-    def _clear_target(self) -> None:
+    def _end_observation(self, reason: str) -> None:
+        if self._observer is not None:
+            try:
+                self._observer.finish(self.diagnostic_snapshot(), reason=reason)
+            except Exception:
+                diagnostics.observation_failed()
+
+    def _clear_target(self, *, reason: str = "target_departure") -> None:
+        self._end_observation(reason)
+        self._hold_eyes = None
         self._tracking_deadline_ms = None
         self._tracking_full_deadline_ms = None
         self._tracking_pause_only = False

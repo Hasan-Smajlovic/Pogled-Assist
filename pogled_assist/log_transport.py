@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import platform
-import shutil
 import sys
 import threading
 import time
@@ -26,7 +26,7 @@ MAX_QUEUE_RECORDS = 1024
 PRIORITY_RESERVE = 64
 TRACE_SECONDS = 600
 TRACE_BYTES = 32 * 1024 * 1024
-SESSION_BYTES = 64 * 1024 * 1024
+SEGMENT_BYTES = 16 * 1024 * 1024
 PROCESS_INSTANCE = uuid.uuid4().hex
 SUMMARY_EVENTS = frozenset({"stream_summary", "selection_summary", "marker_summary"})
 
@@ -41,6 +41,7 @@ class LogWriter:
         self._closing_segments: deque = deque()
         self._closing_records = 0
         self._generation = 0
+        self._observation_generation = 0
         self._desired: tuple | None = None
         self._stopping = False
         self._sequence = 0
@@ -57,6 +58,16 @@ class LogWriter:
         self._console = None
         self._active: tuple | None = None
         self._bytes = 0
+        self._text_bytes = 0
+        self._segment_index = 0
+        self._context_snapshots = {}
+        self._persistence = {}
+        self._gap_history = deque(maxlen=64)
+        self._gap_count = 0
+        self._json_path = self._text_path = None
+        self._retry_at = 0.0
+        self._text_rotation_retry = 0.0
+        self._successful_writes = set()
         self._trace_bytes = 0
         self._active_trace = False
         self._active_sequence = 0
@@ -79,7 +90,7 @@ class LogWriter:
 
     @property
     def observation_generation(self) -> tuple:
-        return self._generation, self._recording.id if self.recording_active else None
+        return self._observation_generation
 
     def start_recording(self, directory: Path, minutes: int, context: dict) -> str | None:
         from .diagnostic_recording import DURATIONS, Recording, set_recording_active
@@ -89,6 +100,8 @@ class LogWriter:
         with self._condition:
             if self._stopping or self._recording is not None:
                 return None
+            if not self.enabled:
+                self._observation_generation += 1
             item = Recording(
                 uuid.uuid4().hex,
                 directory,
@@ -156,6 +169,8 @@ class LogWriter:
         with self._condition:
             if self._stopping:
                 return
+            if not self.enabled:
+                self._observation_generation += 1
             self._seal_summaries("segment_replaced")
             self._discard_pending("segment_replaced")
             self._generation += 1
@@ -192,6 +207,7 @@ class LogWriter:
         )
         recording_id = self._recording.id if self.recording_active else None
         payload = bounded_copy(fields)
+        payload["observation_id"] = uuid.uuid4().hex
         return self._put(
             "event", (name, payload, now, time.time(), trace), priority, generation, recording_id
         )
@@ -407,6 +423,7 @@ class LogWriter:
                 continue
             if desired != self._active:
                 self._switch_segment(desired, changed_at)
+            self._retry_outputs()
             if item is not None:
                 self._consume(item)
             self._update_recording()
@@ -464,7 +481,8 @@ class LogWriter:
         self._close_files()
         self._active = desired
         self._console = None
-        self._bytes = self._trace_bytes = 0
+        self._bytes = self._trace_bytes = self._text_bytes = 0
+        self._segment_index = 0
         self._active_sequence = 0
         self._ended = False
         if desired is None:
@@ -478,31 +496,44 @@ class LogWriter:
         self._write_runtime()
 
     def _open_text(self, latest: Path) -> None:
+        from .diagnostic_recording import reserve_path
+
         try:
             latest.parent.mkdir(parents=True, exist_ok=True)
+            if self._text_path is None:
+                reserve_path(latest)
+            self._text_path = latest
             self._file = latest.open(self._archive_mode(latest), encoding="utf-8")
+            self._text_bytes = latest.stat().st_size
         except Exception:
-            self._failure()
+            self._failure("ordinary", "text_open")
 
     def _archive_mode(self, latest: Path) -> str:
         if not latest.exists():
             return "w"
         archive = latest.with_name(datetime.now().strftime("%Y%m%d_%H%M%S_%f.txt"))
         try:
-            shutil.copy2(latest, archive)
+            os.replace(latest, archive)
+            self._recovered("ordinary", "text_rotation")
         except OSError:
             # An archive failure must not destroy the only copy of the old log.
-            self._failure()
+            self._failure("ordinary", "text_rotation")
+            self._text_rotation_retry = time.monotonic() + 2
             return "a"
         return "w"
 
     def _open_json(self, latest: Path, session: str) -> None:
+        from .diagnostic_recording import reserve_path
+
         try:
             folder = latest.parent / "diagnostics"
             folder.mkdir(parents=True, exist_ok=True)
-            self._json = (folder / f"{session}.jsonl").open("w", encoding="utf-8")
+            suffix = f".part-{self._segment_index:06}" if self._segment_index else ""
+            self._json_path = folder / f"{session}{suffix}.jsonl"
+            reserve_path(self._json_path)
+            self._json = self._json_path.open("x", encoding="utf-8", newline="\n")
         except Exception:
-            self._failure()
+            self._failure("ordinary", "json_open")
 
     def _write_session_header(self, session: str) -> None:
         if self._file is not None:
@@ -511,7 +542,7 @@ class LogWriter:
                     f"Diagnostic session: {session}; logs/diagnostics/{session}.jsonl\n"
                 )
             except Exception:
-                self._failure()
+                self._failure("ordinary", "text_write")
 
     def _write_runtime(self) -> None:
         from .build_info import resolve_build_identity
@@ -543,16 +574,33 @@ class LogWriter:
             else:
                 self._write_event(sequence, data)
         except Exception:
-            self._failure()
+            self._failure("ordinary", "json_write" if kind == "event" else "text_write")
 
     def _write_record(self, data: dict) -> None:
         line = _format_record(data)
+        size = len((line + "\n").encode("utf-8"))
+        if (
+            self._file is not None
+            and self._text_bytes + size > SEGMENT_BYTES
+            and time.monotonic() >= self._text_rotation_retry
+        ):
+            latest = self._active[1]
+            self._file.close()
+            self._file = None
+            try:
+                self._file = latest.open(self._archive_mode(latest), encoding="utf-8")
+                self._text_bytes = latest.stat().st_size
+            except OSError:
+                self._failure("ordinary", "text_rotation")
         for stream in (self._file, self._console):
             if stream is not None:
                 try:
                     stream.write(line + "\n")
+                    if stream is self._file:
+                        self._text_bytes += size
+                        self._successful_writes.add(("ordinary", "text"))
                 except Exception:
-                    self._failure()
+                    self._failure("ordinary" if stream is self._file else None, "text_write")
 
     def _write_event(self, sequence: int, data: tuple) -> None:
         name, fields, at, wall, trace = data
@@ -596,24 +644,39 @@ class LogWriter:
         }
         line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
         size = len(line.encode("utf-8"))
-        if self._bytes + size > SESSION_BYTES - MAX_RECORD_BYTES:
-            record["event"] = "session_limit"
-            record["data"] = {"reason": "size", "health": self.health()}
-            self._json.write(json.dumps(record, ensure_ascii=False) + "\n")
+        if name != "segment_context" and self._bytes and self._bytes + size > SEGMENT_BYTES:
+            from .diagnostic_recording import release_path
+
             self._json.close()
             self._json = None
-            self._active_trace = False
-            with self._condition:
-                if self._active[0] == self._generation:
-                    self._trace = False
-            if self._file:
-                self._file.write("Structured diagnostic session reached its size limit.\n")
-            return 0
+            release_path(self._json_path)
+            self._json_path = None
+            self._segment_index += 1
+            self._bytes = 0
+            self._open_json(self._active[1], self._active[3])
+            if self._json is None:
+                return 0
+            self._write_json(
+                sequence,
+                "segment_context",
+                {
+                    "segment_index": self._segment_index,
+                },
+                captured_at,
+            )
+            for snapshot in tuple(self._context_snapshots.values()):
+                self._write_json(sequence, "segment_context", {"snapshot": snapshot}, captured_at)
+        record["segment_index"] = self._segment_index
         if name in {"session_end", "stream_summary", "ui_heartbeat"}:
             record["logging_health"] = self.health()
             line = json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n"
             size = len(line.encode("utf-8"))
+        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        size = len(line.encode("utf-8"))
         self._json.write(line)
+        self._successful_writes.add(("ordinary", "json"))
+        if name in {"runtime", "gaze_settings", "screen_mapping", "selection_settings"}:
+            self._context_snapshots[name, fields.get("source")] = {"event": name, "data": fields}
         if name == "session_end":
             self._ended = True
         self._bytes += size
@@ -629,13 +692,87 @@ class LogWriter:
                     changed_at or self._change_at,
                 )
             except Exception:
-                self._failure()
+                self._failure("ordinary", "json_write")
 
-    def _failure(self) -> None:
+    def _failure(self, output=None, reason="write") -> None:
         # Reporting through root logging here would recurse into this writer.
         with self._condition:
             self._errors += 1
             self._drop("writer_error")
+            if output is None:
+                return
+            channel = (
+                "text_rotation"
+                if reason == "text_rotation"
+                else "text"
+                if reason.startswith("text")
+                else "metadata"
+                if reason == "metadata"
+                else "json"
+            )
+            key = output, channel
+            self._successful_writes.discard(key)
+            if key not in self._persistence:
+                self._gap_count += 1
+                self._gap_history.append(
+                    dict(
+                        output=output,
+                        channel=channel,
+                        reason=reason,
+                        started_at=time.time(),
+                        recovered_at=None,
+                    )
+                )
+            self._persistence[key] = reason
+
+    def _recovered(self, output, channel):
+        key = output, channel
+        if key in self._persistence:
+            self._persistence.pop(key, None)
+            for gap in reversed(self._gap_history):
+                if (
+                    gap["output"] == output
+                    and gap["channel"] == channel
+                    and gap["recovered_at"] is None
+                ):
+                    gap["recovered_at"] = time.time()
+                    break
+
+    def persistence_status(self) -> dict:
+        with self._condition:
+            return dict(
+                failures=[
+                    dict(output=key[0], channel=key[1], reason=value)
+                    for key, value in self._persistence.items()
+                    if key[0] != "ordinary" or self._desired is not None
+                ],
+                gaps=[dict(gap) for gap in self._gap_history],
+                gaps_truncated=self._gap_count > len(self._gap_history),
+            )
+
+    def _retry_outputs(self):
+        if self._active is None or self._active[1] is None or time.monotonic() < self._retry_at:
+            return
+        self._retry_at = time.monotonic() + 2
+        latest = self._active[1]
+        try:
+            if self._file is None:
+                self._file = latest.open("a", encoding="utf-8")
+                self._text_bytes = latest.stat().st_size
+            if self._json is None and self._json_path is not None:
+                self._json = self._json_path.open("a", encoding="utf-8", newline="\n")
+                self._bytes = self._json_path.stat().st_size
+                self._write_json(
+                    self._active_sequence,
+                    "persistence_recovered",
+                    {
+                        "reason": "reopened",
+                        "coverage_gap": True,
+                    },
+                    (time.monotonic(), time.time()),
+                )
+        except OSError:
+            self._failure("ordinary", "reopen")
 
     def _flush(self) -> None:
         self._flush_stream(self._recording_sink, recording=True)
@@ -647,13 +784,34 @@ class LogWriter:
             return
         try:
             stream.flush()
+            if stream is self._file and ("ordinary", "text") in self._successful_writes:
+                self._recovered("ordinary", "text")
+            elif stream is self._json and ("ordinary", "json") in self._successful_writes:
+                self._recovered("ordinary", "json")
+            elif recording:
+                self._recovered("manual", "json")
         except Exception:
             if recording:
                 self._recording_failure()
             else:
-                self._failure()
+                self._failure(
+                    "ordinary" if stream in (self._file, self._json) else None,
+                    "text_flush" if stream is self._file else "json_flush",
+                )
 
     def _consume(self, queued: tuple) -> None:
+        if queued[2] == "event":
+            name, fields, *_rest = queued[3]
+            key = name, fields.get("source")
+            if name in {
+                "gaze_settings",
+                "screen_mapping",
+                "selection_settings",
+                "selection_state",
+            } and (key in self._context_snapshots or len(self._context_snapshots) < 32):
+                self._context_snapshots[key] = {"event": name, "data": fields}
+            elif name == "selection_end":
+                self._context_snapshots.pop(("selection_state", fields.get("source")), None)
         item = self._recording
         if item is not None and queued[4] == item.id:
             try:
@@ -674,14 +832,13 @@ class LogWriter:
         name, fields, at, wall, _ = queued[3]
         if name in {"session_start", "session_end", "runtime", "trace_limit", "session_limit"}:
             return
-        if not self._recording_sink.write(RecordingEvent(name, fields, at, wall)):
-            self.stop_recording("size")
-            item.reason = "size"
+        self._recording_sink.write(RecordingEvent(name, fields, at, wall))
 
     def _recording_failure(self) -> None:
         with self._condition:
             if self._recording is not None:
                 self._recording.writer_errors += 1
+                self._failure("manual", "write")
                 self.stop_recording("writer_error")
                 self._recording.reason = "writer_error"
 
@@ -696,7 +853,9 @@ class LogWriter:
             self._recording_open_attempted = True
             try:
                 item.context["build"] = resolve_build_identity()
-                self._recording_sink = RecordingSink(item, PROCESS_INSTANCE)
+                self._recording_sink = RecordingSink(
+                    item, PROCESS_INSTANCE, snapshots=self._context_snapshots
+                )
             except Exception:
                 self._recording_failure()
         if time.monotonic() >= item.deadline:
@@ -710,7 +869,6 @@ class LogWriter:
             return
         from .diagnostic_recording import (
             RecordingEvent,
-            RecordingStore,
             atomic_bytes,
             json_bytes,
             set_recording_active,
@@ -729,9 +887,12 @@ class LogWriter:
                     footer=True,
                 )
                 sink.close()
+                if not item.writer_errors:
+                    self._recovered("manual", "json")
         except Exception:
             item.writer_errors += 1
             item.reason = "writer_error"
+            self._failure("manual", "write")
             if sink is not None:
                 with suppress(Exception):
                     sink.close()
@@ -749,11 +910,12 @@ class LogWriter:
         )
         try:
             atomic_bytes(item.directory / item.id / "recording.json", json_bytes(item.snapshot()))
+            self._recovered("manual", "metadata")
             set_recording_active(item.directory, item.id, False)
-            RecordingStore(item.directory).prune()
         except Exception:
             item.writer_errors += 1
             item.complete, item.state = False, "error"
+            self._failure("manual", "metadata")
         finally:
             set_recording_active(item.directory, item.id, False)
         with self._condition:
@@ -761,6 +923,8 @@ class LogWriter:
             self._recording = None
 
     def _close_files(self) -> None:
+        from .diagnostic_recording import release_path
+
         for name in ("_file", "_json"):
             stream = getattr(self, name)
             setattr(self, name, None)
@@ -769,6 +933,11 @@ class LogWriter:
                     stream.close()
                 except Exception:
                     self._failure()
+        for name in ("_json_path", "_text_path"):
+            path = getattr(self, name)
+            if path is not None:
+                release_path(path)
+                setattr(self, name, None)
 
 
 class QueueLogHandler(logging.Handler):

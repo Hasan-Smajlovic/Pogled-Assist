@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
@@ -36,6 +37,11 @@ class DiagnosticRecordings(QObject):
         self._queue: Queue = Queue(maxsize=4)
         self._stopped = Event()
         self._worker = None
+        self.storage = {}
+        self.persistence = {}
+        self._maintenance_pending = False
+        self._next_maintenance = 0.0
+        self._recovered = False
         self._finished.connect(self._apply, Qt.QueuedConnection)
         self._timer = QTimer(self)
         self._timer.setInterval(250)
@@ -62,6 +68,20 @@ class DiagnosticRecordings(QObject):
         self.poll()
 
     def poll(self) -> None:
+        writer = self._writer or self._writer_source()
+        if hasattr(writer, "persistence_status"):
+            persistence = writer.persistence_status()
+            if persistence != self.persistence:
+                self.persistence = persistence
+                self.indicator.set_persistence(persistence)
+                self.changed.emit()
+        if (
+            self._recovered
+            and not self._maintenance_pending
+            and time.monotonic() >= self._next_maintenance
+        ):
+            self._maintenance_pending = self._submit("maintenance", "", None)
+            self._next_maintenance = time.monotonic() + 5
         if self._writer is None:
             return
         status = self._writer.recording_status()
@@ -72,6 +92,10 @@ class DiagnosticRecordings(QObject):
             self.changed.emit()
         if was_busy and not self.busy:
             self.load()
+
+    def set_budget(self, gigabytes: int) -> None:
+        self.store.budget_bytes = gigabytes * 1_000_000_000
+        self._next_maintenance = 0
 
     def load(self) -> None:
         if self._stopped.is_set():
@@ -91,9 +115,13 @@ class DiagnosticRecordings(QObject):
             return False
         if self.busy and self.status["id"] == recording_id:
             return False
+        if not self.store.reserve_export(recording_id):
+            return False
         self._exporting = self._submit(
             "export", recording_id, (recording_id, destination, deepcopy(report))
         )
+        if not self._exporting:
+            self.store.release_export(recording_id)
         return self._exporting
 
     def _submit(self, action, key, value) -> bool:
@@ -109,20 +137,28 @@ class DiagnosticRecordings(QObject):
     def _run(self) -> None:
         while not self._stopped.is_set():
             task = self._queue.get()
-            if task is None or self._stopped.is_set():
+            if task is None:
+                return
+            if self._stopped.is_set():
+                if task[0] == "export":
+                    self.store.release_export(task[1])
                 return
             action, key, value = task
             try:
-                result = (
-                    self.store.recover_and_load(active_id=value)
-                    if action == "load"
-                    else self.store.export(*value)
-                )
+                if action == "load":
+                    result = self.store.recover_and_load(active_id=value)
+                elif action == "maintenance":
+                    result = self.store.maintain()
+                else:
+                    result = self.store.export(*value)
                 success = True
             except RecordingReadError:
                 result, success = "unreadable", False
             except Exception:
                 result, success = None, False
+            finally:
+                if action == "export":
+                    self.store.release_export(key)
             try:
                 self._finished.emit((action, key, success, result))
             except RuntimeError:
@@ -132,11 +168,17 @@ class DiagnosticRecordings(QObject):
         if self._stopped.is_set():
             return
         action, key, success, result = outcome
+        if action == "maintenance":
+            self._maintenance_pending = False
+            self.storage = result if success else {**self.storage, "state": "unavailable"}
+            self.changed.emit()
+            return
         if action == "load":
             self.loading = False
             self.history_error = not success
             if success:
                 self.entries = result
+                self._recovered = True
             if self._reload_pending:
                 self._reload_pending = False
                 self.load()
@@ -156,6 +198,10 @@ class DiagnosticRecordings(QObject):
     def shutdown(self) -> None:
         self._timer.stop()
         self._stopped.set()
+        while not self._queue.empty():
+            task = self._queue.get_nowait()
+            if task is not None and task[0] == "export":
+                self.store.release_export(task[1])
         # A busy worker observes the stop before taking another queued job.
         with suppress(Full):
             self._queue.put_nowait(None)

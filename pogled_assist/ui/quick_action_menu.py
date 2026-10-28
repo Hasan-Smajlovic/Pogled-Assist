@@ -11,6 +11,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QStyle, QWidget
 
+from .. import diagnostics
 from ..interaction.gaze_selection import (
     DEFAULT_SELECTION_PAUSE_MS,
     MAX_SELECTION_PAUSE_MS,
@@ -85,7 +86,7 @@ class QuickActionRadialMenu(QWidget):
         self._candidate_anchor: QPoint | None = None
         self._selected_action: str | None = None
         self._candidate_progress = 0.0
-        self._selection_timer = GazeSelectionTimer()
+        self._selection_timer = GazeSelectionTimer("quick_menu")
         self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
@@ -140,6 +141,7 @@ class QuickActionRadialMenu(QWidget):
         logger.info("Quick action radial menu opened at %s,%s.", center.x(), center.y())
 
     def close_menu(self) -> None:
+        was_visible = self.isVisible()
         self._candidate_action = None
         self._candidate_anchor = None
         self._selected_action = None
@@ -149,7 +151,8 @@ class QuickActionRadialMenu(QWidget):
         self._last_topmost_ms = 0.0
         self._timer.stop()
         self.hide()
-        logger.info("Quick action radial menu closed.")
+        if was_visible:
+            logger.info("Quick action radial menu closed.")
 
     def handle_gaze(self, point: QPoint) -> None:
         if not self.isVisible() or self._selection_emitted:
@@ -205,7 +208,11 @@ class QuickActionRadialMenu(QWidget):
             self._selection_timer.complete()
             self._selection_emitted = True
             logger.info("Quick action radial gaze selected: %s", action)
-            self.action_selected.emit(action)
+            diagnostics.invoke_action(
+                lambda: self.action_selected.emit(action),
+                source="gaze",
+                selection=self._selection_timer,
+            )
             return
 
         self.update()
@@ -216,7 +223,9 @@ class QuickActionRadialMenu(QWidget):
         action = self._action_for_global_point(self.mapToGlobal(local_point), allow_center=True)
         if action is not None:
             logger.info("Quick action radial mouse selected: %s", action)
-            self.action_selected.emit(action)
+            diagnostics.invoke_action(
+                lambda: self.action_selected.emit(action), source="mouse", action=action
+            )
             return
 
         super().mousePressEvent(event)

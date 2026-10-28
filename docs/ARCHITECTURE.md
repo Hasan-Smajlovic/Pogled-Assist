@@ -213,10 +213,10 @@ data/speech_phrases.json rollback-compatible standalone phrases for older releas
 data/speech_learning.json versioned local word and short-context counts
 data/version-history/*/ immutable pre-install copies of saved data
 logs/latest.txt          current application log when logging is enabled
-logs/diagnostics/*.jsonl bounded structured diagnostic sessions
+logs/diagnostics/*.jsonl rotated segments of continuous structured sessions
 logs/gaze-check/gaze-check-<uuid>.json versioned aggregate gaze-check reports
 logs/diagnostic-recordings/<id>/recording.json versioned short-recording lifecycle and context
-logs/diagnostic-recordings/<id>/snimak.jsonl bounded detailed recording
+logs/diagnostic-recordings/<id>/snimak*.jsonl segments of one timed detailed recording
 ```
 
 Missing or malformed settings fall back safely to defaults, with supported values clamped to the same ranges as the Settings UI. Installation, update, and rollback work must preserve `data/` and `logs/`. The transactional installer verifies the copied data and logs byte for byte before swapping directories, and keeps a dated data snapshot under `data/version-history`. Snapshots exclude earlier snapshots to avoid recursive growth. Settings loading fills fields omitted by older writers from these snapshots; current fields and supported edits from the older version take precedence. Settings saves retain unknown fields and reject unreadable or unsupported formats. Snapshots contain personal saved data and belong with the user's local data, never in source control or diagnostic uploads.

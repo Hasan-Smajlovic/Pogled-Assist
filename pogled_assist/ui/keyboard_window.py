@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..diagnostics import safe_action
+from ..diagnostics import invoke_action, safe_action
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
     keyboard_group_page,
@@ -334,6 +334,14 @@ class KeyboardWindow(SidebarPanel):
         self._keys.add_keys(group, action_prefix, columns=columns)
 
     def _trigger_action(self, action: str) -> None:
+        invoke_action(
+            lambda: self._dispatch_action(action),
+            context=self._diagnostic_context,
+            action=action,
+            source="button",
+        )
+
+    def _dispatch_action(self, action: str) -> None:
         command = action.removeprefix(KEYBOARD_WINDOW_ACTION_PREFIX)
         if command.startswith("tab:"):
             self._group_page = 0

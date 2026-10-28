@@ -127,7 +127,7 @@ def test_clear_confirmation_survives_invalid_eyes_gap_and_logging_failure(
 def _assert_confirmation_events(mode, latest):
     events = records(latest)
     assert any(
-        data.get("reason") == "eye_gate_closed" for data in _event_data(events, "selection_state")
+        data.get("reason") == "eye_gate_closed" for data in _event_data(events, "selection_end")
     )
     assert any(
         data["source"] == "gaze" and data["target_id"] == "confirm:accept"

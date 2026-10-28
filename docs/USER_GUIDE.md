@@ -262,9 +262,9 @@ Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets
 #### Record a problem
 
 1. Open **Postavke > Podrška > Dijagnostičko snimanje**, or use the same shortcut in **Provjera pogleda** when no precision/button measurement is active. A caregiver operates this screen by mouse or keyboard; normal gaze input is paused while it is open.
-2. Choose **1, 2, 5 or 10 min** (default 2), then **Pokreni snimanje**. Explicit recording works even with **Uključi zapisivanje** off and never changes that setting. It also works after an ordinary log session reaches its size cap.
+2. Choose **1, 2, 5 or 10 min** (default 2), then **Pokreni snimanje**. Explicit recording works even with **Uključi zapisivanje** off and never changes that setting. Ordinary logs also continue throughout use while enabled.
 3. Return to the application, reproduce the problem and note the approximate time and intended control. Closing the recording window keeps recording active. Returning to a gaze check preserves its result and keeps normal input paused until the check closes; no measurement continues hidden behind diagnostics.
-4. Wait for the duration or 32 MiB limit, or reopen the screen and choose **Zaustavi snimanje**. Wait for saving to finish before exporting or starting another recording.
+4. Wait for the duration, or reopen the screen and choose **Zaustavi snimanje**. Wait for saving to finish before exporting or starting another recording.
 
 #### Understand the indicator
 
@@ -277,13 +277,13 @@ A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Sp
 | **Snimak nije potpun** | A recording was retained with an interruption or missing data; review its details. |
 | **Greška čuvanja snimka** | Saving failed; review the recording's available data and error state. |
 
-Incomplete/error messages stay visible until a new recording starts. Opening another window does not restart the shared confirmation timer. A recording is technical gaze/event data, not microphone or screen capture.
+A persistence error stays visible through recording, finishing and saved confirmation until saving recovers. A new recording alone does not clear that failure. Ordinary-log failure uses **Greška čuvanja logova**; failure of both destinations uses **Greška čuvanja svih logova**. Incomplete-recording messages stay visible until the next recording. Opening another window does not restart the shared confirmation timer. A recording is technical gaze/event data, not microphone or screen capture.
 
 #### Review and export
 
-**Sačuvani snimci** lists recordings available after restart. Review the reason, final-record presence, omitted-event count, write errors and truncated-data count. Time expiry or a manual stop can be complete; a size cap, shutdown, write error, missing final record or reported loss is incomplete. A force-killed application can leave a useful partial stream. An unreadable recording cannot be exported. Failed reading offers **Osvježi listu**. The newest five recordings, up to 200 MiB, are kept after a successful new save; manually exported ZIPs are preserved. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns file locations and retention details.
+**Sačuvani snimci** lists recordings available after restart. Review the reason, final-record presence, omitted-event count, write errors and truncated-data count. Time expiry or a manual stop can be complete; a size cap, shutdown, write error, missing final record or reported loss is incomplete. A force-killed application can leave a useful partial stream. An unreadable recording cannot be exported. Failed reading offers **Osvježi listu**. Use **Postavke > Podrška > Prostor za logove** to choose the shared space for ordinary logs and manual recordings: **4 GB** by default, **1-10 GB**. One GB is 1,000,000,000 bytes. The oldest closed logs are deleted automatically, without priority between ordinary and manual logs. Active output, whole active recordings and sources queued for export are protected and can temporarily exceed the budget. Diagnostics shows actual usage, budget, oldest known log time and storage status. Low disk space also triggers cleanup. Exported ZIPs and gaze-check results are preserved. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns file locations and retention details.
 
-Choose **Izvezi ZIP** and a destination in Windows Save As. The package includes the selected detailed JSONL, `kontekst.json`, a Bosnian `sazetak.txt`, and `manifest.json` with version, recording identity/state, byte sizes and SHA-256 hashes. **Dodaj rezultat Provjere pogleda** optionally includes one saved or current-memory report, including an interrupted report. Its own date, policy, simulation flag and state remain separate; no report is selected automatically. Export is local and sends nothing. Failure leaves the recording and any earlier destination intact, allowing retry.
+Choose **Izvezi ZIP** and a destination in Windows Save As. The package includes all segments of the selected detailed recording, `kontekst.json`, a Bosnian `sazetak.txt`, and `manifest.json` with version, recording identity/state, byte sizes and SHA-256 hashes. **Dodaj rezultat Provjere pogleda** optionally includes one saved or current-memory report, including an interrupted report. Its own date, policy, simulation flag and state remain separate; no report is selected automatically. Export is local and sends nothing. Failure leaves the recording and any earlier destination intact, allowing retry.
 
 The package includes detailed gaze coordinates and control geometry, selected gaze settings, display/backend/device information and build identity. A full revision with **Lokalne izmjene izvora: Da** describes a modified build; unknown values remain unavailable. It excludes complete settings/log folders, API keys, composed or spoken messages, library contents, audio, screenshots and device serial numbers. Coordinates and geometry may reveal activity; review the package before sharing it through your agreed support channel.
 
@@ -297,7 +297,9 @@ $env:POGLED_ASSIST_GAZE_DIAGNOSTICS = 'trace'
 Remove-Item Env:\POGLED_ASSIST_GAZE_DIAGNOSTICS
 ```
 
-Close any already-running copy first. This older launch-time trace requires **Uključi zapisivanje**, lasts at most ten minutes or 32 MiB, then returns to basic logging; disabling normal logging ends that trace. The explicit recording controls above work independently. Ordinary structured sessions remain capped at 64 MiB and use process-cumulative writer health; do not treat those counts as losses from a new manual recording. Archive filenames reflect rotation time, which can differ from session start. A crash can omit the last batch or closing record.
+Close any already-running copy first. This older launch-time trace requires **Uključi zapisivanje**, lasts at most ten minutes or 32 MiB, then returns to basic logging; disabling normal logging ends that trace. The explicit recording controls above work independently. Ordinary structured and text logs rotate into bounded files and continue while enabled. They use process-cumulative writer health; do not treat those counts as losses from a new manual recording. Archive filenames reflect rotation time, which can differ from session start. A crash can omit the last batch or closing record.
+
+To send ordinary logs, copy the local **logs** folder and share it through the agreed private support channel. A copy taken while the application runs may be incomplete; it does not require closing the app. The reader can use valid data and identify incomplete coverage. No automatic time-range export is required. Keep private log folders out of public issues and source control.
 
 ## Exit
 

@@ -7,11 +7,12 @@ import json
 import math
 import os
 import re
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .log_reader import summarize
@@ -21,13 +22,68 @@ from .tracking.gaze_check_report import (
     report_text,
 )
 
-RECORDING_BYTES = 32 * 1024 * 1024
-MAX_RECORDINGS = 5
-TOTAL_BYTES = 200 * 1024 * 1024
+SEGMENT_BYTES = 16 * 1024 * 1024
+LOW_SPACE_BYTES = 1_000_000_000
+RECOVERY_SPACE_BYTES = 2_000_000_000
+DEFAULT_BUDGET_BYTES = 4_000_000_000
+MAX_MAINTENANCE_ITEMS = 128
 DURATIONS = (1, 2, 5, 10)
 RECORDING_ID = re.compile(r"[0-9a-f]{32}\Z")
 _STORE_LOCK = RLock()  # File workers only; input/Qt producers never take this lock.
 _ACTIVE_RECORDINGS: set[tuple[str, str]] = set()
+_RESERVATION_LOCK = Lock()
+_RESERVATIONS: dict[str, int] = {}
+_DELETING: set[str] = set()
+
+
+def _path_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def reserve_path(path: Path) -> bool:
+    key = _path_key(path)
+    with _RESERVATION_LOCK:
+        if key in _DELETING:
+            return False
+        _RESERVATIONS[key] = _RESERVATIONS.get(key, 0) + 1
+        return True
+
+
+def release_path(path: Path) -> None:
+    key = _path_key(path)
+    with _RESERVATION_LOCK:
+        count = _RESERVATIONS.get(key, 0)
+        if count > 1:
+            _RESERVATIONS[key] = count - 1
+        else:
+            _RESERVATIONS.pop(key, None)
+
+
+def disk_free(root: Path) -> int:
+    return shutil.disk_usage(root).free
+
+
+def _safe_storage_path(path: Path) -> bool:
+    try:
+        return not path.is_symlink() and not (
+            getattr(path.lstat(), "st_file_attributes", 0) & 0x400
+        )
+    except OSError:
+        return False
+
+
+def _known_log_time(path: Path) -> str | None:
+    if path.suffix != ".jsonl":
+        return None
+    try:
+        with path.open("rb") as stream:
+            value = json.loads(stream.readline(8193)).get("wall_time")
+        parsed = datetime.fromisoformat(value)
+        return (
+            parsed.astimezone(timezone.utc).isoformat() if parsed.utcoffset() is not None else None
+        )
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
 
 
 def set_recording_active(directory: Path, recording_id: str, active: bool) -> None:
@@ -123,6 +179,7 @@ class Recording:
     bounded_snapshots: int = 0
     end_present: bool = False
     complete: bool = False
+    segment_count: int = 1
 
     @property
     def deadline(self) -> float:
@@ -150,6 +207,7 @@ class Recording:
             "session_end_present": self.end_present,
             "complete": self.complete,
             "context": self.context,
+            "segment_count": self.segment_count,
         }
 
 
@@ -164,11 +222,13 @@ class RecordingEvent:
 class RecordingSink:
     """A second structured destination of LogWriter, never a separate observation pipeline."""
 
-    def __init__(self, recording: Recording, process: str) -> None:
+    def __init__(self, recording: Recording, process: str, *, snapshots=None) -> None:
         self.recording = recording
         self.process = process
         self.sequence = 0
         self.stream = None
+        self._segment_bytes = 0
+        self.snapshots = snapshots if snapshots is not None else {}
         folder = recording.directory / recording.id
         folder.mkdir(parents=True, exist_ok=False)
         atomic_bytes(folder / "recording.json", json_bytes(recording.snapshot()))
@@ -192,6 +252,25 @@ class RecordingSink:
             footer=True,
         )
         recording.state = "recording" if recording.accepting else "finishing"
+        self._write_context(recording.started_mono, recording.started_wall)
+
+    def _write_context(self, at, wall):
+        self.write(
+            RecordingEvent(
+                "segment_context",
+                {
+                    "segment_index": self.recording.segment_count - 1,
+                    "context": self.recording.context,
+                },
+                at,
+                wall,
+            ),
+            footer=True,
+        )
+        for snapshot in tuple(self.snapshots.values()):
+            self.write(
+                RecordingEvent("segment_context", {"snapshot": snapshot}, at, wall), footer=True
+            )
 
     def write(self, event: RecordingEvent, *, footer=False) -> bool:
         item = self.recording
@@ -215,24 +294,37 @@ class RecordingSink:
                 event.monotonic_time,
                 event.wall_time,
             )
-        self.sequence += 1
         record = {
             "schema_version": 1,
             "event": event.name,
             "session_id": item.id,
             "process_instance": self.process,
-            "event_seq": self.sequence,
+            "event_seq": self.sequence + 1,
             "wall_time": utc_time(event.wall_time),
             "monotonic_s": event.monotonic_time,
             "data": event.fields,
         }
         line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
         size = len(line.encode("utf-8"))
-        # Reserve a bounded lifecycle footer inside the total 32 MiB cap.
-        if item.bytes_written + size > RECORDING_BYTES - (0 if footer else 8192):
-            return False
+        if (
+            event.name != "segment_context"
+            and self._segment_bytes
+            and self._segment_bytes + size > SEGMENT_BYTES
+        ):
+            self.close()
+            item.segment_count += 1
+            self.stream = (
+                item.directory / item.id / f"snimak-{item.segment_count - 1:06}.jsonl"
+            ).open("x", encoding="utf-8", newline="\n")
+            self._segment_bytes = 0
+            self._write_context(event.monotonic_time, event.wall_time)
+        self.sequence += 1
+        record["event_seq"] = self.sequence
+        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        size = len(line.encode("utf-8"))
         self.stream.write(line)
         item.bytes_written += size
+        self._segment_bytes += size
         return True
 
     def flush(self) -> None:
@@ -283,8 +375,6 @@ def _read_recording_metadata(path: Path, recording_id: str) -> dict:
 
 def _read_recording_edges(path: Path, recording_id: str) -> tuple[int, bool]:
     size = path.stat().st_size
-    if size > RECORDING_BYTES:
-        raise ValueError("Invalid recording size")
     with path.open("rb") as stream:
         first = json.loads(stream.readline(8193))
         stream.seek(max(0, size - 8192))
@@ -338,21 +428,17 @@ def _recording_is_complete(item: dict, ended: bool, analysis: dict | None) -> bo
     )
 
 
-def _recording_retention_candidate(
-    folder: Path, recording_id: str, directory: Path
-) -> tuple[tuple[Path, ...], int] | None:
-    # Keep unreadable recordings within the budget and never touch extra files.
-    if _is_active(directory, recording_id):
-        return None
-    paths = _recording_files(folder)
-    if not _retention_folder_is_safe(folder, paths):
-        return None
-    return paths, sum(path.stat().st_size for path in paths)
-
-
 def _recording_files(folder: Path) -> tuple[Path, ...]:
     return tuple(
-        path for path in (folder / "snimak.jsonl", folder / "recording.json") if path.exists()
+        sorted(
+            (
+                path
+                for path in folder.iterdir()
+                if path.name in {"snimak.jsonl", "recording.json"}
+                or re.fullmatch(r"snimak-\d{6}\.jsonl", path.name)
+            ),
+            key=lambda path: (path.name != "snimak.jsonl", path.name),
+        )
     )
 
 
@@ -360,10 +446,6 @@ def _retention_folder_is_safe(folder: Path, paths: tuple[Path, ...]) -> bool:
     if any(path.is_symlink() for path in paths):
         return False
     return {path.name for path in folder.iterdir()} == {path.name for path in paths}
-
-
-def _retention_limit_exceeded(retained: int, total: int) -> bool:
-    return retained > MAX_RECORDINGS or total > TOTAL_BYTES
 
 
 def _remove_recording(folder: Path, paths: tuple[Path, ...]) -> None:
@@ -382,11 +464,11 @@ def _is_recording_folder(folder: Path, directory: Path, active_id: str | None) -
 
 def _recording_paths(directory: Path, recording_id: str) -> tuple[Path, Path]:
     folder = directory / recording_id
-    if folder.is_symlink():
+    if not _safe_storage_path(directory) or not _safe_storage_path(folder):
         raise ValueError("Linked recording")
     metadata = folder / "recording.json"
     trace = folder / "snimak.jsonl"
-    if metadata.is_symlink() or trace.is_symlink():
+    if not _safe_storage_path(metadata) or not _safe_storage_path(trace):
         raise ValueError("Linked recording file")
     return metadata, trace
 
@@ -394,6 +476,147 @@ def _recording_paths(directory: Path, recording_id: str) -> tuple[Path, Path]:
 class RecordingStore:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
+        self.budget_bytes = DEFAULT_BUDGET_BYTES
+        self.storage: dict = {}
+
+    reserve_path = staticmethod(reserve_path)
+    release_path = staticmethod(release_path)
+
+    def reserve_export(self, recording_id: str) -> bool:
+        if not RECORDING_ID.fullmatch(recording_id) or _is_active(self.directory, recording_id):
+            return False
+        return reserve_path(self.directory / recording_id)
+
+    def release_export(self, recording_id: str) -> None:
+        release_path(self.directory / recording_id)
+
+    def maintain(self, *, budget_bytes: int | None = None) -> dict:
+        """File-worker maintenance. Registry locks cover claims only, never disk work."""
+        root = self.directory.parent
+        budget = self.budget_bytes if budget_bytes is None else budget_bytes
+        if not root.exists():
+            self.storage = dict(
+                usage_bytes=0,
+                budget_bytes=budget,
+                oldest_at=None,
+                state="ready",
+                pruned_items=0,
+                protected_bytes=0,
+            )
+            return self.storage
+        items = sorted(self._managed_items(), key=lambda item: item[2])
+        total = sum(item[3] for item in items)
+        free = disk_free(root)
+        low = free < LOW_SPACE_BYTES or (
+            self.storage.get("low_space", False) and free < RECOVERY_SPACE_BYTES
+        )
+        removed = set()
+        failed = False
+        for key, paths, _age, size, _known in items:
+            if total <= budget and (not low or free >= RECOVERY_SPACE_BYTES):
+                break
+            if len(removed) >= MAX_MAINTENANCE_ITEMS:
+                break
+            identity = _path_key(key)
+            with _RESERVATION_LOCK:
+                protected = identity in _RESERVATIONS or identity in _DELETING
+                if key.parent == self.directory:
+                    protected |= _is_active(self.directory, key.name)
+                if protected:
+                    continue
+                _DELETING.add(identity)
+            try:
+                # Recheck the allowlist immediately before each deletion.
+                if not all(_safe_storage_path(path) for path in (root, key.parent, key, *paths)):
+                    continue
+                if key.is_dir():
+                    if not _retention_folder_is_safe(key, paths):
+                        continue
+                    _remove_recording(key, paths)
+                else:
+                    if not _safe_storage_path(key):
+                        continue
+                    key.unlink()
+                removed.add(identity)
+                total -= size
+                free = disk_free(root)
+            except OSError:
+                failed = True
+            finally:
+                with _RESERVATION_LOCK:
+                    _DELETING.discard(identity)
+        # A partially failed deletion must be measured again, not subtracted optimistically.
+        retained = list(self._managed_items())
+        known = [item[4] for item in retained if item[4] is not None]
+        with _RESERVATION_LOCK:
+            protected_bytes = sum(
+                item[3]
+                for item in retained
+                if _path_key(item[0]) in _RESERVATIONS or _is_active(self.directory, item[0].name)
+            )
+        total = sum(item[3] for item in retained)
+        self.storage = dict(
+            usage_bytes=total,
+            budget_bytes=budget,
+            oldest_at=min(known) if known else None,
+            protected_bytes=protected_bytes,
+            pruned_items=len(removed),
+            pruned_total=self.storage.get("pruned_total", 0) + len(removed),
+            low_space=low and free < RECOVERY_SPACE_BYTES,
+            free_bytes=free,
+            state="cleanup_failed"
+            if failed
+            else "low_space"
+            if low and free < RECOVERY_SPACE_BYTES
+            else "protected_over_budget"
+            if total > budget
+            else "ready",
+            temporary_allowance_bytes=protected_bytes + 2 * SEGMENT_BYTES,
+        )
+        return dict(self.storage)
+
+    def _managed_items(self):
+        root = self.directory.parent
+        if not _safe_storage_path(root):
+            return
+        for folder, pattern in (
+            (root, r"(?:latest|\d{8}_\d{6}_\d+)\.txt"),
+            (root / "diagnostics", r"[0-9a-f]{32}(?:\.part-\d{6})?\.jsonl"),
+        ):
+            if not folder.exists() or not _safe_storage_path(folder):
+                continue
+            for path in folder.iterdir():
+                if re.fullmatch(pattern, path.name) and _safe_storage_path(path) and path.is_file():
+                    try:
+                        stat = path.stat()
+                        yield path, (path,), stat.st_mtime, stat.st_size, _known_log_time(path)
+                    except OSError:
+                        continue
+        if not self.directory.exists() or not _safe_storage_path(self.directory):
+            return
+        for folder in self.directory.iterdir():
+            if (
+                not RECORDING_ID.fullmatch(folder.name)
+                or not _safe_storage_path(folder)
+                or not folder.is_dir()
+            ):
+                continue
+            try:
+                paths = _recording_files(folder)
+                if not all(_safe_storage_path(p) for p in paths):
+                    continue
+                sizes = [path.stat() for path in paths]
+                if sizes:
+                    known = _known_log_time(folder / "snimak.jsonl")
+                    yield (
+                        folder,
+                        paths,
+                        min(s.st_mtime for s in sizes),
+                        sum(s.st_size for s in sizes),
+                        known,
+                    )
+            except OSError:
+                continue
 
     def load(self, *, active_id: str | None = None) -> list[dict]:
         with _STORE_LOCK:
@@ -418,7 +641,7 @@ class RecordingStore:
             # missed pruning. Initial-only remnants become confirmed partial
             # recordings above; a failed recovery never deletes older data.
             if saved:
-                self._prune(active_id=active_id)
+                self.maintain()
             return self._load(active_id=active_id)
 
     def _load(self, *, active_id: str | None = None) -> list[dict]:
@@ -446,8 +669,20 @@ class RecordingStore:
             raise ValueError("Invalid recording identity")
         metadata_path, trace_path = _recording_paths(self.directory, recording_id)
         item = _read_recording_metadata(metadata_path, recording_id)
+        traces = tuple(
+            path for path in _recording_files(metadata_path.parent) if path.suffix == ".jsonl"
+        )
+        if any(path.is_symlink() for path in traces):
+            raise ValueError("Linked recording segment")
         size, ended = _read_recording_edges(trace_path, recording_id)
-        analysis = _analyze_recording(trace_path, recording_id, analyze=analyze)
+        if len(traces) > 1:
+            size = sum(path.stat().st_size for path in traces)
+            with traces[-1].open("rb") as stream:
+                stream.seek(max(0, traces[-1].stat().st_size - 8192))
+                ended = _has_recording_end(stream.read(8192), recording_id)
+        analysis = _analyze_recording(
+            metadata_path.parent if len(traces) > 1 else trace_path, recording_id, analyze=analyze
+        )
         item.update(bytes=size, session_end_present=ended)
         _mark_interrupted_metadata(item, ended)
         item["complete"] = _recording_is_complete(item, ended, analysis)
@@ -456,28 +691,17 @@ class RecordingStore:
         return item
 
     def prune(self, *, active_id: str | None = None) -> None:
-        with _STORE_LOCK:
-            self._prune(active_id=active_id)
-
-    def _prune(self, *, active_id: str | None = None) -> None:
-        total = 0
-        retained = 0
-        for item in self.load(active_id=active_id):
-            folder = self.directory / item["id"]
-            candidate = _recording_retention_candidate(folder, item["id"], self.directory)
-            if candidate is None:
-                continue
-            paths, size = candidate
-            total += size
-            retained += 1
-            if _retention_limit_exceeded(retained, total):
-                _remove_recording(folder, paths)
+        self.maintain()
 
     def export(
         self, recording_id: str, destination: Path, report: GazeCheckReport | None = None
     ) -> None:
-        with _STORE_LOCK:
+        if not self.reserve_export(recording_id):
+            raise ValueError("Recording is still active or unavailable")
+        try:
             self._export(recording_id, destination, report)
+        finally:
+            self.release_export(recording_id)
 
     def _export(self, recording_id: str, destination: Path, report: GazeCheckReport | None) -> None:
         self._validate_export_destination(recording_id, destination)
@@ -494,28 +718,25 @@ class RecordingStore:
     def _validate_export_destination(self, recording_id: str, destination: Path) -> None:
         if _is_active(self.directory, recording_id):
             raise ValueError("Recording is still active")
-        source_paths = (
-            (self.directory / recording_id / name).resolve()
-            for name in ("recording.json", "snimak.jsonl")
-        )
-        if destination.resolve() in source_paths:
+        folder = (self.directory / recording_id).resolve()
+        if destination.resolve().parent == folder:
             raise ValueError("Cannot replace recording source")
 
-    def _read_export_source(self, recording_id: str) -> tuple[dict, bytes]:
+    def _read_export_source(self, recording_id: str) -> tuple[dict, tuple[Path, ...]]:
         item = self.inspect(recording_id)
-        trace_path = self.directory / recording_id / "snimak.jsonl"
-        with trace_path.open("rb") as stream:
-            trace = stream.read(RECORDING_BYTES + 1)
-        if len(trace) > RECORDING_BYTES:
-            raise ValueError("Recording too large")
-        return item, trace
+        paths = tuple(
+            path
+            for path in _recording_files(self.directory / recording_id)
+            if path.suffix == ".jsonl"
+        )
+        return item, paths
 
     @staticmethod
     def _export_files(
-        item: dict, trace: bytes, report: GazeCheckReport | None
-    ) -> tuple[dict[str, bytes], dict | None]:
+        item: dict, trace: tuple[Path, ...], report: GazeCheckReport | None
+    ) -> tuple[dict[str, bytes | Path], dict | None]:
         files = {
-            "snimak.jsonl": trace,
+            **{path.name: path for path in trace},
             "kontekst.json": json_bytes(item["context"]),
             "sazetak.txt": recording_text(item).encode("utf-8"),
         }
@@ -538,19 +759,16 @@ class RecordingStore:
         return files, selected
 
     @staticmethod
-    def _export_manifest(item: dict, files: dict[str, bytes], selected: dict | None) -> dict:
+    def _export_manifest(item: dict, files: dict[str, bytes | Path], selected: dict | None) -> dict:
         return {
             "schema_version": 1,
             "recording": {key: value for key, value in item.items() if key != "analysis"},
             "selected_gaze_check": selected,
-            "files": [
-                {"path": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
-                for name, data in files.items()
-            ],
+            "files": [{"path": name, **_payload_info(data)} for name, data in files.items()],
         }
 
     @staticmethod
-    def _write_export(destination: Path, files: dict[str, bytes]) -> None:
+    def _write_export(destination: Path, files: dict[str, bytes | Path]) -> None:
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -559,7 +777,22 @@ class RecordingStore:
                 temporary = Path(stream.name)
             with ZipFile(temporary, "w", compression=ZIP_DEFLATED) as archive:
                 for name, payload in files.items():
-                    archive.writestr(name, payload)
+                    if isinstance(payload, Path):
+                        digest = hashlib.sha256()
+                        with (
+                            payload.open("rb") as source,
+                            archive.open(name, "w", force_zip64=True) as target,
+                        ):
+                            for chunk in iter(lambda: source.read(256 * 1024), b""):
+                                target.write(chunk)
+                                digest.update(chunk)
+                        expected = json.loads(files["manifest.json"])["files"]
+                        if digest.hexdigest() != next(
+                            item["sha256"] for item in expected if item["path"] == name
+                        ):
+                            raise ValueError("Recording changed during export")
+                    else:
+                        archive.writestr(name, payload)
             with temporary.open("r+b") as stream:
                 os.fsync(stream.fileno())
             # Keep the exact path for which Windows asked about overwriting.
@@ -567,6 +800,18 @@ class RecordingStore:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+
+
+def _payload_info(payload: bytes | Path) -> dict:
+    if isinstance(payload, bytes):
+        return dict(bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+    digest = hashlib.sha256()
+    size = 0
+    with payload.open("rb") as source:
+        for chunk in iter(lambda: source.read(256 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return dict(bytes=size, sha256=digest.hexdigest())
 
 
 def recording_text(item: dict) -> str:
@@ -645,8 +890,15 @@ _RECORDING_REASONS = {
 
 
 def _validate_recording_state(item: dict) -> None:
-    if set(item) != _RECORDING_METADATA_KEYS or item["state"] not in _RECORDING_STATES:
+    if (
+        set(item) - {"segment_count"} != _RECORDING_METADATA_KEYS
+        or item["state"] not in _RECORDING_STATES
+    ):
         raise ValueError("Unsupported recording metadata")
+    if "segment_count" in item and (
+        type(item["segment_count"]) is not int or item["segment_count"] < 1
+    ):
+        raise ValueError("Invalid recording segments")
     if item["reason"] not in _RECORDING_REASONS:
         raise ValueError("Invalid end reason")
     _validate_recording_flags(item)

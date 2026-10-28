@@ -103,6 +103,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._diagnostic_recordings = DiagnosticRecordings(
             RecordingStore(get_project_root() / "logs" / "diagnostic-recordings"), self
         )
+        self._diagnostic_recordings.set_budget(self._initial_gaze_settings.log_storage_gb)
+        self._diagnostic_recordings.load()
         self._gaze_check_reports = GazeCheckReports(
             GazeCheckStore(get_project_root() / "logs" / "gaze-check"), self
         )
@@ -417,6 +419,14 @@ class HotbarWindow(HotbarSpeech, QWidget):
         checked: bool | None = None,
         source: str = "unknown",
     ) -> None:
+        diagnostics.invoke_action(
+            lambda: self._dispatch_toolbar_action(action, checked=checked, source=source),
+            context=self.diagnostic_context(action),
+            action=action,
+            source=source,
+        )
+
+    def _dispatch_toolbar_action(self, action, *, checked, source):
         logger.info("Toolbar action requested by %s: %s", source, diagnostics.safe_action(action))
         if source == "mouse":
             self._mouse.cancel_gaze_interactions_for_mouse()
@@ -1139,6 +1149,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._quit_application()
 
     def _update_gaze_settings(self, settings: object) -> None:
+        self._diagnostic_recordings.set_budget(settings.log_storage_gb)
         previous = (
             self._mouse.settings.eye_tracking_policy,
             self._mouse.settings.eye_tracking_hold_ms,

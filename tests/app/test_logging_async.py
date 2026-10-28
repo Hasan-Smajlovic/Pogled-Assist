@@ -178,7 +178,7 @@ def test_archive_failure_preserves_old_log_and_keeps_structured_logging(tmp_path
     latest = tmp_path / "logs/latest.txt"
     latest.parent.mkdir()
     latest.write_text("only copy of the previous session\n", encoding="utf-8")
-    monkeypatch.setattr(log_transport.shutil, "copy2", fail)
+    monkeypatch.setattr(log_transport.os, "replace", fail)
     writer = LogWriter()
     writer.start_segment(latest, None, trace=False)
     writer.event("new_session_observation", {})
@@ -229,11 +229,11 @@ def test_bounded_payloads_report_truncation_in_session_health(tmp_path):
     assert end["logging_health"]["bounded_snapshots"] == 1
 
 
-def test_trace_and_session_limits_leave_explicit_markers(tmp_path, monkeypatch):
+def test_trace_limit_survives_rotation_while_basic_logging_continues(tmp_path, monkeypatch):
     from pogled_assist import log_transport
 
     monkeypatch.setattr(log_transport, "TRACE_BYTES", 100)
-    monkeypatch.setattr(log_transport, "SESSION_BYTES", 16000)
+    monkeypatch.setattr(log_transport, "SEGMENT_BYTES", 16000)
     latest = tmp_path / "logs/latest.txt"
     writer = LogWriter()
     writer.start_segment(latest, None, trace=True)
@@ -244,7 +244,9 @@ def test_trace_and_session_limits_leave_explicit_markers(tmp_path, monkeypatch):
     assert writer.stop()
     names = [record["event"] for record in read_events(latest)]
     assert "trace_limit" in names
-    assert "session_limit" in names
+    assert "session_limit" not in names
+    assert "segment_context" in names
+    assert len(list((latest.parent / "diagnostics").glob("*.jsonl"))) > 1
     assert names.count("native_gaze") == 1
     assert "basic" in names
 

@@ -46,6 +46,20 @@
   }
   $('startup-enabled').addEventListener('change', previewStartupChange);
   $('logging-enabled').checked = ReferenceDesign.readSession('logging-enabled', false);
+  let logBudget = ReferenceDesign.readSession('log-budget-gb', 4);
+  function renderLogBudget() {
+    $('log-budget-value').textContent = logBudget + ' GB';
+    $('log-budget-less').disabled = logBudget <= 1;
+    $('log-budget-more').disabled = logBudget >= 10;
+  }
+  for (const [id, delta] of [['log-budget-less', -1], ['log-budget-more', 1]]) {
+    $(id).addEventListener('click', () => {
+      logBudget = Math.min(10, Math.max(1, logBudget + delta));
+      ReferenceDesign.writeSession('log-budget-gb', logBudget);
+      renderLogBudget();
+    });
+  }
+  renderLogBudget();
   $('logging-enabled').addEventListener('change', event => {
     ReferenceDesign.writeSession('logging-enabled', event.target.checked);
     $('settings-status').textContent = event.target.checked ? 'Opće zapisivanje je uključeno.' : 'Opće zapisivanje je isključeno. Ručno pokrenuto dijagnostičko snimanje nastavlja do svog završetka.';
