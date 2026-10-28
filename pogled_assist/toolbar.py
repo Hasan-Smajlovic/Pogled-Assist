@@ -187,6 +187,11 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._mouse.cancel_toolbar_interaction(require_leave=True)
         super().resizeEvent(event)
 
+    def finish_shutdown(self) -> None:
+        wait = getattr(self._gaze, "wait_for_shutdown", None)
+        if wait is not None:
+            wait()
+
     def action_at_global_point(self, point: QPoint) -> str | None:
         if self._quick_overlay_visible():
             return None

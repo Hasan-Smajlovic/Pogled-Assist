@@ -167,17 +167,18 @@ class TobiiStreamEngineBackend:
             self._destroy_resources()
             raise
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=1.5)
             if self._thread.is_alive():
                 logger.warning("Tobii Stream Engine pump thread did not stop cleanly.")
-                return
+                return False
             self._thread = None
 
         self._destroy_resources()
         logger.info("Tobii Stream Engine backend stopped.")
+        return True
 
     def _destroy_resources(self) -> None:
         if self._lib is None:

@@ -30,6 +30,8 @@ class GazeSelectionTimer:
         self._last_seen_ms = 0.0
         self._away_since_ms: float | None = None
         self._tracking_deadline_ms: float | None = None
+        self._tracking_full_deadline_ms: float | None = None
+        self._tracking_pause_only = False
         self._observer = (
             diagnostics.SelectionObserver(diagnostic_source) if diagnostic_source else None
         )
@@ -48,6 +50,9 @@ class GazeSelectionTimer:
             "active": self._target is not None,
             "blocked": self.is_blocked,
             "held": self._away_since_ms is not None,
+            "tracking_hold": ("completed_pause" if self._tracking_pause_only else "full_progress")
+            if self.tracking_held
+            else None,
             "credited_ms": credited,
         }
 
@@ -99,6 +104,8 @@ class GazeSelectionTimer:
         can_hold: bool = False,
         hold_ms: int = 0,
     ) -> GazeSelectionUpdate:
+        if self.tracking_held and (pause_ms, dwell_ms) != (self._pause_ms, self._dwell_ms):
+            self.pause(reason="tracking_settings_changed")
         self._pause_ms = pause_ms
         self._dwell_ms = dwell_ms
         self._advancing = True
@@ -165,10 +172,14 @@ class GazeSelectionTimer:
 
     def _resume_tracking(self, target, now_ms, *, restart, hold_ms):
         resume = self._can_resume_tracking(target, now_ms, restart=restart, hold_ms=hold_ms)
-        self._tracking_deadline_ms = None
         if not resume:
             self.pause(reason="tracking_hold_cancelled")
             return None
+        if now_ms >= self._tracking_full_deadline_ms and not self.retain_completed_pause():
+            return None
+        self._tracking_deadline_ms = None
+        self._tracking_full_deadline_ms = None
+        self._tracking_pause_only = False
         self._started_ms += max(0.0, now_ms - self._last_seen_ms)
         self._last_seen_ms = now_ms
         self._away_since_ms = None
@@ -205,10 +216,29 @@ class GazeSelectionTimer:
         self._clear_target()
         self._observe(reason)
 
-    def hold_tracking(self, deadline_ms: float) -> None:
+    def hold_tracking(self, deadline_ms: float, retention_deadline_ms: float | None = None) -> None:
         if self._target is not None and self._tracking_deadline_ms is None:
-            self._tracking_deadline_ms = deadline_ms
+            self._tracking_full_deadline_ms = deadline_ms
+            self._tracking_deadline_ms = (
+                deadline_ms if retention_deadline_ms is None else retention_deadline_ms
+            )
             self._observe("tracking_held")
+
+    def retain_completed_pause(self) -> bool:
+        if not self.tracking_held:
+            return False
+        if not self.pause_completed:
+            self.pause(reason="tracking_pause_unfinished")
+            return False
+        if not self._tracking_pause_only:
+            self._started_ms = self._last_seen_ms - self._pause_ms
+            self._tracking_pause_only = True
+            self._observe("tracking_completed_pause_retained")
+        return True
+
+    @property
+    def pause_completed(self) -> bool:
+        return self._target is not None and self._last_seen_ms - self._started_ms >= self._pause_ms
 
     @property
     def tracking_held(self) -> bool:
@@ -244,6 +274,8 @@ class GazeSelectionTimer:
 
     def _clear_target(self) -> None:
         self._tracking_deadline_ms = None
+        self._tracking_full_deadline_ms = None
+        self._tracking_pause_only = False
         self._target = None
         self._started_ms = 0.0
         self._last_seen_ms = 0.0

@@ -75,6 +75,7 @@ class SessionAnalysis:
         self.outcomes: Counter = Counter()
         self.attempts: deque = deque(maxlen=500)
         self.evidence: deque = deque(maxlen=2000)
+        self.bridge_connections: deque = deque(maxlen=64)
         self.details_truncated = False
 
     def observe(self, item: dict) -> None:
@@ -89,6 +90,31 @@ class SessionAnalysis:
             self.evidence.append((at - interval, at, evidence))
         if event == "selection_end":
             self._observe_selection_end(at, data)
+        if event == "bridge_connection":
+            self._observe_bridge(at, data)
+
+    def _observe_bridge(self, at: float, data: dict) -> None:
+        self.details_truncated |= len(self.bridge_connections) == self.bridge_connections.maxlen
+        self.bridge_connections.append(
+            {
+                "monotonic_s": at,
+                "stream_generation": data.get("stream_generation")
+                if type(data.get("stream_generation")) is int
+                else None,
+                "decision": data.get("decision")
+                if isinstance(data.get("decision"), str)
+                and data["decision"] in {"failure", "recovery", "shutdown"}
+                else "unknown",
+                "reason": data.get("reason")[:128] if isinstance(data.get("reason"), str) else None,
+                "native_eye_age_ms": _nonnegative(data.get("native_eye_age_ms")),
+                "process_state": data.get("process_state")
+                if isinstance(data.get("process_state"), str)
+                and data["process_state"] in {"running", "exited", "not_started"}
+                else "unknown",
+                "exit_code": data.get("exit_code") if type(data.get("exit_code")) is int else None,
+                "shutdown_requested": data.get("shutdown_requested") is True,
+            }
+        )
 
     def _observe_metrics(self, event: str, data: dict) -> None:
         if event in {"stream_summary", "selection_summary"}:
@@ -153,6 +179,7 @@ class SessionAnalysis:
             "eye_state_seconds": dict(self.eye_seconds),
             "observed_selection_outcomes": dict(self.outcomes),
             "recent_selection_ends": attempts,
+            "bridge_connections": list(self.bridge_connections),
             "suppressed_events": dict(self.suppressed),
             "details_truncated": self.details_truncated,
             "evidence_incomplete": not complete or bool(self.suppressed) or self.details_truncated,
@@ -172,6 +199,8 @@ def _nonnegative(value: object, default=None):
 
 
 def _event_evidence(event: str, data: dict) -> tuple[str | None, float]:
+    if event == "bridge_connection" and data.get("decision") in ("failure", "recovery"):
+        return "bridge_" + data["decision"], 0.0
     if event == "eye_gate_applied":
         gate_open = data.get("application_gate_open")
         closed = (

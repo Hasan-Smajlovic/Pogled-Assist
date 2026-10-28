@@ -22,7 +22,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Boundary or flow | Tests and reusable inputs |
 | --- | --- |
 | Gaze mapping, pointer and dwell actions | `tests/gaze/test_mouse_controller.py` (`FakeInput`) and `tests/gaze/test_gaze_selection.py` |
-| Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py` and `tests/gaze/test_gaze_provider_recovery.py` |
+| Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py`, `tests/gaze/test_gaze_provider_recovery.py` and `tests/gaze/test_gaze_connection_lifecycle.py` (Qt responsiveness, pending startup/cleanup and child-process disposal) |
 | Eye policy, interruption deadlines and the independent desktop gate | `tests/gaze/test_eye_tracking_policy.py` and `tests/ui/test_eye_tracking_policy_e2e.py` |
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |

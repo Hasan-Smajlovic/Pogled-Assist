@@ -168,6 +168,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._eye_gate.configure(settings.eye_tracking_policy, settings.eye_tracking_hold_ms)
         self._eye_gate.interrupted.connect(self._tracking_interrupted)
         self._eye_gate.hold_started.connect(self._hold_tracking)
+        self._eye_gate.pause_retained.connect(self._retain_tracking_pause)
         self._eye_gate.hold_finished.connect(self._resume_tracking)
         self._policy_sample_at: float | None = None
         self._escape = QShortcut(QKeySequence("Esc"), self)
@@ -534,14 +535,25 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         if self._check is not None:
             self._check.interrupt()
 
-    def _hold_tracking(self, deadline_ms: float) -> None:
-        self._selection.hold_tracking(deadline_ms)
+    def _hold_tracking(self, deadline_ms: float, retention_deadline_ms: float) -> None:
+        self._selection.hold_tracking(deadline_ms, retention_deadline_ms)
         if self._trial_coverage is not None:
             self._trial_coverage.interrupt()
         if self._selection.tracking_held:
             self._target.paused = True
             self._target.update()
             self._set_trial_hint("Na čekanju · čuvam napredak do povratka oba oka.")
+
+    def _retain_tracking_pause(self) -> None:
+        # Count a discarded attempt before the timer clears its target.
+        if not self._selection.pause_completed:
+            self._cancel_trial_progress(loss=True)
+            return
+        if not self._selection.retain_completed_pause():
+            return
+        self._target.progress = 0.0
+        self._target.update()
+        self._set_trial_hint("Na čekanju · početna pauza završena, punjenje kreće od nule.")
 
     def _resume_tracking(self) -> None:
         self._target.paused = False

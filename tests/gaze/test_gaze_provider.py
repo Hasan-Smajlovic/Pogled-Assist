@@ -143,40 +143,54 @@ def test_provider_stops_emitting_when_either_eye_is_invalid(qapp):
     assert gaze == []
 
 
-def test_provider_tries_backends_in_order_without_scheduling_retry(qapp, monkeypatch):
-    provider = TobiiGazeProvider()
-    provider._start_requested = True
+def test_provider_tries_backends_in_order_without_scheduling_retry(qtbot, monkeypatch):
+    from pogled_assist.tracking import gaze_provider
+
     attempts = []
-    monkeypatch.setattr(
-        provider,
-        "_start_with_tobii_research",
-        lambda: attempts.append("tobii-research") or False,
+    monkeypatch.setitem(
+        sys.modules,
+        "tobii_research",
+        SimpleNamespace(
+            find_all_eyetrackers=lambda: attempts.append("research") or [],
+        ),
     )
     monkeypatch.setattr(
-        provider,
-        "_start_with_stream_engine",
-        lambda: attempts.append("stream-engine") or True,
+        gaze_provider,
+        "TobiiStreamEngineBackend",
+        lambda *_: SimpleNamespace(
+            start=lambda: attempts.append("native"),
+            stop=lambda: None,
+            label="fake",
+        ),
     )
-
-    provider._attempt_start()
-
-    assert attempts == ["tobii-research", "stream-engine"]
-    assert not provider._retry_timer.isActive()
-
-
-def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkeypatch):
     provider = TobiiGazeProvider()
-    provider._start_requested = True
+    provider.start()
+    qtbot.waitUntil(lambda: provider._running)
+    assert attempts == ["research", "native"]
+    assert not provider._retry_timer.isActive()
+    provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
+def test_provider_schedules_retry_when_all_backends_are_unavailable(qtbot, monkeypatch):
+    from pogled_assist.tracking import gaze_provider
+
+    monkeypatch.setitem(
+        sys.modules, "tobii_research", SimpleNamespace(find_all_eyetrackers=lambda: [])
+    )
+
+    def unavailable(*_):
+        raise RuntimeError("synthetic unavailable backend")
+
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", unavailable)
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBridgeBackend", unavailable)
+    provider = TobiiGazeProvider()
     statuses = []
     tracking = []
     provider.tracking_status_changed.connect(tracking.append)
     provider.status_changed.connect(statuses.append)
-    monkeypatch.setattr(provider, "_start_with_tobii_research", lambda: False)
-    monkeypatch.setattr(provider, "_start_with_stream_engine", lambda: False)
-
-    provider._attempt_start()
-
-    assert provider._retry_timer.isActive()
+    provider.start()
+    qtbot.waitUntil(provider._retry_timer.isActive)
     assert statuses[-1] == "Tobii uređaj nije pronađen. Pokušavam ponovo."
     assert [status.state for status in tracking] == [
         TrackingState.CONNECTING,
@@ -186,7 +200,7 @@ def test_provider_schedules_retry_when_all_backends_are_unavailable(qapp, monkey
     assert tracking[-1] == TrackingStatus(TrackingState.STOPPED)
 
 
-def test_provider_stop_closes_active_stream_engine_backend(qapp):
+def test_provider_stop_closes_active_stream_engine_backend(qtbot):
     class FakeBackend:
         stopped = False
 
@@ -203,6 +217,7 @@ def test_provider_stop_closes_active_stream_engine_backend(qapp):
 
     provider.stop()
 
+    qtbot.waitUntil(lambda: provider._connection_session is None)
     assert backend.stopped is True
     assert provider._stream_engine is None
     assert provider._running is False
@@ -214,7 +229,7 @@ def test_provider_stop_closes_active_stream_engine_backend(qapp):
 @pytest.mark.parametrize("backend_name", ["research", "native", "bridge"])
 @pytest.mark.parametrize("worker_thread", [False, True])
 def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend(
-    qapp, monkeypatch, backend_name, worker_thread
+    qapp, qtbot, monkeypatch, backend_name, worker_thread
 ):
     from pogled_assist.tracking import gaze_provider
 
@@ -225,7 +240,7 @@ def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend
 
         def start():
             if fail:
-                raise gaze_provider.TobiiStreamEngineError("Synthetic fallback")
+                raise RuntimeError("Synthetic fallback")
 
         return SimpleNamespace(label="Synthetic tracker", start=start, stop=lambda: None)
 
@@ -256,6 +271,7 @@ def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend
     provider.tracking_status_changed.connect(statuses.append)
     provider.eye_status_changed.connect(lambda *status: eyes.append(status))
     provider.start()
+    qtbot.waitUntil(lambda: provider._running)
     assert [status.state for status in statuses] == [
         TrackingState.CONNECTING,
         TrackingState.CONNECTED,
@@ -279,13 +295,16 @@ def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend
     assert eyes == [(False, False), (False, False)]
     provider.stop()
     assert statuses[-1] == TrackingStatus(TrackingState.STOPPED)
+    qtbot.waitUntil(lambda: provider._connection_session is None)
     provider.start()
+    qtbot.waitUntil(lambda: provider._running)
     before_first_sample = len(eyes)
     deliver_invalid()
     assert len(eyes) == before_first_sample + 1
     deliver_invalid()
     assert len(eyes) == before_first_sample + 1
     provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
 def test_queued_first_invalid_eyes_are_discarded_on_stop_and_old_callbacks_stay_invalid(qapp):
@@ -308,7 +327,7 @@ def test_queued_first_invalid_eyes_are_discarded_on_stop_and_old_callbacks_stay_
 
 
 @pytest.mark.parametrize("use_bridge", [False, True])
-def test_callbacks_from_stopped_stream_cannot_reopen_gate(qapp, monkeypatch, use_bridge):
+def test_callbacks_from_stopped_stream_cannot_reopen_gate(qapp, qtbot, monkeypatch, use_bridge):
     from pogled_assist.tracking import gaze_provider
 
     callbacks = []
@@ -323,7 +342,16 @@ def test_callbacks_from_stopped_stream_cannot_reopen_gate(qapp, monkeypatch, use
 
         return SimpleNamespace(label="fake stream", start=lambda: None, stop=stop)
 
-    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", make_backend)
+    monkeypatch.setitem(
+        sys.modules, "tobii_research", SimpleNamespace(find_all_eyetrackers=lambda: [])
+    )
+
+    def native(*args):
+        if use_bridge:
+            raise RuntimeError("synthetic native unavailable")
+        return make_backend(*args)
+
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", native)
     monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBridgeBackend", make_backend)
     provider = TobiiGazeProvider()
     gaze = []
@@ -332,15 +360,16 @@ def test_callbacks_from_stopped_stream_cannot_reopen_gate(qapp, monkeypatch, use
     provider.eye_status_changed.connect(lambda *args: eyes.append(args))
 
     def start():
-        if use_bridge:
-            return provider._start_with_stream_engine_bridge(RuntimeError("fake direct failure"))
-        return provider._start_with_stream_engine()
+        provider.start()
+        qtbot.waitUntil(lambda: provider._running)
+        return True
 
     assert start()
     callbacks[0][1](True, True, 1)
     provider.stop()
     assert eyes[-1] == (False, False)
     assert provider._pending_gaze_sample is None
+    qtbot.waitUntil(lambda: provider._connection_session is None)
     assert start()
     callbacks[0][1](True, True, 99)
     callbacks[0][0](0.9, 0.9, 99)
@@ -351,6 +380,7 @@ def test_callbacks_from_stopped_stream_cannot_reopen_gate(qapp, monkeypatch, use
     provider._emit_latest_gaze_sample()
     assert gaze == [(0.25, 0.75, 2)]
     provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
 def test_queued_eye_status_cannot_reopen_gate_after_stop(qapp):
@@ -375,7 +405,7 @@ def test_queued_eye_status_cannot_reopen_gate_after_stop(qapp):
     assert controller._both_eyes_open is False
 
 
-def test_research_callbacks_from_previous_subscription_are_ignored(qapp, monkeypatch):
+def test_research_callbacks_from_previous_subscription_are_ignored(qapp, qtbot, monkeypatch):
     from pogled_assist.interaction.mouse_controller import GazeMouseController
 
     callbacks = []
@@ -408,14 +438,17 @@ def test_research_callbacks_from_previous_subscription_are_ignored(qapp, monkeyp
         "right_gaze_point_on_display_area": (0.6, 0.8),
         "system_time_stamp": 42,
     }
-    assert provider._start_with_tobii_research()
+    provider.start()
+    qtbot.waitUntil(lambda: provider._running)
     provider.stop()
     callbacks[0](sample)
     provider._emit_latest_gaze_sample()
     assert not controller._both_eyes_open
     assert gaze == []
+    qtbot.waitUntil(lambda: provider._connection_session is None)
     assert unsubscribed == [callbacks[0]]
-    assert provider._start_with_tobii_research()
+    provider.start()
+    qtbot.waitUntil(lambda: provider._running)
     callbacks[0](sample)
     provider._emit_latest_gaze_sample()
     assert gaze == []
@@ -424,3 +457,4 @@ def test_research_callbacks_from_previous_subscription_are_ignored(qapp, monkeyp
     assert len(gaze) == 1
     assert controller._both_eyes_open
     provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)

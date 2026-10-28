@@ -148,6 +148,45 @@ def test_tracking_hold_cannot_extend_an_existing_edge_deadline(returned_at, cred
     assert timer.diagnostic_snapshot()["credited_ms"] == credit
 
 
+def test_completed_pause_retention_cannot_extend_an_existing_edge_deadline():
+    timer = GazeSelectionTimer()
+    timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)
+    timer.update("button", 0, **timing)
+    timer.update("button", 800, **timing)
+    timer.update("neighbor", 820, can_hold=True, **timing)
+    timer.hold_tracking(1150, 1350)
+    timer.retain_completed_pause()
+    result = timer.update("button", 1200, **timing)
+    assert result.progress is None
+    assert not result.ready
+    assert timer.diagnostic_snapshot()["credited_ms"] == 0
+
+
+@pytest.mark.parametrize(
+    "credited,interruption,required",
+    [
+        (1000, 100, (500, 500)),
+        (1000, 350, (1500, 650)),
+        (1000, 500, (1500, 1500)),
+        (800, 350, (1500, 1500)),
+    ],
+)
+def test_same_synthetic_task_compares_full_progress_and_completed_pause_retention(
+    credited, interruption, required
+):
+    timing = dict(pause_ms=850, dwell_ms=650)
+    loss = credited + 10
+    returned = loss + interruption
+    for retention, remaining in zip((300, 500), required, strict=True):
+        timer = GazeSelectionTimer()
+        timer.update("button", 0, **timing)
+        timer.update("button", credited, **timing)
+        timer.hold_tracking(loss + 300, loss + retention)
+        assert not timer.update("button", returned, **timing).ready
+        assert not timer.update("button", returned + remaining - 1, **timing).ready
+        assert timer.update("button", returned + remaining, **timing).ready
+
+
 def test_completed_target_stays_blocked_through_brief_excursions_and_eye_loss():
     timer = GazeSelectionTimer()
     timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)

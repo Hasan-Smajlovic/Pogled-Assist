@@ -164,7 +164,7 @@ Gaze settings uses these values:
 | --- | --- | --- |
 | Pause before gaze selection | 250 ms | 100 to 2000 ms |
 | Progress-ring fill time after the pause | 850 ms | 150 to 5000 ms |
-| Short eye-tracking interruption | 150 ms | 50 to 500 ms, step 50 ms |
+| Full-progress retention during a short eye-tracking interruption | 150 ms | 50 to 500 ms, step 50 ms |
 | Edge selection hold | 120 ms | 0 to 300 ms, step 20 ms; 0 disables it |
 | Stable target radius | 48 px | 10 to 160 px |
 | Delay between actions | 350 ms | 100 to 5000 ms |
@@ -189,10 +189,22 @@ Choose **Režim praćenja očiju** in **Postavke > Pogled i odabir > Odabir pogl
 | Choice | Behavior |
 | --- | --- |
 | **Oba oka** | Default, including older settings files. Losing either eye cancels progress. |
-| **Oba oka uz kratke prekide** | Starts with both eyes. Losing one eye freezes the current attempt for the selected duration. Both eyes and fresh gaze inside the same unchanged target must return before expiry. |
+| **Oba oka uz kratke prekide** | Starts with both eyes. Losing one eye freezes all progress for the selected duration, then retains only an already completed initial pause until 500 ms total from the loss. Both eyes and fresh gaze inside the same unchanged target are required to resume. |
 | **Jedno oko je dovoljno (probno)** | Allows starting and completing an application selection with at least one valid eye and fresh valid gaze coordinates. Without coordinates it waits. Availability on Tobii 4C needs checking on the device. |
 
-**Trajanje kratkog prekida** remains visible and retains its saved value in every mode; it is adjustable only in the second mode. During the hold, the filled arc stays still with a pause mark. It cannot fill or activate. The first returning sample adds no progress. Expiry, losing both eyes, changing the sole tracked eye without fresh both-eye gaze between them, changing the target or its content/geometry, losing the connection, or changing the mode or duration discards pending progress. Completed controls still require looking away before selecting them again. Turning off the progress display hides the arc and its pause mark.
+**Trajanje kratkog prekida** keeps its saved value in every mode and is adjustable only in the second mode. It sets full-progress retention H, not an extra delay after a fixed hold. The default remains 150 ms; installing the update does not change saved values.
+
+| Time from the original single-eye loss | Retained selection |
+| --- | --- |
+| Less than H | All credited pause and fill progress stays frozen. |
+| From H until 500 ms total | Only an initial pause completed before the loss survives. Fill is cleared; an unfinished initial pause is discarded. |
+| At least 500 ms | The attempt is discarded. |
+
+At H = 500 ms there is no second window. The full-progress hold keeps the filled arc and pause mark; the completed-pause hold shows an empty arc with the pause mark. Neither state can advance or activate. Turning off progress hides both displays. The first returning sample restores state without earning the missing interval or activating.
+
+For example, with an 850 ms initial pause, 650 ms fill and H = 300 ms, returning after 350 ms to the same unchanged target preserves a completed pause and requires the full 650 ms fill again. It does not repeat the 850 ms pause. This is a synthetic reference example, not a recommended optimum for every user.
+
+Both-eye loss, switching the sole tracked eye without fresh both-eye gaze between, a changed target/content/geometry, lost connection, suspended input or relevant timing/policy changes discard retained progress. Existing stale-data and delivery-gap checks take precedence and can discard it before 500 ms. Repeated eye reports do not restart either deadline, and tracking retention cannot extend an edge-hold deadline. Completed controls still require looking away before repetition.
 
 The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and button trial use the selected policy and display its name; eye indicators and both-eye availability remain actual measurements. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
 

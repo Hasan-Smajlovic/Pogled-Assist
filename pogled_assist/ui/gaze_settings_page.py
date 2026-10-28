@@ -79,7 +79,7 @@ class GazeSettingsPage(QFrame):
         selection.addWidget(row)
         self._hold_row, self._hold_value = self._controls.adjust_row(
             "Trajanje kratkog prekida",
-            "Čuvanje napretka pri gubitku jednog oka: 50 do 500 ms.",
+            "Čuvanje cijelog napretka pri gubitku jednog oka: 50 do 500 ms.",
             self._owner._adjust_eye_tracking_hold,
             50,
         )

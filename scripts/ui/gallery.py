@@ -68,6 +68,7 @@ GROUPS = {
             "hotbar-selection-held",
             "selection-progress",
             "selection-held",
+            "selection-pause-held",
         ),
     ),
     "gaze-check": (

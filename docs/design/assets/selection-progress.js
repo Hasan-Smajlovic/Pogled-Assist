@@ -9,18 +9,22 @@
     const policy = ReferenceEyePolicy.read();
     const state = $('selection-state-preview').value;
     const active = state === 'active' || state === 'resumed' && policy !== 'both' || state === 'held' && policy === 'any';
-    const held = state === 'held' && policy === 'hold';
+    const pauseOnly = ['pause-only', 'pause-resumed'].includes(state) && policy === 'hold' && ReferenceEyePolicy.holdMs() < 500;
+    const held = (state === 'held' || state === 'pause-only' && pauseOnly) && policy === 'hold';
     const fired = state === 'fired';
-    const visible = (active || held || fired) && $('selection-progress-visible').checked;
+    const visible = (active || held || fired || pauseOnly) && $('selection-progress-visible').checked;
     $('selection-progress-ring').hidden = !visible;
     $('selection-progress-ring').dataset.state = held ? 'held' : fired ? 'fired' : 'active';
     document.querySelector('.selection-preview-target').dataset.state = held ? 'held' : fired ? 'fired' : active ? 'active' : 'idle';
-    $('selection-progress-ring').setAttribute('aria-label', fired ? 'Odabir potvrđen' : (held ? 'Napredak na čekanju' : 'Napredak odabira') + ': 65 posto');
+    $('selection-progress-ring').setAttribute('aria-label', fired ? 'Odabir potvrđen' : (held ? 'Napredak na čekanju' : 'Napredak odabira') + (pauseOnly ? ': 0 posto' : ': 65 posto'));
+    $('selection-progress-ring').style.setProperty('--fill', pauseOnly ? '0%' : '65%');
     $('selection-mode-label').textContent = 'Režim: ' + ReferenceEyePolicy.label();
     const messages = {
       active: 'Svjež pogled je na dugmetu. Napredak se puni.',
       fired: 'Pun mirni krug potvrđuje odabir tokom 220 ms.',
       held: held ? 'Napredak je zamrznut. Rok: ' + ReferenceEyePolicy.holdMs() + ' ms od prvog gubitka jednog oka.' : policy === 'any' ? 'Jedno oko i svjež pogled: odabir se nastavlja.' : 'Gubitak jednog oka: napredak je poništen.',
+      'pause-only': pauseOnly ? 'Čuva se završena početna pauza. Punjenje je nula; krajnji rok je ukupno 500 ms od gubitka oka.' : 'Nema dodatnog čuvanja pauze u ovom režimu ili pri trajanju 500 ms.',
+      'pause-resumed': pauseOnly ? 'Oba oka i svjež pogled vraćaju završenu pauzu s nula punjenja. Slijedi cijelo novo punjenje.' : 'Nema dodatnog čuvanja pauze u ovom režimu ili pri trajanju 500 ms.',
       resumed: 'Prvi svjež pogled s oba oka vraća 65% napretka. Ovaj uzorak ne aktivira dugme.',
       expired: 'Rok je istekao. Napredak je poništen i sljedeći izbor počinje ispočetka.',
       'both-lost': 'Oba oka su izgubljena. Napredak je odmah poništen u svakom režimu.',

@@ -138,6 +138,7 @@ class GazeMouseController(QObject):
         self._eye_gate = EyeTrackingGate(self)
         self._eye_gate.interrupted.connect(self._tracking_interrupted)
         self._eye_gate.hold_started.connect(self._hold_toolbar_tracking)
+        self._eye_gate.pause_retained.connect(self._retain_toolbar_pause)
         self._eye_gate.hold_finished.connect(lambda: self.interaction_hold_changed.emit(False))
         self._tracking_hold_bounds: QRect | None = None
         self.gaze_received_at: float | None = None
@@ -154,12 +155,21 @@ class GazeMouseController(QObject):
         self._smooth_physical_point = None
         self._last_cursor_point = None
 
-    def _hold_toolbar_tracking(self, deadline_ms: float) -> None:
-        self._toolbar_selection.hold_tracking(deadline_ms)
+    def _hold_toolbar_tracking(self, deadline_ms: float, retention_deadline_ms: float) -> None:
+        self._toolbar_selection.hold_tracking(deadline_ms, retention_deadline_ms)
         if self._toolbar_selection.tracking_held:
             getter = getattr(self._target, "selection_bounds", self._target.action_bounds)
             bounds = getter(self._toolbar_selection.target)
             self._tracking_hold_bounds = QRect(bounds) if bounds is not None else None
+            self.interaction_hold_changed.emit(True)
+
+    def _retain_toolbar_pause(self) -> None:
+        if not self._toolbar_selection.retain_completed_pause():
+            self._pause_toolbar_dwell()
+            return
+        bounds = self._tracking_hold_bounds
+        if bounds is not None:
+            self._emit_interaction_progress("toolbar", bounds.center(), 0.0, "")
             self.interaction_hold_changed.emit(True)
 
     def start(self) -> None:
@@ -316,6 +326,11 @@ class GazeMouseController(QObject):
             self.status_changed.emit("Uvećani klik je otkazan.")
 
     def update_settings(self, settings: GazeSettings) -> None:
+        if self._toolbar_selection.tracking_held and any(
+            getattr(settings, key) != getattr(self.settings, key)
+            for key in ("selection_pause_ms", "dwell_ms", "click_cooldown_ms")
+        ):
+            self._eye_gate.cancel()
         if settings.edge_hold_ms != self.settings.edge_hold_ms:
             self.cancel_toolbar_interaction(require_leave=True)
         self.settings = settings

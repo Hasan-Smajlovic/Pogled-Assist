@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -209,8 +210,8 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
         def stop(self):
             pass
 
-    monkeypatch.setattr(
-        gaze_provider.TobiiGazeProvider, "_start_with_tobii_research", lambda _: False
+    monkeypatch.setitem(
+        sys.modules, "tobii_research", SimpleNamespace(find_all_eyetrackers=lambda: [])
     )
     monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", FakeBackend)
     provider = gaze_provider.TobiiGazeProvider()
@@ -223,6 +224,7 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
     try:
         for _connection in range(2):
             provider.start()
+            qtbot.waitUntil(lambda: provider._running)
             assert status._detail.text() == "Čekam stanje očiju"
             callbacks[-1][1](False, False, 1)
             assert status._title.text() == "Praćenje pauzirano"
@@ -235,8 +237,10 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
             assert "Synthetic tracker" in status.toolTip()
             provider.stop()
             assert status._title.text() == "Praćenje zaustavljeno"
+            qtbot.waitUntil(lambda: provider._connection_session is None)
     finally:
         provider.stop()
+        qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
 @pytest.mark.e2e
