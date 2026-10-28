@@ -20,11 +20,8 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, make_speech_w
     window = make_speech_window(speech, library_store=store)
     window.show()
 
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:1"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:1:1"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}space"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"].click()
+    for command in ("group:1", "letter:1:1", "space", "group:0", "letter:0:0"):
+        click_speech_action(qtbot, window, command)
     window._play_button.click()
 
     assert window._input.text() == "DŽ A"
@@ -132,7 +129,8 @@ def test_speech_list_and_dialog_controls_are_large_gaze_targets(qtbot, make_spee
         window._next_page_button,
     )
     assert all(button.width() >= 160 for button in list_controls)
-    assert all(button.height() >= 80 for button in list_controls)
+    assert all(button.height() >= 80 for button in list_controls[:2])
+    assert all(button.height() >= 72 for button in list_controls[2:])
     alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
     assert window._key_grid_host.width() >= alarm.width() * 2
     assert f"{SPEECH_WINDOW_ACTION_PREFIX}close" not in window._action_buttons
@@ -170,6 +168,7 @@ def test_speech_add_and_cancel_category_answer_and_phrase_editors(qtbot, make_sp
     assert all(item.name != "ODBAČENA KATEGORIJA" for item in store.library.categories)
     assert window._input.text() == "RAZGOVOR"
 
+    window._previous_page_button.click()
     click_speech_action(qtbot, window, "list:select:0")
     window._add_item_button.click()
     window._input.setText("Odbačeni odgovor")

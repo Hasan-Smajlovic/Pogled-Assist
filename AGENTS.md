@@ -1,78 +1,61 @@
 # Agent guide
 
-Pogled Assist is a Windows desktop application used through a Tobii Eye Tracker 4C. A person relies on the current installed behavior, so preserving working gaze, input, speech, settings, and installation flows is the first constraint for every change.
+Pogled Assist is a Windows/PySide6 application used through a Tobii Eye Tracker 4C. Preserve the installed user's gaze, input, speech, settings, data and installation flows. Current `development` behavior is the compatibility baseline unless a linked issue explicitly changes it.
 
 ## Start here
 
-Use the guide relevant to the task and follow its linked sections as needed.
+Read the guide for the task, then follow its relevant links. Avoid loading every guide for a focused change.
 
-- [README.md](README.md) covers installation, launch commands, requirements, data, and known limits.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps the runtime and lists the behavior that must remain stable.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) defines setup, automated checks, and test strategy. [UI development](docs/UI_DEVELOPMENT.md) owns design review, simulation, and manual Windows/Tobii checks.
-- [CONTRIBUTING.md](CONTRIBUTING.md) defines branches, reviews, merges, and releases.
-- [docs/WINDOWS_RELEASE.md](docs/WINDOWS_RELEASE.md) covers packaging, installation, rollback, and clean-machine validation.
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) describes the controls and settings people use. [Speech suggestions](docs/features/speech-suggestions.md) defines that feature's behavior and acceptance criteria.
-
-For a focused change, start with the owning contract below, then use the [test boundary map](docs/DEVELOPMENT.md#test-strategy) to find existing fakes and regression tests.
-
-| Task | Read first |
+| Task | Owner |
 | --- | --- |
-| Eye validity, one-eye selection, freshness or recovery | [Eye-tracking policy](docs/ARCHITECTURE.md#eye-tracking-policy) |
-| Selection resets near a button edge | [Edge selection hold](docs/ARCHITECTURE.md#edge-selection-hold) |
-| Gaze-check measurements, saved results or report export | [Measurements](docs/ARCHITECTURE.md#gaze-check-measurements) and [report ownership](docs/ARCHITECTURE.md#gaze-check-reports) |
-| Recording, recording indicators, support ZIPs or log analysis | [Recording ownership and lifecycle](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages) and [analysis workflow](docs/DEVELOPMENT.md#diagnostic-log-analysis) |
-| Slow, failing or skipped checks | [Verification modes](docs/DEVELOPMENT.md#verification-modes), [conditional tests](docs/DEVELOPMENT.md#conditional-tests) and [troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
+| Install, launch, requirements | [README](README.md) |
+| Runtime ownership and compatibility | [Architecture](docs/ARCHITECTURE.md#compatibility-contract) |
+| Setup, commands and final verification | [Development](docs/DEVELOPMENT.md) |
+| Test fakes, boundaries and conditional checks | [Testing](docs/TESTING.md) |
+| UI references, simulation, gallery and manual checks | [UI development](docs/UI_DEVELOPMENT.md) |
+| Branches, issues, review, merge and release workflow | [Contributing](CONTRIBUTING.md) |
+| Package, install, update and rollback | [Windows release](docs/WINDOWS_RELEASE.md) |
+| Visible choices and adjustment instructions | [User guide](docs/USER_GUIDE.md) |
+| Eye validity, freshness and recovery | [Eye policy](docs/ARCHITECTURE.md#eye-tracking-policy) |
+| Selection resets near edges | [Edge hold](docs/ARCHITECTURE.md#edge-selection-hold) |
+| Gaze-check calculations and saved reports | [Measurements](docs/ARCHITECTURE.md#gaze-check-measurements), [report ownership](docs/ARCHITECTURE.md#gaze-check-reports) |
+| Recording, support ZIPs and log analysis | [Diagnostics](docs/DIAGNOSTICS.md) |
+| Slow or failing local checks | [Troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
+| Speech prediction behavior | [Speech suggestions](docs/features/speech-suggestions.md) |
 
-The user guide owns visible choices and adjustment instructions; architecture owns runtime contracts and data ownership; development owns commands and automated evidence. Update the owner and link from other guides instead of copying the same rules. Documentation describes implemented behavior, not proof that a particular build passed verification. Record run-specific results and remaining hardware checks in the pull request.
+Each fact belongs in its owning guide. Link to it from other documents. Documentation describes implemented behavior; run-specific results and remaining checks belong in the PR.
+
+Use `docs/features/` for detailed guides to an individual feature's setup, behavior, limits or acceptance criteria. Add a guide when those details need a separate reference; keep short instructions in the user guide. Use lowercase filenames with hyphens and link the guide from README and the user guide. Shared architecture, development, testing, diagnostics and release contracts stay in their existing owners.
 
 ## Task-specific workflows
 
-Read the applicable sections of these skills when the task matches:
+Read applicable skill sections:
 
-- [grill-me](.agents/skills/grill-me/SKILL.md): clarify goals and designs before implementation. Use the request and available project context first. Ask focused questions for a single uncertainty. If the goal, approach, or several connected decisions remain unclear, proactively start this interview; do not wait for an explicit request. Wait for answers before dependent work and continue independent investigation. Once the request is clear, proceed without unnecessary confirmation.
-- [shipping-a-change](.agents/skills/shipping-a-change/SKILL.md): visible UI, settings, runtime assets, or Bosnian models; use before implementation and when preparing that change for review.
-- [security-review](.agents/skills/security-review/SKILL.md): text or data under `language/` or `tests/fixtures/`, update trust, typed-text privacy, logging, external processes, or workflow permissions.
-- [blast-radius](.agents/skills/blast-radius/SKILL.md): impact reviews and refactors or contract and lifecycle changes that affect other components; trace indirect consequences and assess the evidence for compatibility.
-- [interrogate](.agents/skills/interrogate/SKILL.md): independent or adversarial reviews and complex changes that need a second assessment; coordinate read-only reviewers and verify their findings against the code and requirements.
-
-## Writing and communication
-
-Apply these principles to documentation, pull request descriptions, and explanations within the task's scope.
-
-- Lead with the concrete point. Use plain words and consistent technical terms; name the action, mechanism, or consequence the reader needs to understand.
-- Remove filler, repetition, generic praise, and vague claims of importance. Split dense sentences without turning them into fragments or omitting context.
-- Support factual claims with identifiable evidence. Do not invent sources, measurements, examples presented as facts, or verification results.
-- Preserve technical meaning, safety conditions, requirement strength, exceptions, and real uncertainty. Shorter wording must not imply a stronger guarantee or hide a limitation.
-- Preserve commands, identifiers, paths, quotations, and required template sections during style edits. If a heading or link target changes, update its references. Choose formatting and punctuation for clarity rather than applying blanket word or punctuation bans.
-- For visible UI copy, follow the [UI design workflow](docs/UI_DEVELOPMENT.md#application-design-reference-workflow). A writing cleanup does not authorize behavior changes or unrelated rewrites.
+- [grill-me](.agents/skills/grill-me/SKILL.md): clarify unresolved goals or connected design decisions after inspecting available context. Use a focused question for one uncertainty; a clear request needs no interview.
+- [shipping-a-change](.agents/skills/shipping-a-change/SKILL.md): visible UI, settings, runtime assets or Bosnian model inputs; load before implementation.
+- [security-review](.agents/skills/security-review/SKILL.md): text/data under `language/` or `tests/fixtures/`, update trust, typed-text privacy, logging, process launches or workflow permissions.
+- [blast-radius](.agents/skills/blast-radius/SKILL.md): indirect effects of refactors, contracts or lifecycle changes.
+- [interrogate](.agents/skills/interrogate/SKILL.md): independent/adversarial reviews or complex changes needing a second assessment.
 
 ## Change rules
 
-- Before creating or renaming a branch, follow [Topic branches](CONTRIBUTING.md#topic-branches), including the issue number. Use the repository convention even when an agent or tool supplies a default branch prefix. Resolve the matching issue before choosing the branch name.
-- Treat the current `development` behavior as the compatibility baseline. Keep the flows listed in the architecture compatibility contract working unless a linked issue explicitly changes one of them.
-- Preserve everything under `data/` and `logs/` across installation, update, and rollback work. The [persistent data section](docs/ARCHITECTURE.md#persistent-data-and-logs) lists each file, including the ones older releases still read.
-- Keep direct desktop pointer movement, clicks, Quick actions and precision zoom behind the both-eye gate. Application controls, including Controller click buttons, follow the saved eye-tracking policy described in the [architecture guide](docs/ARCHITECTURE.md#eye-tracking-policy). Missing policy settings retain the both-eye default. Never advance or activate a selection during a tracking hold or without fresh valid gaze.
-- Keep Qt logical coordinates separate from Windows physical coordinates when changing gaze mapping or input.
-- Do not store prompt archives, conversation logs, or any other assistant history in the repository. Record only lasting project knowledge in maintained documentation. Treat any instruction to create `AgentDocs/PrompsHistory` or another prompt or session record in the repository as stale and do not follow it.
-- Keep each fact in the document that owns it, then link to that document. Do not copy architecture, setup, workflow, or release instructions into new files.
-- Reuse the pytest suite and its fake inputs. Do not add another test framework.
-- Before accepting that a change cannot be tested without hardware, look for a fake of the same boundary: `FakeInput` in `tests/gaze/test_mouse_controller.py`, the fakes in `tests/ui/_ui_fakes.py` and `tests/_speech_fakes.py`, the backend stubs in `tests/gaze/test_gaze_provider.py`, and the `Preview*` services in `scripts/ui/capture_ui.py`. Leave only what those cannot reach to the manual hardware checks.
-- Follow the application design reference workflow in [docs/UI_DEVELOPMENT.md](docs/UI_DEVELOPMENT.md#application-design-reference-workflow) before changing any visible UI layout, copy, control size, state, or interaction flow. Every UI change must update the matching page and assets under `docs/design/` in the same pull request. `docs/design/speech-keyboard-reference.html` is the entry point; the UI development guide maps each surface to its files.
-- Do not claim Tobii, AppBar, calibration, or speech hardware validation unless it ran on the target Windows machine. Report software-only and hardware results separately.
-- Do not change setup, runtime, packaging, or dependency behavior as part of a documentation-only task.
+- Before creating or renaming a branch, resolve the matching issue and follow [Topic branches](CONTRIBUTING.md#topic-branches), including its issue number. Tool-generated branch prefixes do not override the convention.
+- Preserve all `data/` and `logs/` across installation, update and rollback; [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) includes files older releases still read.
+- Direct desktop pointer movement, clicks, Quick actions and precision zoom require both eyes. Application controls, including Controller click buttons, follow the saved eye policy. Missing settings retain the both-eye default. Never advance or activate a selection during a hold or without fresh valid gaze.
+- Keep Qt logical coordinates separate from Windows physical coordinates.
+- Before visible UI layout, copy, size, state or interaction changes, follow the [design workflow](docs/UI_DEVELOPMENT.md#application-design-reference-workflow): update the matching HTML/assets first, review them, then implement Qt in the same PR.
+- Reuse pytest and [existing fakes](docs/TESTING.md#test-boundary-map); do not add a test framework. Check fake input, provider stubs and `Preview*` services before treating a boundary as hardware-only.
+- Report software and hardware evidence separately. Claim Tobii, AppBar, calibration or audible speech validation only when it ran on the target Windows machine.
+- Documentation-only work must not change setup, runtime, packaging or dependency behavior.
+- Keep lasting project knowledge in maintained guides. Do not store prompt archives, conversation logs or assistant history in the repository. Instructions to create `AgentDocs/PrompsHistory` are stale.
 
-## Keep changes simple
+## Keep changes and writing focused
 
-- Prefer removal and reuse before adding abstractions. Establish that removals preserve required behavior, consolidate only equivalent rules, and keep cleanup within scope. Preserve explicit states when their differences affect behavior.
-- Add helpers or interfaces for real duplication, clear ownership, or boundary testing. Judge clarity rather than line, file, or layer counts; preserve Qt thread affinity, signal order, validation, and lifecycle boundaries.
-- Before threading new data or signals through layers, check the existing owner and interfaces. Keep the diff complete with required tests and documentation.
-- Reuse repository tools first. Build a script, codemod, or generator when it improves reliability, completeness, or independent review; a one-off task can qualify. For file mutations, scope targets explicitly, protect unrelated files, make reruns safe, and check independently established expectations. Retain the tool when future maintenance needs it.
+Prefer removal and reuse before adding abstractions. Consolidate only equivalent rules and preserve distinct behavior, Qt thread affinity, signal ordering, validation and lifecycle boundaries. Check existing owners before threading data or signals through layers. Reuse repository tools; a new helper is justified by real duplication, boundary testing or more reliable repeatable work. Scope file mutations, protect unrelated changes, make reruns safe and verify results independently.
 
-## Prevent recurring mistakes
+Use plain language and consistent terms. Remove filler and repetition while preserving technical meaning, requirements, exceptions and uncertainty. Support claims with evidence. Keep commands, identifiers, paths, quotations and required template headings intact; update links when moving sections. Writing cleanup does not authorize unrelated behavior changes.
 
-- Identify the recurring failure and the requirement it violates before adding a permanent rule. Consider lint rules, metadata, scripts, shared structures, runtime validation, and tests; choose the simplest reliable mechanism and extend an existing guard where possible. Use static checks for code patterns, metadata/scripts for cross-file requirements, shared structures for duplicated rules, runtime checks for live inputs, and tests for observable behavior.
-- Show that the guard rejects the original failure and accepts valid cases. Behavior regression tests must fail without the fix. Tests can verify a lint rule or script but do not replace its enforcement. Explain the mechanism's fit and follow the verification rules below when execution is deferred.
-- Keep safety rationale and automation limits in their owning guide. Remove only reminders fully replaced by the guard; record lasting decisions without diaries or duplicate instructions. Report any guard work that remains and why.
+To prevent a recurring mistake, identify the violated requirement and choose the simplest suitable guard: a static check, shared structure, script, validation or behavioral test. Extend existing enforcement where possible. Demonstrate rejection of the original failure and acceptance of valid cases; tests of a guard do not replace its enforcement. Keep rationale and automation limits in the owning guide, remove only reminders the guard fully replaces, and report any deferred guard work.
 
 ## Maintenance matrix
 
@@ -82,8 +65,8 @@ Apply these principles to documentation, pull request descriptions, and explanat
 | The surfaces rendered by `scripts/ui/capture_ui.py` | The snapshot count in `tests/ui/test_ui_rendering.py` and the surface count and list in `docs/UI_DEVELOPMENT.md` |
 | A runtime file under `pogled_assist/assets/` or `assets/` | `datas` in `packaging/windows/PogledAssist.spec`, `$requiredFiles` in `scripts/release/build_windows_package.ps1`, and a `binary` entry in `.gitattributes` for binary files |
 | A field of `GazeSettings` in `pogled_assist/interaction/mouse_controller.py` or `SpeechSettings` in `pogled_assist/speech/speech_service.py` | Coercion and defaults in `pogled_assist/settings_store.py`, the matching settings page under `pogled_assist/ui/` and its wiring in `pogled_assist/ui/settings_window.py`, `tests/app/test_settings_store.py`, and `docs/USER_GUIDE.md`; numeric ranges share `pogled_assist/settings_limits.py`, except selection-pause limits owned by `pogled_assist/interaction/gaze_selection.py` |
-| Gaze-check report schema, context or persistence | Validation and export in `pogled_assist/tracking/gaze_check_report.py` and `pogled_assist/tracking/gaze_check_store.py`, report/history UI, the [report contract](docs/ARCHITECTURE.md#gaze-check-reports), and report storage/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
-| Diagnostic recording context, lifecycle or support ZIP contents | The explicit allowlists and store in `pogled_assist/diagnostic_recording.py`, writer/reader handling where affected, the [recording contract](docs/ARCHITECTURE.md#short-diagnostic-recordings-and-support-packages), [collection instructions](docs/USER_GUIDE.md#diagnostic-log-collection), and recording/reader/UI tests in the [test boundary map](docs/DEVELOPMENT.md#test-strategy) |
+| Gaze-check report schema, context or persistence | Validation and export in `pogled_assist/tracking/gaze_check_report.py` and `pogled_assist/tracking/gaze_check_store.py`, report/history UI, the [report contract](docs/ARCHITECTURE.md#gaze-check-reports), and report storage/UI tests in the [test boundary map](docs/TESTING.md#test-boundary-map) |
+| Diagnostic recording context, lifecycle or support ZIP contents | The explicit allowlists and store in `pogled_assist/diagnostic_recording.py`, writer/reader handling where affected, the [recording contract](docs/DIAGNOSTICS.md#short-diagnostic-recordings-and-support-packages), [collection instructions](docs/USER_GUIDE.md#diagnostic-log-collection), and recording/reader/UI tests in the [test boundary map](docs/TESTING.md#test-boundary-map) |
 | Model inputs under `language/bs/model/`, `pogled_assist/suggestions/text.py`, or `scripts/speech_suggestions/prepare_*_model.py` | The prepared `pogled_assist/assets/bosnian-*-model.*` files and the reports under `language/bs/`, regenerated with the commands in `language/bs/README.md` |
 | A file under `data/` | The data lists in `README.md` and `docs/ARCHITECTURE.md`, and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |
@@ -93,25 +76,16 @@ Apply these principles to documentation, pull request descriptions, and explanat
 
 ## Verification
 
-Inspect the actual changed artifact and connect success claims to direct evidence from the final diff and checks run against it. Reuse pytest and repository commands. Compilation, timestamps, stale screenshots, or an agent's summary alone do not prove behavior. If a check fails, investigate both the observation and the system.
-
-Standard lint, test, and package verification runs through `dev.ps1` in its Windows/Python 3.10 environment. Documented model and diagnostic commands may invoke that same `.venv` directly. Do not substitute system Python, a temporary environment, or ad hoc tool installation. See the [development guide](docs/DEVELOPMENT.md#verification-before-a-pull-request):
+Inspect final artifacts and the diff; compilation, timestamps, stale screenshots or agent summaries alone do not prove behavior. Follow [development verification](docs/DEVELOPMENT.md#verification-before-a-pull-request) in the repository's Windows/Python 3.10 environment:
 
 ```powershell
 .\dev.ps1 setup
 .\dev.ps1 check -Parallel
 ```
 
-Use `.\dev.ps1 check-fast` while iterating. Prefer `.\dev.ps1 check -Parallel` for complete verification on the final diff before marking a pull request ready for review. Use sequential `.\dev.ps1 check` when resource contention makes parallel stages slower or when diagnosing a failure; record the reason and timings. Both modes run the complete checks. See the [development guide](docs/DEVELOPMENT.md#verification-before-a-pull-request) for execution details, then follow the applicable [manual checks](docs/UI_DEVELOPMENT.md#manual-windows-checks) for runtime changes. Fast checks do not satisfy final verification.
+Use `check-fast` while iterating. The complete final check must exit 0; use sequential `check` when diagnosing contention/failure and report its reason and timings. Fast checks do not establish readiness. If execution is deferred or unavailable, finish authorized work and report **Implemented; verification not run**, with outstanding checks and limits. A draft PR may precede verification.
 
-If the user defers execution or the required environment is unavailable, finish the authorized implementation and report "Implemented; verification not run" with the outstanding checks and limits. A handoff or [draft pull request](CONTRIBUTING.md#issue-linking-and-pull-request-contents) may precede verification; neither establishes readiness for review.
-
-## Done means
-
-- The complete `.\dev.ps1 check -Parallel` (or sequential fallback) exits with code 0 on the final diff before review, and the required `code-quality`, `tests`, and `windows-package` checks pass before merge.
-- Every behavior change includes a pytest test that fails without the change.
-- Every maintenance matrix row that matches a changed path is updated in the same diff.
-- The final report and pull request name checks actually run, their results and limits; every applicable manual Windows/Tobii check is passed, failed, or Not run.
+Done also requires a failing-without-the-fix pytest test for every behavior change, all applicable maintenance rows above to be satisfied, and each applicable [manual Windows/Tobii check](docs/UI_DEVELOPMENT.md#manual-windows-checks) recorded as passed, failed or Not run. Required `code-quality`, `tests` and `windows-package` checks must pass before merge. Name checks actually run and their results in the final report and PR.
 
 ## Never merges without a human
 

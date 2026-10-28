@@ -5,26 +5,18 @@ description: Clarify a Pogled Assist plan or design through a focused interview.
 
 # Grill me
 
-Turn an unclear request or design into an agreed outcome and actionable plan. Probe decisions that affect correctness, user experience, compatibility, or verification. Match the depth to the uncertainty; a clear task does not need an interview.
+Resolve product or design decisions that prevent an actionable plan. A clear task needs no interview. [AGENTS.md](../../../AGENTS.md) and the [compatibility contract](../../../docs/ARCHITECTURE.md#compatibility-contract) supply project constraints.
 
-[AGENTS.md](../../../AGENTS.md) owns project constraints and routes to the relevant guides. Use the [compatibility contract](../../../docs/ARCHITECTURE.md#compatibility-contract) when evaluating proposed behavior changes. This skill is self-contained and does not require another command or skill to conduct the interview.
+## Find the uncertainty
 
-## Establish what remains undecided
+Read the request, previous answers, linked issue and relevant code/guides first. Investigate technical facts yourself. Separate established requirements from assumptions and decisions only the user can make; do not reopen settled choices without new evidence.
 
-- Start with the user's request, prior answers, any linked issue, and the relevant project guides. Establish what is already known about the intended outcome, scope, constraints, and acceptance criteria.
-- Investigate technical facts in the code and existing tests yourself. Ask the user about intent, priorities, and tradeoffs that those sources cannot decide; do not ask them to locate facts available in the repository.
-- Separate established requirements from unresolved decisions and assumptions. Prioritize questions whose answers would change the plan. Do not invent uncertainty or reopen decisions already answered without new evidence.
+## Ask for decisions
 
-## Interview for decisions
+Start with the decision that most affects correctness, scope, user experience or verification. Ask a small group of related, self-contained questions in the user's language. Explain the tradeoff and recommend an option when supported; leave room for another approach. Use a focused question for one uncertainty.
 
-- Start with the most consequential unresolved decision, then follow its dependencies. Ask small groups of related questions rather than a long questionnaire or repeated single questions about the same topic. Use the available question tool when suitable; otherwise ask in the conversation.
-- Make each question self-contained: explain what is unclear, why it matters, and the viable options with their tradeoffs. Give a reasoned recommendation when the evidence supports one, while allowing the user to propose another approach. Use the user's language and explain technical details plainly.
-- After each answer, check its consequences for scope, existing behavior, and how success would be demonstrated. Ask focused follow-ups for contradictions or remaining decisions that materially affect the work. Use only the relevant owning guides, including the UI development workflow for visible changes.
-- Challenge an unsafe, unsupported, or unnecessarily complex proposal with a concrete consequence and a simpler alternative where possible. Be candid about uncertainty; keep the discussion collaborative rather than trying to win agreement or interrogating the user about facts you can inspect.
-- Wait for answers before work that depends on them. Continue independent investigation while waiting. Silence is not an answer or approval, and an unanswered material decision must remain visible.
+After each answer, check consequences and contradictions. Challenge unsafe or unnecessarily complex choices with a concrete consequence and a simpler alternative. Wait before dependent work; continue independent investigation. Silence is not an answer or approval.
 
-## Finish and resume the task
+## Resume
 
-Stop when the outcome, scope, constraints, acceptance criteria, and material decisions are clear enough to act. Summarize the agreed plan, key tradeoffs, and remaining verification or external dependencies. Distinguish decisions the user made from recommendations and unresolved questions.
-
-Resume work already authorized by the user without another confirmation. If the request is only to explore or plan, deliver the agreed plan. Keep any lasting documentation in its owning guide under the rules in AGENTS.md; do not create a transcript or separate planning file by default.
+Stop when outcome, scope, constraints and acceptance criteria are clear enough to act. Summarize material decisions, tradeoffs and remaining dependencies, distinguishing user decisions from recommendations. Resume already-authorized work without another confirmation. For a planning-only request, deliver the plan. Record lasting decisions in their owning guide, not a transcript or new planning file by default.

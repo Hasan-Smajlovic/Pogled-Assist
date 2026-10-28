@@ -15,7 +15,7 @@ Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into poi
 - Right-side Keyboard and Controller panels for typing and common shortcuts.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
 - Adjustable [edge selection stability](docs/USER_GUIDE.md#selection-stability-near-edges) for Speech, Keyboard and the hotbar.
-- An optional caregiver gaze check with live positioning, timed targets, a local dwell trial, and [saved results and ZIP export](docs/USER_GUIDE.md#saved-gaze-check-results).
+- An optional caregiver gaze check with live positioning, timed targets, a local dwell trial, and [saved results and ZIP export](docs/features/gaze-check.md#saved-gaze-check-results).
 - Short, explicitly started [diagnostic recordings and local support ZIPs](docs/USER_GUIDE.md#diagnostic-log-collection), with a visible recording indicator.
 - Tobii Pro SDK, Stream Engine, and optional 32-bit Stream Engine bridge support.
 
@@ -30,7 +30,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\install_windows.ps1 -Launch
 ```
 
-The installer copies the app to `C:\PogledAssist`, verifies that the packaged executable starts, and creates a desktop shortcut. Future updates are installed from verified stable GitHub Release artifacts by the packaged `update_windows.ps1`. The release includes Python and the application dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools. Standardni and Prirodni are installed with the app; no separate Python or speech-tool installation is needed. Prirodni needs internet access when speaking. The optional Efendija voice uses an ElevenLabs account, API key and accessible voice; see [ElevenLabs setup](docs/USER_GUIDE.md#efendija-voice-and-elevenlabs-setup). The optional 32-bit Tobii bridge runtime is also bundled. A setup summary checks local components and device presence, with actions for official Tobii downloads and calibration. Tobii device software and personal calibration remain separate.
+The installer copies the app to `C:\PogledAssist`, verifies that the packaged executable starts, and creates a desktop shortcut. Future updates are installed from verified stable GitHub Release artifacts by the packaged `update_windows.ps1`. The release includes Python and the application dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools. Standardni and Prirodni are installed with the app; no separate Python or speech-tool installation is needed. Prirodni needs internet access when speaking.
+
+The optional Efendija voice uses an ElevenLabs account, API key and accessible voice; see [ElevenLabs setup](docs/features/elevenlabs.md).
+
+The optional 32-bit Tobii bridge runtime is also bundled. A setup summary checks local components and device presence, with actions for official Tobii downloads and calibration. Tobii device software and personal calibration remain separate.
 
 The previous application under `C:\TobiiExec` is a separate installation. The Pogled Assist installer and updater refuse that legacy path, so its files, desktop shortcut, startup task, settings, and logs remain unchanged.
 
@@ -89,17 +93,21 @@ Development uses Python 3.10 for the application, Tobii Pro SDK, automated check
 .\dev.ps1 ui -Open
 ```
 
-The complete command reference, test strategy, and manual UI checklist are in the [development guide](docs/DEVELOPMENT.md).
+Use [Development](docs/DEVELOPMENT.md) for commands, [Testing](docs/TESTING.md) for boundary fakes, and [UI development](docs/UI_DEVELOPMENT.md) for visual and manual checks.
 
 ## Documentation
 
 | Need | Guide |
 | --- | --- |
 | Use and troubleshoot the application | [User guide](docs/USER_GUIDE.md) |
+| Run the caregiver gaze check and read saved results | [Gaze check](docs/features/gaze-check.md) |
+| Configure Efendija, credits and saved audio | [ElevenLabs](docs/features/elevenlabs.md) |
 | Understand the runtime and compatibility baseline | [Architecture](docs/ARCHITECTURE.md) |
 | Understand Bosnian word completion, prediction, and its verification | [Speech suggestions](docs/features/speech-suggestions.md) |
 | Find instructions for coding agents and files that change together | [Agent guide](AGENTS.md) |
 | Set up development and run checks | [Development guide](docs/DEVELOPMENT.md) |
+| Write tests and find reusable fakes | [Testing](docs/TESTING.md) |
+| Understand recordings or analyze a support ZIP | [Diagnostics](docs/DIAGNOSTICS.md) |
 | Change UI, review screenshots, or run manual Windows/Tobii checks | [UI development and review](docs/UI_DEVELOPMENT.md) |
 | Configure or recover gallery publication | [UI gallery publication](docs/UI_GALLERY.md) |
 | Troubleshoot local development checks | [Development troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
@@ -118,7 +126,7 @@ The [application UI reference](docs/design/speech-keyboard-reference.html) is a 
 | Python 3.10 x86 | Bundled bridge runtime when only a 32-bit Stream Engine DLL is available |
 | eSpeak NG with `bs` voice | Default offline Bosnian speech, bundled in releases |
 | `edge-playback` and `edge-tts` | Online Bosnian neural voice, bundled in releases |
-| ElevenLabs account and accessible voice | Optional Efendija synthesis; see [setup](docs/USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) |
+| ElevenLabs account and accessible voice | Optional Efendija synthesis; see [setup](docs/features/elevenlabs.md) |
 
 The app searches common install locations. These environment variables override discovery when needed:
 
@@ -133,7 +141,7 @@ The app searches common install locations. These environment variables override 
 | `ELEVENLABS_VOICE_ID` | Development override for the selected saved voice |
 | `ELEVENLABS_MODEL_ID` | Development override for the selected model |
 
-See [ElevenLabs setup](docs/USER_GUIDE.md#efendija-voice-and-elevenlabs-setup) for local settings and permissions.
+See [ElevenLabs setup](docs/features/elevenlabs.md) for local settings and permissions.
 
 An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the older app is also checked as a fallback when it points to a valid 32-bit Python 3.10. The new `POGLED_ASSIST_X86_PYTHON` setting takes priority.
 

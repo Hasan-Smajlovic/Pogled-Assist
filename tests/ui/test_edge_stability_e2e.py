@@ -101,8 +101,8 @@ def test_edge_setting_is_gaze_operable_and_fits_without_shrinking_controls(
     row = page._edge_hold_value.parentWidget()
     buttons = [w for w in window._controls._actions if w.parentWidget() is row]
     assert len(buttons) == 2
-    plus = next(w for w in buttons if w.text() == "Više")
-    minus = next(w for w in buttons if w.text() == "Manje")
+    plus = next(w for w in buttons if w.text() == "+ Više")
+    minus = next(w for w in buttons if w.text() == "- Manje")
     center = plus.mapToGlobal(plus.rect().center())
     assert window._controls.action_at(center)[0] is plus
     window.handle_eye_status(True, True)

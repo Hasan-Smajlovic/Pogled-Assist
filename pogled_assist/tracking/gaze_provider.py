@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import queue
 import threading
 import time
 from collections import deque
@@ -15,17 +16,16 @@ from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from .. import diagnostics
 from ..interaction.eye_tracking_policy import BOTH_EYES, EyeState, eyes_usable, valid_policy
 from .gaze_check import CheckSnapshot, CheckTelemetry
+from .gaze_connection import GazeConnection, GazeConnectionSession
 from .status import GAZE_DELIVERY_GAP_SECONDS, TrackingState, TrackingStatus
 from .tobii_stream_engine import (
     EyeStatusCallback,
     GazeCallback,
     TobiiStreamEngineBackend,
-    TobiiStreamEngineError,
     finite_eye_position,
 )
 from .tobii_stream_engine_bridge_backend import (
     TobiiStreamEngineBridgeBackend,
-    TobiiStreamEngineBridgeError,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,8 @@ class TobiiGazeProvider(QObject):
         self._tracker: Any | None = None
         self._research_callback: Callable[[dict[str, Any]], None] | None = None
         self._stream_engine: Any | None = None
+        self._connection_session: GazeConnectionSession | None = None
+        self._retry_after_cleanup = False
         self._running = False
         self._start_requested = False
         self._backend_name = ""
@@ -99,13 +101,15 @@ class TobiiGazeProvider(QObject):
         self._retry_timer = QTimer(self)
         self._retry_timer.setSingleShot(True)
         self._retry_timer.timeout.connect(self._attempt_start)
+        self._connection_timer = QTimer(self)
+        self._connection_timer.setInterval(GAZE_EMIT_INTERVAL_MS)
+        self._connection_timer.timeout.connect(self._poll_connection)
 
     def start(self) -> None:
-        if self._running:
-            logger.info("Tobii gaze provider start skipped; provider is already running.")
+        if self._start_requested:
             return
-
         self._start_requested = True
+        self._retry_after_cleanup = False
         self._sample_count = 0
         self._invalidate_stream_callbacks()
         with self._sample_lock:
@@ -113,157 +117,116 @@ class TobiiGazeProvider(QObject):
             self._last_reported_dropped_sample_count = 0
         self._emit_eye_status(False, False, "startup")
         self._emit_timer.start()
-        logger.info("Starting Tobii gaze provider.")
         self._attempt_start()
 
     def _attempt_start(self) -> None:
-        if not self._start_requested or self._running:
+        if not self._start_requested:
             return
-
+        if self._running or self._connection_session is not None:
+            return
         self._set_tracking_status(TrackingState.CONNECTING)
-        if self._start_with_tobii_research():
-            return
-
-        if self._start_with_stream_engine():
-            return
-
-        self._schedule_retry("Tobii uređaj nije pronađen. Pokušavam ponovo.")
-
-    def _start_with_tobii_research(self) -> bool:
-        try:
-            import tobii_research as tr
-        except ImportError:
-            logger.exception("tobii-research import failed.")
-            self.status_changed.emit("Nedostaje tobii-research. Pokušavam Stream Engine.")
-            return False
-
-        try:
-            logger.info("Scanning for Tobii eye trackers with tobii-research.")
-            trackers = tr.find_all_eyetrackers()
-        except Exception:
-            logger.exception("Tobii eye tracker scan failed.")
-            self.status_changed.emit("Pretraga Tobii uređaja putem Pro SDK-a nije uspjela.")
-            return False
-
-        if not trackers:
-            logger.warning("No Tobii eye trackers were found through tobii-research.")
-            self.status_changed.emit(
-                "Tobii uređaj nije pronađen putem Pro SDK-a. Pokušavam Stream Engine."
-            )
-            return False
-
-        self._tr = tr
-        self._tracker = _choose_tracker(trackers)
-        logger.info("Selected Tobii tracker: %s", _tracker_label(self._tracker))
-        self._invalidate_stream_callbacks()
-        self._emit_eye_status(False, False, "research-start")
+        gaze, eyes = self._new_stream_callbacks()
         generation = self._stream_generation
 
-        def gaze_callback(gaze_data: dict[str, Any]) -> None:
+        def research(data):
             with self._sample_lock:
                 if generation == self._stream_generation:
-                    self._on_gaze_data(gaze_data)
+                    self._on_gaze_data(data)
 
-        self._research_callback = gaze_callback
+        session = GazeConnectionSession(
+            callbacks=(
+                gaze,
+                eyes,
+                self._position_callback(generation),
+                self._invalid_callback(generation),
+                research,
+            ),
+            backend_types=(TobiiStreamEngineBackend, TobiiStreamEngineBridgeBackend),
+            generation=generation,
+        )
+        self._launch_session(session)
 
-        try:
-            logger.info("Subscribing to Tobii gaze data.")
-            self._tracker.subscribe_to(
-                tr.EYETRACKER_GAZE_DATA,
-                self._research_callback,
-                as_dictionary=True,
+    def _launch_session(self, session: GazeConnectionSession) -> None:
+        self._connection_session = session
+        session.start()
+        self._connection_timer.start()
+
+    def _poll_connection(self) -> None:
+        session = self._connection_session
+        if session is None:
+            self._connection_timer.stop()
+            return
+        while True:
+            try:
+                event, value = session.events.get_nowait()
+            except queue.Empty:
+                break
+            if event == "connected":
+                self._connection_ready(session, value)
+            else:
+                self._connection_message(session, value)
+        if session.done.is_set() and not session._thread.is_alive():
+            self._connection_finished(session)
+
+    def _connection_message(self, session: GazeConnectionSession, message: str) -> None:
+        if self._accepts_session(session):
+            self.status_changed.emit(message)
+
+    def _accepts_session(self, session: GazeConnectionSession) -> bool:
+        if session is not self._connection_session:
+            return False
+        if not self._start_requested:
+            return False
+        return not session.cancelled.is_set()
+
+    def _connection_ready(self, session: GazeConnectionSession, connection: GazeConnection) -> None:
+        if not self._accepts_session(session):
+            session.cancel()
+            return
+        self._stream_engine = connection.backend
+        self._tracker = connection.tracker
+        self._tr = connection.research
+        self._research_callback = connection.callback
+        self._backend_name = connection.name
+        self._running = True
+        if connection.backend is not None:
+            self._stream_started_at = time.monotonic()
+        diagnostics.emit(
+            "backend_metadata", priority=True, backend=connection.name, **connection.metadata
+        )
+        self._set_tracking_status(TrackingState.CONNECTED, connection.label)
+        self._announce_connection(session, connection)
+
+    def _announce_connection(
+        self, session: GazeConnectionSession, connection: GazeConnection
+    ) -> None:
+        # Each synchronous notification can stop tracking before callbacks are admitted.
+        if not self._start_requested or session.cancelled.is_set():
+            return
+        self.tracker_changed.emit(connection.label)
+        if not self._start_requested or session.cancelled.is_set():
+            return
+        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {connection.label}.")
+        if self._start_requested and not session.cancelled.is_set():
+            connection.admitted.set()
+            self._connection_timer.stop()
+
+    def _connection_finished(self, session: GazeConnectionSession) -> None:
+        if session is not self._connection_session:
+            return
+        self._connection_session = None
+        self._connection_timer.stop()
+        if not self._start_requested:
+            return
+        if self._retry_after_cleanup or session.connection is None:
+            self._retry_after_cleanup = False
+            self._schedule_retry(
+                "Veza s Tobii uređajem je prekinuta. Pokušavam ponovo."
+                if session.connection is not None
+                else "Tobii uređaj nije pronađen. Pokušavam ponovo."
             )
-        except Exception:
-            logger.exception("Tobii gaze subscription failed.")
-            self.status_changed.emit("Povezivanje s Tobii uređajem nije uspjelo.")
-            self._tracker = None
-            self._tr = None
-            self._research_callback = None
-            self._invalidate_stream_callbacks()
-            return False
-
-        self._running = True
-        self._backend_name = "tobii-research"
-        label = _tracker_label(self._tracker)
-        self._set_tracking_status(TrackingState.CONNECTED, label)
-        diagnostics.emit(
-            "backend_metadata",
-            priority=True,
-            backend=self._backend_name,
-            sdk_version=getattr(tr, "__version__", "unknown"),
-            model=getattr(self._tracker, "model", "unknown"),
-            firmware_version=getattr(self._tracker, "firmware_version", "unknown"),
-            eye_validity_source="pro_sdk_gaze_point_validity",
-        )
-        self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
-        return True
-
-    def _start_with_stream_engine(self) -> bool:
-        logger.info("Trying Tobii Stream Engine fallback.")
-        try:
-            backend = TobiiStreamEngineBackend(*self._new_stream_callbacks())
-            self._attach_check_observers(backend)
-            backend.start()
-        except TobiiStreamEngineError as exc:
-            logger.warning("Tobii Stream Engine fallback did not start: %s", exc)
-            self.status_changed.emit("Stream Engine nije dostupan. Pokušavam drugi način.")
-            return self._start_with_stream_engine_bridge(exc)
-        except Exception as exc:
-            logger.exception("Tobii Stream Engine fallback failed.")
-            self.status_changed.emit("Stream Engine nije uspio. Pokušavam drugi način.")
-            return self._start_with_stream_engine_bridge(exc)
-
-        self._stream_engine = backend
-        self._running = True
-        self._backend_name = "stream-engine"
-        diagnostics.emit(
-            "backend_metadata",
-            priority=True,
-            backend=self._backend_name,
-            **getattr(backend, "diagnostic_metadata", {}),
-        )
-        self._stream_started_at = time.monotonic()
-        label = backend.label
-        self._set_tracking_status(TrackingState.CONNECTED, label)
-        self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
-        return True
-
-    def _start_with_stream_engine_bridge(self, direct_error: Exception) -> bool:
-        logger.info(
-            "Trying Tobii Stream Engine x86 bridge after direct backend failure: %s",
-            direct_error,
-        )
-        self.status_changed.emit("Pokušavam Tobii x86 most za 32-bitni Core Software.")
-        try:
-            backend = TobiiStreamEngineBridgeBackend(*self._new_stream_callbacks())
-            self._attach_check_observers(backend)
-            backend.start()
-        except TobiiStreamEngineBridgeError as exc:
-            logger.warning("Tobii Stream Engine x86 bridge did not start: %s", exc)
-            self.status_changed.emit("Tobii x86 most nije dostupan.")
-            return False
-        except Exception:
-            logger.exception("Tobii Stream Engine x86 bridge failed.")
-            self.status_changed.emit("Tobii x86 most nije uspio.")
-            return False
-
-        self._stream_engine = backend
-        self._running = True
-        self._backend_name = "stream-engine-x86-bridge"
-        diagnostics.emit(
-            "backend_metadata",
-            priority=True,
-            backend=self._backend_name,
-            **getattr(backend, "diagnostic_metadata", {}),
-        )
-        self._stream_started_at = time.monotonic()
-        label = backend.label
-        self._set_tracking_status(TrackingState.CONNECTED, label)
-        self.tracker_changed.emit(label)
-        self.status_changed.emit(f"Praćenje je aktivno putem uređaja {label}.")
-        return True
+        else:
+            self._attempt_start()
 
     def _invalidate_stream_callbacks(self) -> None:
         with self._sample_lock:
@@ -420,40 +383,41 @@ class TobiiGazeProvider(QObject):
         self._retry_timer.start(RETRY_INTERVAL_MS)
 
     def stop(self) -> None:
-        self._set_tracking_status(TrackingState.STOPPED)
         self._start_requested = False
+        self._retry_after_cleanup = False
         self._retry_timer.stop()
         self._emit_timer.stop()
         self._invalidate_stream_callbacks()
+        self._running = False
+        self._set_tracking_status(TrackingState.STOPPED)
         self._emit_eye_status(False, False, "stopped")
-
-        if self._stream_engine is not None:
-            self._stream_engine.stop()
-            self._stream_engine = None
-            self._running = False
-            self._backend_name = ""
-            logger.info("Tobii gaze provider stopped.")
-            return
-
-        research_available = self._tracker is not None and self._tr is not None
-        if not self._running or not research_available:
-            logger.info("Tobii gaze provider stop skipped; provider is not running.")
-            return
-
-        try:
-            logger.info("Unsubscribing from Tobii gaze data.")
-            self._tracker.unsubscribe_from(
-                self._tr.EYETRACKER_GAZE_DATA,
-                self._research_callback,
+        session = self._connection_session
+        if session is not None:
+            session.cancel()
+            self._connection_timer.start()
+        elif self._stream_engine is not None or self._tracker is not None:
+            self._launch_session(
+                GazeConnectionSession(
+                    connection=GazeConnection(
+                        self._backend_name,
+                        backend=self._stream_engine,
+                        tracker=self._tracker,
+                        research=self._tr,
+                        callback=self._research_callback,
+                    )
+                )
             )
-        except Exception:
-            logger.exception("Tobii gaze unsubscribe failed.")
-            self.status_changed.emit("Prekid veze s Tobii uređajem nije uspio.")
-        finally:
-            self._running = False
-            self._backend_name = ""
-            self._research_callback = None
-            logger.info("Tobii gaze provider stopped.")
+        self._stream_engine = None
+        self._tracker = None
+        self._tr = None
+        self._research_callback = None
+        self._backend_name = ""
+
+    def wait_for_shutdown(self) -> None:
+        """Called only after app.exec(), when no UI events remain to process."""
+        session = self._connection_session
+        if session is not None and not session.wait_for_bridge_shutdown():
+            logger.error("Tobii bridge cleanup did not finish before application exit.")
 
     def _set_tracking_status(self, state: TrackingState, detail: str = "") -> None:
         status = TrackingStatus(state, detail)
@@ -774,13 +738,21 @@ class TobiiGazeProvider(QObject):
                 self._mark_stream_resumed()
             restart = self._bridge_needs_restart(age, failure)
         if restart:
+            observation = getattr(self._stream_engine, "failure_observation", None)
+            if observation is None:
+                observation = self._stream_engine.process_observation("missing_delivery")
+            diagnostics.emit("bridge_connection", priority=True, decision="recovery", **observation)
             # This runs on the Qt thread; reader threads never stop their own backend.
             # Only the isolated bridge can be forcibly stopped. A stalled native DLL
             # thread must not be replaced with another live device subscription.
             self.stop()
             self._start_requested = True
             self._emit_timer.start()
-            self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+            self._retry_after_cleanup = True
+            self._set_tracking_status(TrackingState.RETRYING)
+            self.status_changed.emit("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+            if self._connection_session is None:
+                self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
 
     def _stream_is_monitored(self) -> bool:
         return (
@@ -973,24 +945,6 @@ def _valid_gaze_point(
         return None
 
     return x, y
-
-
-def _choose_tracker(trackers: tuple[Any, ...]) -> Any:
-    for tracker in trackers:
-        label = _tracker_label(tracker).lower()
-        if "4c" in label:
-            return tracker
-    return trackers[0]
-
-
-def _tracker_label(tracker: Any) -> str:
-    parts = [
-        getattr(tracker, "model", ""),
-        getattr(tracker, "device_name", ""),
-        getattr(tracker, "serial_number", ""),
-    ]
-    label = " ".join(str(part) for part in parts if part)
-    return label or "Tobii uređaj za praćenje pogleda"
 
 
 def _normalize_stream_engine_point(

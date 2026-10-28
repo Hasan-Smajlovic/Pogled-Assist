@@ -10,7 +10,7 @@ from pogled_assist.ui.speech_window import BOSNIAN_LETTERS, SPEECH_WINDOW_ACTION
 
 
 @pytest.mark.e2e
-def test_speech_modal_blocks_background_and_supports_gaze(qtbot, make_speech_window):
+def test_speech_groups_become_inline_letters_with_mouse_and_gaze(qtbot, make_speech_window):
     speech = FakeSpeech()
     window = make_speech_window(speech, library_store=FakeLibraryStore())
     window.show()
@@ -22,16 +22,19 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot, make_speech_win
 
     group_action = f"{SPEECH_WINDOW_ACTION_PREFIX}group:1"
     qtbot.mouseClick(window._action_buttons[group_action], Qt.LeftButton)
-    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.letter)
-    assert window._dialogs.backdrop.isVisible()
+    assert window._dialogs.active is None
+    assert not window._dialogs.backdrop.isVisible()
+    assert group_action not in window._action_buttons
 
     qtbot.mouseClick(window._play_button, Qt.LeftButton)
     qtbot.mouseClick(window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}space"], Qt.LeftButton)
     assert speech.requests == []
-    assert window._input.text() == ""
+    assert window._input.text() == " "
+    window._input.clear()
 
     letter_action = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:1:1"
     letter = window._action_buttons[letter_action]
+    assert letter.parentWidget() is window._key_grid_host
     qtbot.waitUntil(letter.isVisible)
     qtbot.mouseClick(letter, Qt.LeftButton)
     qtbot.waitUntil(lambda: window._dialogs.active is None)
@@ -40,15 +43,16 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot, make_speech_win
 
     gaze_group_action = f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"
     group = window._action_buttons[gaze_group_action]
+    qtbot.waitUntil(group.isVisible)
     group_center = group.mapToGlobal(group.rect().center())
     assert window.action_at_global_point(group_center) == gaze_group_action
     window.handle_gaze_action(gaze_group_action)
-    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.letter)
+    assert window._dialogs.active is None
 
     space_center = window._space_button.mapToGlobal(window._space_button.rect().center())
-    assert window.action_at_global_point(space_center) is None
+    assert window.action_at_global_point(space_center) == window._action("space")
     window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}space")
-    assert window._input.text() == "DŽ"
+    assert window._input.text() == "DŽ "
 
     gaze_letter_action = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"
     gaze_letter = window._action_buttons[gaze_letter_action]
@@ -57,7 +61,12 @@ def test_speech_modal_blocks_background_and_supports_gaze(qtbot, make_speech_win
     assert window.action_at_global_point(letter_center) == gaze_letter_action
     window.handle_gaze_action(gaze_letter_action)
     qtbot.waitUntil(lambda: window._dialogs.active is None)
-    assert window._input.text() == "DŽA"
+    assert window._input.text() == "DŽ A"
+    qtbot.waitUntil(window._action_buttons[gaze_group_action].isVisible)
+    window.handle_gaze_action(gaze_group_action)
+    window.handle_gaze_action(window._action("letters:close"))
+    assert gaze_group_action in window._action_buttons
+    assert window._input.text() == "DŽ A"
 
 
 @pytest.mark.e2e

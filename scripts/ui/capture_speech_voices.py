@@ -33,6 +33,13 @@ class CaptureSpeechVoices:
         self.settings._select_tab(2)
         self.capture(self.settings, "settings-efendija", "Settings: Efendija", size=size)
         self.settings._open_eleven()
+        self.settings._eleven_page.connection_help.show_help()
+        self.capture_dialog(
+            self.settings._eleven_page.connection_help.popup,
+            "information-connection",
+            "Connection check help",
+        )
+        self.settings._eleven_page.connection_help.popup.close()
         for name, state in _account_scenarios(options, account.state):
             account.state = state
             self.settings._eleven_page.refresh(state)

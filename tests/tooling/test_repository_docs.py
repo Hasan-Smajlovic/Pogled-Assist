@@ -19,6 +19,10 @@ REQUIRED_FILES = (
     "CONTRIBUTING.md",
     "docs/ARCHITECTURE.md",
     "docs/DEVELOPMENT.md",
+    "docs/TESTING.md",
+    "docs/DIAGNOSTICS.md",
+    "docs/features/gaze-check.md",
+    "docs/features/elevenlabs.md",
     "docs/UI_DEVELOPMENT.md",
     "docs/UI_GALLERY.md",
     "docs/DEVELOPMENT_TROUBLESHOOTING.md",
@@ -27,6 +31,7 @@ REQUIRED_FILES = (
     "docs/features/speech-suggestions.md",
     "language/bs/README.md",
     "docs/design/speech-keyboard-reference.html",
+    "docs/design/design-system.html",
     "docs/design/speech.html",
     "docs/design/settings.html",
     "docs/design/gaze-check.html",
@@ -383,6 +388,25 @@ def test_local_markdown_links_resolve() -> None:
     assert not broken_links, "Broken local documentation links:\n" + "\n".join(broken_links)
 
 
+def test_documentation_scan_checks_links_in_github_templates(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+    templates = [
+        tmp_path / ".github" / "pull_request_template.md",
+        tmp_path / ".github" / "ISSUE_TEMPLATE" / "bug_report.md",
+    ]
+    for template in templates:
+        template.parent.mkdir(parents=True, exist_ok=True)
+        template.write_text("[Missing guide](missing.md)\n", encoding="utf-8")
+
+    scanned = set(_maintained_markdown())
+    assert set(templates) <= scanned
+    assert all(_broken_local_links(template) == ["missing.md"] for template in templates)
+
+    for template in templates:
+        (template.parent / "missing.md").write_text("# Restored guide\n", encoding="utf-8")
+    assert all(not _broken_local_links(template) for template in templates)
+
+
 def test_maintained_docs_do_not_use_removed_runtime_paths() -> None:
     stale = [
         f"{document.relative_to(REPO_ROOT)}: {match.group()}"
@@ -500,6 +524,7 @@ def _maintained_markdown() -> list[Path]:
             REPO_ROOT / "CONTRIBUTING.md",
             *_agent_guidance(),
             *(REPO_ROOT / "docs").rglob("*.md"),
+            *(REPO_ROOT / ".github").rglob("*.md"),
             *(REPO_ROOT / "language").rglob("*.md"),
             *(REPO_ROOT / "tests" / "fixtures").rglob("*.md"),
         }

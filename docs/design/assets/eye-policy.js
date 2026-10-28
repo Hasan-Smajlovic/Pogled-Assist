@@ -20,7 +20,7 @@
       ? Math.max(50, Math.min(500, Math.round(saved / 50) * 50)) : 150;
   }
   function description() {
-    if (read() === 'hold') return 'Počnite s oba oka. Pri gubitku jednog oka napredak čeka do ' + holdMs() + ' ms; nastavak traži oba oka i svjež pogled na isto dugme.';
+    if (read() === 'hold') return 'Sav napredak čuva se do ' + holdMs() + ' ms od gubitka jednog oka.' + (holdMs() < 500 ? ' Zatim se do ukupno 500 ms čuva samo završena početna pauza, bez punjenja.' : '') + ' Nastavak traži oba oka i svjež pogled na isti cilj; zastarjeli podaci poništavaju pokušaj.';
     if (read() === 'any') return 'Za početak i završetak dovoljan je pogled uz najmanje jedno praćeno oko. Probni režim: bez svježih podataka o pogledu nema odabira.';
     return 'Oba oka moraju se pratiti. Gubitak bilo kojeg oka odmah poništava nezavršen odabir.';
   }

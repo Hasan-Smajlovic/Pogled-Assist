@@ -5,6 +5,9 @@
   const gazeDemo = document.getElementById('gaze-demo') ? createReferenceGaze() : { reset() {} };
   let arabic = readScript();
   let sideTab = 'letters', sidePage = 0, sideGroup = null, sideGroupSize = 5;
+  const requestedSize = Number(new URLSearchParams(location.search).get('group-size'));
+  if ([1, 2, 5, 12].includes(requestedSize)) sideGroupSize = requestedSize;
+  $('sidebar-group-size').value = String(sideGroupSize);
   if (document.body.dataset.referencePage === 'sidebar') {
     document.querySelectorAll('.sidebar-reference button').forEach(button => button.setAttribute('data-edge-control', ''));
   }
@@ -24,6 +27,7 @@
     arabic = !arabic; writeScript(arabic); sidePage = 0; sideGroup = null; renderSidebars(); gazeDemo.reset();
   });
   function renderSidebars() {
+    for (const button of document.querySelectorAll('[data-side-tab]')) button.setAttribute('aria-pressed', String(button.dataset.sideTab === sideTab));
     for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
     const keys = sideTab === 'letters' ? grouped(arabic ? ARABIC_LETTERS : GROUPS.flat(), sideGroupSize) : grouped(sideTab === 'numbers' ? [...SIDEBAR_NUMPAD, ...(arabic ? [...'٠١٢٣٤٥٦٧٨٩'] : [])] : arabic ? [...new Set([...SIDEBAR_SYMBOLS, ...ARABIC_SYMBOLS])] : SIDEBAR_SYMBOLS, arabic ? Math.max(5, sideGroupSize) : sideGroupSize);
     const pages = Math.max(1, Math.ceil(keys.length / 8));

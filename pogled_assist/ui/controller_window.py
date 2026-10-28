@@ -32,6 +32,7 @@ from .icons import themed_icon
 from .keyboard_grid import KeyboardGrid
 from .recording_badge import RecordingBadge
 from .sidebar_panel import SidebarPanel
+from .theme import apply_theme
 
 logger = logging.getLogger(__name__)
 
@@ -65,26 +66,26 @@ BUTTON_HEIGHTS = {
 
 CONTROLLER_STYLESHEET = """
             QWidget#controllerWindow {
-                background: #111318;
-                color: #f6f7fb;
+                background: #15191f;
+                color: #edf2f7;
                 font-family: Segoe UI, Arial, sans-serif;
                 font-size: 13px;
             }
             QToolButton {
-                background: #1c2029;
-                border: 1px solid #303747;
+                background: #283442;
+                border: 1px solid #71869b;
                 border-radius: 8px;
-                color: #eef2f8;
+                color: #edf2f7;
                 font-weight: 700;
                 padding: 6px;
             }
             QToolButton:hover {
-                background: #262c38;
-                border-color: #4c5970;
+                background: #334355;
+                border-color: #84c5d9;
             }
             QToolButton:checked {
-                background: #245f9f;
-                border-color: #67b7dc;
+                background: #2e6478;
+                border-color: #84c5d9;
                 color: #ffffff;
             }
             QToolButton#tabButton {
@@ -114,18 +115,8 @@ CONTROLLER_STYLESHEET = """
                 text-align: left;
             }
             QToolButton#checkButton:checked {
-                background: #245f9f;
-                border-color: #67b7dc;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="0"] {
-                background: #f0c84a;
-                border: 3px solid #ffe58a;
-                color: #111318;
-            }
-            QToolButton[gazeTarget="true"][gazePulse="1"] {
-                background: #16a34a;
-                border: 3px solid #bbf7d0;
-                color: #ffffff;
+                background: #2e6478;
+                border-color: #84c5d9;
             }
             """
 
@@ -261,7 +252,7 @@ class ControllerWindow(SidebarPanel):
         self._trigger_action(action, source="gaze")
 
     def _build_ui(self) -> None:
-        self.setStyleSheet(CONTROLLER_STYLESHEET)
+        apply_theme(self, CONTROLLER_STYLESHEET)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
@@ -296,7 +287,6 @@ class ControllerWindow(SidebarPanel):
         self._keys = KeyboardGrid(self._content_layout, self._make_button, self._action)
 
         self._recording_badge = RecordingBadge(self)
-        root.addWidget(self._recording_badge)
         root.addLayout(tab_row)
         self._script_button = self._make_button(
             switch_label(self._speech_settings.keyboard_script),
@@ -306,6 +296,7 @@ class ControllerWindow(SidebarPanel):
         )
         root.addWidget(self._script_button)
         root.addWidget(self._content_host, 1)
+        root.addWidget(self._recording_badge)
 
     def _show_general_tab(self) -> None:
         self._active_tab = TAB_GENERAL
@@ -676,7 +667,6 @@ class ControllerWindow(SidebarPanel):
         button.setMinimumHeight(BUTTON_HEIGHTS[role])
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         button.setProperty("gazeTarget", False)
-        button.setProperty("gazePulse", "")
         button.pressed.connect(self.mouse_action_started.emit)
         button.clicked.connect(
             lambda _checked=False, item=action: self._trigger_action(

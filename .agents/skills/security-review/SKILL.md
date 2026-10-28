@@ -17,7 +17,7 @@ description: Load before changing any text or data under language/ or tests/fixt
 
 ## Rules
 
-- Log typed text only as the `<text>` placeholder, as `SpeechService._start_process` does. Personal learning keeps word counts in `data/speech_learning.json`, never message transcripts. The [diagnostic logging contract](../../../docs/ARCHITECTURE.md#diagnostic-logging) owns the limits for structured events and traces.
+- Log typed text only as the `<text>` placeholder, as `SpeechService._start_process` does. Personal learning keeps word counts in `data/speech_learning.json`, never message transcripts. The [diagnostic logging contract](../../../docs/DIAGNOSTICS.md#diagnostic-logging) owns the limits for structured events and traces.
 - Pass user text to processes as one list element with the shell off. The shell launch in `pogled_assist/tracking/tobii_calibration.py` is reserved for the operator-set `TOBII_CALIBRATION_COMMAND`.
 - Verify before changing files: a checksum, metadata, or network failure leaves the installed app unchanged. For an explicit selection, match the requested version to the returned tag and package `VERSION`. In the Settings flow, keep cancellation and restart confirmation ahead of installation. Selected historical packages still use the currently installed transactional installer.
 - Change the pinned release source in both places together: `RELEASE_API_URL` and `RELEASE_DOWNLOAD_ROOT` in `pogled_assist/release_update.py`, and `$OfficialReleaseApiUrl` and `$OfficialReleaseAssetRoot` in `update_windows.ps1`.

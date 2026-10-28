@@ -25,6 +25,77 @@ def read_report(tmp_path, records):
     return summarize(path)
 
 
+def test_bridge_observations_keep_failure_separate_from_shutdown_and_drop_extra_fields(tmp_path):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0),
+            record(
+                "bridge_connection",
+                1,
+                decision="failure",
+                stream_generation=4,
+                reason="stdout_eof",
+                process_state="running",
+                exit_code=None,
+                native_eye_age_ms=350,
+                shutdown_requested=False,
+                typed_text="PRIVATE MESSAGE",
+            ),
+            record(
+                "bridge_connection",
+                2,
+                decision="shutdown",
+                stream_generation=4,
+                reason="app_shutdown",
+                process_state="exited",
+                exit_code=-15,
+                native_eye_age_ms=400,
+                shutdown_requested=True,
+            ),
+            record("session_end", 3),
+        ],
+    )
+    events = result["analysis"]["bridge_connections"]
+    assert events[0]["process_state"] == "running"
+    assert events[0]["exit_code"] is None
+    assert events[0]["native_eye_age_ms"] == 350
+    assert not events[0]["shutdown_requested"]
+    assert events[1]["exit_code"] == -15
+    assert events[1]["shutdown_requested"]
+    assert "PRIVATE MESSAGE" not in json.dumps(result)
+
+
+def test_bridge_reader_bounds_observations_and_rejects_malformed_fields(tmp_path):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 0),
+            *(
+                record(
+                    "bridge_connection",
+                    index + 1,
+                    decision=[],
+                    process_state={},
+                    reason="x" * 1000,
+                    exit_code=True,
+                    native_eye_age_ms=-1,
+                )
+                for index in range(70)
+            ),
+            record("session_end", 72),
+        ],
+    )
+    events = result["analysis"]["bridge_connections"]
+    assert len(events) == 64
+    assert result["analysis"]["details_truncated"]
+    assert events[0]["decision"] == "unknown"
+    assert events[0]["process_state"] == "unknown"
+    assert events[0]["exit_code"] is None
+    assert events[0]["native_eye_age_ms"] is None
+    assert len(events[0]["reason"]) == 128
+
+
 def test_report_connects_nearby_evidence_including_later_heartbeat(tmp_path):
     result = read_report(
         tmp_path,

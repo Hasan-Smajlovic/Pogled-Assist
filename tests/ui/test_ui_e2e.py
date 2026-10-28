@@ -14,7 +14,7 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 @pytest.mark.e2e
 @pytest.mark.parametrize(
-    "size,script,letters_per_group,use_gaze",
+    "case",
     [
         ((1280, 720), "latin", 1, False),
         ((1280, 720), "latin", 5, True),
@@ -24,11 +24,14 @@ from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
         ((1280, 720), "arabic", 12, True),
         ((1440, 900), "latin", 5, False),
         ((1440, 900), "arabic", 5, True),
+        ((1920, 1080), "latin", 5, False),
+        ((1920, 1080), "arabic", 5, True),
     ],
 )
 def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
-    qtbot, make_speech_window, size, script, letters_per_group, use_gaze
+    qtbot, make_speech_window, case
 ):
+    size, script, letters_per_group, use_gaze = case
     speech = FakeSpeech()
     speech._settings = SpeechSettings(keyboard_script=script)
     window = make_speech_window(
@@ -47,8 +50,8 @@ def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
     assert window.height() == size[1]
     previous = None
     for button, command in controls:
-        assert button.minimumHeight() == 81
-        assert button.height() == 81
+        assert button.minimumHeight() == 95
+        assert button.height() == 95
         rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
         assert window.rect().contains(rect)
         if previous is not None:
@@ -58,22 +61,41 @@ def test_speech_bottom_buttons_fit_and_preserve_mouse_and_gaze_actions(
         point = button.mapToGlobal(QPoint(button.width() // 2, button.height() - 1))
         assert window.action_at_global_point(point) == f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"
 
-    assert window._script_button.minimumHeight() == 76
+    assert window._script_button.minimumHeight() == 95
+    alarm = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}alarm:start"]
+    script_rect = QRect(window._script_button.mapTo(window, QPoint()), window._script_button.size())
+    alarm_rect = QRect(alarm.mapTo(window, QPoint()), alarm.size())
+    keys_rect = QRect(window._key_grid_host.mapTo(window, QPoint()), window._key_grid_host.size())
+    numbers_rect = QRect(
+        window._keyboard_toggle_button.mapTo(window, QPoint()),
+        window._keyboard_toggle_button.size(),
+    )
+    assert script_rect.left() == alarm_rect.left()
+    assert script_rect.right() == alarm_rect.right()
+    assert numbers_rect.right() == keys_rect.right()
+    assert script_rect.left() - numbers_rect.right() - 1 == 12
+    assert (
+        window.action_at_global_point(
+            window._script_button.mapToGlobal(window._script_button.rect().center())
+        )
+        == f"{SPEECH_WINDOW_ACTION_PREFIX}script-toggle"
+    )
     window._input.setText("ABC")
     for button, command in controls[:2]:
-        if use_gaze:
-            window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
-        else:
-            button.click()
+        _select_speech_control(window, button, command, use_gaze)
         assert window._input.text() == ("ABC " if command == "space" else "ABC")
 
     original = window._symbols_mode
-    if use_gaze:
-        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle")
-    else:
-        window._keyboard_toggle_button.click()
+    _select_speech_control(window, window._keyboard_toggle_button, "keyboard-toggle", use_gaze)
     assert window._symbols_mode != original
     assert window._input.text() == "ABC"
+
+
+def _select_speech_control(window, button, command, use_gaze):
+    if use_gaze:
+        window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}{command}")
+    else:
+        button.click()
 
 
 @pytest.mark.e2e
@@ -177,7 +199,7 @@ def _assert_sidebar_hit(window, button):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize(
-    "size,script,letters_per_group",
+    "case",
     [
         ((320, 640), "latin", 2),
         ((320, 640), "arabic", 2),
@@ -187,11 +209,10 @@ def _assert_sidebar_hit(window, button):
         ((380, 950), "arabic", 5),
     ],
 )
-def test_controller_keyboard_rows_fill_sidebar_width(
-    qtbot, monkeypatch, script, letters_per_group, size
-):
+def test_controller_keyboard_rows_fill_sidebar_width(qtbot, monkeypatch, case):
     from pogled_assist.ui import sidebar_panel
 
+    size, script, letters_per_group = case
     monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
     window = ControllerWindow(
         GazeSettings(),
@@ -221,16 +242,11 @@ def test_controller_keyboard_rows_fill_sidebar_width(
                 for command in ("keyboard_space", "keyboard_backspace")
             ]
         )
-        if f"{prefix}keyboard-page:1" in window._action_buttons:
-            check_row([window._action_buttons[f"{prefix}keyboard-page:{i}"] for i in (-1, 1)])
-            window._action_buttons[f"{prefix}keyboard-page:1"].click()
-            check_row(list(window._keyboard_tab_buttons.values()))
-            window._action_buttons[f"{prefix}keyboard-page:-1"].click()
+        _check_controller_paging(window, check_row)
 
         window._action_buttons[f"{prefix}{group_command}:0"].click()
         check_row(list(window._keyboard_tab_buttons.values()))
-        if f"{prefix}{key_command}:2" in window._action_buttons:
-            check_row([window._action_buttons[f"{prefix}{key_command}:{i}"] for i in range(3)])
+        _check_controller_key_row(window, key_command, check_row)
         check_row(
             [
                 window._action_buttons[f"{prefix}{command}"]
@@ -258,8 +274,24 @@ def test_controller_keyboard_rows_fill_sidebar_width(
         qtbot.waitUntil(check_first_row)
 
 
+def _check_controller_paging(window, check_row):
+    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
+    if f"{prefix}keyboard-page:1" not in window._action_buttons:
+        return
+    check_row([window._action_buttons[f"{prefix}keyboard-page:{i}"] for i in (-1, 1)])
+    window._action_buttons[f"{prefix}keyboard-page:1"].click()
+    check_row(list(window._keyboard_tab_buttons.values()))
+    window._action_buttons[f"{prefix}keyboard-page:-1"].click()
+
+
+def _check_controller_key_row(window, key_command, check_row):
+    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
+    if f"{prefix}{key_command}:2" in window._action_buttons:
+        check_row([window._action_buttons[f"{prefix}{key_command}:{i}"] for i in range(3)])
+
+
 @pytest.mark.e2e
-def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot, make_speech_window):
+def test_twelve_inline_letters_fit_150_percent_display_and_accept_gaze(qtbot, make_speech_window):
     window = make_speech_window(
         FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore()
     )
@@ -268,18 +300,16 @@ def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot, m
     qtbot.waitUntil(window.isVisible)
 
     window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"].click()
-    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.letter)
-    dialog = window._dialogs.letter
-    assert dialog.height() <= window.height() - 64
-    assert dialog.width() <= window.width() - 64
+    assert window._dialogs.active is None
+    qtbot.wait(1)
 
-    bounds = dialog.rect()
-    for action in window._dialogs.letter_actions:
+    bounds = window._key_grid_host.rect()
+    for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
-        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
+        rect = QRect(button.mapTo(window._key_grid_host, QPoint(0, 0)), button.size())
         assert bounds.contains(rect), action
         assert button.width() >= 140, action
-        assert button.height() >= 110, action
+        assert button.height() >= 72, action
         assert window.action_at_global_point(button.mapToGlobal(button.rect().center())) == action
 
     last_letter = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:11"
@@ -298,14 +328,39 @@ def test_single_letter_groups_fit_150_percent_display(qtbot, make_speech_window)
     assert window.size().width() <= 1280
     assert window.size().height() <= 720
     bounds = QRect(0, 0, 1280, 720)
-    group_actions = [
+    reached = set()
+    for page, expected_count in enumerate((12, 12, 6)):
+        group_actions = sorted(
+            action
+            for action in window._action_buttons
+            if action.startswith(f"{SPEECH_WINDOW_ACTION_PREFIX}group:")
+        )
+        assert len(group_actions) == expected_count
+        assert window._page_label.text() == f"{page + 1} / 3"
+        reached.update(group_actions)
+        for action in (*group_actions, f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle"):
+            button = window._action_buttons[action]
+            rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
+            assert bounds.contains(rect), action
+            assert button.height() >= 72, action
+        assert window._next_page_button.isEnabled() == (page < 2)
+        if page < 2:
+            window._next_page_button.click()
+            qtbot.wait(1)
+    assert reached == {
         f"{SPEECH_WINDOW_ACTION_PREFIX}group:{index}" for index in range(len(window._letter_groups))
-    ]
-    for action in (*group_actions, f"{SPEECH_WINDOW_ACTION_PREFIX}keyboard-toggle"):
-        button = window._action_buttons[action]
-        rect = QRect(button.mapTo(window, QPoint(0, 0)), button.size())
-        assert bounds.contains(rect), action
-        assert button.height() >= 72, action
+    }
+    last = len(window._letter_groups) - 1
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}group:{last}")
+    window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}letter:{last}:0")
+    assert window._input.text() == window._letter_groups[last][0]
+    qtbot.waitUntil(window._action_buttons[window._action(f"group:{last}")].isVisible)
+    assert window._keyboard_page == 2
+    window.handle_gaze_action(window._action(f"group:{last}"))
+    assert window._next_page_button.isHidden()
+    window.handle_gaze_action(window._action("letters:close"))
+    assert window._keyboard_page == 2
+    assert window._page_label.text() == "3 / 3"
 
 
 @pytest.mark.e2e

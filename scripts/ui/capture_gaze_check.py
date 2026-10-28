@@ -45,6 +45,9 @@ class CaptureGazeCheck:
         )
         window._render_position()
         self.capture(window, "gaze-check-position", "Gaze check: live position", size=size)
+        window._position_help.show_help()
+        self.capture_dialog(window._position_help.popup, "information-position", "Position help")
+        window._position_help.popup.close()
         window._recording_badge.set_status(
             {"busy": True, "state": "recording", "remaining_seconds": 83}
         )

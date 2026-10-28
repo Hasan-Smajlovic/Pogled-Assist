@@ -47,9 +47,9 @@ class InstallationWindow(QDialog):
         self.setWindowTitle("Provjera instalacije — Pogled Assist")
         self.resize(900, 650)
         self.setStyleSheet(
-            "QDialog, QWidget { background: #1c2029; color: #eef2f8; font-size: 18px; }"
-            "QPushButton { padding: 14px; border: 1px solid #394253; border-radius: 8px; }"
-            "QPushButton:focus { border: 2px solid #8bd5f5; }"
+            "QDialog, QWidget { background: #283442; color: #edf2f7; font-size: 18px; }"
+            "QPushButton { padding: 14px; border: 1px solid #394959; border-radius: 8px; }"
+            "QPushButton:focus { border: 2px solid #84c5d9; }"
             "QPushButton:disabled { color: #7c8491; }"
         )
         layout = QVBoxLayout(self)

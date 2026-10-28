@@ -78,7 +78,7 @@ def tracking_status_view(
         detail = "Čekam podatke o pogledu" if last_gaze_at is None else "Podaci o pogledu kasne"
         return TrackingStatusView("Čekam podatke", detail, "hourglass-half", "#f2ce76")
     title = "Odabir jednim okom" if policy == ANY_EYE and not all(eyes) else "Praćenje spremno"
-    return TrackingStatusView(title, detail, "check-circle", "#70dfa1")
+    return TrackingStatusView(title, detail, "check-circle", "#a3d5ba")
 
 
 class TrackingStatusWidget(QWidget):
@@ -195,7 +195,7 @@ class TrackingStatusWidget(QWidget):
                 self._icon.setText(symbols.get(view.icon, "!"))
             self.setStyleSheet(
                 f"QWidget#trackingStatus {{background: transparent; border-left: 2px solid {view.color};}}"
-                "QLabel {background: transparent; color: #eef2f8;}"
+                "QLabel {background: transparent; color: #edf2f7;}"
                 "QLabel#trackingTitle {font-size: 15px; font-weight: 600;}"
                 "QLabel#trackingDetail {font-size: 13px; color: #bec9d9;}"
                 f"QLabel#trackingIcon {{font-size: 18px; color: {view.color};}}"

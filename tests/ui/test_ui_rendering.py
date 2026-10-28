@@ -31,6 +31,14 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     def capture_with_script_control_check(app, widget, output_dir, name, size):
         snapshot = capture_widget(app, widget, output_dir, name, size)
+        if name == "keyboard-latin-paged":
+            assert widget._active_tab == "letters"
+            first_group = widget._action_buttons[widget._action("group:0")]
+            next_page = widget._action_buttons[widget._action("group-page:1")]
+            assert first_group.isVisible()
+            assert first_group.text() == "A B"
+            assert next_page.isVisible()
+            assert next_page.isEnabled()
         if name in (
             "controller-keyboard",
             "controller-latin-paged",
@@ -67,9 +75,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     unrelated.write_bytes(b"leave caller files alone")
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 70
+    assert len(snapshots) == 76
     assert {path.stem for path in snapshots} == CORE_NAMES
-    assert len(encountered) == 148  # Extended states remain available without PNG encoding.
+    assert len(encountered) == 154  # Extended states remain available without PNG encoding.
     assert not omitted.exists()
     assert unrelated.read_bytes() == b"leave caller files alone"
     unrelated.unlink()  # Keep the CI artifact limited to actual previews.
@@ -77,7 +85,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     for snapshot in snapshots:
         image = QImage(str(snapshot))
         assert not image.isNull(), snapshot.name
-        assert image.width() >= 380, snapshot.name
+        assert image.width() >= (200 if snapshot.name.startswith("information-") else 380), (
+            snapshot.name
+        )
         assert image.height() >= 70, snapshot.name
         if snapshot.name.startswith(("settings-", "gaze-check-")):
             assert (image.width(), image.height()) == (1280, 720), snapshot.name

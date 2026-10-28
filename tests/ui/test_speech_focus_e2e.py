@@ -99,6 +99,21 @@ def test_speech_control_click_keeps_selection_and_its_direction(
 
 
 @pytest.mark.e2e
+def test_inline_letters_keep_typing_focus_and_escape_returns_to_groups(qtbot, speech_focus):
+    qapp, window = speech_focus
+    window._input.setText("PORUKA")
+    click_speech_action(qtbot, window, "group:0")
+    assert window._dialogs.active is None
+    assert qapp.focusWidget() is window._input
+    qtbot.keyClicks(qapp.focusWidget(), "x")
+    assert window._input.text() == "PORUKAX"
+    qtbot.keyClick(qapp.focusWidget(), Qt.Key_Escape)
+    assert window._active_group_index is None
+    assert window._input.text() == "PORUKAX"
+    assert qapp.focusWidget() is window._input
+
+
+@pytest.mark.e2e
 @pytest.mark.parametrize(
     "command", ["play", "categories", "phrases", "keyboard-toggle", "backspace"]
 )
@@ -120,8 +135,6 @@ def test_speech_controls_leave_message_ready_for_typing(qtbot, speech_focus, com
 @pytest.mark.parametrize(
     "commands",
     [
-        pytest.param(("group:0", "letters:close"), id="group:0-letters:close"),
-        pytest.param(("group:0", "letter:0:0"), id="group:0-letter:0:0"),
         pytest.param(("clear", "confirm:cancel"), id="clear-confirm:cancel"),
         pytest.param(("clear", "confirm:accept"), id="clear-confirm:accept"),
         pytest.param(("alarm:start", "alarm:stop"), id="alarm:start-alarm:stop"),

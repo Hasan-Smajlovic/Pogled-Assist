@@ -38,6 +38,9 @@ def test_arabic_speech_keys_marks_switching_and_stale_predictions(qtbot, make_sp
     window._show_symbols_level()
     for mark in ARABIC_MARKS:
         index = window._symbols.index(mark)
+        while window._keyboard_page < (index // 5) // 12:
+            window._next_page_button.click()
+            qtbot.wait(1)
         click_speech_action(qtbot, window, f"symbol-group:{index // 5}")
         button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}symbol:{index}"]
         assert button.text() == "◌" + mark
@@ -109,14 +112,14 @@ def test_arabic_speech_groups_and_dialog_fit_150_percent(
         if "group:" in action:
             assert window.rect().contains(QRect(button.mapTo(window, QPoint(0, 0)), button.size()))
             assert button.height() >= 72
-    window._open_letter_dialog(0)
+    window._show_letter_group(0)
     qtbot.wait(1)
-    dialog = window._dialogs.letter
-    assert dialog.width() <= 1280 and dialog.height() <= 720
+    assert window._dialogs.active is None
+    host = window._key_grid_host
     rects = []
-    for action in window._dialogs.letter_actions:
+    for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
-        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
-        assert dialog.rect().contains(rect)
+        rect = QRect(button.mapTo(host, QPoint(0, 0)), button.size())
+        assert host.rect().contains(rect)
         assert all(not rect.intersects(previous) for previous in rects)
         rects.append(rect)

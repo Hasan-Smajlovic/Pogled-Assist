@@ -5,29 +5,20 @@ description: Assess what a Pogled Assist change could break outside the diff. Us
 
 # Blast radius
 
-Trace indirect consequences of a proposed change and establish the evidence for the assumptions that make it safe. Scale the review to the affected behavior; routine isolated edits do not need a separate impact report.
+Trace what a change can break outside its diff. Scale the analysis to the affected behavior; isolated edits do not need a separate impact report. [AGENTS.md](../../../AGENTS.md) owns compatibility, maintenance and verification.
 
-[AGENTS.md](../../../AGENTS.md) owns compatibility rules, the maintenance matrix, verification, and human review requirements. Use the applicable [shipping-a-change](../shipping-a-change/SKILL.md) and [security-review](../security-review/SKILL.md) sections for their workflows. This skill adds impact analysis; it does not replace those requirements or expand the user's authorized scope.
+## Trace the boundary
 
-## Establish the change and its consumers
+Identify the baseline, final files and intended user outcome. Start with the [compatibility contract](../../../docs/ARCHITECTURE.md#compatibility-contract), then follow actual consumers across relevant boundaries: Qt signals/threads/timers/shutdown, persisted formats and older readers, coordinate spaces, bridge messages, generated models and packaged assets. An empty symbol search does not prove there are no consumers. When behavior depends on a library, inspect the pinned version and local wrappers.
 
-- Identify the baseline and the exact change being reviewed, including related new files. State what changes for the user and what must remain compatible. Start from the [architecture contract](../../../docs/ARCHITECTURE.md#compatibility-contract) and read only the component sections relevant to the change.
-- Follow data and control flow beyond direct callers. Check the boundaries the change crosses: queued Qt signals, thread affinity, timers and shutdown; persisted formats and older readers; logical and physical coordinates; bridge messages; generated models and frozen-package assets. Use the actual implementation and owning guides rather than treating this as a universal checklist.
-- When safety depends on library behavior, inspect the pinned version and any local wrapper or patch. Do not transfer assumptions from another version or infer that there are no consumers from an empty symbol search.
+For each material risk, trace a concrete trigger to an observable failure with source locations. Check error/recovery paths and each independent compatibility condition. Separate confirmed failures, plausible risks lacking evidence and checked cases; do not invent probabilities or universal checklists.
 
-## Identify the assumptions and failure paths
+## Establish evidence
 
-- State each independent condition required for compatibility. One proven condition does not clear other risks. For each material risk, trace a concrete trigger through the affected components to an observable failure or side effect, with source locations.
-- Check lifecycle and error paths as well as normal operation when they cross the changed boundary. For example, a gaze-delivery change may work in a sequential test yet allow an invalid-eye transition to disappear in the Qt queue or let pending callbacks act after shutdown.
-- Separate confirmed failures, plausible risks with missing evidence, and cases checked and cleared. Explain likelihood using reachable conditions and impact using the user consequence; do not invent numerical probabilities. A cleared case must name the conditions and evidence that cleared it.
+Use the [boundary fakes](../../../docs/TESTING.md#test-boundary-map) and inspect what existing tests reach. A synchronous fake cannot establish queued-thread ordering or native behavior. When authorized, add the smallest faithful pytest reproduction for missing coverage. Before interactive work, account for real input and persistent data: the [mouse simulator](../../../docs/UI_DEVELOPMENT.md#mouse-gaze-simulation) can issue Windows clicks.
 
-## Exercise the important conditions
+Follow [verification rules](../../../docs/DEVELOPMENT.md#verification-before-a-pull-request). If execution is deferred, finish analysis and authorized edits, mark checks Not run and supply executable tests or precise reproduction steps. Leave only unreached boundaries to [manual Windows/Tobii checks](../../../docs/UI_DEVELOPMENT.md#manual-windows-checks). Load applicable shipping/security workflows when the change crosses their boundaries.
 
-- Use the [test strategy and existing boundary fakes](../../../docs/DEVELOPMENT.md#test-strategy) to find a check that exercises the production components and the relevant ordering, persistence, or side effect. Check what a test actually reaches; its name or a passing unrelated test is not proof. A synchronous fake cannot establish behavior that depends on worker-thread dispatch or a native device.
-- Reuse or extend the matching pytest tests when authorized and coverage is missing. Choose the smallest faithful reproduction, with an assertion that exposes the failure. Do not create a new script for every review or substitute a standalone function call for the lifecycle being investigated.
-- Follow the [verification guide](../../../docs/DEVELOPMENT.md#verification-before-a-pull-request) for execution and deferred checks. When the user defers execution or the required environment is unavailable, finish the source analysis and authorized edits, mark execution Not run, and leave executable checks or precise reproduction steps. Do not present an unexecuted test as proof.
-- Leave only the boundaries those checks cannot reach to the applicable [manual Windows and Tobii checks](../../../docs/UI_DEVELOPMENT.md#manual-windows-checks). Distinguish software evidence from hardware validation. Before an interactive reproduction, account for real input and persistent data; the [mouse simulator](../../../docs/UI_DEVELOPMENT.md#mouse-gaze-simulation) can perform real Windows clicks and is not an isolated runtime.
+## Report
 
-## Report the result
-
-Keep the report proportional to the change. Name the changed behavior and affected consumers, then give the material findings with their trigger, user consequence, source references, and evidence or remaining uncertainty. Summarize cleared cases with their limits. List checks actually run and their results, checks left Not run and why, and the next check needed for each unresolved risk. Source tracing, executed tests, and target-machine observations support different claims; name which evidence supports each conclusion. Focused proof does not establish readiness for review or merge.
+Name affected behavior/consumers and material findings: trigger, consequence, source and evidence or uncertainty. Summarize cleared cases with their limits and the next check for unresolved risks. Distinguish source tracing, executed tests and hardware observations. Focused proof does not establish review or merge readiness.

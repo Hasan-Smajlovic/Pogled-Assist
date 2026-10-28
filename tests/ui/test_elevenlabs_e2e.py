@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import pairwise
 
 import pytest
 from _clock import freeze_monotonic
 from _speech_fakes import FakeCredentials, FakeElevenClient
 from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QLineEdit
+from PySide6.QtWidgets import QBoxLayout, QLineEdit, QStyle, QStyleOptionComboBox
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.eleven_account import ElevenAccount
@@ -129,7 +130,7 @@ def test_credits_display_remaining_and_warning_thresholds(settings):
     window, _store, _client, account, _ = settings
     window._open_eleven()
     for used, percent, color in [
-        (0, 100, "#91dec0"),
+        (0, 100, "#a3d5ba"),
         (850, 15, "#edc779"),
         (950, 5, "#e48c80"),
         (1100, 0, "#e48c80"),
@@ -708,3 +709,112 @@ def test_missing_selected_model_cannot_start_paid_test(settings, qtbot):
     assert not window._speech_page._test_speech_button.isEnabled()
     window._open_eleven()
     assert not window._eleven_page.test_button.isEnabled()
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_voice_placeholder_fits_before_and_after_catalog_check(settings, qtbot, saved_key):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+        account.check()
+        qtbot.waitUntil(lambda: account.state.options is not None)
+    window.resize(1280, 720)
+    window._open_eleven()
+    qtbot.wait(1)
+    combo = window._eleven_page.voice
+    assert combo.currentIndex() == -1
+    option = QStyleOptionComboBox()
+    combo.initStyleOption(option)
+    field = combo.style().subControlRect(
+        QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo
+    )
+    assert combo.fontMetrics().horizontalAdvance(combo.placeholderText()) <= field.width()
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_wide_key_actions_end_at_the_row_edge(settings, qtbot, saved_key):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+    window.resize(1280, 720)
+    window._open_eleven()
+    page = window._eleven_page
+    for replacing in (False, True, False):
+        if replacing and saved_key:
+            page._replace_key()
+        else:
+            page.clear_input()
+        qtbot.wait(1)
+        actions = [
+            control
+            for control in (
+                page.show_key,
+                page.save_key,
+                page.cancel_key,
+                page.replace_key,
+                page.remove_key,
+            )
+            if control.isVisible()
+        ]
+        rightmost = max(actions, key=lambda control: control.geometry().right())
+        row = rightmost.parentWidget()
+        assert row.width() - rightmost.geometry().right() - 1 <= 1
+        for left, right in pairwise(sorted(actions, key=lambda control: control.x())):
+            assert right.x() - left.geometry().right() - 1 >= 12
+        assert all(control.height() == 58 for control in actions)
+
+
+@pytest.mark.parametrize("saved_key", [False, True])
+def test_narrow_key_setup_stays_gaze_reachable_without_horizontal_scrolling(
+    settings, qtbot, saved_key
+):
+    window, _store, _client, account, _ = settings
+    if saved_key:
+        assert account.save_key("synthetic-key")
+    window.resize(800, 720)
+    window._open_eleven()
+    page = window._eleven_page
+    if saved_key:
+        page._replace_key()
+    qtbot.waitUntil(
+        lambda: (
+            window._scroll.horizontalScrollBar().maximum() == 0
+            and page.width() <= window._scroll.viewport().width()
+        )
+    )
+    assert (window.width(), window.height()) == (800, 720)
+    key_actions = [
+        control
+        for control in (page.show_key, page.save_key, page.cancel_key)
+        if control.isVisible()
+    ]
+    for left, right in pairwise(key_actions):
+        assert right.x() - left.geometry().right() - 1 >= 12
+    for control in (
+        page._back_button,
+        page.check_button,
+        page.connection_help,
+        page.show_key,
+        page.save_key,
+        page.cancel_key,
+    ):
+        if not control.isVisible() or not control.isEnabled():
+            continue
+        window._scroll.verticalScrollBar().setValue(0)
+        viewport = window._scroll.viewport()
+        while not viewport.rect().contains(
+            QRect(control.mapTo(viewport, QPoint()), control.size())
+        ):
+            bar = window._scroll.verticalScrollBar()
+            before = bar.value()
+            bar.setValue(before + max(58, bar.pageStep() - 58))
+            assert bar.value() > before
+        point = control.mapToGlobal(control.rect().center())
+        assert window._controls.action_at(point)[0] is control
+        assert control.height() == 58
+    page.key_input.setText("unsaved-replacement")
+    page.clear_input()
+    assert page.key_input.text() == ""
+    window.resize(1280, 720)
+    qtbot.waitUntil(lambda: page._groups.direction() == QBoxLayout.LeftToRight)
+    assert window._scroll.horizontalScrollBar().maximum() == 0

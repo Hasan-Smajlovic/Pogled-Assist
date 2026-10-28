@@ -26,7 +26,7 @@
     </header>
     <section id="tracking-stage" class="tracking-stage" data-context="letters" aria-label="Primjer aplikacije">
       <div id="tracking-canvas" class="tracking-canvas">
-      <div class="tracking-app">
+      <div class="tracking-app speech-screen">
         <header class="topbar">
           <button class="warning" type="button" data-tracking-context="confirm">Obriši</button>
           <button type="button">Kategorije</button>
@@ -34,30 +34,30 @@
           <button class="primary" type="button">Izgovori</button>
           <button type="button">Fraze</button>
         </header>
-        <section class="tracking-predictions" aria-label="Ponuđene riječi">
-          <h2 class="section-label">Brzi izbor</h2>
-          <div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button type="button" disabled>Poništi riječ</button></div>
+        <section class="predictions" aria-label="Ponuđene riječi">
+          <h2 class="visually-hidden">Ponuđene riječi</h2>
+          <div class="prediction-controls"><div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button class="word" type="button">MOŽE</button></div><button id="undo-word" type="button" disabled>Poništi riječ</button></div>
         </section>
         <div class="workspace">
           <section class="main-panel">
-            <div class="view-header"><h2 class="section-label">Odaberite grupu slova</h2></div>
+            <h2 class="visually-hidden">Odaberite grupu slova</h2>
             <div class="key-grid">
               <button type="button" data-tracking-group="0">A B C Č Ć</button><button type="button" data-tracking-group="1">D DŽ Đ E F</button>
               <button type="button" data-tracking-group="2">G H I J K</button><button type="button" data-tracking-group="3">L LJ M N NJ</button>
               <button type="button" data-tracking-group="4">O P R S Š</button><button type="button" data-tracking-group="5">T U V Z Ž</button>
             </div>
-          </section>
-          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="section-label">Kontrole</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Zatvori govorni način</small></button></aside>
-        </div>
-        <footer class="utility-row"><button type="button">Razmak</button><button type="button">Obriši slovo</button><button type="button">Brojevi i znakovi</button><button type="button">Arapski</button></footer>
-      </div>
-      <div class="tracking-modal-layer">
-        <section class="tracking-modal" aria-labelledby="tracking-dialog-title">
-          <header class="tracking-modal-heading"><div class="tracking-dialog-title"><h2 id="tracking-dialog-title">Odaberite slovo</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><div id="tracking-dialog-feedback"></div></header>
-          <div id="tracking-letter-options" class="letter-grid">
+          <div id="tracking-letter-options" class="key-grid inline-letters">
             <button type="button" data-tracking-letter>A</button><button type="button" data-tracking-letter>B</button><button type="button" data-tracking-letter>C</button>
             <button type="button" data-tracking-letter>Č</button><button type="button" data-tracking-letter>Ć</button><button class="back" type="button" data-tracking-context="message">Nazad na grupe</button>
           </div>
+          </section>
+          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Izađi ili ugasi aplikaciju</small></button></aside>
+        </div>
+        <footer class="utility-row"><div class="utility-main"><button type="button">Razmak</button><button type="button">Obriši slovo</button><span class="utility-divider" aria-hidden="true"></span><button type="button">Brojevi i znakovi</button></div><button type="button">Arapski</button></footer>
+      </div>
+      <div class="tracking-modal-layer">
+        <section class="tracking-modal" aria-labelledby="tracking-dialog-title">
+          <header class="tracking-modal-heading"><h2 id="tracking-dialog-title">Odaberite slovo</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div><div id="tracking-dialog-feedback"></div></header>
           <div id="tracking-confirm-options">
             <p class="dialog-copy">Cijela poruka bit će obrisana.</p>
             <div class="confirm-actions"><button type="button" data-tracking-context="message">Odustani</button><button id="tracking-confirm" class="danger" type="button">Potvrdi</button></div>
@@ -73,7 +73,8 @@
   <p>Obavijest klizi odozgo u postojeće zaglavlje aktivnog prikaza. Tekst ostaje u jednom redu, odvojen srednjom tačkom, bez prečice za Provjeru pogleda. Nema praznog reda niti pomjeranja dugmadi. Polje poruke zadržava punu širinu; obavijest mu privremeno smanjuje visinu, koja se vraća nakon nestanka. Pokazatelji očiju i tekst skriveni su tokom urednog praćenja.</p>
   <p>Duži problem prikazuje upozorenje nakon približno 0,8 s; tri stvarna prekida upotrebljivog praćenja od najmanje 0,35 s unutar 10 s mogu prikazati Praćenje često prekida. Nakon povratka uslova izabranog režima i svježeg pogleda slijedi Praćenje se vraća, zatim poslije 500 ms zeleno Možete nastaviti na 2 s. Obavijest se povlači i blijedi za 180 ms. Novi prekid ažurira istu obavijest. Smanjene animacije isključuju klizanje, izbljeđivanje i animiranu promjenu visine.</p>
   <p>Obavijest ne zaustavlja unos niti potvrđuje preciznost. Izabrani režim određuje da li je pogled dopušten za odabir. Probni režim uz jedno oko i svjež pogled ne prikazuje odabir je zaustavljen niti upozorenje samo zbog drugog oka. Ako pogled nedostaje, čekanje ostaje stvarno i odabir ne napreduje. Pokazatelji očiju ne pretvaraju jedno praćeno oko u dva.</p>
-  <p>Kratko čuvanje napretka ne čeka obavijest od 0,8 s: odmah zamrzava krug i isticanje cilja, dodaje oznaku pauze i prestaje pulsirati. Po isteku podesivog roka napredak se uklanja. <a href="selection-progress.html">Zaseban prikaz napretka</a> definiše izgled i pravila nastavka. Ručno izabrana stanja u ovom nacrtu zaustavljena su radi pregleda; ne predstavljaju mjerenje trajanja.</p>
+  <p>Slova odabrane grupe zamjenjuju grupe u prostoru tastature, bez modala. Obavijest ostaje u zaglavlju poruke, a snimanje uz Kontrole. Potvrda brisanja zadržava modal i red od 32 px za obavijest. Dolazak obavijesti ne pomjera tipke.</p>
+  <p>Kratko čuvanje napretka ne čeka obavijest od 0,8 s: odmah zamrzava mirni svijetloplavi krug i dodaje oznaku pauze. Nema pulsiranja, središnje tačke ni druge trake napretka. Po isteku podesivog roka napredak se uklanja. <a href="selection-progress.html">Zaseban prikaz napretka</a> definiše isti izgled i pravila nastavka za sve HTML prikaze. Ručno izabrana stanja u ovom nacrtu zaustavljena su radi pregleda; ne predstavljaju mjerenje trajanja.</p>
   <p>Obavijesti o praćenju pogleda početno su uključene u Postavkama. Isključivanje skriva cijelu obavijest, uključujući potvrdu povratka. Početni meni i Provjera pogleda ostaju nezavisni; Odmor, Postavke i Provjera pogleda ne izazivaju obavijesti. Izbor u Opcijama pregleda i HTML Postavkama dijeli se samo unutar sesije preglednika, bez upisa u stvarne postavke.</p>
   <p>Automatski primjer prikazuje deset sekundi prekida lijevog oka i povratak, bez automatskog odabira dugmeta. Ručni klikovi predstavljaju pomoć mišem. <a href="../USER_GUIDE.md#tracking-notifications-in-speech">Vodič za korištenje</a> opisuje ponašanje u aplikaciji.</p>
 </details>

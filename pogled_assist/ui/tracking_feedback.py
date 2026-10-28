@@ -8,7 +8,7 @@ from typing import ClassVar
 
 from PySide6.QtCore import QEasingCurve, QObject, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QStyle, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QStyle, QVBoxLayout, QWidget
 
 from .. import diagnostics
 from ..interaction.eye_tracking_policy import BOTH_EYES, eyes_usable
@@ -109,7 +109,7 @@ class TrackingNoticeWidget(QWidget):
 
     progress_changed = Signal(float)
     COLORS: ClassVar = {
-        "warning": ("#342e1e", "#816e36", "#ffe58a"),
+        "warning": ("#342e1e", "#816e36", "#efd092"),
         "quiet": ("#232c38", "#53677d", "#dce6f3"),
         "error": ("#3b2429", "#94515b", "#ffa0a8"),
         "ready": ("#173326", "#3e8260", "#86efac"),
@@ -186,7 +186,7 @@ class TrackingNoticeWidget(QWidget):
         x = 10
         if self.notice.eyes is not None:
             for name, valid in zip(("Lijevo", "Desno"), self.notice.eyes, strict=True):
-                color = QColor("#70dfa1" if valid else "#ffd36a")
+                color = QColor("#a3d5ba" if valid else "#efd092")
                 painter.setPen(QPen(color, 1.5, Qt.SolidLine if valid else Qt.DashLine))
                 painter.setBrush(Qt.NoBrush)
                 center = self.height() / 2
@@ -266,11 +266,12 @@ class MessageTrackingHeader(QWidget):
 
 def dialog_tracking_header(title: QWidget, parent: QWidget) -> tuple[QWidget, TrackingNoticeWidget]:
     header = QWidget(parent)
-    header.setFixedHeight(60)
-    layout = QHBoxLayout(header)
+    header.setFixedHeight(68)
+    layout = QVBoxLayout(header)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(12)
+    layout.setSpacing(0)
     notice = TrackingNoticeWidget(header)
     layout.addWidget(title)
-    layout.addWidget(notice, 1)
+    notice.setFixedHeight(32)
+    layout.addWidget(notice)
     return header, notice

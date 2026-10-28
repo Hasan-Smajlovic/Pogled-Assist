@@ -65,16 +65,16 @@ class DiagnosticsWindow(QWidget):
         self.setObjectName("gazeCheck")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
         self.setStyleSheet(
-            STYLESHEET + "QListWidget { background: #1c2029; color: #eef2f8; font-size: 16px; }"
+            STYLESHEET + "QListWidget { background: #283442; color: #edf2f7; font-size: 16px; }"
             "QListWidget::item { padding: 12px; min-height: 68px; }"
-            "QListWidget::item:selected { background: #245f9f; }"
+            "QListWidget::item:selected { background: #2e6478; }"
             "QTabBar::tab { min-height: 50px; min-width: 260px; padding: 0 20px; font-size: 18px; }"
-            "QTabBar::tab:selected { background: #245f9f; }"
-            "QTabWidget::pane { border: none; background: #111318; }"
-            "QTabBar::tab { background: #1c2029; color: #eef2f8; border: 1px solid #58647a; }"
-            "QScrollArea QPushButton { border: 1px solid #58647a; background: #262c38; }"
-            "QScrollArea QPushButton:checked { background: #245f9f; border-color: #8bd5f5; }"
-            "QScrollArea QComboBox { border: 1px solid #58647a; background: #111318; }"
+            "QTabBar::tab:selected { background: #1d242d; border-bottom: 3px solid #84c5d9; }"
+            "QTabWidget::pane { border: none; background: #15191f; }"
+            "QTabBar::tab { background: transparent; color: #b8c5d2; border: 0; border-bottom: 1px solid #394959; }"
+            "QScrollArea QPushButton { border: 1px solid #71869b; background: #334355; }"
+            "QScrollArea QPushButton:checked { background: #2e6478; border-color: #84c5d9; }"
+            "QScrollArea QComboBox { border: 1px solid #71869b; background: #15191f; }"
         )
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 18, 24, 18)
@@ -97,6 +97,7 @@ class DiagnosticsWindow(QWidget):
         self._build_new()
         self._build_history()
         footer = QHBoxLayout()
+        footer.setSpacing(16)
         self._status = text_label("Izaberite trajanje, zatim pokrenite snimanje.")
         footer.addWidget(self._status, 1)
         self._return = self._button(f"Vrati se u {origin}", self.close)
@@ -133,6 +134,7 @@ class DiagnosticsWindow(QWidget):
     def _build_new(self):
         page = QWidget()
         columns = QHBoxLayout(page)
+        columns.setSpacing(16)
         card, layout = self._card()
         layout.addWidget(text_label("Snimite problem tokom korištenja", title=True))
         layout.addWidget(
@@ -201,6 +203,7 @@ class DiagnosticsWindow(QWidget):
     def _build_history(self):
         page = QWidget()
         columns = QHBoxLayout(page)
+        columns.setSpacing(16)
         self._list = QListWidget()
         self._list.setFixedWidth(310)
         self._list.setAccessibleName("Sačuvani dijagnostički snimci")
