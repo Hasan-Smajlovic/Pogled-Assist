@@ -133,33 +133,28 @@ def test_far_target_switch_skips_hold_and_starts_its_own_full_pause():
     assert timer.update("second", 1820, **timing).ready
 
 
-@pytest.mark.parametrize("returned_at,credit", [(900, 800), (940, 0), (980, 0)])
-def test_tracking_hold_cannot_extend_an_existing_edge_deadline(returned_at, credit):
+@pytest.mark.parametrize(
+    "returned_at,credit,pause_only",
+    [(900, 800, False), (940, 0, False), (980, 0, False), (1200, 0, True)],
+)
+def test_tracking_hold_cannot_extend_an_existing_edge_deadline(returned_at, credit, pause_only):
     timer = GazeSelectionTimer()
     timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)
     timer.update("button", 0, **timing)
     timer.update("button", 800, **timing)
     timer.update("neighbor", 820, can_hold=True, **timing)
-    timer.hold_tracking(1100)
+    if pause_only:
+        timer.hold_tracking(1150, 1350)
+        timer.retain_completed_pause()
+    else:
+        timer.hold_tracking(1100)
 
     result = timer.update("button", returned_at, **timing)
 
     assert not result.ready
     assert timer.diagnostic_snapshot()["credited_ms"] == credit
-
-
-def test_completed_pause_retention_cannot_extend_an_existing_edge_deadline():
-    timer = GazeSelectionTimer()
-    timing = dict(pause_ms=500, dwell_ms=500, hold_ms=120)
-    timer.update("button", 0, **timing)
-    timer.update("button", 800, **timing)
-    timer.update("neighbor", 820, can_hold=True, **timing)
-    timer.hold_tracking(1150, 1350)
-    timer.retain_completed_pause()
-    result = timer.update("button", 1200, **timing)
-    assert result.progress is None
-    assert not result.ready
-    assert timer.diagnostic_snapshot()["credited_ms"] == 0
+    if pause_only:
+        assert result.progress is None
 
 
 @pytest.mark.parametrize(

@@ -391,14 +391,12 @@ def _find_x86_python(stop_event: threading.Event | None = None) -> str:
     )
     candidates = [value for value in configured if value]
     candidates.append(str(bundled_x86_python()))
-    if stop_event is not None and stop_event.is_set():
-        raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
+    _check_start_cancelled(stop_event)
     candidates.extend(_py_launcher_candidates())
     candidates.extend(_common_python_candidates())
 
     for candidate in candidates:
-        if stop_event is not None and stop_event.is_set():
-            raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
+        _check_start_cancelled(stop_event)
         if _is_x86_python(candidate):
             logger.info("Found 32-bit Python for Tobii bridge: %s", candidate)
             return candidate
@@ -407,6 +405,11 @@ def _find_x86_python(stop_event: threading.Event | None = None) -> str:
         "32-bit Python 3.10 was not found. Reinstall the release to restore its bundled "
         "Tobii bridge runtime, or rerun setup_windows.ps1 for a source installation."
     )
+
+
+def _check_start_cancelled(stop_event: threading.Event | None) -> None:
+    if stop_event is not None and stop_event.is_set():
+        raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
 
 
 def bundled_x86_python() -> Path:

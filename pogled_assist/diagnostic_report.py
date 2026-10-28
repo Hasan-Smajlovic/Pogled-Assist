@@ -202,13 +202,7 @@ def _event_evidence(event: str, data: dict) -> tuple[str | None, float]:
     if event == "bridge_connection" and data.get("decision") in ("failure", "recovery"):
         return "bridge_" + data["decision"], 0.0
     if event == "eye_gate_applied":
-        gate_open = data.get("application_gate_open")
-        closed = (
-            not gate_open
-            if isinstance(gate_open, bool)
-            else data.get("left_valid") is False or data.get("right_valid") is False
-        )
-        return ("eye_gate_closed" if closed else None), 0.0
+        return _eye_gate_evidence(data)
     if event == "delivery_gap":
         return "gaze_delivery_gap", _nonnegative(data.get("gap_ms"), 0.0) / 1000
     if event == "provider_discard" and data.get("reason") == "delivery_stale":
@@ -216,6 +210,16 @@ def _event_evidence(event: str, data: dict) -> tuple[str | None, float]:
     if event in {"ui_heartbeat", "stream_summary"}:
         return _timer_evidence(event, data)
     return None, 0.0
+
+
+def _eye_gate_evidence(data: dict) -> tuple[str | None, float]:
+    gate_open = data.get("application_gate_open")
+    closed = (
+        not gate_open
+        if isinstance(gate_open, bool)
+        else data.get("left_valid") is False or data.get("right_valid") is False
+    )
+    return ("eye_gate_closed" if closed else None), 0.0
 
 
 def _timer_evidence(event: str, data: dict) -> tuple[str | None, float]:

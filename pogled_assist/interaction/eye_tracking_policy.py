@@ -159,21 +159,24 @@ class EyeTrackingGate(QObject):
         if not eyes_usable(self.policy, *self.eyes):
             return False
         if self._hold_until is not None:
-            if now >= self._hold_until or now - self._last_gaze_at >= GAZE_FRESH_SECONDS:
-                self.cancel()
-            else:
-                self._expire()
-                self._hold_until = None
-                self._full_hold_until = None
-                self._loss_at = None
-                self._pause_only = False
-                self._deadline.stop()
-                self.hold_finished.emit()
+            self._resume_hold(now)
         self._last_gaze_at = at
         if all(self.eyes):
             self._sole_eye = None
         self._freshness.start(max(1, math.ceil((at + GAZE_FRESH_SECONDS - now) * 1000)))
         return True
+
+    def _resume_hold(self, now: float) -> None:
+        if now >= self._hold_until or now - self._last_gaze_at >= GAZE_FRESH_SECONDS:
+            self.cancel()
+            return
+        self._expire()
+        self._hold_until = None
+        self._full_hold_until = None
+        self._loss_at = None
+        self._pause_only = False
+        self._deadline.stop()
+        self.hold_finished.emit()
 
     def _expire(self) -> None:
         if self._hold_until is not None:

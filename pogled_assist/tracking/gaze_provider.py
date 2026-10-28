@@ -120,7 +120,9 @@ class TobiiGazeProvider(QObject):
         self._attempt_start()
 
     def _attempt_start(self) -> None:
-        if not self._start_requested or self._running or self._connection_session is not None:
+        if not self._start_requested:
+            return
+        if self._running or self._connection_session is not None:
             return
         self._set_tracking_status(TrackingState.CONNECTING)
         gaze, eyes = self._new_stream_callbacks()
@@ -140,8 +142,6 @@ class TobiiGazeProvider(QObject):
                 research,
             ),
             backend_types=(TobiiStreamEngineBackend, TobiiStreamEngineBridgeBackend),
-            choose_tracker=_choose_tracker,
-            tracker_label=_tracker_label,
             generation=generation,
         )
         self._launch_session(session)
@@ -169,19 +169,18 @@ class TobiiGazeProvider(QObject):
             self._connection_finished(session)
 
     def _connection_message(self, session: GazeConnectionSession, message: str) -> None:
-        if (
-            session is self._connection_session
-            and self._start_requested
-            and not session.cancelled.is_set()
-        ):
+        if self._accepts_session(session):
             self.status_changed.emit(message)
 
+    def _accepts_session(self, session: GazeConnectionSession) -> bool:
+        if session is not self._connection_session:
+            return False
+        if not self._start_requested:
+            return False
+        return not session.cancelled.is_set()
+
     def _connection_ready(self, session: GazeConnectionSession, connection: GazeConnection) -> None:
-        if (
-            session is not self._connection_session
-            or not self._start_requested
-            or session.cancelled.is_set()
-        ):
+        if not self._accepts_session(session):
             session.cancel()
             return
         self._stream_engine = connection.backend
@@ -196,6 +195,12 @@ class TobiiGazeProvider(QObject):
             "backend_metadata", priority=True, backend=connection.name, **connection.metadata
         )
         self._set_tracking_status(TrackingState.CONNECTED, connection.label)
+        self._announce_connection(session, connection)
+
+    def _announce_connection(
+        self, session: GazeConnectionSession, connection: GazeConnection
+    ) -> None:
+        # Each synchronous notification can stop tracking before callbacks are admitted.
         if not self._start_requested or session.cancelled.is_set():
             return
         self.tracker_changed.emit(connection.label)
@@ -935,24 +940,6 @@ def _valid_gaze_point(
         return None
 
     return x, y
-
-
-def _choose_tracker(trackers: tuple[Any, ...]) -> Any:
-    for tracker in trackers:
-        label = _tracker_label(tracker).lower()
-        if "4c" in label:
-            return tracker
-    return trackers[0]
-
-
-def _tracker_label(tracker: Any) -> str:
-    parts = [
-        getattr(tracker, "model", ""),
-        getattr(tracker, "device_name", ""),
-        getattr(tracker, "serial_number", ""),
-    ]
-    label = " ".join(str(part) for part in parts if part)
-    return label or "Tobii uređaj za praćenje pogleda"
 
 
 def _normalize_stream_engine_point(

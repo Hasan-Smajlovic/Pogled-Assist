@@ -42,8 +42,6 @@ class GazeConnectionSession:
         *,
         callbacks: tuple[Callable, ...] = (),
         backend_types: tuple[Callable, ...] = (),
-        choose_tracker: Callable | None = None,
-        tracker_label: Callable | None = None,
         connection: GazeConnection | None = None,
         generation: int = 0,
     ) -> None:
@@ -56,8 +54,6 @@ class GazeConnectionSession:
         self._uses_bridge = connection is not None and connection.name == "stream-engine-x86-bridge"
         self._callbacks = callbacks
         self._backend_types = backend_types
-        self._choose_tracker = choose_tracker
-        self._tracker_label = tracker_label
         self._thread = threading.Thread(target=self._run, name="TobiiConnection", daemon=True)
 
     def start(self) -> None:
@@ -78,11 +74,15 @@ class GazeConnectionSession:
     def _run(self) -> None:
         cleanup_only = self.connection is not None
         try:
-            if not cleanup_only:
-                self.connection = self._connect()
-            if self.connection is not None and not cleanup_only and not self.cancelled.is_set():
-                self.events.put(("connected", self.connection))
-                self.cancelled.wait()
+            if cleanup_only:
+                return
+            self.connection = self._connect()
+            if self.connection is None:
+                return
+            if self.cancelled.is_set():
+                return
+            self.events.put(("connected", self.connection))
+            self.cancelled.wait()
         except Exception:
             logger.exception("Tobii connection attempt failed.")
         finally:
@@ -116,40 +116,46 @@ class GazeConnectionSession:
             if name == "stream-engine-x86-bridge":
                 self._uses_bridge = True
                 self.events.put(("message", "Pokušavam Tobii x86 most za 32-bitni Core Software."))
-            connection = GazeConnection(name)
-            gaze, eyes, position, invalid, _research = self._callbacks
-            try:
-                connection.backend = backend_type(
-                    self._guard(gaze, connection), self._guard(eyes, connection)
-                )
-                self._pending_backend = connection.backend
-                connection.backend.connection_generation = self._generation
-                if self.cancelled.is_set():
-                    self._close(connection)
-                    return None
-                connection.backend.eye_position_callback = self._guard(position, connection)
-                connection.backend.gaze_invalid_callback = self._guard(invalid, connection)
-                connection.backend.start()
-                connection.label = connection.backend.label
-                connection.metadata = getattr(connection.backend, "diagnostic_metadata", {})
+            connection = self._start_backend(name, backend_type)
+            if connection is not None:
                 return connection
-            except Exception as error:
-                logger.exception("Tobii %s startup failed.", name)
-                if name == "stream-engine":
-                    message = (
-                        "Stream Engine nije dostupan. Pokušavam drugi način."
-                        if isinstance(error, TobiiStreamEngineError)
-                        else "Stream Engine nije uspio. Pokušavam drugi način."
-                    )
-                else:
-                    message = (
-                        "Tobii x86 most nije dostupan."
-                        if isinstance(error, TobiiStreamEngineBridgeError)
-                        else "Tobii x86 most nije uspio."
-                    )
-                self.events.put(("message", message))
-                self._close(connection)
         return None
+
+    def _start_backend(self, name: str, backend_type: Callable) -> GazeConnection | None:
+        connection = GazeConnection(name)
+        gaze, eyes, position, invalid, _research = self._callbacks
+        try:
+            connection.backend = backend_type(
+                self._guard(gaze, connection), self._guard(eyes, connection)
+            )
+            self._pending_backend = connection.backend
+            connection.backend.connection_generation = self._generation
+            if self.cancelled.is_set():
+                self._close(connection)
+                return None
+            connection.backend.eye_position_callback = self._guard(position, connection)
+            connection.backend.gaze_invalid_callback = self._guard(invalid, connection)
+            connection.backend.start()
+            connection.label = connection.backend.label
+            connection.metadata = getattr(connection.backend, "diagnostic_metadata", {})
+            return connection
+        except Exception as error:
+            logger.exception("Tobii %s startup failed.", name)
+            if name == "stream-engine":
+                message = (
+                    "Stream Engine nije dostupan. Pokušavam drugi način."
+                    if isinstance(error, TobiiStreamEngineError)
+                    else "Stream Engine nije uspio. Pokušavam drugi način."
+                )
+            else:
+                message = (
+                    "Tobii x86 most nije dostupan."
+                    if isinstance(error, TobiiStreamEngineBridgeError)
+                    else "Tobii x86 most nije uspio."
+                )
+            self.events.put(("message", message))
+            self._close(connection)
+            return None
 
     def _research(self) -> GazeConnection | None:
         connection = GazeConnection("tobii-research")
@@ -171,12 +177,12 @@ class GazeConnectionSession:
                 return None
             failure_message = "Povezivanje s Tobii uređajem nije uspjelo."
             connection.research = tr
-            connection.tracker = self._choose_tracker(trackers)
+            connection.tracker = _choose_tracker(trackers)
             connection.callback = self._guard(self._callbacks[4], connection)
             connection.tracker.subscribe_to(
                 tr.EYETRACKER_GAZE_DATA, connection.callback, as_dictionary=True
             )
-            connection.label = self._tracker_label(connection.tracker)
+            connection.label = _tracker_label(connection.tracker)
             connection.metadata = {
                 "sdk_version": getattr(tr, "__version__", "unknown"),
                 "model": getattr(connection.tracker, "model", "unknown"),
@@ -201,3 +207,21 @@ class GazeConnectionSession:
             # An unresponsive native pump still owns its subscription. The session
             # remains busy until cleanup succeeds, including across stop/start.
             threading.Event().wait(0.1)
+
+
+def _choose_tracker(trackers: tuple[Any, ...]) -> Any:
+    for tracker in trackers:
+        label = _tracker_label(tracker).lower()
+        if "4c" in label:
+            return tracker
+    return trackers[0]
+
+
+def _tracker_label(tracker: Any) -> str:
+    parts = [
+        getattr(tracker, "model", ""),
+        getattr(tracker, "device_name", ""),
+        getattr(tracker, "serial_number", ""),
+    ]
+    label = " ".join(str(part) for part in parts if part)
+    return label or "Tobii uređaj za praćenje pogleda"

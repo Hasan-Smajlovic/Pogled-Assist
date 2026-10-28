@@ -5,13 +5,13 @@ import threading
 from types import SimpleNamespace
 
 import pytest
+from PySide6.QtWidgets import QApplication
 
 from pogled_assist.interaction.gaze_targets import GazeTargets
+from pogled_assist.tracking.gaze_connection import _choose_tracker, _tracker_label
 from pogled_assist.tracking.gaze_provider import (
     TobiiGazeProvider,
-    _choose_tracker,
     _normalize_stream_engine_point,
-    _tracker_label,
     _valid_gaze_point,
 )
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
@@ -229,8 +229,52 @@ def test_provider_stop_closes_active_stream_engine_backend(qtbot):
 @pytest.mark.parametrize("backend_name", ["research", "native", "bridge"])
 @pytest.mark.parametrize("worker_thread", [False, True])
 def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend(
-    qapp, qtbot, monkeypatch, backend_name, worker_thread
+    qtbot, monkeypatch, backend_name, worker_thread
 ):
+    callbacks = _install_lifecycle_backends(monkeypatch, backend_name)
+    provider = TobiiGazeProvider()
+    statuses = []
+    eyes = []
+    provider.tracking_status_changed.connect(statuses.append)
+    provider.eye_status_changed.connect(lambda *status: eyes.append(status))
+    provider.start()
+    qtbot.waitUntil(lambda: provider._running)
+    assert [status.state for status in statuses] == [
+        TrackingState.CONNECTING,
+        TrackingState.CONNECTED,
+    ]
+    assert statuses[-1].detail == "Synthetic tracker"
+    assert eyes == [(False, False)]
+
+    def deliver_invalid():
+        if worker_thread:
+            worker = threading.Thread(target=callbacks[-1])
+            worker.start()
+            worker.join(timeout=1)
+            assert not worker.is_alive()
+            QApplication.processEvents()
+        else:
+            callbacks[-1]()
+
+    deliver_invalid()
+    assert eyes == [(False, False), (False, False)]
+    deliver_invalid()
+    assert eyes == [(False, False), (False, False)]
+    provider.stop()
+    assert statuses[-1] == TrackingStatus(TrackingState.STOPPED)
+    qtbot.waitUntil(lambda: provider._connection_session is None)
+    provider.start()
+    qtbot.waitUntil(lambda: provider._running)
+    before_first_sample = len(eyes)
+    deliver_invalid()
+    assert len(eyes) == before_first_sample + 1
+    deliver_invalid()
+    assert len(eyes) == before_first_sample + 1
+    provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
+def _install_lifecycle_backends(monkeypatch, backend_name):
     from pogled_assist.tracking import gaze_provider
 
     callbacks = []
@@ -265,46 +309,7 @@ def test_tracking_lifecycle_and_first_invalid_eyes_are_published_by_each_backend
         lambda gaze, eyes: make_backend(gaze, eyes, fail=backend_name == "bridge"),
     )
     monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBridgeBackend", make_backend)
-    provider = TobiiGazeProvider()
-    statuses = []
-    eyes = []
-    provider.tracking_status_changed.connect(statuses.append)
-    provider.eye_status_changed.connect(lambda *status: eyes.append(status))
-    provider.start()
-    qtbot.waitUntil(lambda: provider._running)
-    assert [status.state for status in statuses] == [
-        TrackingState.CONNECTING,
-        TrackingState.CONNECTED,
-    ]
-    assert statuses[-1].detail == "Synthetic tracker"
-    assert eyes == [(False, False)]
-
-    def deliver_invalid():
-        if worker_thread:
-            worker = threading.Thread(target=callbacks[-1])
-            worker.start()
-            worker.join(timeout=1)
-            assert not worker.is_alive()
-            qapp.processEvents()
-        else:
-            callbacks[-1]()
-
-    deliver_invalid()
-    assert eyes == [(False, False), (False, False)]
-    deliver_invalid()
-    assert eyes == [(False, False), (False, False)]
-    provider.stop()
-    assert statuses[-1] == TrackingStatus(TrackingState.STOPPED)
-    qtbot.waitUntil(lambda: provider._connection_session is None)
-    provider.start()
-    qtbot.waitUntil(lambda: provider._running)
-    before_first_sample = len(eyes)
-    deliver_invalid()
-    assert len(eyes) == before_first_sample + 1
-    deliver_invalid()
-    assert len(eyes) == before_first_sample + 1
-    provider.stop()
-    qtbot.waitUntil(lambda: provider._connection_session is None)
+    return callbacks
 
 
 def test_queued_first_invalid_eyes_are_discarded_on_stop_and_old_callbacks_stay_invalid(qapp):

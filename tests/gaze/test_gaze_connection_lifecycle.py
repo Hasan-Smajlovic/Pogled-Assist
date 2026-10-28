@@ -80,23 +80,7 @@ def test_stop_during_blocking_work_discards_late_results_and_callbacks(qtbot, mo
             entered.set()
             assert release.wait(timeout=3)
 
-    def subscribe(_event, callback, **_kwargs):
-        subscriptions.append(callback)
-        callbacks.append(
-            lambda: callback(
-                {
-                    "left_gaze_point_validity": 1,
-                    "left_gaze_point_on_display_area": (0.5, 0.5),
-                    "right_gaze_point_validity": 1,
-                    "right_gaze_point_on_display_area": (0.5, 0.5),
-                }
-            )
-        )
-        block("subscription")
-
-    tracker = SimpleNamespace(
-        model="fake", subscribe_to=subscribe, unsubscribe_from=lambda *_: stopped.append(True)
-    )
+    tracker = _blocking_tracker(block, callbacks, subscriptions, stopped)
 
     def discover():
         block("discovery")
@@ -149,6 +133,26 @@ def test_stop_during_blocking_work_discards_late_results_and_callbacks(qtbot, mo
         release.set()
         provider.stop()
         qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
+def _blocking_tracker(block, callbacks, subscriptions, stopped):
+    def subscribe(_event, callback, **_kwargs):
+        subscriptions.append(callback)
+        callbacks.append(
+            lambda: callback(
+                {
+                    "left_gaze_point_validity": 1,
+                    "left_gaze_point_on_display_area": (0.5, 0.5),
+                    "right_gaze_point_validity": 1,
+                    "right_gaze_point_on_display_area": (0.5, 0.5),
+                }
+            )
+        )
+        block("subscription")
+
+    return SimpleNamespace(
+        model="fake", subscribe_to=subscribe, unsubscribe_from=lambda *_: stopped.append(True)
+    )
 
 
 def test_native_cleanup_must_finish_before_a_new_subscription(qtbot, monkeypatch):
