@@ -31,6 +31,173 @@ def record(path, session, event, at, **data):
         stream.write(json.dumps(item) + "\n")
 
 
+def test_full_stream_summary_survives_both_destinations(tmp_path, monkeypatch):
+    now = freeze_monotonic(monkeypatch, 100)
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    root = tmp_path / "logs"
+    writer.start_segment(root / "latest.txt", None, trace=False)
+    folder = root / "recordings"
+    key = writer.start_recording(folder, 1, recording_context({}, {}, simulated=True))
+    metrics = diagnostics.StreamMetrics()
+    counts = {
+        name: index + 1
+        for index, name in enumerate(
+            (
+                "native_gaze_callback",
+                "native_eye_callback",
+                "eye_position_callback",
+                "provider_queued",
+                "provider_emitted",
+                "provider_replaced",
+                "rejected:right_invalid",
+                "suppressed:eye_gate_received",
+            )
+        )
+    }
+    metadata = {
+        name: "v" * 256 for name in ("sdk_version", "model", "firmware_version", "architecture")
+    }
+    durations = {}
+    try:
+        for name, count in counts.items():
+            metrics.count(name, count)
+        for stream, states in (
+            ("native", ("both_valid", "left_invalid", "right_invalid", "both_invalid")),
+            ("application_gate", ("open", "closed")),
+        ):
+            for state in states:
+                metrics.eyes(
+                    stream, state, sampled=True, stale_after=0.5 if stream == "native" else None
+                )
+                now[0] += 0.1
+                durations[f"{stream}:{state}"] = pytest.approx(0.1)
+            durations[f"{stream}:stale_unknown"] = 0
+        # Native state continues accruing while the application gate is sampled.
+        durations["native:both_invalid"] = pytest.approx(0.3)
+        metrics.summary(
+            force=True,
+            generation=1,
+            backend="stream_engine",
+            backend_metadata=metadata,
+            qt_timer_max_late_ms=12.0,
+            check_active=False,
+            eye_age_ms=123.0,
+        )
+        writer.stop_recording()
+    finally:
+        assert writer.stop()
+    ordinary = next((root / "diagnostics").glob("*.jsonl"))
+    manual = folder / key / "snimak.jsonl"
+    for path in (ordinary, manual):
+        events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        summary = next(item["data"] for item in events if item["event"] == "stream_summary")
+        assert not summary.get("_snapshot_truncated")
+        assert summary["cumulative_counts"] == counts
+        assert summary["counts"] == {
+            k: v for k, v in counts.items() if path == ordinary or not k.startswith("suppressed:")
+        }
+        assert summary["eye_state_seconds"] == durations
+        assert summary["backend_metadata"] == metadata
+        assert summary["eye_age_ms"] == 123.0
+        assert len(summary["observation_start_sessions"]) == 2
+        assert summarize(path)["complete"]
+
+
+@pytest.mark.parametrize("drop_baseline", [False, True])
+def test_large_cumulative_summary_keeps_manual_baseline_and_rotated_context(
+    qapp, tmp_path, monkeypatch, drop_baseline
+):
+    from pogled_assist import diagnostic_recording, log_transport
+
+    monkeypatch.setattr(log_transport, "SEGMENT_BYTES", 2000)
+    monkeypatch.setattr(diagnostic_recording, "SEGMENT_BYTES", 2000)
+    freeze_monotonic(monkeypatch, 100)
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    root = tmp_path / "logs"
+    writer.start_segment(root / "latest.txt", None, trace=False)
+    folder = root / "recordings"
+    store = RecordingStore(folder)
+    recordings = DiagnosticRecordings(store, qapp, writer=lambda: writer)
+    monkeypatch.setattr(recordings, "_schedule_maintenance", lambda: None)
+    metrics = diagnostics.StreamMetrics(event_name="selection_summary", source="toolbar")
+    reasons = (
+        "target_departure",
+        "restart",
+        "target_changed",
+        "settings_changed",
+        "invalid_gaze",
+        "both_eyes_invalid",
+        "stale_eye_data",
+        "eligible_eye_changed",
+        "eye_gate_closed",
+        "tracking_hold_expired",
+        "stale_gaze",
+        "gaze_freshness_expired",
+        "interaction_context_changed",
+        "input_suspended",
+        "geometry_changed",
+        "tracking_pause_unfinished",
+        "edge_hold_expired",
+    )
+    room = writer._queue_has_room
+    try:
+        for reason in reasons:
+            metrics.event("selection_end", reason=reason)
+            metrics.summary(force=True)
+        assert len(metrics._total_counts) == 34
+        metrics.event("selection_end", reason="completed")
+        if drop_baseline:
+            monkeypatch.setattr(writer, "_queue_has_room", lambda *_args: False)
+        assert recordings.start(1, recording_context({}, {}, simulated=True))
+        key = writer._recording.id
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        metrics.event("selection_end", reason="completed")
+        metrics.summary(force=True)
+        # A new ordinary destination replays the captured counter position.
+        writer.start_segment(root / "latest.txt", None, trace=False)
+        metrics.event("selection_end", reason="completed")
+        recordings.stop()
+    finally:
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        recordings.shutdown()
+        recordings.deleteLater()
+        assert writer.stop()
+    manual = store.inspect(key)["analysis"]["analysis"]
+    assert manual["reason_totals_from_counters"] == {
+        "outcome:completed": 2,
+        "reason:selection_end:completed": 2,
+    }
+    merged = summarize(root)["analysis"]
+    expected = {
+        f"{prefix}{reason}": 1
+        for reason in reasons
+        for prefix in ("outcome:", "reason:selection_end:")
+    }
+    expected.update({"outcome:completed": 3, "reason:selection_end:completed": 3})
+    assert merged["reason_totals_from_counters"] == expected
+    assert not manual["partial_counter_streams"]
+    assert writer.health()["bounded_snapshots"] == 0
+    assert list((root / "diagnostics").glob("*.part-*.jsonl"))
+    assert list((folder / key).glob("snimak-*.jsonl"))
+    large_contexts = 0
+    for path in root.rglob("*.jsonl"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            item = json.loads(line)
+            fields = item["data"]
+            if item["event"] == "segment_context":
+                fields = fields.get("snapshot", {}).get("data", {})
+                if len(fields.get("cumulative_counts", {})) > 32:
+                    large_contexts += 1
+            assert not fields.get("_snapshot_truncated")
+    assert large_contexts > 0
+    destination = tmp_path / "support.zip"
+    store.export(key, destination)
+    with ZipFile(destination) as archive:
+        assert '"outcome:completed": 2' in archive.read("sazetak.txt").decode()
+
+
 def test_overlapping_sessions_are_merged_in_observation_order(tmp_path):
     ordinary, manual = tmp_path / "ordinary.jsonl", tmp_path / "manual.jsonl"
     record(ordinary, "ordinary", "session_start", 0)

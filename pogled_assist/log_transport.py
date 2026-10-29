@@ -210,7 +210,9 @@ class LogWriter:
             else None
         )
         recording_id = self._recording.id if self.recording_active else None
-        payload = bounded_copy(fields)
+        payload = (
+            bounded_copy(fields, summary=True) if name in SUMMARY_EVENTS else bounded_copy(fields)
+        )
         payload["observation_id"] = uuid.uuid4().hex
         return self._put(
             "event", (name, payload, now, time.time(), trace), priority, generation, recording_id
@@ -516,13 +518,18 @@ class LogWriter:
             self._persistence[key] = reason
 
     def _recovered(self, output, channel):
-        key = output, channel
-        if key in self._persistence:
-            self._persistence.pop(key, None)
-            for gap in reversed(self._gap_history):
-                if (gap["output"], gap["channel"], gap["recovered_at"]) == (output, channel, None):
-                    gap["recovered_at"] = time.time()
-                    break
+        with self._condition:
+            key = output, channel
+            if key in self._persistence:
+                self._persistence.pop(key, None)
+                for gap in reversed(self._gap_history):
+                    if (gap["output"], gap["channel"], gap["recovered_at"]) == (
+                        output,
+                        channel,
+                        None,
+                    ):
+                        gap["recovered_at"] = time.time()
+                        break
 
     def persistence_status(self) -> dict:
         with self._condition:
@@ -703,9 +710,9 @@ class QueueLogHandler(logging.Handler):
         super().close()
 
 
-def bounded_copy(value: object) -> object:
+def bounded_copy(value: object, *, summary: bool = False) -> object:
     """Copy only bounded primitive data; never invoke arbitrary object formatting."""
-    snapshot = BoundedSnapshot(MAX_RECORD_BYTES - 1024)
+    snapshot = BoundedSnapshot(MAX_RECORD_BYTES - 1024, summary=summary)
     result = snapshot.copy(value)
     if snapshot.truncated and isinstance(result, dict):
         result["_snapshot_truncated"] = True

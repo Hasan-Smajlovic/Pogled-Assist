@@ -4,6 +4,7 @@ import faulthandler
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from pogled_assist import logging_setup
+from pogled_assist.log_snapshot import NumericSnapshot
 from pogled_assist.log_transport import LogWriter, bounded_copy
 
 
@@ -20,6 +22,70 @@ def read_events(latest):
         for file in (latest.parent / "diagnostics").glob("*.jsonl")
         for line in file.read_text().splitlines()
     ]
+
+
+def test_recovery_keeps_concurrent_persistence_snapshot_consistent():
+    writer = LogWriter()
+    writer._failure("manual", "json_flush")
+    writer._failure("manual", "metadata")
+    reading, release = threading.Event(), threading.Event()
+    recovering, recovered = threading.Event(), threading.Event()
+    snapshots, errors = [], []
+    status_code = LogWriter.persistence_status.__code__
+
+    def pause_snapshot(frame, event, _arg):
+        if (
+            event == "line"
+            and frame.f_code.co_name == "<listcomp>"
+            and frame.f_back.f_code is status_code
+            and not reading.is_set()
+        ):
+            # Suspend the actual dictionary iterator while the reader owns its lock.
+            reading.set()
+            assert release.wait(10), "Persistence snapshot was not released"
+        return pause_snapshot
+
+    def snapshot():
+        sys.settrace(pause_snapshot)
+        try:
+            snapshots.append(writer.persistence_status())
+        except Exception as error:
+            errors.append(error)
+        finally:
+            sys.settrace(None)
+
+    def recover():
+        recovering.set()
+        try:
+            writer._recovered("manual", "json")
+        except Exception as error:
+            errors.append(error)
+        finally:
+            recovered.set()
+
+    reader = threading.Thread(target=snapshot)
+    recovery = threading.Thread(target=recover)
+    try:
+        reader.start()
+        assert reading.wait(10), "Persistence reader did not reach its iterator"
+        recovery.start()
+        assert recovering.wait(10), "Persistence recovery did not start"
+        recovered_during_snapshot = recovered.wait(0.1)
+    finally:
+        release.set()
+        reader.join(10)
+        if recovery.ident is not None:
+            recovery.join(10)
+        assert writer.stop()
+    assert not reader.is_alive() and not recovery.is_alive()
+    assert not errors
+    assert not recovered_during_snapshot
+    assert len(snapshots[0]["failures"]) == 2
+    assert all(gap["recovered_at"] is None for gap in snapshots[0]["gaps"])
+    after = writer.persistence_status()
+    assert after["failures"] == [dict(output="manual", channel="metadata", reason="metadata")]
+    assert after["gaps"][0]["recovered_at"] is not None
+    assert after["gaps"][1]["recovered_at"] is None
 
 
 @pytest.mark.parametrize("failed_channel", ["text", "json", "both"])
@@ -183,6 +249,102 @@ def test_queued_data_is_a_bounded_copy_without_arbitrary_object_formatting():
     assert snapshot["mutable"] == (1, 2)
     assert len(snapshot["huge"]) < 8192
     assert len(repr(snapshot)) < 8192
+
+
+def test_compact_summary_keeps_queued_bytes_and_source_mutations_bounded(tmp_path):
+    entered, release = threading.Event(), threading.Event()
+
+    class Console:
+        def write(self, text):
+            if "block-summary" in text:
+                entered.set()
+                assert release.wait(10)
+
+        def flush(self):
+            pass
+
+    def retained_size(value):
+        size = sys.getsizeof(value)
+        if type(value) is NumericSnapshot:
+            size += sys.getsizeof(value.payload)
+        elif type(value) is dict:
+            size += sum(retained_size(k) + retained_size(v) for k, v in value.items())
+        elif type(value) in (tuple, list):
+            size += sum(retained_size(v) for v in value)
+        return size
+
+    writer = LogWriter(capacity=8)
+    latest = tmp_path / "logs/latest.txt"
+    writer.start_segment(latest, Console(), trace=False)
+    writer.record(logging.makeLogRecord({"msg": "block-summary", "args": (), "levelno": 20}))
+    counts = {f"reason:selection_end:reason_{index}": index + 1 for index in range(40)}
+    counts["outcome:completed"] = 2**100
+    expected = dict(counts)
+    fields = dict(
+        source="toolbar",
+        counts=counts,
+        cumulative_counts=dict(counts),
+        eye_state_seconds={"native:both_valid": 0.125},
+        interval_index=1,
+        observation_stream_id="a" * 32,
+        interval_id="b" * 32,
+        observation_start_sessions=("c" * 32, "d" * 32),
+    )
+    try:
+        assert entered.wait(10)
+        for _ in range(writer.capacity + 1):
+            writer.event("selection_summary", fields, priority=True)
+        with writer._condition:
+            queued = tuple(writer._queue)
+            assert len(queued) + writer._closing_records <= writer.capacity
+            assert queued
+            for item in queued:
+                assert retained_size(item) <= 8192
+                snapshot = item[3][1]
+                assert not snapshot.get("_snapshot_truncated")
+                assert type(snapshot["counts"]) is NumericSnapshot
+        counts.clear()
+        fields["cumulative_counts"].clear()
+        fields["eye_state_seconds"].clear()
+        assert writer.health()["dropped"]["event"] > 0
+    finally:
+        release.set()
+        assert writer.stop()
+    summaries = [
+        item["data"] for item in read_events(latest) if item["event"] == "selection_summary"
+    ]
+    assert summaries
+    for summary in summaries:
+        assert summary["counts"] == summary["cumulative_counts"] == expected
+        assert summary["eye_state_seconds"] == {"native:both_valid": 0.125}
+        assert summary["observation_start_sessions"] == ["c" * 32, "d" * 32]
+
+
+@pytest.mark.parametrize("case", ["many", "long_key", "large_integer", "live", "byte_budget"])
+def test_invalid_or_oversized_summary_maps_keep_explicit_bounded_loss(case, tmp_path):
+    class Hostile:
+        def __repr__(self):
+            raise AssertionError("No arbitrary formatting on producer")
+
+    counters = {
+        "many": {str(i): i for i in range(129)},
+        "long_key": {"k" * 129: 1},
+        "large_integer": {"counter": 2**129},
+        "live": {"counter": Hostile()},
+        "byte_budget": {"k" * 120 + str(i): 1 for i in range(128)},
+    }[case]
+    writer = LogWriter()
+    latest = tmp_path / "logs/latest.txt"
+    writer.start_segment(latest, None, trace=False)
+    try:
+        assert writer.event("selection_summary", {"counts": counters}, priority=True)
+    finally:
+        assert writer.stop()
+    summary = next(item for item in read_events(latest) if item["event"] == "selection_summary")
+    assert summary["data"]["_snapshot_truncated"]
+    assert writer.health()["bounded_snapshots"] == 1
+    assert writer.health()["writer_errors"] == 0
+    assert len(json.dumps(summary)) < 8192
 
 
 def test_runtime_segments_archive_on_writer_and_discard_disabled_backlog(tmp_path):

@@ -41,6 +41,7 @@ from .log_reservations import (
 from .log_reservations import (
     set_recording_active as set_recording_active,
 )
+from .log_snapshot import NumericSnapshot, expand_numeric_snapshot
 from .recording_export import export_files, export_manifest, write_export
 from .recording_metadata import (
     _RECORDING_METADATA_KEYS,
@@ -224,8 +225,11 @@ class RecordingSink:
         item = self.recording
         if self.stream is None:
             return False
+        counts = event.fields.get("counts")
+        if type(counts) is NumericSnapshot:
+            counts = expand_numeric_snapshot(counts)
         if event.name in {"stream_summary", "selection_summary", "marker_summary"} and isinstance(
-            event.fields.get("counts"), dict
+            counts, dict
         ):
             # These counters describe the ordinary basic destination. Manual
             # trace receives the detailed events; its queue loss is separate.
@@ -235,7 +239,7 @@ class RecordingSink:
                     **event.fields,
                     "counts": {
                         key: value
-                        for key, value in event.fields["counts"].items()
+                        for key, value in counts.items()
                         if not key.startswith("suppressed:")
                     },
                 },
@@ -252,7 +256,16 @@ class RecordingSink:
             "monotonic_s": event.monotonic_time,
             "data": event.fields,
         }
-        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        line = (
+            json.dumps(
+                record,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                default=expand_numeric_snapshot,
+            )
+            + "\n"
+        )
         size = len(line.encode("utf-8"))
         if (
             event.name != "segment_context"
@@ -268,7 +281,16 @@ class RecordingSink:
             self._write_context(event.monotonic_time, event.wall_time)
         self.sequence += 1
         record["event_seq"] = self.sequence
-        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        line = (
+            json.dumps(
+                record,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                default=expand_numeric_snapshot,
+            )
+            + "\n"
+        )
         size = len(line.encode("utf-8"))
         self.stream.write(line)
         item.bytes_written += size

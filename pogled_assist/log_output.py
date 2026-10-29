@@ -11,6 +11,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .log_snapshot import expand_numeric_snapshot
+
 
 class OrdinaryOutput:
     def __init__(self, writer, limits, process):
@@ -217,7 +219,16 @@ class OrdinaryOutput:
             "monotonic_s": at,
             "data": fields,
         }
-        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        line = (
+            json.dumps(
+                record,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                default=expand_numeric_snapshot,
+            )
+            + "\n"
+        )
         size = len(line.encode("utf-8"))
         if self._needs_json_rotation(name, size):
             self._rotate_json(sequence, captured_at)
@@ -226,7 +237,16 @@ class OrdinaryOutput:
         record["segment_index"] = self._segment_index
         if name in {"session_end", "stream_summary", "ui_heartbeat"}:
             record["logging_health"] = self._writer.health()
-        line = json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        line = (
+            json.dumps(
+                record,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                default=expand_numeric_snapshot,
+            )
+            + "\n"
+        )
         size = len(line.encode("utf-8"))
         self._json.write(line)
         self._writer._successful_writes.add(("ordinary", "json"))
