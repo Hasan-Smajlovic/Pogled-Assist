@@ -30,6 +30,8 @@ from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 
 from pogled_assist import logging_setup
+from pogled_assist.build_info import resolve_build_identity
+from pogled_assist.diagnostic_recording import RecordingStore, recording_context
 from pogled_assist.diagnostic_report import LatencySummary
 from pogled_assist.interaction.mouse_controller import GazeMouseController
 from pogled_assist.log_reader import summarize
@@ -92,8 +94,12 @@ def _benchmark_logging(mode, folder, monkeypatch):
     writer = LogWriter() if mode != "off" else None
     root = logging.getLogger()
     previous_disabled = root.manager.disable
-    if writer is not None:
+    if writer is not None and mode != "manual":
         writer.start_segment(folder / "logs" / "latest.txt", None, trace=mode == "trace")
+    if mode.startswith("manual"):
+        writer.start_recording(
+            folder / "logs" / "recordings", 1, recording_context({}, {}, simulated=True)
+        )
     monkeypatch.setattr(logging_setup, "_writer", writer)
     monkeypatch.setattr(root, "handlers", [QueueLogHandler(writer)] if writer else [])
     monkeypatch.setattr(root, "level", logging.INFO)
@@ -286,6 +292,7 @@ def _measure_mode(mode, folder, qtbot, monkeypatch):
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         QCoreApplication.processEvents()
         if writer is not None:
+            writer.stop_recording()
             drained = writer.stop(5)
         logging.disable(previous_disabled)
     assert not worker.is_alive()
@@ -329,6 +336,11 @@ def _assert_complete_session(health, folder, mode):
         assert not health["writer_errors"], "Logging failed; performance results are invalid"
         assert not health["dropped"], "Logging lost records; performance results are invalid"
         assert not health["bounded_snapshots"], "Logging truncated records"
+        if mode.startswith("manual"):
+            entries = RecordingStore(folder / "logs" / "recordings").load()
+            assert len(entries) == 1 and entries[0]["complete"]
+        if mode == "manual":
+            return
         paths = list((folder / "logs" / "diagnostics").glob("*.jsonl"))
         assert len(paths) == 1
         session = summarize(paths[0])
@@ -342,7 +354,7 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
         pytest.skip("Run with -Workers 1 to avoid concurrent benchmark interference")
     output = Path(__file__).resolve().parents[2] / "dist" / "gaze-benchmark" / uuid.uuid4().hex
     runs = []
-    modes = ("off", "basic", "trace")
+    modes = ("off", "basic", "trace", "manual", "manual-basic")
     # Rotate order so warm caches and thermal changes do not always favor one mode.
     for repeat in range(3):
         for mode in modes[repeat:] + modes[:repeat]:
@@ -351,6 +363,7 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
                 runs.append({"repeat": repeat, **result})
     report = {
         "schema_version": 1,
+        "build": resolve_build_identity(),
         "platform": platform.platform(),
         "python": platform.python_version(),
         "pyside": pyside_version,

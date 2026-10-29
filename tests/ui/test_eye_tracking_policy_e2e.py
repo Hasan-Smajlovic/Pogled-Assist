@@ -516,10 +516,18 @@ def test_queued_gaze_keeps_native_freshness_through_application_gates(
     if surface == "settings":
         hotbar._open_settings()
         window = hotbar._settings_window
+        # Fullscreen geometry follows the offscreen display, not this test's target size.
+        window.showNormal()
         window.setGeometry(0, 0, 1280, 720)
         window._select_tab(1)
         qtbot.wait(1)
         button = window._gaze_page._interaction_overlay_button
+        qtbot.waitUntil(
+            lambda: (
+                window.geometry() == QRect(0, 0, 1280, 720)
+                and button.visibleRegion().contains(button.rect().center())
+            )
+        )
         selection = window._gaze_selection
         gate = window._eye_gate
     else:

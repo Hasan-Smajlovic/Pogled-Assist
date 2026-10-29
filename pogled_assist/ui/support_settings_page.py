@@ -28,6 +28,21 @@ class SupportSettingsPage(QFrame):
         )
         note.setWordWrap(True)
         layout.addWidget(note)
+        row, self._budget_value = owner._controls.adjust_row(
+            "Prostor za logove",
+            "Zajedno za opće logove i ručne snimke. Najstariji zatvoreni logovi brišu se automatski.",
+            owner._adjust_log_storage,
+            1,
+        )
+        layout.addWidget(row)
+        note = styled_label(
+            "1 do 10 GB · 1 GB = 1.000.000.000 bajtova. Aktivni snimci i izvori izvoza ostaju zaštićeni. "
+            "ZIP-ovi i rezultati Provjere pogleda se ne brišu.",
+            "settingHint",
+            self,
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
         layout.addSpacing(12)
         layout.addWidget(styled_label("Pomoć pri poteškoćama", "groupLabel", self))
         row, grid, _hint = setting_row(
@@ -50,3 +65,4 @@ class SupportSettingsPage(QFrame):
 
     def refresh(self, settings):
         self._logging_checkbox.setChecked(settings.logging_enabled)
+        self._budget_value.setText(f"{settings.log_storage_gb} GB")

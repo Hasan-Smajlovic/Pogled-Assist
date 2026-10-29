@@ -103,6 +103,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._diagnostic_recordings = DiagnosticRecordings(
             RecordingStore(get_project_root() / "logs" / "diagnostic-recordings"), self
         )
+        self._diagnostic_recordings.set_budget(self._initial_gaze_settings.log_storage_gb)
+        self._diagnostic_recordings.load()
         self._gaze_check_reports = GazeCheckReports(
             GazeCheckStore(get_project_root() / "logs" / "gaze-check"), self
         )
@@ -417,6 +419,14 @@ class HotbarWindow(HotbarSpeech, QWidget):
         checked: bool | None = None,
         source: str = "unknown",
     ) -> None:
+        diagnostics.invoke_action(
+            lambda: self._dispatch_toolbar_action(action, checked=checked, source=source),
+            context=self.diagnostic_context(action),
+            action=action,
+            source=source,
+        )
+
+    def _dispatch_toolbar_action(self, action, *, checked, source):
         logger.info("Toolbar action requested by %s: %s", source, diagnostics.safe_action(action))
         if source == "mouse":
             self._mouse.cancel_gaze_interactions_for_mouse()
@@ -555,6 +565,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
         )
 
     def _quick_zoom_target_selected(self, point: QPoint) -> None:
+        diagnostics.invoke_action(lambda: self._quick_zoom_target_selected_handler(point))
+
+    def _quick_zoom_target_selected_handler(self, point):
         context = self._zoom_context
         self._zoom_context = None
         self._quick_zoom.close_zoom()
@@ -596,6 +609,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._set_status("Otvoren je meni brzih radnji.")
 
     def _quick_action_selected(self, action: str) -> None:
+        diagnostics.invoke_action(lambda: self._quick_action_selected_handler(action))
+
+    def _quick_action_selected_handler(self, action):
         self._quick_menu.close_menu()
         self._interaction_overlay.clear()
         if action == CANCEL_QUICK_ACTION:
@@ -1139,6 +1155,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._quit_application()
 
     def _update_gaze_settings(self, settings: object) -> None:
+        self._diagnostic_recordings.set_budget(settings.log_storage_gb)
         previous = (
             self._mouse.settings.eye_tracking_policy,
             self._mouse.settings.eye_tracking_hold_ms,
@@ -1186,7 +1203,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
     def _reset_tracking_continuity(self) -> None:
         self._mouse._eye_gate.cancel()
-        self._close_tracking_overlays()
+        self._close_tracking_overlays(reason="context_changed")
         self._interaction_overlay.clear()
         if self._settings_window is not None:
             self._settings_window._eye_gate.cancel()
@@ -1198,16 +1215,16 @@ class HotbarWindow(HotbarSpeech, QWidget):
         for window in (self._settings_window, self._gaze_check_window):
             if window is not None:
                 window._eye_gate.invalidate_gaze(received_at)
-        self._close_tracking_overlays()
+        self._close_tracking_overlays(reason="stale_gaze")
         held = self._mouse._toolbar_selection.tracking_held
         if self._settings_window is not None:
             held |= self._settings_window._gaze_selection.tracking_held
         if not held:
             self._interaction_overlay.clear()
 
-    def _close_tracking_overlays(self) -> None:
-        self._quick_zoom.close_zoom()
-        self._quick_menu.close_menu()
+    def _close_tracking_overlays(self, *, reason: str) -> None:
+        self._quick_zoom.close_zoom(reason=reason)
+        self._quick_menu.close_menu(reason=reason)
         self._zoom_context = None
         self._gaze_bubble.clear()
         self._tracking_status.invalidate_gaze()
@@ -1286,8 +1303,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
 
         if not eyes_usable(self._mouse.settings.eye_tracking_policy, left_open, right_open):
             self._gaze_bubble.clear()
-        self._quick_zoom.close_zoom()
-        self._quick_menu.close_menu()
+        self._quick_zoom.close_zoom(reason="eye_gate_closed")
+        self._quick_menu.close_menu(reason="eye_gate_closed")
         self._zoom_context = None
         self._mouse.cancel_zoomed_click(reset_mode=False)
 

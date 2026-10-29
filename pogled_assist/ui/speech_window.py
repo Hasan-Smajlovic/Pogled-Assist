@@ -121,6 +121,16 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._context_changed,
         )
 
+        self._connect_input()
+        self._show_group_level()
+        self._predictions.show_status(self._suggestions.status)
+        state = speech.playback_state
+        if state in ("preparing", "speaking"):
+            self._playback_id = speech.request_id
+            self._playback_changed(speech.request_id, state)
+        logger.info("Speech window initialized with %s letter groups.", len(self._letter_groups))
+
+    def _connect_input(self):
         self.action_requested.connect(self._trigger_action)
         self.dialog_closed.connect(self._after_dialog_closed)
         self._input.returnPressed.connect(self._play)
@@ -129,13 +139,6 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._input.textChanged.connect(self._text_changed)
         self._input.cursorPositionChanged.connect(self._refresh_suggestions)
         self._input.selectionChanged.connect(self._refresh_suggestions)
-        self._show_group_level()
-        self._predictions.show_status(self._suggestions.status)
-        state = speech.playback_state
-        if state in ("preparing", "speaking"):
-            self._playback_id = speech.request_id
-            self._playback_changed(speech.request_id, state)
-        logger.info("Speech window initialized with %s letter groups.", len(self._letter_groups))
 
     def show_full_screen(self) -> None:
         screen = QGuiApplication.primaryScreen()
@@ -211,10 +214,12 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         super().closeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if (
-            event.key() == Qt.Key_Escape
-            and self._active_group_index is not None
-            and self._dialogs.active is None
+        if all(
+            (
+                event.key() == Qt.Key_Escape,
+                self._active_group_index is not None,
+                self._dialogs.active is None,
+            )
         ):
             self._show_keyboard_groups()
             self._restore_input_focus()
@@ -244,30 +249,38 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         return QRect(top_left, self.size()).contains(point)
 
     def handle_gaze_action(self, action: str) -> None:
-        if not action.startswith(SPEECH_WINDOW_ACTION_PREFIX):
+        if not self._gaze_action_allowed(action):
             return
-        if self._dialogs.active is not None and action not in self._dialogs.actions:
-            return
-        if action.startswith(self._action("suggestion:")):
-            button = self._action_buttons.get(action)
-            if not self._predictions.allows_action(button):
-                return
         logger.info("Speech window gaze action requested: %s", diagnostics.safe_action(action))
         keyboard_actions = set(self._main_dynamic_actions)
         was_inline = self._active_group_index is not None
         self._trigger_action(action, source="gaze")
-        if (
-            (was_inline or self._active_group_index is not None)
-            and keyboard_actions != self._main_dynamic_actions
-            and self._last_gaze_point is not None
-            and self._dialogs.active is None
+        self._keep_departure_bounds(was_inline, keyboard_actions)
+
+    def _gaze_action_allowed(self, action):
+        if not action.startswith(SPEECH_WINDOW_ACTION_PREFIX):
+            return False
+        if self._dialogs.active is not None and action not in self._dialogs.actions:
+            return False
+        if action.startswith(self._action("suggestion:")):
+            button = self._action_buttons.get(action)
+            if not self._predictions.allows_action(button):
+                return False
+        return True
+
+    def _keep_departure_bounds(self, was_inline, keyboard_actions):
+        changed = keyboard_actions != self._main_dynamic_actions
+        inline = was_inline or self._active_group_index is not None
+        if not all(
+            (inline, changed, self._last_gaze_point is not None, self._dialogs.active is None)
         ):
-            # A new key can appear under the gaze that selected its group.
-            self._show_keyboard_buttons()
-            replacement = self._action_at_point(self._main_dynamic_actions, self._last_gaze_point)
-            self._keyboard_departure_bounds = (
-                self.action_bounds(replacement) if replacement is not None else None
-            )
+            return
+        # The newly displayed key must wait for gaze to leave the old group.
+        self._show_keyboard_buttons()
+        replacement = self._action_at_point(self._main_dynamic_actions, self._last_gaze_point)
+        self._keyboard_departure_bounds = (
+            self.action_bounds(replacement) if replacement is not None else None
+        )
 
     def _after_dialog_closed(self, dialog: QDialog) -> None:
         if dialog is self._dialogs.alarm:
@@ -644,15 +657,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 reason="target_unavailable",
             )
             return
-        context = self._diagnostic_context
-        target_id = context.token(action)
-        diagnostics.emit(
-            "ui_action_requested",
-            priority=True,
-            context_id=context.id,
-            target_id=target_id,
+        diagnostics.invoke_action(
+            lambda: self._dispatch_action(action, source=source),
+            context=self._diagnostic_context,
+            action=action,
             source=source,
         )
+
+    def _dispatch_action(self, action: str, *, source: str) -> None:
         command = action.removeprefix(SPEECH_WINDOW_ACTION_PREFIX)
         handlers = {
             "clear": self._open_clear_dialog,
@@ -689,34 +701,32 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             handler()
         else:
             self._trigger_indexed_action(command)
-        diagnostics.emit(
-            "ui_action_returned",
-            priority=True,
-            context_id=context.id,
-            target_id=target_id,
-            source=source,
-            outcome="handler_returned",
-        )
         self._restore_input_focus()
 
     def _trigger_indexed_action(self, command: str) -> None:
         kind, _, value = command.partition(":")
-        if kind == "suggestion":
-            self._select_suggestion(int(value))
-        elif kind == "group":
-            self._show_letter_group(int(value))
-        elif kind == "letter":
-            group_index, letter_index = (int(index) for index in value.split(":"))
-            self._append_text(self._letter_groups[group_index][letter_index])
-            self._show_group_level()
-        elif kind == "symbol-group":
-            self._show_letter_group(int(value), symbols=True)
-        elif kind == "symbol":
-            self._append_text(self._symbols[int(value)])
-            if self._active_group_index is not None:
-                self._show_symbols_level()
+        handlers = {
+            "suggestion": lambda: self._select_suggestion(int(value)),
+            "group": lambda: self._show_letter_group(int(value)),
+            "letter": lambda: self._select_letter(value),
+            "symbol-group": lambda: self._show_letter_group(int(value), symbols=True),
+            "symbol": lambda: self._select_symbol(int(value)),
+        }
+        handler = handlers.get(kind)
+        if handler is not None:
+            handler()
         elif command.startswith("list:select:"):
             self._select_list_item(int(command.rsplit(":", 1)[1]))
+
+    def _select_letter(self, value):
+        group_index, letter_index = (int(index) for index in value.split(":"))
+        self._append_text(self._letter_groups[group_index][letter_index])
+        self._show_group_level()
+
+    def _select_symbol(self, index):
+        self._append_text(self._symbols[index])
+        if self._active_group_index is not None:
+            self._show_symbols_level()
 
     def _toggle_categories(self) -> None:
         if self._view_mode in ("categories", "answers"):

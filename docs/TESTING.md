@@ -27,7 +27,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
 | Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
-| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` and `tests/ui/test_diagnostics_e2e.py` |
+| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` , `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
 | Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
 | Parallel checks, coverage merging and pinned tool installation | `tests/tooling/test_dev_environment.py` and `tests/tooling/test_dev_coverage.py` |
 | Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |
@@ -73,7 +73,7 @@ A complete run discovers the suite, but a test can still require an unavailable 
 | Test | When it runs | What remains unproven |
 | --- | --- | --- |
 | `test_native_buffer_replacement_and_completion_keep_qt_responsive` in `tests/speech/test_audio_playback.py` | When Qt finds an audio output. A probe exits with code 77 and pytest skips it otherwise. | A passing muted, isolated native-decoder probe checks replacement/stop/completion and Qt responsiveness, not audible speech or MP3 quality. |
-| `test_gaze_logging_performance` in `tests/ui/test_gaze_performance.py` | Windows, explicit environment opt-in and `-Workers 1`. Ordinary CI does not enable it. | Software logging overhead under synthetic input, not physical Tobii latency or the overhead of manual recording. |
+| `test_gaze_logging_performance` in `tests/ui/test_gaze_performance.py` | Windows, explicit environment opt-in and `-Workers 1`. Ordinary CI does not enable it. | Software logging overhead under synthetic input, not physical Tobii latency, native input correctness or audible speech. |
 
 To run the software benchmark on the reference Windows PC, close competing workloads and use:
 
@@ -86,4 +86,4 @@ try {
 }
 ```
 
-It compares logging off/basic/trace in three rotated repeats with 60 Hz synthetic input. Reports and synthetic logs go under a unique `dist/gaze-benchmark/<id>/` directory. Compare repeated runs on the same machine and Qt platform; do not turn those measurements into universal CI speed thresholds. Manual-recording overhead still needs the separate [target-machine comparison](UI_DEVELOPMENT.md#manual-tobii-checks).
+It compares logging off/basic/trace and manual recording with ordinary logging off/on, in three rotated repeats with the same 60 Hz synthetic input. Each report includes build identity, producer/controller/Qt latency, CPU, sampled memory and total output bytes; capture reports before and after a diagnostics change on the same reference PC. Reports and synthetic logs go under a unique `dist/gaze-benchmark/<id>/` directory. Compare repeated runs on the same machine and Qt platform; do not turn those measurements into universal CI speed thresholds. The [target-machine comparison](UI_DEVELOPMENT.md#manual-tobii-checks) remains necessary for Windows/Tobii evidence.

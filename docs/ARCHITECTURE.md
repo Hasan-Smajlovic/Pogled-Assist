@@ -47,7 +47,7 @@ The Python package is named `pogled_assist`. The existing `run_gaze_mouse.py` an
 | Gaze acquisition | `pogled_assist/tracking/` | Tracker discovery, development simulation, backend fallback, sample bounds, retry, x86 bridge, calibration |
 | Gaze interaction | `pogled_assist/interaction/` | Logical/physical coordinate mapping in `screen_mapping.py`, UI target lookup through `GazeTarget`, smoothing, shared selection timing, click and Quick action requests |
 | Gaze-check reports | `pogled_assist/tracking/gaze_check_report.py`, `pogled_assist/tracking/gaze_check_store.py`, `pogled_assist/ui/gaze_check_reports.py` | Aggregate report schema, atomic storage/export, application-lifetime memory and file-worker results |
-| Diagnostic recording | `pogled_assist/diagnostics.py`, `pogled_assist/log_transport.py`, `pogled_assist/diagnostic_recording.py`, `pogled_assist/ui/diagnostic_recordings.py` | Observations, bounded writer, recording storage/retention/export and Qt-facing lifecycle |
+| Diagnostic recording | `pogled_assist/diagnostics.py`, `pogled_assist/log_transport.py`, `pogled_assist/diagnostic_recording.py`, `pogled_assist/log_output.py`, `pogled_assist/log_storage.py`, `pogled_assist/recording_metadata.py`, `pogled_assist/recording_export.py`, `pogled_assist/ui/diagnostic_recordings.py` | Observations, bounded writer, ordinary output, recording storage/retention/export and Qt-facing lifecycle |
 | Windows integration | `pogled_assist/windows/` | Physical input, work-area reservation, keyboard, startup, external foreground/cursor tracking, focus, z-order |
 | User surfaces | `pogled_assist/ui/` | Settings, speech, keyboard, controller, radial menu, precision zoom, gaze feedback |
 | Speech | `pogled_assist/speech/` | eSpeak NG, Edge and ElevenLabs playback, saved-entry audio, saved categories, answers and phrases, and the repeating local alarm |
@@ -213,10 +213,10 @@ data/speech_phrases.json rollback-compatible standalone phrases for older releas
 data/speech_learning.json versioned local word and short-context counts
 data/version-history/*/ immutable pre-install copies of saved data
 logs/latest.txt          current application log when logging is enabled
-logs/diagnostics/*.jsonl bounded structured diagnostic sessions
+logs/diagnostics/*.jsonl rotated segments of continuous structured sessions
 logs/gaze-check/gaze-check-<uuid>.json versioned aggregate gaze-check reports
 logs/diagnostic-recordings/<id>/recording.json versioned short-recording lifecycle and context
-logs/diagnostic-recordings/<id>/snimak.jsonl bounded detailed recording
+logs/diagnostic-recordings/<id>/snimak*.jsonl segments of one timed detailed recording
 ```
 
 Missing or malformed settings fall back safely to defaults, with supported values clamped to the same ranges as the Settings UI. Installation, update, and rollback work must preserve `data/` and `logs/`. The transactional installer verifies the copied data and logs byte for byte before swapping directories, and keeps a dated data snapshot under `data/version-history`. Snapshots exclude earlier snapshots to avoid recursive growth. Settings loading fills fields omitted by older writers from these snapshots; current fields and supported edits from the older version take precedence. Settings saves retain unknown fields and reject unreadable or unsupported formats. Snapshots contain personal saved data and belong with the user's local data, never in source control or diagnostic uploads.
