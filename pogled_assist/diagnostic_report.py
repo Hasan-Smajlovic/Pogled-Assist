@@ -84,12 +84,14 @@ class SessionAnalysis:
         self.reason_totals: Counter = Counter()
         self._summary_counters = {}
         self.missing_counter_intervals = 0
+        self.partial_counter_streams = 0
         self.settings_outcomes = {}
         self.actions = deque(maxlen=500)
         self.settings = {}
         self.open_attempts = {}
         self.partial_attempts = 0
         self.coverage_start = None
+        self._coverage_sessions = set()
         self.partial_holds = Counter()
         self.hold_coverage = Counter()
         self.partial_hold_duration = LatencySummary()
@@ -97,7 +99,7 @@ class SessionAnalysis:
     def observe(self, item: dict) -> None:
         event, data = item["event"], item["data"]
         at = item.get("monotonic_s")
-        self._observe_item_context(event, data, at)
+        self._observe_item_context(event, data, at, item.get("session_id"))
         self._observe_metrics(event, data)
         if not finite_number(at):
             return
@@ -111,11 +113,16 @@ class SessionAnalysis:
             self._observe_bridge(at, data)
         self._observe_selection_details(event, data)
 
-    def _observe_item_context(self, event, data, at):
+    def _observe_item_context(self, event, data, at, session):
         if event == "session_start" and finite_number(at):
             self.coverage_start = (
                 min(at, self.coverage_start) if self.coverage_start is not None else at
             )
+            if isinstance(session, str):
+                if len(self._coverage_sessions) < 256:
+                    self._coverage_sessions.add(session)
+                elif session not in self._coverage_sessions:
+                    self.details_truncated = True
         if event == "segment_context" and isinstance(data.get("snapshot"), dict):
             snapshot = data["snapshot"]
             self._observe_context(snapshot.get("event"), snapshot.get("data", {}), copied=True)
@@ -166,6 +173,8 @@ class SessionAnalysis:
             self._observe_settings(data)
         if event == "selection_state":
             self._observe_attempt(data, copied)
+        if copied and event in {"stream_summary", "selection_summary"}:
+            self._observe_counters(data, baseline=True)
 
     def _observe_settings(self, data):
         identity = data.get("settings_id")
@@ -218,23 +227,52 @@ class SessionAnalysis:
         if event == "ui_heartbeat":
             self.latencies["heartbeat_lateness"].add(data.get("qt_timer_late_ms"))
 
-    def _observe_counters(self, data):
+    def _observe_counters(self, data, *, baseline=False):
         stream = data.get("observation_stream_id")
         counts = data.get("cumulative_counts")
         index = data.get("interval_index")
         if not all((isinstance(stream, str), isinstance(counts, dict), type(index) is int)):
             return
+        if index < 1:
+            return
         if stream not in self._summary_counters and len(self._summary_counters) >= 256:
             self.details_truncated = True
             return
-        previous_index, previous = self._summary_counters.get(stream, (0, {}))
+        valid = _reason_counts(counts)
+        started = data.get("observation_started_monotonic_s")
+        sessions = data.get("observation_start_sessions")
+        has_sessions = isinstance(sessions, (list, tuple)) and bool(sessions)
+        observed_start = has_sessions and any(
+            isinstance(session, str) and session in self._coverage_sessions for session in sessions
+        )
+        if not has_sessions and finite_number(started) and self.coverage_start is not None:
+            observed_start = started >= self.coverage_start
+        if baseline:
+            # Replayed context is a starting position, never a new interval.
+            # An overlapping stream already observed in full keeps its position.
+            if not observed_start:
+                self._summary_counters.setdefault(stream, (index, valid, True))
+            return
+        previous_index, previous, copied = self._summary_counters.get(stream, (0, {}, False))
+        if copied and (index <= previous_index or observed_start):
+            # Coarse timestamps can place boundary context before an earlier
+            # actual interval from an overlapping destination.
+            previous_index, previous = 0, {}
+        if previous_index == 0 and index > 1 and not observed_start:
+            # Older or truncated copies may lack the admission snapshot. Only
+            # the first visible interval is attributable to this time range.
+            interval = _reason_counts(data.get("counts", {}))
+            previous_index = index - 1
+            previous = {key: max(0, value - interval.get(key, 0)) for key, value in valid.items()}
+            self.partial_counter_streams += 1
         if index <= previous_index:
             return
         self.missing_counter_intervals += max(0, index - previous_index - 1)
-        valid = _reason_counts(counts)
         for key, value in valid.items():
-            self.reason_totals[key] += max(0, value - previous.get(key, 0))
-        self._summary_counters[stream] = index, valid
+            delta = max(0, value - previous.get(key, 0))
+            if delta:
+                self.reason_totals[key] += delta
+        self._summary_counters[stream] = index, valid, False
 
     def _observe_suppressed(self, counts: object) -> None:
         if not isinstance(counts, dict):
@@ -322,10 +360,14 @@ class SessionAnalysis:
             "discarded_credit_ms": self.discarded_credit_ms,
             "reason_totals_from_counters": dict(self.reason_totals),
             "missing_counter_intervals": self.missing_counter_intervals,
+            "partial_counter_streams": self.partial_counter_streams,
             "recent_action_links": list(self.actions),
             "settings_intervals": self.settings,
             "partial_selection_attempts": self.partial_attempts + len(self.open_attempts),
-            "evidence_incomplete": not complete or bool(self.suppressed) or self.details_truncated,
+            "evidence_incomplete": not complete
+            or bool(self.suppressed)
+            or self.details_truncated
+            or bool(self.partial_counter_streams),
             "interpretation": (
                 "Nearby observations overlap the preceding second or the next 100 ms; "
                 "summary intervals are coarse and correlation does not establish cause. "
@@ -374,6 +416,8 @@ def _timer_evidence(event: str, data: dict) -> tuple[str | None, float]:
 
 
 def _reason_counts(counts):
+    if not isinstance(counts, dict):
+        return {}
     return {
         key: value
         for key, value in counts.items()

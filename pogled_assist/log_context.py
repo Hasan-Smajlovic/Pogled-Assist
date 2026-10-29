@@ -8,6 +8,8 @@ CONTEXT_EVENTS = frozenset(
         "selection_settings",
         "selection_state",
         "target_geometry",
+        "stream_summary",
+        "selection_summary",
     }
 )
 

@@ -101,8 +101,19 @@ def test_overlapping_sessions_are_merged_in_observation_order(tmp_path):
     assert result["analysis"]["reason_totals_from_counters"] == {"outcome:completed": 3}
 
 
-@pytest.mark.parametrize("field", ["attempt_id", "surface", "coverage", "outcome"])
-def test_malformed_optional_field_keeps_other_evidence(tmp_path, field):
+@pytest.mark.parametrize(
+    "field,invalid",
+    [
+        ("attempt_id", []),
+        ("surface", []),
+        ("coverage", []),
+        ("outcome", []),
+        ("observation_start_sessions", {}),
+        ("observation_start_sessions", [[]]),
+        ("observation_start_sessions", ["a", "b", "c"]),
+    ],
+)
+def test_malformed_optional_field_keeps_other_evidence(tmp_path, field, invalid):
     path = tmp_path / "stream.jsonl"
     record(path, "s", "session_start", 0)
     record(path, "s", "selection_state", 1, attempt_id="known", attempt_started=True)
@@ -111,7 +122,7 @@ def test_malformed_optional_field_keeps_other_evidence(tmp_path, field):
         "s",
         "selection_hold_end" if field == "outcome" else "selection_end",
         2,
-        **{field: [], "reason": "completed"},
+        **{field: invalid, "reason": "completed"},
     )
     record(path, "s", "session_end", 3)
     result = summarize(path)
@@ -339,3 +350,142 @@ def test_recorded_hold_coverage_and_support_summary(tmp_path, monkeypatch):
         "Nedostajući intervali brojača",
     ):
         assert label in summary
+
+
+@pytest.mark.parametrize("drop_before", [False, True])
+@pytest.mark.parametrize("drop_during", [False, True])
+def test_manual_counter_baseline_excludes_prior_activity_and_recovers_lost_intervals(
+    qapp, tmp_path, monkeypatch, drop_before, drop_during
+):
+    freeze_monotonic(monkeypatch, 100)
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    root = tmp_path / "logs"
+    writer.start_segment(root / "latest.txt", None, trace=False)
+    store = RecordingStore(root / "recordings")
+    recordings = DiagnosticRecordings(store, qapp, writer=lambda: writer)
+    monkeypatch.setattr(recordings, "_schedule_maintenance", lambda: None)
+    metrics = diagnostics.StreamMetrics(event_name="selection_summary", source="toolbar")
+    room = writer._queue_has_room
+    try:
+        for _ in range(3):
+            metrics.event("selection_end", reason="target_departure")
+        metrics.summary(force=True)
+        metrics.event("selection_end", reason="target_departure")
+        if drop_before:
+            monkeypatch.setattr(writer, "_queue_has_room", lambda *_args: False)
+        assert recordings.start(1, recording_context({}, {}, simulated=True))
+        key = writer._recording.id
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        metrics.event("selection_end", reason="completed")
+        if drop_during:
+            monkeypatch.setattr(writer, "_queue_has_room", lambda *_args: False)
+        metrics.summary(force=True)
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        metrics.event("selection_end", reason="completed")
+        recordings.stop()
+    finally:
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        recordings.shutdown()
+        recordings.deleteLater()
+        assert writer.stop()
+    analysis = store.inspect(key)["analysis"]["analysis"]
+    assert analysis["reason_totals_from_counters"] == {
+        "outcome:completed": 2,
+        "reason:selection_end:completed": 2,
+    }
+    assert analysis["missing_counter_intervals"] == int(drop_during)
+    destination = tmp_path / "support.zip"
+    store.export(key, destination)
+    with ZipFile(destination) as archive:
+        summary = archive.read("sazetak.txt").decode()
+        counter_line = next(line for line in summary.splitlines() if line.startswith("Razlozi iz"))
+        assert "target_departure" not in counter_line
+        assert '"outcome:completed": 2' in counter_line
+    merged = summarize(root)["analysis"]
+    assert merged["reason_totals_from_counters"]["outcome:target_departure"] == 4
+    assert merged["reason_totals_from_counters"]["outcome:completed"] == 2
+
+
+@pytest.mark.parametrize("manual_covers_start", [False, True])
+def test_dropped_initial_intervals_use_the_streams_actual_destinations(
+    tmp_path, monkeypatch, manual_covers_start
+):
+    freeze_monotonic(monkeypatch, 100)
+    writer = LogWriter()
+    monkeypatch.setattr(logging_setup, "_writer", writer)
+    root = tmp_path / "logs"
+    writer.start_segment(root / "latest.txt", None, trace=False)
+    folder = root / "recordings"
+    room = writer._queue_has_room
+    try:
+        if manual_covers_start:
+            key = writer.start_recording(folder, 1, recording_context({}, {}, simulated=True))
+        metrics = diagnostics.StreamMetrics(event_name="selection_summary", source="toolbar")
+        for _ in range(2):
+            metrics.event("selection_end", reason="completed")
+            metrics.event("selection_end", reason="completed")
+            monkeypatch.setattr(writer, "_queue_has_room", lambda *_args: False)
+            metrics.summary(force=True)
+            monkeypatch.setattr(writer, "_queue_has_room", room)
+        if not manual_covers_start:
+            key = writer.start_recording(folder, 1, recording_context({}, {}, simulated=True))
+        metrics.event("selection_end", reason="completed")
+        metrics.event("selection_end", reason="completed")
+        metrics.summary(force=True)
+        writer.stop_recording()
+    finally:
+        monkeypatch.setattr(writer, "_queue_has_room", room)
+        assert writer.stop()
+    manual = RecordingStore(folder).inspect(key)["analysis"]["analysis"]
+    assert manual["reason_totals_from_counters"]["outcome:completed"] == (
+        6 if manual_covers_start else 2
+    )
+    assert manual["missing_counter_intervals"] == (2 if manual_covers_start else 0)
+    merged = summarize(root)["analysis"]
+    assert merged["reason_totals_from_counters"]["outcome:completed"] == 6
+    assert merged["missing_counter_intervals"] == 2
+
+
+@pytest.mark.parametrize("include_origin", [False, True])
+def test_unrelated_old_session_cannot_extend_counter_coverage(tmp_path, include_origin):
+    old, manual = tmp_path / "old.jsonl", tmp_path / "manual.jsonl"
+    record(old, "old", "session_start", 0)
+    record(old, "old", "session_end", 1)
+    if include_origin:
+        origin = tmp_path / "origin.jsonl"
+        record(origin, "origin", "session_start", 2)
+        record(origin, "origin", "session_end", 12)
+    fields = dict(
+        observation_stream_id="stream",
+        observation_start_sessions=["origin"],
+        observation_started_monotonic_s=2.5,
+    )
+    record(manual, "manual", "session_start", 10)
+    record(
+        manual,
+        "manual",
+        "segment_context",
+        10,
+        snapshot={
+            "event": "selection_summary",
+            "data": {**fields, "interval_index": 2, "cumulative_counts": {"outcome:completed": 4}},
+        },
+    )
+    record(
+        manual,
+        "manual",
+        "selection_summary",
+        11,
+        **fields,
+        interval_index=3,
+        counts={"outcome:completed": 2},
+        cumulative_counts={"outcome:completed": 6},
+    )
+    record(manual, "manual", "session_end", 12)
+    assert summarize(manual)["analysis"]["reason_totals_from_counters"] == {"outcome:completed": 2}
+    merged = summarize(tmp_path)["analysis"]
+    assert merged["reason_totals_from_counters"] == {
+        "outcome:completed": 6 if include_origin else 2
+    }
+    assert merged["missing_counter_intervals"] == (2 if include_origin else 0)

@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +20,67 @@ def read_events(latest):
         for file in (latest.parent / "diagnostics").glob("*.jsonl")
         for line in file.read_text().splitlines()
     ]
+
+
+@pytest.mark.parametrize("failed_channel", ["text", "json", "both"])
+def test_initial_directory_failure_recovers_outputs_and_retention_reservations(
+    tmp_path, monkeypatch, qtbot, failed_channel
+):
+    from pogled_assist import log_reservations
+
+    latest = tmp_path / "logs/latest.txt"
+    latest.parent.mkdir()
+    folders = {
+        "text": {latest.parent},
+        "json": {latest.parent / "diagnostics"},
+        "both": {latest.parent, latest.parent / "diagnostics"},
+    }[failed_channel]
+    denied = threading.Event()
+    denied.set()
+    mkdir = Path.mkdir
+
+    def fail_directory(path, *args, **kwargs):
+        if denied.is_set() and path in folders:
+            raise OSError("Synthetic directory failure")
+        return mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_directory)
+    writer = LogWriter()
+    try:
+        writer.start_segment(latest, None, trace=False)
+        expected = {"text", "json"} if failed_channel == "both" else {failed_channel}
+        qtbot.waitUntil(
+            lambda: expected.issubset(
+                gap["channel"] for gap in writer.persistence_status()["failures"]
+            )
+        )
+        denied.clear()
+        qtbot.waitUntil(
+            lambda: writer._output._file is not None and writer._output._json is not None,
+            timeout=5000,
+        )
+        assert writer.event("after_storage_recovery", {}, priority=True)
+        writer.record(logging.makeLogRecord({"msg": "after storage recovery", "levelno": 20}))
+        qtbot.waitUntil(lambda: not writer.persistence_status()["failures"])
+        paths = (writer._output._text_path, writer._output._json_path)
+        assert all(path is not None for path in paths)
+        assert all(
+            log_reservations._RESERVATIONS.get(log_reservations._path_key(path)) == 1
+            for path in paths
+        )
+        gaps = writer.persistence_status()["gaps"]
+        assert all(gap["recovered_at"] is not None for gap in gaps)
+    finally:
+        denied.clear()
+        assert writer.stop()
+    assert "after storage recovery" in latest.read_text()
+    names = [item["event"] for item in read_events(latest)]
+    assert "after_storage_recovery" in names
+    if failed_channel in {"json", "both"}:
+        assert "persistence_recovered" in names
+    assert all(
+        log_reservations._path_key(path) not in log_reservations._RESERVATIONS for path in paths
+    )
 
 
 def test_blocked_console_does_not_block_log_producer(monkeypatch, tmp_path):

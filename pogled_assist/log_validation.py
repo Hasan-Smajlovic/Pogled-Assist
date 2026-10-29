@@ -26,6 +26,13 @@ def diagnostic_fields_valid(data: dict) -> bool:
         if key in STRING_FIELDS
     ):
         return False
+    sessions = data.get("observation_start_sessions")
+    if sessions is not None and (
+        not isinstance(sessions, list)
+        or len(sessions) > 2
+        or not all(isinstance(session, str) for session in sessions)
+    ):
+        return False
     snapshot = data.get("snapshot")
     if snapshot is None:
         return True

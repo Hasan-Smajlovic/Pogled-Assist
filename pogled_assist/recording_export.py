@@ -151,6 +151,7 @@ def _analysis_text(analysis):
         "discarded_credit_ms": "Odbačeni napredak (ms)",
         "latency": "Kašnjenja (ms)",
         "missing_counter_intervals": "Nedostajući intervali brojača",
+        "partial_counter_streams": "Tokovi brojača bez početne vrijednosti",
         "reason_totals_from_counters": "Razlozi iz zbirnih brojača",
         "partial_selection_attempts": "Djelimični pokušaji odabira",
         "evidence_incomplete": "Dokazi nepotpuni",

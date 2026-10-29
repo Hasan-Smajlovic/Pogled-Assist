@@ -56,15 +56,17 @@ class OrdinaryOutput:
         for snapshot in snapshots.values():
             self._write_json(0, "segment_context", {"snapshot": snapshot}, opened_at)
 
-    def _open_text(self, latest: Path) -> None:
+    def _open_text(self, latest: Path, *, recovering=False) -> None:
         from .log_reservations import reserve_path
 
         try:
-            latest.parent.mkdir(parents=True, exist_ok=True)
             if self._text_path is None:
-                reserve_path(latest)
-            self._text_path = latest
-            self._file = latest.open(self._archive_mode(latest), encoding="utf-8")
+                if not reserve_path(latest):
+                    raise OSError("Log path is being pruned")
+                self._text_path = latest
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            mode = "a" if recovering else self._archive_mode(latest)
+            self._file = latest.open(mode, encoding="utf-8")
             self._text_bytes = latest.stat().st_size
         except Exception:
             self._writer._failure("ordinary", "text_open")
@@ -83,16 +85,22 @@ class OrdinaryOutput:
             return "a"
         return "w"
 
-    def _open_json(self, latest: Path, session: str) -> None:
+    def _open_json(self, latest: Path, session: str, *, recovering=False) -> None:
         from .log_reservations import reserve_path
 
         try:
             folder = latest.parent / "diagnostics"
+            if self._json_path is None:
+                suffix = f".part-{self._segment_index:06}" if self._segment_index else ""
+                path = folder / f"{session}{suffix}.jsonl"
+                if not reserve_path(path):
+                    raise OSError("Log path is being pruned")
+                self._json_path = path
             folder.mkdir(parents=True, exist_ok=True)
-            suffix = f".part-{self._segment_index:06}" if self._segment_index else ""
-            self._json_path = folder / f"{session}{suffix}.jsonl"
-            reserve_path(self._json_path)
-            self._json = self._json_path.open("x", encoding="utf-8", newline="\n")
+            self._json = self._json_path.open(
+                "a" if recovering else "x", encoding="utf-8", newline="\n"
+            )
+            self._bytes = self._json_path.stat().st_size
         except Exception:
             self._writer._failure("ordinary", "json_open")
 
@@ -274,22 +282,23 @@ class OrdinaryOutput:
             return
         self._retry_at = time.monotonic() + 2
         latest = self._active[1]
+        if self._file is None:
+            self._open_text(latest, recovering=True)
+        if self._json is not None:
+            return
+        self._open_json(latest, self._active[3], recovering=True)
+        if self._json is None:
+            return
         try:
-            if self._file is None:
-                self._file = latest.open("a", encoding="utf-8")
-                self._text_bytes = latest.stat().st_size
-            if self._json is None and self._json_path is not None:
-                self._json = self._json_path.open("a", encoding="utf-8", newline="\n")
-                self._bytes = self._json_path.stat().st_size
-                self._write_json(
-                    self._active_sequence,
-                    "persistence_recovered",
-                    {
-                        "reason": "reopened",
-                        "coverage_gap": True,
-                    },
-                    (time.monotonic(), time.time()),
-                )
+            self._write_json(
+                self._active_sequence,
+                "persistence_recovered",
+                {
+                    "reason": "reopened",
+                    "coverage_gap": True,
+                },
+                (time.monotonic(), time.time()),
+            )
         except OSError:
             self._writer._failure("ordinary", "reopen")
 

@@ -192,6 +192,8 @@ class StreamMetrics:
         self._known_states: dict[str, str] = {}
         self._writer = None
         self.started = time.monotonic()
+        self._stream_started_at = self.started
+        self._start_sessions = ()
         self.counts: Counter = Counter()
         self.durations: Counter = Counter()
         self._states: dict[str, tuple[str, float, float]] = {}
@@ -213,6 +215,8 @@ class StreamMetrics:
         if identity != self._writer:
             self._writer = identity
             self.started = time.monotonic()
+            self._stream_started_at = self.started
+            self._start_sessions = getattr(writer, "observation_start_sessions", ())
             self.counts.clear()
             self.durations.clear()
             self._states.clear()
@@ -308,6 +312,8 @@ class StreamMetrics:
                 priority=True,
                 interval_id=uuid.uuid4().hex,
                 observation_stream_id=self._stream_id,
+                observation_started_monotonic_s=self._stream_started_at,
+                observation_start_sessions=self._start_sessions,
                 interval_index=self._interval_index,
                 previous_intervals_dropped=self._missing_intervals,
                 cumulative_counts=dict(self._total_counts),
@@ -441,10 +447,10 @@ class SelectionObserver:
             target_id=target,
             attempt_id=self.attempt,
             settings_id=self._settings_id,
-            affected_eye=snapshot.get("affected_eye"),
+            affected_eye=snapshot.get("affected_eye") if phase.startswith("tracking_") else None,
         )
         self._fields = fields
-        self._observe_hold(phase, snapshot["credited_ms"])
+        self._observe_hold(phase, snapshot["credited_ms"], reason)
         state = (*identity, phase)
         if state != self._state:
             self._rates.event(
@@ -468,10 +474,14 @@ class SelectionObserver:
         self._state = state
         self._rates.summary()
 
-    def _observe_hold(self, phase, credit):
+    def _observe_hold(self, phase, credit, reason):
         held = phase.endswith("_hold")
-        if self._hold is not None and not held:
-            self._end_hold("resumed", "sample", credit)
+        if self._hold is not None:
+            same_family = (phase == "edge_hold") == (self._hold[1] == "edge_hold")
+            if not held:
+                self._end_hold("resumed", "sample", credit)
+            elif not same_family:
+                self._end_hold("cancelled", reason, credit)
         if held and self._hold is None:
             self._hold = (
                 time.monotonic(),

@@ -74,7 +74,8 @@ class ObservationMerge:
         database.execute("PRAGMA cache_size=-1024")
         database.execute("PRAGMA temp_store=FILE")
         database.execute(
-            "CREATE TABLE events (process TEXT, at REAL, ordinal INTEGER PRIMARY KEY, payload TEXT)"
+            "CREATE TABLE events (process TEXT, at REAL, counter_index INTEGER, "
+            "ordinal INTEGER PRIMARY KEY, payload TEXT)"
         )
         database.execute(
             "CREATE TABLE seen (process TEXT, identity TEXT, PRIMARY KEY(process, identity)) WITHOUT ROWID"
@@ -96,19 +97,30 @@ class ObservationMerge:
         elif item["event"] not in CONTEXT_EVENTS:
             self.legacy = True
         at = item.get("monotonic_s")
+        index = item["data"].get("interval_index")
+        counter_index = (
+            index
+            if item["event"] in {"stream_summary", "selection_summary"}
+            and type(index) is int
+            and 0 < index < 2**63
+            else 0
+        )
         self.database.execute(
-            "INSERT INTO events(process, at, payload) VALUES (?, ?, ?)",
-            (process, float(at) if finite_number(at) else None, json.dumps(item)),
+            "INSERT INTO events(process, at, counter_index, payload) VALUES (?, ?, ?, ?)",
+            (process, float(at) if finite_number(at) else None, counter_index, json.dumps(item)),
         )
         self.counts[item["event"]] += 1
 
     def analyses(self, complete):
-        self.database.execute("CREATE INDEX event_order ON events(process, at, ordinal)")
+        self.database.execute(
+            "CREATE INDEX event_order ON events(process, at, counter_index, ordinal)"
+        )
         results = []
         for (process,) in self.database.execute("SELECT DISTINCT process FROM events"):
             analysis = SessionAnalysis()
             for (payload,) in self.database.execute(
-                "SELECT payload FROM events WHERE process=? ORDER BY at, ordinal", (process,)
+                "SELECT payload FROM events WHERE process=? ORDER BY at, counter_index, ordinal",
+                (process,),
             ):
                 analysis.observe(json.loads(payload))
             results.append(

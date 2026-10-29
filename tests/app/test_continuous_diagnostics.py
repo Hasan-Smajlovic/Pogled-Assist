@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist import diagnostics
 from pogled_assist.interaction.gaze_selection import GazeSelectionTimer
@@ -69,6 +70,44 @@ def test_completed_pause_transition_retains_attempt_and_records_discard(observat
     assert outcomes[-1]["attempt_id"] == attempt
 
 
+@pytest.mark.parametrize("retain_pause", [False, True])
+def test_edge_to_tracking_hold_records_distinct_episodes_in_the_same_attempt(
+    observations, monkeypatch, retain_pause
+):
+    _writer, events = observations
+    now = freeze_monotonic(monkeypatch, 0)
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("speech", 0, pause_ms=250, dwell_ms=1000)
+    now[0] = 0.4
+    timer.update("speech", 400, pause_ms=250, dwell_ms=1000)
+    attempt = timer._observer.attempt
+    now[0] = 0.41
+    timer.update(None, 410, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=120)
+    now[0] = 0.42
+    timer.hold_tracking(470 if retain_pause else 570, 920, eyes=(False, True))
+    if retain_pause:
+        now[0] = 0.48
+        assert timer.retain_completed_pause()
+    now[0] = 0.5
+    update = timer.update("speech", 500, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=120)
+    assert not update.ready
+    assert timer.diagnostic_snapshot()["credited_ms"] == (250 if retain_pause else 400)
+    assert timer._observer.attempt == attempt
+    holds = [data for name, data in events if name == "selection_hold_end"]
+    assert len(holds) == 2
+    assert holds[0]["kind"] == "edge_hold"
+    assert holds[0]["affected_eye"] is None
+    assert holds[0]["outcome"] == "cancelled"
+    assert holds[0]["reason"] == "tracking_held"
+    assert holds[0]["duration_ms"] == pytest.approx(10)
+    assert holds[1]["kind"] == "tracking_full_progress_hold"
+    assert holds[1]["affected_eye"] == "left_invalid"
+    assert holds[1]["outcome"] == "resumed"
+    assert holds[1]["duration_ms"] == pytest.approx(80)
+    assert all(data["attempt_id"] == attempt for data in holds)
+    assert not any(name == "selection_end" for name, _ in events)
+
+
 def test_action_link_retains_origin_when_handler_replaces_context(observations):
     _writer, events = observations
     timer = GazeSelectionTimer("toolbar")
@@ -93,6 +132,31 @@ def test_action_link_retains_origin_when_handler_replaces_context(observations):
     )
     assert all(data["role"] == "group" for data in actions)
     assert "group:2" not in str(events)
+
+
+def test_edge_hold_after_tracking_recovery_has_no_stale_eye_evidence(observations, monkeypatch):
+    _writer, events = observations
+    now = freeze_monotonic(monkeypatch, 0)
+    timer = GazeSelectionTimer("toolbar")
+    timer.update("speech", 0, pause_ms=250, dwell_ms=1000)
+    now[0] = 0.4
+    timer.update("speech", 400, pause_ms=250, dwell_ms=1000)
+    now[0] = 0.41
+    timer.hold_tracking(600, eyes=(False, True))
+    now[0] = 0.45
+    timer.update("speech", 450, pause_ms=250, dwell_ms=1000)
+    now[0] = 0.46
+    timer.update(None, 460, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=120)
+    now[0] = 0.47
+    timer.hold_tracking(700, eyes=(True, False))
+    now[0] = 0.5
+    timer.update("speech", 500, pause_ms=250, dwell_ms=1000, can_hold=True, hold_ms=120)
+    holds = [data for name, data in events if name == "selection_hold_end"]
+    assert [data["affected_eye"] for data in holds] == ["left_invalid", None, "right_invalid"]
+    edge = next(
+        data for name, data in events if name == "selection_state" and data["phase"] == "edge_hold"
+    )
+    assert edge["affected_eye"] is None
 
 
 def test_manual_start_stop_does_not_split_an_ordinary_attempt(tmp_path, monkeypatch):
@@ -121,6 +185,8 @@ def test_manual_start_stop_does_not_split_an_ordinary_attempt(tmp_path, monkeypa
 
 
 def test_dropped_summary_keeps_cumulative_reason_counts_and_marks_missing_interval(monkeypatch):
+    from pogled_assist.diagnostic_report import SessionAnalysis
+
     now = [0.0]
     events = []
     accepts = [False]
@@ -146,3 +212,10 @@ def test_dropped_summary_keeps_cumulative_reason_counts_and_marks_missing_interv
     assert summary["cumulative_counts"]["outcome:stale_gaze"] == 11
     assert summary["previous_intervals_dropped"] == 1
     assert summary["interval_index"] == 2
+    analysis = SessionAnalysis()
+    analysis.observe({"event": "session_start", "monotonic_s": 0, "data": {}})
+    analysis.observe({"event": "selection_summary", "monotonic_s": 2, "data": summary})
+    result = analysis.result(complete=True)
+    assert result["reason_totals_from_counters"]["outcome:stale_gaze"] == 11
+    assert result["missing_counter_intervals"] == 1
+    assert result["partial_counter_streams"] == 0

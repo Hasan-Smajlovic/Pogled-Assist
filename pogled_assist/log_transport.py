@@ -77,6 +77,15 @@ class LogWriter:
     def observation_generation(self) -> tuple:
         return self._observation_generation
 
+    @property
+    def observation_start_sessions(self) -> tuple[str, ...]:
+        """Destinations that cover a metrics stream's first observation."""
+        with self._condition:
+            sessions = (self._desired[3],) if self._desired is not None else ()
+            if self.recording_active:
+                sessions += (self._recording.id,)
+            return sessions
+
     def start_recording(self, directory: Path, minutes: int, context: dict) -> str | None:
         from .diagnostic_recording import DURATIONS, Recording, set_recording_active
 
@@ -284,6 +293,10 @@ class LogWriter:
             item = self._recordable(recording_id)
             if not self._accept_generation(generation, item):
                 return False
+            # A new destination needs the counter position at its boundary,
+            # even if this preceding interval cannot enter the output queue.
+            if kind == "event" and payload[0] in SUMMARY_EVENTS:
+                update_context(self._admitted_context, payload[0], payload[1])
             if not self._queue_has_room(priority, kind, item):
                 return False
             if kind == "event":
