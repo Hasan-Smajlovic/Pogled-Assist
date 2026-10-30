@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from .. import diagnostics
 from .tobii_stream_engine import (
     EyePositionCallback,
     GazeInvalidCallback,
@@ -61,6 +62,11 @@ class TobiiStreamEngineBridgeBackend:
         self._error_event = threading.Event()
         self._stop_event = threading.Event()
         self._start_error = ""
+        self.connection_generation = 0
+        self._last_eye_delivery_at: float | None = None
+        self._failure_observation: dict | None = None
+        self._shutdown_observed = False
+        self._failure_lock = threading.Lock()
         self._label = "Tobii Stream Engine x86 bridge"
         self._python_path = ""
         self._message_handlers: dict[str, Callable[[dict], None]] = {
@@ -86,7 +92,9 @@ class TobiiStreamEngineBridgeBackend:
         return self._start_error if self._error_event.is_set() else None
 
     def start(self) -> None:
-        self._python_path = _find_x86_python()
+        if self._stop_event.is_set():
+            raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
+        self._python_path = _find_x86_python(self._stop_event)
         script_path = bridge_script_path()
         app_root = Path(__file__).resolve().parents[2]
         command = [
@@ -101,6 +109,8 @@ class TobiiStreamEngineBridgeBackend:
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         env["PYTHONPATH"] = _prepend_pythonpath(str(app_root), env.get("PYTHONPATH", ""))
 
+        if self._stop_event.is_set():
+            raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
         try:
             self._process = subprocess.Popen(
                 command,
@@ -133,11 +143,13 @@ class TobiiStreamEngineBridgeBackend:
         self._wait_for_start()
 
     def stop(self) -> None:
-        self._stop_event.set()
         process = self._process
         if process is None:
+            self._stop_event.set()
             self._join_reader_threads()
             return
+        self._observe_shutdown()
+        self._stop_event.set()
 
         if process.poll() is None:
             logger.info("Stopping Tobii Stream Engine x86 bridge.")
@@ -153,9 +165,54 @@ class TobiiStreamEngineBridgeBackend:
         self._process = None
         logger.info("Tobii Stream Engine x86 bridge stopped.")
 
+    def _observe_shutdown(self) -> None:
+        if self._shutdown_observed:
+            return
+        self._shutdown_observed = True
+        diagnostics.emit(
+            "bridge_connection",
+            priority=True,
+            decision="shutdown",
+            **self.process_observation("app_shutdown"),
+        )
+
+    def request_stop(self) -> None:
+        self._stop_event.set()
+
+    def process_observation(self, reason: str) -> dict:
+        process = self._process
+        exit_code = None
+        state = "not_started"
+        if process is not None:
+            try:
+                exit_code = process.poll()
+                state = "running" if exit_code is None else "exited"
+            except (AttributeError, OSError):
+                state = "unknown"
+        return {
+            "stream_generation": self.connection_generation,
+            "reason": reason[:128],
+            "native_eye_age_ms": (time.monotonic() - self._last_eye_delivery_at) * 1000
+            if self._last_eye_delivery_at is not None
+            else None,
+            "process_state": state,
+            "exit_code": exit_code,
+            "shutdown_requested": reason == "app_shutdown" or self._stop_event.is_set(),
+        }
+
+    @property
+    def failure_observation(self) -> dict | None:
+        with self._failure_lock:
+            return (
+                dict(self._failure_observation) if self._failure_observation is not None else None
+            )
+
     def _wait_for_start(self) -> None:
         deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
+            if self._stop_event.is_set():
+                self.stop()
+                raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
             self._raise_if_start_failed()
             if self._started_event.is_set():
                 logger.info(
@@ -167,14 +224,17 @@ class TobiiStreamEngineBridgeBackend:
 
             time.sleep(0.05)
 
-        self.stop()
-        raise TobiiStreamEngineBridgeError(
+        message = (
             f"32-bit Tobii bridge did not report ready within {START_TIMEOUT_SECONDS:.0f} seconds."
         )
+        self._connection_failed(message)
+        self.stop()
+        raise TobiiStreamEngineBridgeError(message)
 
     def _raise_if_start_failed(self) -> None:
         process = self._process
         if process is not None and process.poll() is not None:
+            self._connection_failed("Tobii x86 bridge exited before startup.")
             self._join_reader_threads()
             self._process = None
             raise TobiiStreamEngineBridgeError(
@@ -232,10 +292,14 @@ class TobiiStreamEngineBridgeBackend:
         self._stderr_thread = None
 
     def _connection_failed(self, reason: str) -> None:
-        if self._error_event.is_set() or self._stop_event.is_set():
-            return
-        self._start_error = reason
-        self._error_event.set()
+        with self._failure_lock:
+            if self._error_event.is_set() or self._stop_event.is_set():
+                return
+            self._start_error = reason
+            self._failure_observation = self.process_observation(reason)
+            self._error_event.set()
+            observation = dict(self._failure_observation)
+        diagnostics.emit("bridge_connection", priority=True, decision="failure", **observation)
         self._eye_status_callback(False, False, 0)
         logger.warning("%s", reason)
 
@@ -295,6 +359,7 @@ class TobiiStreamEngineBridgeBackend:
             logger.warning("Tobii x86 bridge eye-status payload was invalid.")
             self._eye_status_callback(False, False, 0)
             return
+        self._last_eye_delivery_at = time.monotonic()
         self._eye_status_callback(left_open, right_open, timestamp)
 
     def _on_eye_position(self, message: dict) -> None:
@@ -327,16 +392,18 @@ class TobiiStreamEngineBridgeBackend:
             self._connection_failed("Tobii x86 bridge stopped unexpectedly.")
 
 
-def _find_x86_python() -> str:
+def _find_x86_python(stop_event: threading.Event | None = None) -> str:
     configured = (
         os.environ.get(name, "").strip() for name in (X86_PYTHON_ENV, LEGACY_X86_PYTHON_ENV)
     )
     candidates = [value for value in configured if value]
     candidates.append(str(bundled_x86_python()))
+    _check_start_cancelled(stop_event)
     candidates.extend(_py_launcher_candidates())
     candidates.extend(_common_python_candidates())
 
     for candidate in candidates:
+        _check_start_cancelled(stop_event)
         if _is_x86_python(candidate):
             logger.info("Found 32-bit Python for Tobii bridge: %s", candidate)
             return candidate
@@ -345,6 +412,11 @@ def _find_x86_python() -> str:
         "32-bit Python 3.10 was not found. Reinstall the release to restore its bundled "
         "Tobii bridge runtime, or rerun setup_windows.ps1 for a source installation."
     )
+
+
+def _check_start_cancelled(stop_event: threading.Event | None) -> None:
+    if stop_event is not None and stop_event.is_set():
+        raise TobiiStreamEngineBridgeError("Bridge startup cancelled.")
 
 
 def bundled_x86_python() -> Path:

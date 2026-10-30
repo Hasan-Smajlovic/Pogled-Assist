@@ -14,6 +14,7 @@
     eyes: ['Praćenje pauzirano', 'Lijevo —   Desno —', 'Ⅱ', '#f2ce76'],
     waiting: ['Čekam podatke', 'Čekam svježe podatke', '◷', '#f2ce76'],
     hold: ['Praćenje pauzirano', 'Lijevo —   Desno ✓', 'Ⅱ', '#f2ce76'],
+    discarded: ['Praćenje pauzirano', 'Lijevo —   Desno ✓', 'Ⅱ', '#f2ce76'],
     'one-waiting': ['Čekam podatke', 'Nema svježeg pogleda', '◷', '#f2ce76'],
     connecting: ['Povezivanje…', 'Tražim Tobii uređaj', '◷', '#f2ce76'],
     retrying: ['Uređaj nije povezan', 'Pokušavam ponovo', '!', '#ffa0a8'],
@@ -27,7 +28,7 @@
   function renderStatus() {
     const state = $('hotbar-status-preview').value;
     let [title, detail, icon, color] = hotbarStatuses[state];
-    if (['left', 'right', 'hold'].includes(state) && ReferenceEyePolicy.read() === 'any') {
+    if (['left', 'right', 'hold', 'discarded'].includes(state) && ReferenceEyePolicy.read() === 'any') {
       title = 'Odabir jednim okom'; icon = '✓'; color = '#70dfa1';
     } else if (state === 'hold' && ReferenceEyePolicy.read() === 'hold') {
       title = 'Odabir na čekanju';

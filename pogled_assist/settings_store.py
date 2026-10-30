@@ -24,6 +24,7 @@ from .settings_limits import (
     EYE_TRACKING_HOLD_MS_RANGE,
     EYE_TRACKING_HOLD_MS_STEP,
     LETTERS_PER_GROUP_RANGE,
+    LOG_STORAGE_GB_RANGE,
     SMOOTHING_RANGE,
     SPEECH_AMPLITUDE_RANGE,
     SPEECH_PITCH_RANGE,
@@ -154,6 +155,7 @@ def _coerce_gaze_settings(value: Any) -> GazeSettings:
         use_precision_zoom=bool(settings.use_precision_zoom),
         start_with_windows=bool(settings.start_with_windows),
         logging_enabled=bool(settings.logging_enabled),
+        log_storage_gb=clamp(settings.log_storage_gb, LOG_STORAGE_GB_RANGE),
         show_launcher_window=bool(settings.show_launcher_window),
     )
 

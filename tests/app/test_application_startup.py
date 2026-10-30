@@ -106,6 +106,7 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simu
             calls.append(("app_icon", True))
 
         def exec(self):
+            calls.append(("exec", True))
             return 17
 
         @staticmethod
@@ -121,6 +122,9 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simu
 
         def show(self):
             calls.append(("show", True))
+
+        def finish_shutdown(self):
+            calls.append(("shutdown", True))
 
     monkeypatch.setattr(
         main_module, "setup_application_logging", lambda: calls.append(("logging", True))
@@ -142,6 +146,7 @@ def test_main_builds_and_runs_application(monkeypatch, tmp_path, arguments, simu
     assert ("name", "Pogled Assist") in calls
     assert ("org", "Pogled Assist") in calls
     assert ("simulate_gaze", simulate_gaze) in calls
+    assert calls.index(("shutdown", True)) > calls.index(("exec", True))
 
 
 def test_frozen_application_rejects_mouse_gaze_simulation(monkeypatch, capsys):

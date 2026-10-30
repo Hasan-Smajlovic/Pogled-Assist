@@ -45,6 +45,7 @@ def test_packaged_bridge_imports_using_only_declared_source_files(tmp_path):
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "Traceback" not in result.stderr, result.stderr
     assert json.loads(result.stdout) == {"type": "checked", "python_bits": 32}
 
 

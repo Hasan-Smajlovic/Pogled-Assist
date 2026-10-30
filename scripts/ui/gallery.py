@@ -8,6 +8,8 @@ GROUPS = {
         "Speech",
         (
             "speech",
+            "speech-letters",
+            "speech-letters-twelve",
             "speech-categories",
             "speech-answers",
             "phrases",
@@ -66,6 +68,7 @@ GROUPS = {
             "hotbar-selection-held",
             "selection-progress",
             "selection-held",
+            "selection-pause-held",
         ),
     ),
     "gaze-check": (

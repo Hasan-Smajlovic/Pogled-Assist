@@ -1,11 +1,75 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from _clock import freeze_monotonic
+from _hotbar_fixtures import app_control
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint, QRect
+
+from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
+from pogled_assist.tracking.status import TrackingState, TrackingStatus
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
+@pytest.mark.parametrize("pause_ms", [100, 500], ids=["completed-pause", "unfinished-pause"])
+def test_hotbar_waiting_status_matches_retained_selection(
+    hotbar_gaze, monkeypatch, surface, pause_ms
+):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 10.0)
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings,
+            eye_tracking_policy="hold",
+            eye_tracking_hold_ms=150,
+            selection_pause_ms=pause_ms,
+            dwell_ms=1000,
+        )
+    )
+    _action, button = app_control(hotbar, surface)
+    assert button.isVisible()
+    point = button.mapToGlobal(button.rect().center())
+    provider = hotbar._gaze
+    provider.tracking_status_changed.emit(TrackingStatus(TrackingState.CONNECTED))
+    gaze, eyes = provider._new_stream_callbacks()
+    status = hotbar._tracking_status
+    selection = controller._toolbar_selection
+
+    def sample(at):
+        now[0] = at
+        eyes(True, True, 1)
+        gaze(point.x() / 1279, point.y() / 719, 1)
+        provider._emit_latest_gaze_sample()
+
+    for index in range(3):
+        sample(10.0 + index / 10)
+    assert status._title.text() == "Praćenje spremno"
+    now[0] = 10.21
+    eyes(True, False, 2)
+    assert status._title.text() == "Odabir na čekanju"
+    now[0] = 10.359
+    controller._eye_gate._deadline.timeout.emit()
+    assert status._title.text() == "Odabir na čekanju"
+    now[0] = 10.361
+    controller._eye_gate._deadline.timeout.emit()
+    retained = pause_ms == 100
+    assert controller._eye_gate.holding
+    assert selection.tracking_held is retained
+    assert hotbar._interaction_overlay.isVisible() is retained
+    assert status._title.text() == ("Odabir na čekanju" if retained else "Praćenje pauzirano")
+    now[0] = 10.41
+    eyes(True, True, 3)
+    assert status._title.text() == ("Odabir na čekanju" if retained else "Čekam podatke")
+    sample(10.41)
+    assert status._title.text() == "Praćenje spremno"
+    assert selection.diagnostic_snapshot()["credited_ms"] == (pause_ms if retained else 0)
+    assert actions == []
 
 
 @pytest.mark.e2e
@@ -209,8 +273,8 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
         def stop(self):
             pass
 
-    monkeypatch.setattr(
-        gaze_provider.TobiiGazeProvider, "_start_with_tobii_research", lambda _: False
+    monkeypatch.setitem(
+        sys.modules, "tobii_research", SimpleNamespace(find_all_eyetrackers=lambda: [])
     )
     monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", FakeBackend)
     provider = gaze_provider.TobiiGazeProvider()
@@ -223,6 +287,7 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
     try:
         for _connection in range(2):
             provider.start()
+            qtbot.waitUntil(lambda: provider._running)
             assert status._detail.text() == "Čekam stanje očiju"
             callbacks[-1][1](False, False, 1)
             assert status._title.text() == "Praćenje pauzirano"
@@ -235,8 +300,10 @@ def test_tracking_status_distinguishes_no_samples_from_live_invalid_eyes(qtbot, 
             assert "Synthetic tracker" in status.toolTip()
             provider.stop()
             assert status._title.text() == "Praćenje zaustavljeno"
+            qtbot.waitUntil(lambda: provider._connection_session is None)
     finally:
         provider.stop()
+        qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
 @pytest.mark.e2e

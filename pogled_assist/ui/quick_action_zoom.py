@@ -10,6 +10,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from .. import diagnostics
 from ..interaction.gaze_selection import (
     DEFAULT_SELECTION_PAUSE_MS,
     MAX_SELECTION_PAUSE_MS,
@@ -42,7 +43,7 @@ class QuickActionZoomWindow(QWidget):
         self._candidate_anchor: QPoint | None = None
         self._candidate_progress = 0.0
         self._candidate_local: QPoint | None = None
-        self._selection_timer = GazeSelectionTimer()
+        self._selection_timer = GazeSelectionTimer("precision_zoom")
         self._selection_pause_ms = DEFAULT_SELECTION_PAUSE_MS
         self._selection_dwell_ms = 500
         self._selection_radius_px = 48
@@ -86,7 +87,7 @@ class QuickActionZoomWindow(QWidget):
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason="context_changed")
         self._selection_emitted = False
         self._timer.start()
         self.show()
@@ -106,16 +107,18 @@ class QuickActionZoomWindow(QWidget):
             self._display_rect.height(),
         )
 
-    def close_zoom(self) -> None:
+    def close_zoom(self, *, reason: str = "window_closed") -> None:
+        was_visible = self.isVisible()
         self._timer.stop()
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None
-        self._selection_timer.cancel()
+        self._selection_timer.cancel(reason=reason)
         self._selection_emitted = False
         self._last_topmost_ms = 0.0
         self.hide()
-        logger.info("Quick action zoom closed.")
+        if was_visible:
+            logger.info("Quick action zoom closed.")
 
     def handle_gaze(self, point: QPoint) -> None:
         if not self.isVisible() or self._selection_emitted:
@@ -176,7 +179,11 @@ class QuickActionZoomWindow(QWidget):
                 selected.x(),
                 selected.y(),
             )
-            self.target_selected.emit(selected)
+            diagnostics.invoke_action(
+                lambda: self.target_selected.emit(selected),
+                source="gaze",
+                selection=self._selection_timer,
+            )
             return
 
         self.update()
@@ -187,7 +194,9 @@ class QuickActionZoomWindow(QWidget):
         if self._display_rect.contains(local):
             selected = self._map_display_to_screen(local)
             logger.info("Quick action zoom mouse selected: %s,%s.", selected.x(), selected.y())
-            self.target_selected.emit(selected)
+            diagnostics.invoke_action(
+                lambda: self.target_selected.emit(selected), source="mouse", action=None
+            )
             return
 
         logger.info("Quick action zoom cancelled by mouse outside zoom square.")
@@ -268,7 +277,10 @@ class QuickActionZoomWindow(QWidget):
 
     def _reset_gaze_candidate(self, *, notify: bool, require_leave: bool = False) -> None:
         had_candidate = self._candidate_anchor is not None
-        self._selection_timer.cancel(require_leave=require_leave)
+        self._selection_timer.cancel(
+            require_leave=require_leave,
+            reason="mouse_intervention" if require_leave else "target_departure",
+        )
         self._candidate_anchor = None
         self._candidate_progress = 0.0
         self._candidate_local = None

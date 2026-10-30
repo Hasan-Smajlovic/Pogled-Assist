@@ -291,7 +291,7 @@ def _check_controller_key_row(window, key_command, check_row):
 
 
 @pytest.mark.e2e
-def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot, make_speech_window):
+def test_twelve_inline_letters_fit_150_percent_display_and_accept_gaze(qtbot, make_speech_window):
     window = make_speech_window(
         FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore()
     )
@@ -300,18 +300,16 @@ def test_twelve_letter_dialog_fits_150_percent_display_and_accepts_gaze(qtbot, m
     qtbot.waitUntil(window.isVisible)
 
     window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"].click()
-    qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.letter)
-    dialog = window._dialogs.letter
-    assert dialog.height() <= window.height() - 64
-    assert dialog.width() <= window.width() - 64
+    assert window._dialogs.active is None
+    qtbot.wait(1)
 
-    bounds = dialog.rect()
-    for action in window._dialogs.letter_actions:
+    bounds = window._key_grid_host.rect()
+    for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
-        rect = QRect(button.mapTo(dialog, QPoint(0, 0)), button.size())
+        rect = QRect(button.mapTo(window._key_grid_host, QPoint(0, 0)), button.size())
         assert bounds.contains(rect), action
         assert button.width() >= 140, action
-        assert button.height() >= 110, action
+        assert button.height() >= 72, action
         assert window.action_at_global_point(button.mapToGlobal(button.rect().center())) == action
 
     last_letter = f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:11"
@@ -356,6 +354,13 @@ def test_single_letter_groups_fit_150_percent_display(qtbot, make_speech_window)
     window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}group:{last}")
     window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}letter:{last}:0")
     assert window._input.text() == window._letter_groups[last][0]
+    qtbot.waitUntil(window._action_buttons[window._action(f"group:{last}")].isVisible)
+    assert window._keyboard_page == 2
+    window.handle_gaze_action(window._action(f"group:{last}"))
+    assert window._next_page_button.isHidden()
+    window.handle_gaze_action(window._action("letters:close"))
+    assert window._keyboard_page == 2
+    assert window._page_label.text() == "3 / 3"
 
 
 @pytest.mark.e2e

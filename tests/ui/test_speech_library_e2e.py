@@ -20,11 +20,8 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, make_speech_w
     window = make_speech_window(speech, library_store=store)
     window.show()
 
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:1"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:1:1"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}space"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}group:0"].click()
-    window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0:0"].click()
+    for command in ("group:1", "letter:1:1", "space", "group:0", "letter:0:0"):
+        click_speech_action(qtbot, window, command)
     window._play_button.click()
 
     assert window._input.text() == "DŽ A"

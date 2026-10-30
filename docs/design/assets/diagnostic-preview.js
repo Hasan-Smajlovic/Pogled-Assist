@@ -25,8 +25,8 @@
     const state = read();
     if (!state.active) return;
     const active = state.active;
-    const seconds = Math.max(0, Math.min(((active.stopped || Date.now()) - active.started) / 1000, active.minutes * 60, 32 / rate));
-    const item = { id: active.id, started: active.started, seconds, size: Math.min(32, seconds * rate), policy: active.policy, reason, dropped: 0, readable: true };
+    const seconds = Math.max(0, Math.min(((active.stopped || Date.now()) - active.started) / 1000, active.minutes * 60));
+    const item = { id: active.id, started: active.started, seconds, size: seconds * rate, policy: active.policy, reason, dropped: 0, readable: true };
     state.active = null;
     state.items = [item, ...state.items.filter(entry => entry.id !== item.id)].slice(0, 5);
     state.finished = Date.now();
@@ -40,8 +40,8 @@
         return value;
       }
       const seconds = (Date.now() - value.active.started) / 1000;
-      if (seconds >= Math.min(value.active.minutes * 60, 32 / rate)) {
-        finish(seconds * rate >= 32 ? 'size-limit' : 'completed');
+      if (seconds >= Math.min(value.active.minutes * 60)) {
+        finish('completed');
         return read();
       }
     }
@@ -64,6 +64,7 @@
   }
   function preview(kind) {
     const value = { active: null, items: [], finished: null };
+    if (kind === 'recording-error') { value.persistenceFailure = true; kind = 'recording'; }
     if (kind === 'recording' || kind === 'finishing') {
       value.active = { id: 'snimak-proba', started: Date.now() - 18000, minutes: 2, policy: ReferenceDesign.readSession('eye-policy', 'both') };
       if (kind === 'finishing') { value.active.stopped = Date.now(); value.active.stoppingUntil = Date.now() + 15000; }
@@ -75,6 +76,7 @@
     write(value);
   }
   function badgeState(value) {
+    if (value.persistenceFailure) return { kind: 'error', text: 'Greška čuvanja logova', compact: 'Logovi !' };
     if (value.active?.stoppingUntil) return { kind: 'finishing', text: 'Završavam snimak…', compact: 'Čuvam…' };
     if (value.active) {
       const remaining = clock(Math.ceil(value.active.minutes * 60 - (Date.now() - value.active.started) / 1000));
@@ -128,8 +130,8 @@
     label.textContent = 'Dijagnostičko snimanje ';
     const select = document.createElement('select');
     for (const [value, text] of [
-      ['ready', 'Bez snimanja'], ['recording', 'Snimanje u toku'], ['finishing', 'Završavanje snimka'],
-      ['completed', 'Snimak je sačuvan'], ['size-limit', 'Dostignut limit prostora'],
+      ['ready', 'Bez snimanja'], ['recording-error', 'Greška logova tokom snimanja'], ['recording', 'Snimanje u toku'], ['finishing', 'Završavanje snimka'],
+      ['completed', 'Snimak je sačuvan'], ['size-limit', 'Raniji snimak: limit prostora'],
       ['dropped', 'Snimak nije potpun'], ['write-error', 'Greška čuvanja'],
     ]) {
       const option = document.createElement('option');

@@ -79,7 +79,14 @@
     const duration = (active ? active.minutes : minutes) * 60;
     renderDuration(active, elapsed, duration, finishing);
     renderLogging();
+    renderPersistence(value);
     renderRecordingState(active, finishing);
+  }
+  function renderPersistence(value) {
+    const text = value.persistenceFailure
+      ? 'Prekidi čuvanja: opći logovi · Greška zapisivanja · Početak 28.10.2026. 14:32:05 · Oporavak: još traje. Raniji prekid: ručni snimak · Greška završnog zapisa · Početak 28.10.2026. 14:30:00 · Oporavak 28.10.2026. 14:31:00. Prikaz je skraćen na posljednja 64 prekida.'
+      : 'Nema zabilježenih prekida čuvanja.';
+    setText('persistence-history', text);
   }
   function renderDuration(active, elapsed, duration, finishing) {
     for (const button of document.querySelectorAll('[data-duration]')) {
@@ -87,7 +94,7 @@
       button.setAttribute('aria-pressed', String(Number(button.dataset.duration) === (active ? active.minutes : minutes)));
     }
     diagEl('recording-remaining').textContent = ReferenceRecording.clock(duration - elapsed);
-    diagEl('recording-size').textContent = (active ? Math.min(32, elapsed * .085).toFixed(1).replace('.', ',') : '0') + ' / 32 MiB';
+    diagEl('recording-size').textContent = (active ? (elapsed * .085).toFixed(1).replace('.', ',') : '0') + ' MiB';
     diagEl('recording-progress').max = duration;
     diagEl('recording-progress').value = elapsed;
   }
@@ -102,7 +109,7 @@
     const display = {
       finishing: { tone: 'ready', mark: '◷', title: 'Završavam i čuvam snimak', copy: 'Izvoz će biti dostupan nakon potvrde čuvanja.' },
       recording: { tone: 'recording', mark: '●', title: 'Snimanje je u toku', copy: 'Vratite se u aplikaciju i ponovite problem. Ovaj prozor možete zatvoriti.' },
-      ready: { tone: 'ready', mark: '○', title: 'Spremno za snimanje', copy: 'Kraj po isteku vremena ili na 32 MiB. Možete zaustaviti i ranije.' },
+      ready: { tone: 'ready', mark: '○', title: 'Spremno za snimanje', copy: 'Kraj po isteku vremena. Možete zaustaviti i ranije.' },
     }[phase];
     const box = diagEl('recording-state');
     box.dataset.tone = display.tone;
@@ -214,7 +221,7 @@
     diagEl('recording-check-result').value = '';
     ReferenceRecording.preview(kind);
     wasActive = Boolean(ReferenceRecording.state().active);
-    selectTab(['ready', 'recording', 'finishing'].includes(kind) ? 'new' : 'history');
+    selectTab(['ready', 'recording', 'recording-error', 'finishing'].includes(kind) ? 'new' : 'history');
   }
 
   for (const name of ['new', 'history']) {

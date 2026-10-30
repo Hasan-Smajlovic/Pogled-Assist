@@ -14,13 +14,97 @@ from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
 
 
 @pytest.fixture
-def selection(monkeypatch):
-    now = freeze_monotonic(monkeypatch, 10.0)
+def gate(qapp):
     gate = EyeTrackingGate()
+    yield gate
+    gate.cancel()
+    gate.deleteLater()
+
+
+def test_completed_pause_survives_second_window_with_zero_fill(monkeypatch, gate):
+    now = freeze_monotonic(monkeypatch, 10.0)
+    gate.configure("hold", 300)
+    timer = GazeSelectionTimer()
+    gate.interrupted.connect(timer.pause)
+    gate.hold_started.connect(timer.hold_tracking)
+    gate.pause_retained.connect(timer.retain_completed_pause)
+    gate.update_eyes(True, True)
+
+    def sample(at):
+        now[0] = at
+        assert gate.sample(at)
+        return timer.update("button", at * 1000, pause_ms=850, dwell_ms=650)
+
+    for index in range(11):
+        sample(10.0 + index / 10)
+    now[0] = 11.01
+    gate.update_eyes(True, False)
+    now[0] = 11.36
+    gate.update_eyes(True, True)
+    resumed = sample(11.36)
+    assert resumed.progress == 0.0
+    assert not resumed.ready
+    assert not sample(12.009).ready
+    assert sample(12.01).ready
+
+
+@pytest.mark.parametrize("duration", [50, 150, 300, 500])
+@pytest.mark.parametrize("credited", [800, 850, 1000])
+@pytest.mark.parametrize(
+    "boundary,offset",
+    [("full", -1), ("full", 0), ("full", 1), ("final", -1), ("final", 0), ("final", 1)],
+)
+def test_two_hold_deadlines_use_only_credited_time(duration, credited, boundary, offset):
+    timer = GazeSelectionTimer()
+    timer.update("button", 0, pause_ms=850, dwell_ms=650)
+    timer.update("button", credited, pause_ms=850, dwell_ms=650)
+    loss = credited + 10
+    timer.hold_tracking(loss + duration, loss + 500)
+    returned = loss + (duration if boundary == "full" else 500) + offset
+    update = timer.update("button", returned, pause_ms=850, dwell_ms=650)
+    if returned < loss + duration:
+        expected = None if credited < 850 else (credited - 850) / 650
+    elif returned < loss + 500 and credited >= 850:
+        expected = 0.0
+    else:
+        expected = None
+    assert update.progress == (pytest.approx(expected) if expected is not None else None)
+    assert not update.ready
+    expected_credit = credited if returned < loss + duration else 850 if expected == 0.0 else 0
+    assert timer.diagnostic_snapshot()["credited_ms"] == expected_credit
+
+
+def test_prior_holds_cannot_complete_an_unfinished_pause():
+    timer = GazeSelectionTimer()
+    timer.update("button", 0, pause_ms=850, dwell_ms=650)
+    timer.update("button", 500, pause_ms=850, dwell_ms=650)
+    timer.hold_tracking(810, 1010)
+    assert timer.update("button", 750, pause_ms=850, dwell_ms=650).progress is None
+    timer.update("button", 1000, pause_ms=850, dwell_ms=650)
+    assert timer.diagnostic_snapshot()["credited_ms"] == 750
+    timer.hold_tracking(1310, 1510)
+    assert timer.update("button", 1360, pause_ms=850, dwell_ms=650).progress is None
+    assert timer.diagnostic_snapshot()["credited_ms"] == 0
+
+
+def test_stale_return_discards_pause_before_retention_deadline(selection):
+    gate, timer, now, sample = selection
+    now[0] = 11.2
+    gate.update_eyes(True, False)
+    now[0] = 11.55
+    gate.update_eyes(True, True)
+    assert not sample(11.55).ready
+    assert timer.diagnostic_snapshot()["credited_ms"] == 0
+
+
+@pytest.fixture
+def selection(monkeypatch, gate):
+    now = freeze_monotonic(monkeypatch, 10.0)
     gate.configure("hold", 150)
     timer = GazeSelectionTimer()
     gate.interrupted.connect(timer.pause)
     gate.hold_started.connect(timer.hold_tracking)
+    gate.pause_retained.connect(timer.retain_completed_pause)
     gate.update_eyes(True, True)
 
     def sample(at, target="button"):
@@ -58,6 +142,10 @@ def test_hold_deadline_is_not_extended_by_reports_or_status_only_recovery(select
     gate.update_eyes(True, True)
     now[0] = 11.161
     gate._deadline.timeout.emit()
+    assert timer.diagnostic_snapshot()["credited_ms"] == 250
+    assert gate.holding
+    now[0] = 11.511
+    gate._deadline.timeout.emit()
     assert timer.target is None
     assert not gate.holding
 
@@ -66,8 +154,11 @@ def test_delayed_qt_loss_uses_native_deadline(selection):
     gate, timer, now, _sample = selection
     now[0] = 11.3
     gate.update_eyes(True, False, received_at=11.01)
+    assert timer.diagnostic_snapshot()["credited_ms"] == 250
+    assert gate.holding
+    now[0] = 11.511
+    gate._deadline.timeout.emit()
     assert timer.target is None
-    assert not gate.holding
 
 
 @pytest.mark.parametrize("invalid_at,preserved", [(11.005, False), (11.015, True)])
@@ -89,6 +180,7 @@ def test_hold_duration_runs_from_loss_and_does_not_expire_from_prior_sample(sele
     gate, timer, now, _sample = selection
     gate.configure("hold", duration)
     gate.sample()
+    timer.pause()
     timer.update("button", 11000, pause_ms=250, dwell_ms=850)
     now[0] = 11.02
     gate.update_eyes(True, False)
@@ -129,13 +221,12 @@ def test_expired_hold_cannot_fire_when_timer_dispatch_is_late(selection):
     now[0] = 11.17
     gate.update_eyes(True, True)
     result = sample(11.17)
-    assert result.progress is None
+    assert result.progress == 0.0
     assert not result.ready
 
 
-def test_switching_sole_eye_requires_fresh_both_eye_gaze_to_keep_progress(monkeypatch):
+def test_switching_sole_eye_requires_fresh_both_eye_gaze_to_keep_progress(monkeypatch, gate):
     now = freeze_monotonic(monkeypatch, 10.0)
-    gate = EyeTrackingGate()
     gate.configure("any", 150)
     resets = []
     gate.interrupted.connect(lambda: resets.append(now[0]))
