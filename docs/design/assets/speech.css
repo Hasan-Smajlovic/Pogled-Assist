@@ -67,6 +67,8 @@
 .key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(72px, 1fr)); }
 .key-grid.dense button { min-height: 72px; }
 .group { font-size: clamp(22px, 2vw, 34px); letter-spacing: .05em; }
+.inline-letters button { font-size: 56px; min-height: 72px; }
+.inline-letters .back { font-size: 22px; }
 .symbols { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); }
 .item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: clamp(18px, 1.65vw, 26px); }
 .item small { color: var(--muted); font-size: 14px; font-weight: 400; }
@@ -102,16 +104,8 @@ dialog {
 }
 dialog::backdrop { background: #000c; }
 dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
-#letters-dialog, #confirm-dialog { width: min(1000px, calc(100vw - 64px)); }
-#letters-dialog { padding: 20px 24px; }
-#letters-dialog h2, #confirm-dialog h2 { min-height: 60px; display: flex; align-items: center; }
-#letters-dialog h2 { margin-bottom: 18px; }
-.letter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.letter-grid.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.letter-grid button { min-height: 128px; font-size: 56px; }
-#letters-dialog.compact .letter-grid button { min-height: 110px; font-size:44px; }
-.letter-grid .back { font-size: 22px; }
-#letters-dialog.compact .letter-grid .back { font-size:22px; }
+#confirm-dialog { width: min(1000px, calc(100vw - 64px)); }
+#confirm-dialog h2 { min-height: 60px; display: flex; align-items: center; }
 .dialog-copy { margin: 0 0 32px; color: #dce6f3; font-size: 22px; line-height: 1.5; overflow-wrap: anywhere; }
 #confirm-dialog, #exit-dialog, #alarm-dialog { display: none; height: min(460px, calc(100dvh - 64px)); }
 #confirm-dialog[open], #exit-dialog[open], #alarm-dialog[open] { display: flex; flex-direction: column; }
@@ -157,10 +151,8 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .utility-divider { grid-column: 1 / -1; height: 1px; }
   #status { white-space: normal; }
   dialog { width: calc(100vw - 24px); padding: 16px; }
-  #letters-dialog, #confirm-dialog { width:calc(100vw - 24px); padding:16px; }
+  #confirm-dialog { width:calc(100vw - 24px); padding:16px; }
   dialog h2 { font-size: 23px; }
-  .letter-grid, .letter-grid.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .letter-grid button { min-height: 110px; }
   .confirm-actions { grid-template-columns: 1fr; gap: 24px; }
 }
 /* Stable playback target: stop stays in the same cell while speech is active. */

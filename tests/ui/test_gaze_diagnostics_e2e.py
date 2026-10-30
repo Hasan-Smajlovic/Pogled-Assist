@@ -127,7 +127,7 @@ def test_clear_confirmation_survives_invalid_eyes_gap_and_logging_failure(
 def _assert_confirmation_events(mode, latest):
     events = records(latest)
     assert any(
-        data.get("reason") == "eye_gate_closed" for data in _event_data(events, "selection_state")
+        data.get("reason") == "eye_gate_closed" for data in _event_data(events, "selection_end")
     )
     assert any(
         data["source"] == "gaze" and data["target_id"] == "confirm:accept"
@@ -144,6 +144,71 @@ def _assert_confirmation_events(mode, latest):
 
 def _event_data(events, event):
     return [item["data"] for item in events if item["event"] == event]
+
+
+def test_completed_pause_retention_matches_with_logging_off_on_and_blocked(
+    diagnostic_mode, qtbot, monkeypatch
+):
+    mode, latest = diagnostic_mode
+    now = freeze_monotonic(monkeypatch, 100.0)
+    window = SpeechWindow(
+        FakeSpeech(), library_store=FakeLibraryStore(), alarm_sound=FakeAlarmSound()
+    )
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._input.setText("PRIVATE COMPOSED MESSAGE")
+    window._open_clear_dialog()
+    qtbot.wait(1)
+    controller = GazeMouseController(window, pointer_movement_enabled=False)
+    controller.update_settings(
+        GazeSettings(
+            eye_tracking_policy="hold",
+            eye_tracking_hold_ms=300,
+            selection_pause_ms=850,
+            dwell_ms=650,
+        )
+    )
+    controller._logical_screen_rect = (0, 0, 1280, 720)
+    controller._physical_screen_rect = (0, 0, 1920, 1080)
+    provider = TobiiGazeProvider()
+    gaze, eyes = provider._new_stream_callbacks()
+    provider.eye_state_changed.connect(
+        lambda state: controller.handle_eye_status(state.left, state.right, state.received_at)
+    )
+    provider.gaze_updated.connect(
+        lambda x, y, timestamp: controller.handle_gaze(x, y, timestamp, provider.gaze_received_at)
+    )
+    controller.toolbar_action_requested.connect(window.handle_gaze_action)
+    window.interaction_context_changed.connect(controller.cancel_toolbar_interaction)
+    actions = []
+    controller.toolbar_action_requested.connect(actions.append)
+    target = window.action_bounds(window._action("confirm:accept")).center()
+
+    def sample(at):
+        now[0] = at
+        eyes(True, True, 1)
+        gaze(target.x() / 1279, target.y() / 719, 1)
+        provider._emit_latest_gaze_sample()
+
+    for index in range(11):
+        sample(100 + index / 10)
+    now[0] = 101.01
+    eyes(True, False, 2)
+    now[0] = 101.32
+    controller._eye_gate._deadline.timeout.emit()
+    assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 850
+    sample(101.36)
+    assert actions == []
+    for index in range(1, 14):
+        sample(101.36 + index * 0.05)
+    sample(102.011)
+    assert actions == [window._action("confirm:accept")]
+    assert window._input.text() == ""
+    provider.stop()
+    if mode in {"basic", "trace"}:
+        logging_setup.shutdown_application_logging()
+        _assert_private_text_absent(latest)
 
 
 def _assert_private_text_absent(latest):
@@ -219,16 +284,17 @@ def test_letter_geometry_is_complete_and_uses_opaque_ids(diagnostic_mode, qtbot)
     qtbot.addWidget(window)
     window.resize(1280, 720)
     window.show()
-    window._open_letter_dialog(0)
+    window._show_letter_group(0)
     qtbot.wait(1)
-    assert window._dialogs.active is window._dialogs.letter
-    expected = len(window._dialogs.actions)
+    assert window._dialogs.active is None
+    expected = {window._diagnostic_context.token(action) for action in window._main_dynamic_actions}
     if mode in {"basic", "trace"}:
         logging_setup.shutdown_application_logging()
         geometry = [
             item
             for item in records(latest)
-            if item["event"] == "target_geometry" and item["data"]["kind"] == "letter"
+            if item["event"] == "target_geometry"
+            and item["data"].get("context_id") == window._diagnostic_context.id
         ]
         if mode == "basic":
             assert geometry == []
@@ -239,8 +305,14 @@ def test_letter_geometry_is_complete_and_uses_opaque_ids(diagnostic_mode, qtbot)
 def _assert_letter_geometry(geometry, expected):
     assert geometry
     assert not any(item["data"].get("_snapshot_truncated") for item in geometry)
-    targets = [target for item in geometry for target in item["data"]["targets"]]
-    assert len(targets) == expected
+    targets = [
+        target
+        for item in geometry
+        for target in item["data"]["targets"]
+        if target["target_id"] in expected
+    ]
+    assert {target["target_id"] for target in targets} == expected
+    assert len(targets) == len(expected)
     for target in targets:
         _assert_target_geometry(target)
 

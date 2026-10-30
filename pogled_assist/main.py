@@ -138,6 +138,7 @@ def _run_application(*, simulate_gaze: bool) -> int:
 
     exit_code = app.exec()
     heartbeat.stop()
+    window.finish_shutdown()
     logger.info("Application exited with code %s.", exit_code)
     return exit_code
 

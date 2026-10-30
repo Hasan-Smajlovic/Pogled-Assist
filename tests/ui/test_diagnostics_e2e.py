@@ -133,6 +133,32 @@ def dispose_recordings(recordings, qtbot):
     recordings.deleteLater()
 
 
+def test_persistence_history_keeps_reason_recovery_and_truncation(recording_ui):
+    window, recordings, _reports, _writer, _context = recording_ui
+    geometry = window._primary.geometry()
+    recordings.persistence = dict(
+        failures=[dict(output="ordinary", reason="json_write")],
+        gaps=[
+            dict(
+                output="ordinary",
+                reason="json_write",
+                started_at=1_793_188_800,
+                recovered_at=1_793_188_805,
+            ),
+            dict(output="manual", reason="metadata", started_at=1_793_188_806, recovered_at=None),
+        ],
+        gaps_truncated=True,
+    )
+    recordings.changed.emit()
+    text = window._storage.text()
+    assert "opći logovi · Greška strukturiranog zapisa" in text
+    assert "ručni snimak · Greška završnog zapisa" in text
+    assert text.count("Početak:") == text.count("Oporavak:") == 2
+    assert "još traje" in text
+    assert "posljednja 64 prekida" in text
+    assert window._primary.geometry() == geometry
+
+
 def test_window_close_keeps_recording_active_and_history_survives_restart(recording_ui, qtbot):
     window, recordings, reports, writer, context = recording_ui
     assert window._minutes == 2 and window._durations.checkedId() == 2
@@ -427,6 +453,64 @@ def test_recording_save_failure_keeps_warning_instead_of_success(recording_ui, q
     assert "Greška čuvanja snimka" in window._recording_badge.text()
 
 
+@pytest.mark.parametrize("phase", ["recording", "finishing", "completed"])
+@pytest.mark.parametrize("outputs", [("ordinary",), ("manual",), ("ordinary", "manual")])
+def test_persistence_failure_remains_visible_through_recording_states(
+    recording_ui, qtbot, phase, outputs
+):
+    from PySide6.QtCore import Qt
+
+    window, recordings, _reports, _writer, _context = recording_ui
+    badge = window._recording_badge
+    geometry = badge.geometry()
+    primary = window._primary.geometry()
+    focus = QApplication.focusWidget()
+    indicator = recordings.indicator
+    status = dict(
+        id="synthetic", state=phase, busy=phase != "completed", complete=True, remaining_seconds=32
+    )
+    indicator.set_status(status)
+    indicator.set_persistence(dict(failures=[dict(output=output) for output in outputs], gaps=[{}]))
+    assert "Greška čuvanja" in badge.text()
+    assert badge.geometry() == geometry and window._primary.geometry() == primary
+    assert badge.focusPolicy() == Qt.NoFocus and QApplication.focusWidget() is focus
+    assert badge.testAttribute(Qt.WA_TransparentForMouseEvents)
+    assert not indicator._confirmation.isActive()
+    indicator.set_status(status)
+    assert "Greška čuvanja" in badge.text()
+    indicator.set_persistence(dict(failures=[], gaps=[{}]))
+    assert "Greška" not in badge.text()
+
+
+def test_queued_export_is_reserved_until_cancelled(recording_ui, qtbot, monkeypatch, tmp_path):
+    _window, recordings, _reports, _writer, context = recording_ui
+    assert recordings.start(1, context)
+    recordings.stop()
+    qtbot.waitUntil(lambda: not recordings.busy and not recordings.loading)
+    key = recordings.status["id"]
+    entered, release = Event(), Event()
+    recover = recordings.store.recover_and_load
+
+    def blocked(**kwargs):
+        entered.set()
+        release.wait(5)
+        return recover(**kwargs)
+
+    monkeypatch.setattr(recordings.store, "recover_and_load", blocked)
+    recordings.load()
+    try:
+        assert entered.wait(1)
+        assert recordings.export(key, tmp_path / "reserved.zip")
+        recordings.store.maintain(budget_bytes=0)
+        source = recordings.store.directory / key / "snimak.jsonl"
+        assert source.exists()
+        recordings.shutdown()
+        recordings.store.maintain(budget_bytes=0)
+        assert not source.exists()
+    finally:
+        release.set()
+
+
 def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbot, monkeypatch):
     from PySide6.QtCore import Qt
 
@@ -444,11 +528,10 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     hotbar._show_controller_sidebar()
     hotbar._open_speech()
     speech = hotbar._speech_window
-    speech._open_letter_dialog(0)
+    speech._show_letter_group(0)
     qtbot.wait(1)
     letter_targets = {
-        action: speech._action_buttons[action].geometry()
-        for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry() for action in speech._main_dynamic_actions
     }
     badges = [
         hotbar._keyboard_window._recording_badge,
@@ -464,10 +547,9 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     hotbar._recording_changed()
     qtbot.wait(1)
     assert letter_targets == {
-        action: speech._action_buttons[action].geometry()
-        for action in speech._dialogs.letter_actions
+        action: speech._action_buttons[action].geometry() for action in speech._main_dynamic_actions
     }
-    speech._close_dialog()
+    speech._show_group_level()
     monkeypatch.setattr(
         toolbar.SettingsWindow, "_sync_startup_setting_from_windows", lambda _: None
     )

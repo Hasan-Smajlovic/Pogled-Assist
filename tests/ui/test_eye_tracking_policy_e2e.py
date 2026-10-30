@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 from _clock import freeze_monotonic
+from _hotbar_fixtures import app_control
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QGuiApplication
@@ -18,6 +19,118 @@ from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.settings_window import SettingsWindow
 
 pytestmark = pytest.mark.e2e
+
+
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize(
+    "surface", ["speech-group", "speech-letter", "hotbar", "keyboard", "controller"]
+)
+def test_completed_pause_retention_through_application_selection(
+    hotbar_gaze, qtbot, monkeypatch, surface
+):
+    hotbar, controller, _feed, actions, progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 10.0)
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings,
+            eye_tracking_policy="hold",
+            eye_tracking_hold_ms=300,
+            selection_pause_ms=850,
+            dwell_ms=650,
+        )
+    )
+    if surface.startswith("speech-"):
+        hotbar._open_speech()
+        window = hotbar._speech_window
+        window.showNormal()
+        window.setGeometry(0, 0, 1280, 720)
+        if surface == "speech-letter":
+            window._action_buttons[window._action("group:0")].click()
+            action = window._action("letter:0:0")
+        else:
+            action = window._action("group:0")
+        button = window._action_buttons[action]
+    else:
+        action, button = app_control(hotbar, surface)
+    qtbot.waitUntil(button.isVisible)
+    qtbot.wait(1)
+    point = button.mapToGlobal(button.rect().center())
+    provider = hotbar._gaze
+    gaze, eyes = provider._new_stream_callbacks()
+
+    def sample(at):
+        now[0] = at
+        eyes(True, True, 1)
+        gaze(point.x() / 1279, point.y() / 719, 1)
+        provider._emit_latest_gaze_sample()
+
+    for index in range(11):
+        sample(10.0 + index / 10)
+    assert progress[-1] == pytest.approx(150 / 650)
+    now[0] = 11.01
+    eyes(True, False, 2)
+    now[0] = 11.311
+    controller._eye_gate._deadline.timeout.emit()
+    assert progress[-1] == 0.0
+    assert actions == []
+    sample(11.36)
+    assert progress[-1] == 0.0
+    assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 850
+    for index in range(1, 13):
+        sample(11.36 + index * 0.05)
+    sample(12.009)
+    assert actions == []
+    sample(12.011)
+    assert actions == [action]
+
+
+@pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
+@pytest.mark.parametrize("change", ["speech_context", "suspension"])
+def test_retained_pause_cannot_cross_speech_context_change_or_input_suspension(
+    hotbar_gaze, qtbot, monkeypatch, change
+):
+    hotbar, controller, _feed, actions, _progress = hotbar_gaze
+    now = freeze_monotonic(monkeypatch, 10.0)
+    hotbar._update_gaze_settings(
+        replace(
+            controller.settings, eye_tracking_policy="hold", selection_pause_ms=100, dwell_ms=1000
+        )
+    )
+    hotbar._open_speech()
+    window = hotbar._speech_window
+    window.showNormal()
+    window.setGeometry(0, 0, 1280, 720)
+    qtbot.wait(1)
+    button = window._action_buttons[window._action("group:0")]
+    gaze, eyes = hotbar._gaze._new_stream_callbacks()
+
+    def sample(at):
+        now[0] = at
+        point = button.mapToGlobal(button.rect().center())
+        eyes(True, True, 1)
+        gaze(point.x() / 1279, point.y() / 719, 1)
+        hotbar._gaze._emit_latest_gaze_sample()
+
+    for index in range(4):
+        sample(10 + index / 10)
+    now[0] = 10.31
+    eyes(True, False, 2)
+    now[0] = 10.461
+    controller._eye_gate._deadline.timeout.emit()
+    selection = controller._toolbar_selection
+    assert selection.diagnostic_snapshot()["tracking_hold"] == "completed_pause"
+    if change == "speech_context":
+        button.click()
+        button = window._action_buttons[window._action("letter:0:0")]
+    else:
+        controller.set_input_suspended(True)
+        controller.set_input_suspended(False)
+    assert not selection.tracking_held
+    assert not selection.diagnostic_snapshot()["active"]
+    assert selection.diagnostic_snapshot()["credited_ms"] == 0
+    sample(10.67)
+    assert selection.diagnostic_snapshot()["credited_ms"] == 0
+    assert actions == []
 
 
 def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot, monkeypatch):
@@ -52,31 +165,6 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
     assert updates[-1].eye_tracking_policy == "any"
 
 
-def _app_control(hotbar, surface):
-    if surface == "hotbar":
-        action = QUICK_ACTIONS
-        button = hotbar._buttons[action]
-    elif surface == "keyboard":
-        hotbar._show_keyboard_sidebar()
-        window = hotbar._keyboard_window
-        window.setGeometry(900, hotbar.BAR_HEIGHT, 380, 720 - hotbar.BAR_HEIGHT)
-        action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    elif surface == "speech":
-        hotbar._open_speech()
-        window = hotbar._speech_window
-        window.showNormal()
-        window.setGeometry(0, 0, 1280, 720)
-        action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    else:
-        hotbar._show_controller_sidebar()
-        window = hotbar._controller_window
-        action = next(key for key in window._action_buttons if key.endswith("left_click"))
-        button = window._action_buttons[action]
-    return action, button
-
-
 @pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
 @pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
@@ -93,7 +181,7 @@ def test_one_eye_selects_app_controls_including_controller_clicks(
             dwell_ms=850,
         )
     )
-    action, button = _app_control(hotbar, surface)
+    action, button = app_control(hotbar, surface)
     qtbot.wait(1)
     point = button.mapToGlobal(button.rect().center())
     provider = hotbar._gaze
@@ -162,7 +250,7 @@ def test_settings_hold_expires_without_another_gaze_sample(settings_with_pending
     window, now, button = settings_with_pending_hold
     window.handle_eye_status(True, False)
     assert window._gaze_selection.tracking_held
-    now[0] += 0.151
+    now[0] += 0.501
     window._eye_gate._deadline.timeout.emit()
     assert window._gaze_selection.target is None
     assert not button.property("gazeTarget")
@@ -196,15 +284,34 @@ def test_one_eye_check_free_view_and_fixation_keep_real_eye_indicators(qtbot, mo
     assert "Jedno oko je dovoljno" in window._policy_text
 
 
-def test_changed_settings_target_geometry_does_not_resume_a_hold(settings_with_pending_hold):
+@pytest.mark.parametrize("delay", [0.05, 0.2])
+def test_changed_settings_target_geometry_does_not_resume_a_hold(settings_with_pending_hold, delay):
     window, now, button = settings_with_pending_hold
     window.handle_eye_status(True, False)
     button.move(button.x() + 10, button.y())
-    now[0] += 0.05
+    now[0] += delay
     window.handle_eye_status(True, True)
     window.handle_gaze(button.mapToGlobal(button.rect().center()))
     assert window._gaze_settings.show_interaction_overlay
     assert window._gaze_selection.diagnostic_snapshot()["credited_ms"] == 0
+
+
+@pytest.mark.parametrize(
+    "field,value", [("selection_pause_ms", 900), ("dwell_ms", 700), ("click_cooldown_ms", 400)]
+)
+def test_changed_timing_discards_retained_pause(hotbar_gaze, field, value):
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._update_gaze_settings(replace(controller.settings, eye_tracking_policy="hold"))
+    button = hotbar._buttons[QUICK_ACTIONS]
+    point = button.mapToGlobal(button.rect().center())
+    feed(point, 0)
+    feed(point, 900)
+    controller.handle_eye_status(True, False)
+    assert controller._toolbar_selection.tracking_held
+    hotbar._update_gaze_settings(replace(controller.settings, **{field: value}))
+    assert controller._toolbar_selection.target is None
+    assert not controller._eye_gate.holding
+    assert actions == []
 
 
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
@@ -245,6 +352,9 @@ def test_native_worker_hold_deadline_through_hotbar_dispatch(
     assert actions == []
     if delay < 0.15 and not invalid_before_loss:
         assert progress[-1] == before
+    elif not invalid_before_loss:
+        assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 500
+        assert progress[-1] == 0.0
     else:
         assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 0
 
@@ -406,10 +516,18 @@ def test_queued_gaze_keeps_native_freshness_through_application_gates(
     if surface == "settings":
         hotbar._open_settings()
         window = hotbar._settings_window
+        # Fullscreen geometry follows the offscreen display, not this test's target size.
+        window.showNormal()
         window.setGeometry(0, 0, 1280, 720)
         window._select_tab(1)
         qtbot.wait(1)
         button = window._gaze_page._interaction_overlay_button
+        qtbot.waitUntil(
+            lambda: (
+                window.geometry() == QRect(0, 0, 1280, 720)
+                and button.visibleRegion().contains(button.rect().center())
+            )
+        )
         selection = window._gaze_selection
         gate = window._eye_gate
     else:

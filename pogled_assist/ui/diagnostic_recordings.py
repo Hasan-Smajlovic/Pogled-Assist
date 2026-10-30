@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
-from queue import Full, Queue
+from queue import Empty, Full, Queue
 from threading import Event, Thread
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
@@ -36,6 +37,11 @@ class DiagnosticRecordings(QObject):
         self._queue: Queue = Queue(maxsize=4)
         self._stopped = Event()
         self._worker = None
+        self.storage = {}
+        self.persistence = {}
+        self._maintenance_pending = False
+        self._next_maintenance = 0.0
+        self._recovered = False
         self._finished.connect(self._apply, Qt.QueuedConnection)
         self._timer = QTimer(self)
         self._timer.setInterval(250)
@@ -47,7 +53,7 @@ class DiagnosticRecordings(QObject):
         return bool(self.status and self.status.get("busy"))
 
     def start(self, minutes: int, context: dict) -> bool:
-        if self._stopped.is_set() or self.busy or self.loading or self.history_error:
+        if any((self._stopped.is_set(), self.busy, self.loading, self.history_error)):
             return False
         diagnostics.flush_summaries()
         self._writer = self._writer_source()
@@ -62,6 +68,14 @@ class DiagnosticRecordings(QObject):
         self.poll()
 
     def poll(self) -> None:
+        writer = self._writer or self._writer_source()
+        if hasattr(writer, "persistence_status"):
+            persistence = writer.persistence_status()
+            if persistence != self.persistence:
+                self.persistence = persistence
+                self.indicator.set_persistence(persistence)
+                self.changed.emit()
+        self._schedule_maintenance()
         if self._writer is None:
             return
         status = self._writer.recording_status()
@@ -72,6 +86,18 @@ class DiagnosticRecordings(QObject):
             self.changed.emit()
         if was_busy and not self.busy:
             self.load()
+
+    def _schedule_maintenance(self):
+        if not self._recovered or self._maintenance_pending:
+            return
+        if time.monotonic() < self._next_maintenance:
+            return
+        self._maintenance_pending = self._submit("maintenance", "", None)
+        self._next_maintenance = time.monotonic() + 5
+
+    def set_budget(self, gigabytes: int) -> None:
+        self.store.budget_bytes = gigabytes * 1_000_000_000
+        self._next_maintenance = 0
 
     def load(self) -> None:
         if self._stopped.is_set():
@@ -91,9 +117,13 @@ class DiagnosticRecordings(QObject):
             return False
         if self.busy and self.status["id"] == recording_id:
             return False
+        if not self.store.reserve_export(recording_id):
+            return False
         self._exporting = self._submit(
             "export", recording_id, (recording_id, destination, deepcopy(report))
         )
+        if not self._exporting:
+            self.store.release_export(recording_id)
         return self._exporting
 
     def _submit(self, action, key, value) -> bool:
@@ -109,53 +139,80 @@ class DiagnosticRecordings(QObject):
     def _run(self) -> None:
         while not self._stopped.is_set():
             task = self._queue.get()
-            if task is None or self._stopped.is_set():
+            if task is None:
                 return
-            action, key, value = task
-            try:
-                result = (
-                    self.store.recover_and_load(active_id=value)
-                    if action == "load"
-                    else self.store.export(*value)
-                )
-                success = True
-            except RecordingReadError:
-                result, success = "unreadable", False
-            except Exception:
-                result, success = None, False
+            if self._stopped.is_set():
+                if task[0] == "export":
+                    self.store.release_export(task[1])
+                return
+            action, key, _value = task
+            success, result = self._execute(task)
             try:
                 self._finished.emit((action, key, success, result))
             except RuntimeError:
                 return
 
+    def _execute(self, task):
+        action, key, value = task
+        try:
+            return True, self._file_operation(action, value)
+        except RecordingReadError:
+            return False, "unreadable"
+        except Exception:
+            return False, None
+        finally:
+            if action == "export":
+                self.store.release_export(key)
+
+    def _file_operation(self, action, value):
+        if action == "load":
+            return self.store.recover_and_load(active_id=value)
+        if action == "maintenance":
+            return self.store.maintain()
+        return self.store.export(*value)
+
     def _apply(self, outcome) -> None:
         if self._stopped.is_set():
             return
         action, key, success, result = outcome
-        if action == "load":
-            self.loading = False
-            self.history_error = not success
-            if success:
-                self.entries = result
-            if self._reload_pending:
-                self._reload_pending = False
-                self.load()
+        if action == "maintenance":
+            self._maintenance_pending = False
+            self.storage = result if success else {**self.storage, "state": "unavailable"}
             self.changed.emit()
-        else:
-            self._exporting = False
-            if result == "unreadable":
-                self.entries = [
-                    {**entry, "state": "unreadable", "complete": False}
-                    if entry["id"] == key
-                    else entry
-                    for entry in self.entries
-                ]
-                self.changed.emit()
-            self.exported.emit(key, success)
+            return
+        if action == "load":
+            self._apply_load(success, result)
+            return
+        self._exporting = False
+        if result == "unreadable":
+            self.entries = [
+                {**entry, "state": "unreadable", "complete": False} if entry["id"] == key else entry
+                for entry in self.entries
+            ]
+            self.changed.emit()
+        self.exported.emit(key, success)
+
+    def _apply_load(self, success, result):
+        self.loading = False
+        self.history_error = not success
+        if success:
+            self.entries = result
+            self._recovered = True
+        if self._reload_pending:
+            self._reload_pending = False
+            self.load()
+        self.changed.emit()
 
     def shutdown(self) -> None:
         self._timer.stop()
         self._stopped.set()
+        while True:
+            try:
+                task = self._queue.get_nowait()
+            except Empty:
+                break
+            if task is not None and task[0] == "export":
+                self.store.release_export(task[1])
         # A busy worker observes the stop before taking another queued job.
         with suppress(Full):
             self._queue.put_nowait(None)

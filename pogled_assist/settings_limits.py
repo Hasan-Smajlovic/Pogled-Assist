@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TypeVar
 
 SMOOTHING_RANGE = (0.05, 1.0)
+LOG_STORAGE_GB_RANGE = (1, 10)
+LOG_STORAGE_GB_DEFAULT = 4
 DWELL_MS_RANGE = (150, 5000)
 EYE_TRACKING_HOLD_MS_RANGE = (50, 500)
 EYE_TRACKING_HOLD_MS_STEP = 50

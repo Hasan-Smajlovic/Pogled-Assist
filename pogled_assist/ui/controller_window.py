@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..diagnostics import safe_action
+from ..diagnostics import invoke_action, safe_action
 from ..interaction.mouse_controller import GazeSettings
 from ..keyboard_layouts import (
     ARABIC_SCRIPT,
@@ -526,6 +526,14 @@ class ControllerWindow(SidebarPanel):
         self._sync_settings_buttons()
 
     def _trigger_action(self, action: str, *, source: str = "unknown") -> None:
+        invoke_action(
+            lambda: self._dispatch_action(action, source=source),
+            context=self._diagnostic_context,
+            action=action,
+            source=source,
+        )
+
+    def _dispatch_action(self, action: str, *, source: str) -> None:
         command = action.removeprefix(CONTROLLER_WINDOW_ACTION_PREFIX)
         if command.startswith("keyboard_tab:"):
             self._keyboard_group_page = 0

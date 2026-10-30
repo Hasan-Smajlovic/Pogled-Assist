@@ -435,6 +435,14 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         overlay.set_paused(True)
         set_gaze_paused(button, True)
         self.capture(scene, "selection-held", "Speech selection: paused ring", size=(640, 360))
+        overlay.show_progress(QPoint(320, 180), 0.0, "Pogledaj")
+        overlay.set_paused(True)
+        self.capture(
+            scene,
+            "selection-pause-held",
+            "Speech selection: completed pause, zero fill",
+            size=(640, 360),
+        )
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()
@@ -545,16 +553,20 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
         self.widgets.append(self.speech)
         self.capture(self.speech, "speech", "Speech keyboard")
+        self.speech._show_letter_group(0)
+        self.capture(self.speech, "speech-letters", "Speech: inline letters")
+        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=12))
+        self.speech._show_letter_group(0)
+        self.capture(self.speech, "speech-letters-twelve", "Speech: twelve inline letters")
+        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=5))
         self.speech.bind_recording_indicator(RecordingIndicator(self.speech))
         self.speech._recording_badge.set_status(
             {"busy": True, "remaining_seconds": 83, "state": "recording"}
         )
         self.capture(self.speech, "speech-recording", "Speech: passive recording status")
-        self.speech._open_letter_dialog(0)
-        self.capture_dialog(
-            self.speech._dialogs.letter, "speech-recording-letters", "Speech letters: recording"
-        )
-        self.speech._close_dialog()
+        self.speech._show_letter_group(0)
+        self.capture(self.speech, "speech-recording-letters", "Speech letters: recording")
+        self.speech._show_group_level()
         for state, busy, complete in (
             ("finishing", True, False),
             ("completed", False, True),
@@ -587,7 +599,10 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.speech._library_store.read_error = False
         self.speech._show_list_level()
         self.speech._start_editor()
+        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=12))
+        self.speech._show_letter_group(0)
         self.capture(self.speech, "speech-editor", "Speech shared editor")
+        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=5))
         self.capture_speech_dialogs()
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
@@ -619,19 +634,19 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         ):
             self.speech.set_tracking_notice(notice, immediate=True)
             self.capture(self.speech, f"speech-tracking-{name}", f"Speech tracking: {name}")
-        self.speech._open_letter_dialog(0)
+        self.speech._show_letter_group(0)
         self.speech.set_tracking_notice(
             TrackingNotice(
                 "Desno oko se trenutno ne prati", "odabir je zaustavljen", eyes=(True, False)
             ),
             immediate=True,
         )
-        self.capture_dialog(
-            self.speech._dialogs.letter,
+        self.capture(
+            self.speech,
             "speech-tracking-letters",
             "Speech letters: tracking interrupted",
         )
-        self.speech._close_dialog()
+        self.speech._show_group_level()
         self.speech._recording_badge.set_status(
             {"busy": True, "remaining_seconds": 83, "state": "recording"}
         )
@@ -731,11 +746,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.speech._show_group_level()
         self.speech._input.setText("سَلَامٌ · SELAM · ١٢٣")
         self.capture(self.speech, "speech-arabic", "Speech: Arabic")
-        self.speech._open_letter_dialog(0)
-        self.capture_dialog(
-            self.speech._dialogs.letter, "speech-arabic-letters", "Speech: Arabic letters"
-        )
-        self.speech._close_dialog()
+        self.speech._show_letter_group(0)
+        self.capture(self.speech, "speech-arabic-letters", "Speech: Arabic letters")
+        self.speech._show_group_level()
         self.speech._show_symbols_level()
         self.capture(self.speech, "speech-arabic-symbols", "Speech: Arabic symbols")
         mark_group = next(
@@ -743,11 +756,9 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             for index, keys in enumerate(self.speech._symbol_groups)
             if all(key in ARABIC_MARKS for key in keys)
         )
-        self.speech._open_letter_dialog(mark_group, symbols=True)
-        self.capture_dialog(
-            self.speech._dialogs.letter, "speech-arabic-marks", "Speech: Arabic vowel marks"
-        )
-        self.speech._close_dialog()
+        self.speech._show_letter_group(mark_group, symbols=True)
+        self.capture(self.speech, "speech-arabic-marks", "Speech: Arabic vowel marks")
+        self.speech._show_symbols_level()
         self.speech._view_mode = "phrases"
         self.speech._show_list_level()
         self.speech._start_editor()

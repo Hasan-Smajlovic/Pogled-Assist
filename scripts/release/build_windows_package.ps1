@@ -172,6 +172,9 @@ $requiredFiles = @(
     "_internal\pogled_assist\__init__.py",
     "_internal\pogled_assist\log_snapshot.py",
     "_internal\pogled_assist\log_transport.py",
+    "_internal\pogled_assist\log_context.py",
+    "_internal\pogled_assist\log_output.py",
+    "_internal\pogled_assist\log_reservations.py",
     "_internal\pogled_assist\tracking\__init__.py",
     "_internal\pogled_assist\tracking\tobii_stream_engine.py",
     "_internal\pogled_assist\tracking\tobii_stream_engine_bridge.py"

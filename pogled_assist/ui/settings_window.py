@@ -11,6 +11,7 @@ from PySide6.QtCore import QPoint, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
+from .. import diagnostics
 from ..interaction.eye_tracking_policy import EyeTrackingGate
 from ..interaction.gaze_selection import (
     MAX_SELECTION_PAUSE_MS,
@@ -612,6 +613,13 @@ class SettingsWindow(QWidget):
 
         self._emit_gaze_settings(status)
 
+    def _adjust_log_storage(self, delta: int) -> None:
+        from ..settings_limits import LOG_STORAGE_GB_RANGE
+
+        value = clamp(self._gaze_settings.log_storage_gb + delta, LOG_STORAGE_GB_RANGE)
+        self._gaze_settings = replace(self._gaze_settings, log_storage_gb=value)
+        self._emit_gaze_settings("Prostor za logove je ažuriran.")
+
     def _select_eye_tracking_policy(self, index: int) -> None:
         policy = self._gaze_page._policy_combo.itemData(index)
         self._gaze_settings = replace(self._gaze_settings, eye_tracking_policy=policy)
@@ -627,6 +635,8 @@ class SettingsWindow(QWidget):
         self._emit_gaze_settings("Trajanje kratkog prekida je ažurirano.")
 
     def _adjust_dwell_ms(self, delta: int) -> None:
+        if self._gaze_selection.tracking_held:
+            self._eye_gate.cancel(reason="settings_changed")
         value = clamp(self._gaze_settings.dwell_ms + delta, DWELL_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, dwell_ms=value)
         self._emit_gaze_settings("Vrijeme zadržavanja pogleda je ažurirano.")
@@ -638,6 +648,8 @@ class SettingsWindow(QWidget):
         self._emit_gaze_settings("Čuvanje odabira uz rub je ažurirano.")
 
     def _adjust_selection_pause(self, delta: int) -> None:
+        if self._gaze_selection.tracking_held:
+            self._eye_gate.cancel(reason="settings_changed")
         value = clamp(
             self._gaze_settings.selection_pause_ms + delta,
             (MIN_SELECTION_PAUSE_MS, MAX_SELECTION_PAUSE_MS),
@@ -651,6 +663,8 @@ class SettingsWindow(QWidget):
         self._emit_gaze_settings("Radijus stabilnog pogleda je ažuriran.")
 
     def _adjust_click_cooldown(self, delta: int) -> None:
+        if self._gaze_selection.tracking_held:
+            self._eye_gate.cancel(reason="settings_changed")
         value = clamp(self._gaze_settings.click_cooldown_ms + delta, CLICK_COOLDOWN_MS_RANGE)
         self._gaze_settings = replace(self._gaze_settings, click_cooldown_ms=value)
         self._emit_gaze_settings("Pauza između radnji je ažurirana.")
@@ -784,7 +798,7 @@ class SettingsWindow(QWidget):
 
     def _setup_gaze(self):
         self._gaze_target: QWidget | None = None
-        self._gaze_selection = GazeSelectionTimer()
+        self._gaze_selection = GazeSelectionTimer("settings")
         self._last_gaze_action_ms = 0.0
         self._interaction_active = False
         self._eye_gate = EyeTrackingGate(self)
@@ -793,18 +807,28 @@ class SettingsWindow(QWidget):
         )
         self._eye_gate.interrupted.connect(self.pause_gaze_interaction)
         self._eye_gate.hold_started.connect(self._hold_tracking)
+        self._eye_gate.pause_retained.connect(self._retain_tracking_pause)
         self._eye_gate.hold_finished.connect(lambda: self._set_tracking_paused(False))
         self._tracking_hold_rect = None
 
     def handle_eye_status(self, left: bool, right: bool, at: float | None = None) -> None:
         self._eye_gate.update_eyes(left, right, at)
 
-    def _hold_tracking(self, deadline_ms: float) -> None:
-        self._gaze_selection.hold_tracking(deadline_ms)
+    def _hold_tracking(self, deadline_ms: float, retention_deadline_ms: float) -> None:
+        self._gaze_selection.hold_tracking(
+            deadline_ms, retention_deadline_ms, eyes=self._eye_gate.eyes
+        )
         widget = self._gaze_selection.target
         if isinstance(widget, QWidget) and self._gaze_selection.tracking_held:
             self._tracking_hold_rect = global_rect(widget)
             self._set_tracking_paused(True)
+
+    def _retain_tracking_pause(self) -> None:
+        if not self._gaze_selection.retain_completed_pause():
+            self.pause_gaze_interaction()
+            return
+        self._show_gaze_progress(self._gaze_selection.target, 0.0)
+        self._set_tracking_paused(True)
 
     def _set_tracking_paused(self, paused: bool) -> None:
         if self._gaze_target is not None:
@@ -829,15 +853,15 @@ class SettingsWindow(QWidget):
 
         widget, action = target
         if self._gaze_selection.tracking_held and self._tracking_target_changed(widget):
-            self.pause_gaze_interaction()
+            self.pause_gaze_interaction(reason="geometry_or_target_changed")
         self._update_gaze(widget, action, now_ms)
 
     def _handle_missing_gaze_target(self, point: QPoint) -> None:
         if self._gaze_still_on_blocked_target(point):
             # A disabled action under unchanged gaze is not a departure.
-            self.pause_gaze_interaction()
+            self.pause_gaze_interaction(reason="target_disabled")
         else:
-            self.cancel_gaze_interaction()
+            self.cancel_gaze_interaction(reason="target_departure")
 
     def _tracking_target_changed(self, widget: QWidget) -> bool:
         return (
@@ -871,14 +895,16 @@ class SettingsWindow(QWidget):
             and global_rect(blocked).contains(point)
         )
 
-    def cancel_gaze_interaction(self, *, require_leave: bool = False) -> None:
-        self._gaze_selection.cancel(require_leave=require_leave)
+    def cancel_gaze_interaction(
+        self, *, require_leave: bool = False, reason: str = "context_changed"
+    ) -> None:
+        self._gaze_selection.cancel(require_leave=require_leave, reason=reason)
         self._set_gaze_target(None)
         self._cancel_interaction()
 
-    def pause_gaze_interaction(self) -> None:
+    def pause_gaze_interaction(self, *, reason: str | None = None) -> None:
         self._set_tracking_paused(False)
-        self._gaze_selection.pause()
+        self._gaze_selection.pause(reason=reason or self._eye_gate.interruption_reason)
         self._set_gaze_target(None)
         self._cancel_interaction()
 
@@ -916,7 +942,7 @@ class SettingsWindow(QWidget):
         self._interaction_active = False
         self.interaction_finished.emit(global_rect(widget).center(), name)
         self._set_gaze_target(None)
-        action()
+        diagnostics.invoke_action(action, source="gaze", selection=self._gaze_selection)
 
     def _set_gaze_target(self, widget: QWidget | None) -> None:
         if widget is self._gaze_target:

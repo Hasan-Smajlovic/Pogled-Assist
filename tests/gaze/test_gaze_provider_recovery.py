@@ -9,16 +9,16 @@ from _clock import freeze_monotonic
 from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
+from pogled_assist.tracking.tobii_stream_engine_bridge_backend import TobiiStreamEngineBridgeBackend
 
 
 @pytest.fixture
-def active_stream(qapp, monkeypatch):
+def active_stream(qapp, qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
     stopped = []
     provider = TobiiGazeProvider()
-    provider._stream_engine = SimpleNamespace(
-        stop=lambda: stopped.append(True), connection_error=None
-    )
+    provider._stream_engine = TobiiStreamEngineBridgeBackend(lambda *_: None, lambda *_: None)
+    provider._stream_engine.stop = lambda: stopped.append(True)
     provider._running = True
     provider._start_requested = True
     provider._backend_name = "stream-engine-x86-bridge"
@@ -27,6 +27,7 @@ def active_stream(qapp, monkeypatch):
     provider._on_stream_engine_eye_status(True, True, 1)
     yield provider, now, stopped
     provider.stop()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
 def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stream):
@@ -83,20 +84,57 @@ def test_stream_stale_eye_data_cancels_dwell_and_requires_fresh_eyes(active_stre
 
 
 @pytest.mark.parametrize("failure", [False, True])
-def test_stream_outage_stops_backend_and_schedules_retry(active_stream, failure):
+def test_stream_outage_stops_backend_and_schedules_retry(active_stream, qtbot, failure):
     provider, now, stopped = active_stream
     if failure:
-        provider._stream_engine.connection_error = "stdout closed"
+        provider._stream_engine._connection_failed("stdout closed")
     else:
         now[0] += 3.1
     provider._on_stream_engine_gaze(0.5, 0.5, 2)
     provider._emit_latest_gaze_sample()
+    qtbot.waitUntil(provider._retry_timer.isActive)
     assert stopped == [True]
     assert provider._running is False
     assert provider._start_requested is True
     assert provider._retry_timer.isActive()
     assert provider._pending_gaze_sample is None
     assert provider._stream_eye_status_known is False
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_recovery_records_native_delivery_age_and_pretermination_process_state(
+    active_stream, qtbot, monkeypatch, failure
+):
+    from pogled_assist import diagnostics
+
+    provider, now, _stopped = active_stream
+    backend = provider._stream_engine
+    backend.connection_generation = provider._stream_generation
+    backend._process = SimpleNamespace(poll=lambda: None)
+    backend._last_eye_delivery_at = now[0]
+    events = []
+    monkeypatch.setattr(diagnostics, "emit", lambda event, **fields: events.append((event, fields)))
+    now[0] += 3.1
+    if failure:
+        backend._connection_failed("synthetic EOF")
+    provider._check_stream_health()
+    qtbot.waitUntil(provider._retry_timer.isActive)
+    recovery = [
+        fields
+        for event, fields in events
+        if event == "bridge_connection" and fields["decision"] == "recovery"
+    ]
+    assert len(recovery) == 1
+    assert recovery[0] == {
+        "priority": True,
+        "decision": "recovery",
+        "stream_generation": backend.connection_generation,
+        "reason": "synthetic EOF" if failure else "missing_delivery",
+        "native_eye_age_ms": pytest.approx(3100),
+        "process_state": "running",
+        "exit_code": None,
+        "shutdown_requested": False,
+    }
 
 
 def test_live_invalid_eyes_do_not_restart_backend(active_stream):
@@ -113,11 +151,12 @@ def test_live_invalid_eyes_do_not_restart_backend(active_stream):
     assert tracking == []
 
 
-def test_watchdog_does_not_restart_after_shutdown(active_stream):
+def test_watchdog_does_not_restart_after_shutdown(active_stream, qtbot):
     provider, now, stopped = active_stream
     provider.stop()
     now[0] += 5
     provider._emit_latest_gaze_sample()
+    qtbot.waitUntil(lambda: provider._connection_session is None)
     assert stopped == [True]
     assert not provider._retry_timer.isActive()
 
@@ -284,7 +323,7 @@ def test_queued_stream_resumption_cannot_override_retry_status(active_stream, qa
     worker.start()
     worker.join(timeout=1)
     assert not worker.is_alive()
-    provider._stream_engine.connection_error = "stdout closed"
+    provider._stream_engine._connection_failed("stdout closed")
     provider._emit_latest_gaze_sample()
     qapp.processEvents()
     assert label.text() == "Veza s Tobii uređajem je prekinuta. Pokušavam ponovo."

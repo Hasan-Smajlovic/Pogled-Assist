@@ -7,11 +7,24 @@ import time
 import uuid
 import weakref
 from collections import Counter
+from contextvars import ContextVar
 
 from .logging_setup import diagnostic_writer
 
 _metrics = weakref.WeakSet()
 _metrics_lock = threading.Lock()
+_action_origin = ContextVar("diagnostic_action", default=None)
+ESSENTIAL_EVENTS = frozenset(
+    {
+        "selection_end",
+        "selection_state",
+        "selection_hold_end",
+        "selection_credit_discarded",
+        "ui_action_requested",
+        "ui_action_returned",
+        "ui_action_rejected",
+    }
+)
 
 
 SAFE_ACTIONS = frozenset(
@@ -67,14 +80,15 @@ def normal_tracing() -> bool:
     return writer is not None and getattr(writer, "normal_trace", writer.trace)
 
 
-def emit(event: str, *, trace: bool = False, priority: bool = False, **fields) -> None:
+def emit(event: str, *, trace: bool = False, priority: bool = False, **fields) -> bool:
     writer = diagnostic_writer()
     if writer is not None:
         try:
-            writer.event(event, fields, trace=trace, priority=priority)
+            return writer.event(event, fields, trace=trace, priority=priority) is not False
         except Exception:
             # An observation must never escape into the input or check callback.
             writer.observation_failed()
+    return False
 
 
 def observation_failed() -> None:
@@ -86,6 +100,8 @@ def observation_failed() -> None:
 def safe_action(action: str | None) -> str | None:
     if action is None:
         return None
+    if not isinstance(action, str):
+        return "content_target"
     command = action.removeprefix("speech_window:")
     return command if command in SAFE_ACTIONS else "content_target"
 
@@ -96,13 +112,11 @@ class TargetContext:
     def __init__(self, kind: str) -> None:
         self.kind = kind
         self.id = uuid.uuid4().hex
-        self._tokens: dict[str, str] = {}
+        self._tokens: dict[object, str] = {}
 
     def token(self, action: str | None) -> str | None:
         if action is None:
             return None
-        if not isinstance(action, str):
-            return "unidentified_target"
         known = safe_action(action)
         if known != "content_target":
             return known
@@ -112,6 +126,60 @@ class TargetContext:
                 return "content_target"
             self._tokens[action] = uuid.uuid4().hex
         return self._tokens[action]
+
+
+def control_role(action: object) -> str:
+    if not isinstance(action, str):
+        return "control"
+    command = (
+        action.removeprefix("speech_window:")
+        .removeprefix("keyboard_window:")
+        .removeprefix("controller_window:")
+    )
+    kind = command.partition(":")[0]
+    kind = kind.removeprefix("keyboard_")
+    if kind in {"group", "letter", "confirm", "suggestion", "key", "phrase", "category", "answer"}:
+        return kind
+    return "control" if safe_action(action) != "content_target" else "content_control"
+
+
+def invoke_action(callback, *, context=None, action=None, source="unknown", selection=None):
+    """Keep dispatch identity alive while a synchronous handler replaces its controls."""
+    if not enabled():
+        return callback()
+    dispatch = _action_origin.get()
+    if dispatch is not None:
+        return _call_handler(callback, dispatch)
+    origin = getattr(getattr(selection, "_observer", None), "completed", None)
+    fields = dict(origin or {}) if source == "gaze" else {}
+    if not fields:
+        context = context or TargetContext("action")
+        fields = dict(
+            context_id=context.id,
+            target_id=context.token(action),
+            surface=context.kind,
+            role=control_role(action),
+            attempt_id=None,
+        )
+    fields.update(action_id=uuid.uuid4().hex, origin=source, source=source)
+    dispatch = {"outcome": "handler_returned"}
+    token = _action_origin.set(dispatch)
+    emit("ui_action_requested", priority=True, **fields)
+    try:
+        return _call_handler(callback, dispatch)
+    finally:
+        emit("ui_action_returned", priority=True, **dispatch, **fields)
+        _action_origin.reset(token)
+
+
+def _call_handler(callback, dispatch):
+    try:
+        return callback()
+    except BaseException:
+        # Qt reports slot exceptions through sys.excepthook and returns from emit().
+        # Remember the failure at the handler boundary before Qt intercepts it.
+        dispatch["outcome"] = "handler_failed"
+        raise
 
 
 class StreamMetrics:
@@ -124,10 +192,17 @@ class StreamMetrics:
         self._known_states: dict[str, str] = {}
         self._writer = None
         self.started = time.monotonic()
+        self._stream_started_at = self.started
+        self._start_sessions = ()
         self.counts: Counter = Counter()
         self.durations: Counter = Counter()
         self._states: dict[str, tuple[str, float, float]] = {}
         self._rates: dict[str, tuple[float, int]] = {}
+        self._last_events = {}
+        self._total_counts = Counter()
+        self._stream_id = uuid.uuid4().hex
+        self._interval_index = 0
+        self._missing_intervals = 0
         with _metrics_lock:
             _metrics.add(self)
 
@@ -140,6 +215,8 @@ class StreamMetrics:
         if identity != self._writer:
             self._writer = identity
             self.started = time.monotonic()
+            self._stream_started_at = self.started
+            self._start_sessions = getattr(writer, "observation_start_sessions", ())
             self.counts.clear()
             self.durations.clear()
             self._states.clear()
@@ -148,6 +225,10 @@ class StreamMetrics:
             for stream, state in self._known_states.items():
                 self._states[stream] = state, self.started, float("inf")
             self._rates.clear()
+            self._last_events.clear()
+            self._total_counts.clear()
+            self._stream_id = uuid.uuid4().hex
+            self._interval_index = self._missing_intervals = 0
         return True
 
     def count(self, reason: str, amount: int = 1) -> None:
@@ -189,6 +270,18 @@ class StreamMetrics:
         with self._lock:
             if not self._ready():
                 return
+            if event not in ESSENTIAL_EVENTS:
+                if self._last_events.get(event) == fields:
+                    return
+                self._last_events[event] = fields
+            if isinstance(fields.get("reason"), str):
+                self.counts[f"reason:{event}:{fields['reason']}"] += 1
+            if event in ESSENTIAL_EVENTS:
+                reason = fields.get("reason", fields.get("outcome", "unknown"))
+                if event in {"selection_end", "selection_hold_end"}:
+                    self.counts[f"outcome:{reason}"] += 1
+                emit(event, priority=True, **fields)
+                return
             now = time.monotonic()
             start, count = self._rates.get(event, (now, 0))
             if now - start >= 1:
@@ -210,11 +303,20 @@ class StreamMetrics:
                 return False
             for stream in tuple(self._states):
                 self._accrue(stream, now)
-            if force and not self._has_observations():
+            if not self._has_observations():
                 return False
-            emit(
+            self._total_counts.update(self.counts)
+            self._interval_index += 1
+            accepted = emit(
                 self._event_name,
                 priority=True,
+                interval_id=uuid.uuid4().hex,
+                observation_stream_id=self._stream_id,
+                observation_started_monotonic_s=self._stream_started_at,
+                observation_start_sessions=self._start_sessions,
+                interval_index=self._interval_index,
+                previous_intervals_dropped=self._missing_intervals,
+                cumulative_counts=dict(self._total_counts),
                 interval_s=interval,
                 counts=dict(self.counts),
                 eye_state_seconds=dict(self.durations),
@@ -223,6 +325,7 @@ class StreamMetrics:
             self.started = now
             self.counts.clear()
             self.durations.clear()
+            self._missing_intervals = 0 if accepted else self._missing_intervals + 1
             return True
 
     def _has_observations(self) -> bool:
@@ -254,73 +357,35 @@ def eye_state(left: bool, right: bool) -> str:
 
 
 class SelectionObserver:
+    """Observe timer boundaries; never infer a restart from a sampled phase."""
+
     def __init__(self, source: str) -> None:
         self.source = source
         self.context = TargetContext(source)
-        self.attempt: str | None = None
+        self.attempt = None
+        self.completed = None
         self._state = None
         self._writer = None
-        self._started_at: float | None = None
+        self._started_at = None
         self._credited_ms = 0.0
-        self._rates = StreamMetrics(
-            event_name="selection_summary", source=source, context_id=self.context.id
-        )
-
-    def observe(self, snapshot: dict, *, reason: str, pause_ms: int = 0, dwell_ms: int = 0) -> None:
-        if not self._ready():
-            return
-        target = self.context.token(snapshot["target"])
-        phase = self._phase(snapshot, pause_ms)
-        state = (self.context.id, target, phase)
-        previous = self._state
-        self._summarize_context()
-        if self._skip_idle(snapshot, state, reason):
-            return
-        self._update_attempt(snapshot["active"], state)
-        fields = {
-            "source": self.source,
-            "context_id": self.context.id,
-            "attempt_id": self.attempt,
-            "target_id": target,
-            "phase": phase,
-            "reason": reason,
-            "credited_ms": snapshot["credited_ms"],
-            "pause_ms": pause_ms,
-            "dwell_ms": dwell_ms,
-        }
-        if state != previous or reason != "sample":
-            self._rates.event("selection_state", elapsed_ms=self._elapsed_ms(), **fields)
-        emit("selection_sample", trace=True, **fields)
-        if not snapshot["active"]:
-            self._end_attempt(reason)
-        self._state = state
-        self._credited_ms = snapshot["credited_ms"]
-        if not snapshot["active"]:
-            self._rates.summary(force=True)
-
-    def _skip_idle(self, snapshot: dict, state: tuple, reason: str) -> bool:
-        if snapshot["active"] or reason == "sample":
-            return False
-        return state == self._state
-
-    def _summarize_context(self) -> None:
-        if self._state is not None and self._state[0] != self.context.id:
-            self._rates.summary(force=True)
-        self._rates.summary(
-            event_name="selection_summary", source=self.source, context_id=self.context.id
-        )
+        self._fields = {}
+        self._hold = None
+        self._settings = None
+        self._settings_id = None
+        self._coverage = "unknown"
+        self._rates = StreamMetrics(event_name="selection_summary", source=source)
 
     def _ready(self) -> bool:
         writer = diagnostic_writer()
         identity = (
             (writer, getattr(writer, "observation_generation", writer._generation))
-            if writer is not None
+            if writer
             else None
         )
         if identity != self._writer:
-            self._state = None
-            self.attempt = None
-            self._started_at = None
+            self._state = self.attempt = self._started_at = self._hold = None
+            self.completed = None
+            self._settings = None
             self._writer = identity
         return writer is not None
 
@@ -328,45 +393,145 @@ class SelectionObserver:
     def _phase(snapshot: dict, pause_ms: int) -> str:
         if not snapshot["active"]:
             return "repeat_locked" if snapshot["blocked"] else "idle"
+        if snapshot.get("tracking_hold"):
+            return "tracking_" + snapshot["tracking_hold"] + "_hold"
         if snapshot["held"]:
             return "edge_hold"
         return "pause" if snapshot["credited_ms"] < pause_ms else "dwell"
 
-    def _elapsed_ms(self) -> float | None:
-        if self._started_at is None:
-            return None
-        return max(0.0, time.monotonic() - self._started_at) * 1000
+    def _elapsed_ms(self):
+        return (
+            max(0.0, time.monotonic() - self._started_at) * 1000
+            if self._started_at is not None
+            else None
+        )
 
-    def _update_attempt(self, active: bool, state: tuple) -> None:
-        if not active:
+    def observe(self, snapshot: dict, *, reason: str, pause_ms=0, dwell_ms=0) -> None:
+        if not self._ready():
             return
-        previous = self._state
-        same_target = previous is not None and previous[:2] == state[:2]
-        if self.attempt is not None and same_target:
-            return
-        if self.attempt is not None:
-            self._rates.event(
-                "selection_end",
+        settings = pause_ms, dwell_ms
+        if settings != self._settings:
+            self._settings = settings
+            self._settings_id = uuid.uuid4().hex
+            emit(
+                "selection_settings",
+                priority=True,
+                settings_id=self._settings_id,
                 source=self.source,
-                context_id=previous[0],
-                attempt_id=self.attempt,
-                reason="target_or_context_changed",
-                credited_ms_before_end=self._credited_ms,
+                pause_ms=pause_ms,
+                dwell_ms=dwell_ms,
             )
-        self.attempt = uuid.uuid4().hex
-        self._started_at = time.monotonic()
-
-    def _end_attempt(self, reason: str) -> None:
-        if self.attempt is None:
+        if not snapshot["active"]:
+            self.finish(snapshot, reason=reason if reason != "sample" else "target_departure")
             return
+        target = self.context.token(snapshot["target"])
+        identity = self.context.id, target
+        if self.attempt is not None and identity != self._state[:2]:
+            self.finish(
+                None,
+                reason="context_changed" if identity[0] != self._state[0] else "target_changed",
+            )
+        starting = self.attempt is None
+        if starting:
+            self.attempt = uuid.uuid4().hex
+            self._started_at = time.monotonic()
+            self._credited_ms = 0.0
+            self._coverage = "partial_start" if snapshot["credited_ms"] > 0 else "observed_start"
+            self.completed = None
+        phase = self._phase(snapshot, pause_ms)
+        fields = dict(
+            source=self.source,
+            surface=self.context.kind,
+            role=control_role(snapshot["target"]),
+            context_id=self.context.id,
+            target_id=target,
+            attempt_id=self.attempt,
+            settings_id=self._settings_id,
+            affected_eye=snapshot.get("affected_eye") if phase.startswith("tracking_") else None,
+        )
+        self._fields = fields
+        self._observe_hold(phase, snapshot["credited_ms"], reason)
+        state = (*identity, phase)
+        if state != self._state:
+            self._rates.event(
+                "selection_state",
+                phase=phase,
+                reason=reason,
+                credited_ms=snapshot["credited_ms"],
+                elapsed_ms=self._elapsed_ms(),
+                attempt_started=starting,
+                **fields,
+            )
+        emit(
+            "selection_sample",
+            trace=True,
+            phase=phase,
+            reason=reason,
+            credited_ms=snapshot["credited_ms"],
+            **fields,
+        )
+        self._credited_ms = snapshot["credited_ms"]
+        self._state = state
+        self._rates.summary()
+
+    def _observe_hold(self, phase, credit, reason):
+        held = phase.endswith("_hold")
+        if self._hold is not None:
+            same_family = (phase == "edge_hold") == (self._hold[1] == "edge_hold")
+            if not held:
+                self._end_hold("resumed", "sample", credit)
+            elif not same_family:
+                self._end_hold("cancelled", reason, credit)
+        if held and self._hold is None:
+            self._hold = (
+                time.monotonic(),
+                phase,
+                self._credited_ms,
+                self._fields.get("affected_eye"),
+            )
+        if credit < self._credited_ms:
+            self._rates.event(
+                "selection_credit_discarded",
+                **self._fields,
+                discarded_ms=self._credited_ms - credit,
+                retained_ms=credit,
+                reason="completed_pause_retained",
+            )
+
+    def _end_hold(self, outcome, reason, credit):
+        if self._hold is None:
+            return
+        started, kind, original_credit, affected_eye = self._hold
+        fields = {**self._fields, "affected_eye": affected_eye}
+        self._rates.event(
+            "selection_hold_end",
+            **fields,
+            kind=kind,
+            duration_ms=max(0.0, time.monotonic() - started) * 1000,
+            hold_started_monotonic_s=started,
+            outcome=outcome,
+            reason=reason,
+            retained_ms=credit,
+            discarded_ms=max(0.0, original_credit - credit),
+        )
+        self._hold = None
+
+    def finish(self, snapshot, *, reason: str) -> None:
+        if not self._ready() or self.attempt is None:
+            return
+        credit = snapshot["credited_ms"] if snapshot and snapshot["active"] else self._credited_ms
+        self._end_hold("expired" if "expired" in reason else "cancelled", reason, 0)
+        fields = dict(self._fields)
         self._rates.event(
             "selection_end",
-            source=self.source,
-            context_id=self.context.id,
-            attempt_id=self.attempt,
-            reason=reason if reason != "sample" else "target_departure",
-            credited_ms_before_end=self._credited_ms,
+            **fields,
+            reason=reason,
             elapsed_ms=self._elapsed_ms(),
+            credited_ms_before_end=credit,
+            discarded_ms=0 if reason == "completed" else credit,
+            coverage=self._coverage,
         )
-        self.attempt = None
-        self._started_at = None
+        if reason == "completed":
+            self.completed = fields
+        self.attempt = self._started_at = self._state = None
+        self._credited_ms = 0.0
