@@ -310,7 +310,7 @@
       ['Čuvanje uz rub', report.edgeMs + ' ms'], ['Pauza između radnji', report.cooldownMs + ' ms'],
     ].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('');
     checkEl('check-environment').innerHTML = [
-      ['Izvor podataka', 'Simulacija mišem · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
+      ['Izvor podataka', 'Simulacija uz riječ · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
       ['Lokalne izmjene izvora', 'Nije dostupno u ovom primjeru'],
       ['Tobii model / SDK', 'Nije dostupno u simulaciji'], ['Sistem', 'Windows 11 · primjer'],
       ['Ekran / skaliranje', '1920 × 1080 fizičkih px · 150%'], ['Prikaz aplikacije', '1280 × 720 logičkih px'],
