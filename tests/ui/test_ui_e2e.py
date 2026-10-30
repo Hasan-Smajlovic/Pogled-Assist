@@ -119,7 +119,7 @@ def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze,
     provider._emit_cursor_sample()
     assert not controller._both_eyes_open
     assert hotbar._gaze_bubble.isHidden()
-    assert hotbar._tracking_status._view.title == "Simulacija mišem"
+    assert hotbar._tracking_status._view.title == "Simulacija uz riječ"
     assert hotbar._tracking_status._view.detail == "Lijevo —   Desno ✓"
     assert actions == []
 
@@ -131,7 +131,7 @@ def test_simulator_shortcuts_cancel_eye_loss_and_require_fresh_gaze(hotbar_gaze,
     shortcuts["F9"].activated.emit()
     assert not controller._both_eyes_open
     assert hotbar._gaze_bubble.isHidden()
-    assert hotbar._tracking_status._view.title == "Simulacija mišem"
+    assert hotbar._tracking_status._view.title == "Simulacija uz riječ"
 
 
 @pytest.mark.e2e

@@ -15,7 +15,7 @@ Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into poi
 - Right-side Keyboard and Controller panels for typing and common shortcuts.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
 - Adjustable [edge selection stability](docs/USER_GUIDE.md#selection-stability-near-edges) for Speech, Keyboard and the hotbar.
-- An optional caregiver gaze check with live positioning, timed targets, a local dwell trial, and [saved results and ZIP export](docs/features/gaze-check.md#saved-gaze-check-results).
+- An optional caregiver gaze check with live positioning, per-eye tracking with interruption counts, timed targets, a word written by gaze, and [saved results and ZIP export](docs/features/gaze-check.md#saved-gaze-check-results).
 - Short, explicitly started [diagnostic recordings and local support ZIPs](docs/USER_GUIDE.md#diagnostic-log-collection), with a visible recording indicator.
 - Tobii Pro SDK, Stream Engine, and optional 32-bit Stream Engine bridge support.
 

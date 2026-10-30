@@ -5,7 +5,15 @@ from __future__ import annotations
 import math
 
 from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES, eyes_usable
-from ..tracking.gaze_check import FRESH_SECONDS, CheckSnapshot
+from ..tracking.gaze_check import (
+    AGREEMENT_MIN_FRACTION,
+    EYE_GAP_FRACTION,
+    EYE_LOW_FRACTION,
+    FRESH_SECONDS,
+    CheckSnapshot,
+    EyeTrackingResult,
+)
+from ..tracking.gaze_check_report import EyeTrackingSummary
 from ..tracking.status import TrackingState
 
 
@@ -52,7 +60,7 @@ def _gaze_guidance(snapshot: CheckSnapshot, position: bool | None, depth: bool |
         return "Zadržite ekran mirno. Ako se prekidi nastave, provjerite položaj i osvjetljenje."
     if position is None or depth is None:
         return "Uređaj ne šalje položaj za ovaj prikaz. Podesite ekran uz Tobii prikaz položaja."
-    return "Zadržite položaj i odaberite „Provjeri preciznost“."
+    return "Zadržite položaj i odaberite „Pokreni provjeru“."
 
 
 def _depth_guidance(snapshot: CheckSnapshot) -> str:
@@ -106,3 +114,68 @@ def _missing_eye_feedback(snapshot: CheckSnapshot) -> str | None:
 
 def _gaze_in_bounds(gaze: tuple[float, float]) -> bool:
     return all(math.isfinite(value) and 0 <= value <= 1 for value in gaze)
+
+
+def _seconds(value: float) -> str:
+    return f"{value:.1f}".replace(".", ",")
+
+
+def eye_interruptions_text(result: EyeTrackingResult) -> str:
+    if not result.interruptions:
+        return "Prekidi: 0"
+    return f"Prekidi: {result.interruptions} · najduži {_seconds(result.longest_interruption)} s"
+
+
+def eye_summary_text(name: str, summary: EyeTrackingSummary | None) -> str:
+    """One saved test's per-eye share of time, as shown on the result page."""
+    if summary is None:
+        return f"{name} · praćenje po oku nije izmjereno"
+    text = (
+        f"{name} · lijevo {summary.left:.0%} · desno {summary.right:.0%} · "
+        f"oba {summary.both:.0%} · prekidi {summary.interruptions}"
+    )
+    if summary.interruptions:
+        text += f", najduži {_seconds(summary.longest_interruption_seconds)} s"
+    if summary.agreement_fraction is not None:
+        text += (
+            f" · isto mjesto {summary.agreement_fraction:.0%}, razmak "
+            f"{summary.median_separation_logical_px:.0f} px"
+        )
+    return text
+
+
+def eye_agreement_text(result: EyeTrackingResult) -> str:
+    if result.agreement_supported is False:
+        return "Isto mjesto · nije dostupno: uređaj šalje samo zajedničku tačku pogleda oba oka."
+    if not result.agreement_supported:
+        return "Isto mjesto · nije dostupno za ovaj uređaj."
+    if result.median_separation is None:
+        return "Isto mjesto · nije izmjereno: oba oka nisu dovoljno dugo praćena istovremeno."
+    return (
+        f"Isto mjesto · {result.agreement_fraction:.0%} uzoraka unutar "
+        f"{result.threshold:.0f} px · razmak {result.median_separation:.0f} px"
+    )
+
+
+def eye_tracking_advice(result: EyeTrackingResult) -> tuple[str, bool]:
+    """Name what was measured; the values do not establish a cause."""
+    if max(result.left, result.right) < 0.005:
+        return "Uređaj nije javio nijedno oko. Provjerite vezu, položaj i osvjetljenje.", False
+    low = min(result.left, result.right)
+    if low < EYE_LOW_FRACTION and abs(result.left - result.right) >= EYE_GAP_FRACTION:
+        eye = "Lijevo" if result.left < result.right else "Desno"
+        return f"{eye} oko se često gubi. Podesite položaj i ponovite provjeru.", False
+    if low < EYE_LOW_FRACTION:
+        return "Oba oka se često gube. Podesite položaj i ponovite provjeru.", False
+    agreement = result.agreement_fraction
+    if agreement is not None and agreement < AGREEMENT_MIN_FRACTION:
+        return (
+            "Lijevo i desno oko često ne gledaju u istu tačku. "
+            "Jedno oko možda odlazi ili kalibracija više ne odgovara.",
+            False,
+        )
+    return (
+        "Oba oka se uglavnom prate. Ako slova i dalje ne pogađate, "
+        "pokrenite provjeru za položaj i kalibraciju.",
+        True,
+    )
