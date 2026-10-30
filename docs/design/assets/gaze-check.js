@@ -10,6 +10,8 @@
   const tabs = ['precision', 'trial', 'context'];
   let checkMode = 'position';
   let checkTrialIndex = 0;
+  // One entry per finished letter: true when selected, false when its time ran out.
+  let checkTrialResults = [];
   let checkDetails = false;
   let reportTab = 'precision';
   let currentReport = null;
@@ -434,6 +436,7 @@
   function checkStage(mode) {
     if (checkMode !== mode) {
       checkTrialIndex = 0;
+      checkTrialResults = [];
       activeAttemptId = 'pokusaj-' + (++attemptSequence);
     }
     checkMode = mode;
@@ -479,7 +482,12 @@
       targets.append(key);
     });
     const typed = checkEl('check-word');
-    typed.textContent = [...word].map((letter, i) => i < checkTrialIndex ? letter : '_').join(' ');
+    typed.replaceChildren(...[...word].flatMap((letter, i) => {
+      const slot = document.createElement('span');
+      slot.textContent = i < checkTrialResults.length ? letter : '_';
+      if (checkTrialResults[i] === false) { slot.className = 'missed'; slot.title = 'Vrijeme za slovo je isteklo'; }
+      return i ? [' ', slot] : [slot];
+    }));
     typed.style.left = left + 'px'; typed.style.width = rowWidth + 'px'; typed.style.top = (top - 110) + 'px';
     checkEl('check-test-next').textContent = checkTrialIndex < word.length - 1 ? 'Sljedeće slovo' : 'Prikaži primjer rezultata';
   }
@@ -526,13 +534,14 @@
     returnMode = 'position';
     historyItems = [makeReport('provjera-014', '21.10.2026. · 17:45', 'hold'), makeReport('provjera-013', '21.10.2026. · 17:38', 'any', true)];
     if (view === 'empty') historyItems = [];
-    else if (view !== 'position') {
+    else if (!['position', 'word-timeout'].includes(view)) {
       currentReport = previewReport(view);
       rememberReport(currentReport);
     }
     if (view === 'history-error') historyItems.unshift({ id: 'provjera-016', date: '22.10.2026. · 14:40', unreadable: true });
     eyeExample = eyeExamples[view.startsWith('eyes') ? view : 'eyes-live'];
     if (view.startsWith('eyes')) { currentReport = null; renderFrame(); return; }
+    if (view === 'word-timeout') { checkStage('trial'); checkTrialResults = [false]; checkTrialIndex = 1; checkStage('trial'); return; }
     if (['history', 'empty', 'history-error'].includes(view)) showHistory();
     else if (currentReport) { reportTab = view.startsWith('trial') ? 'trial' : 'precision'; showReport(currentReport); }
   }
@@ -549,7 +558,7 @@
   checkEl('check-free').addEventListener('click', () => checkStage('free'));
   checkEl('check-repeat').addEventListener('click', () => checkStage('precision'));
   checkEl('check-test-next').addEventListener('click', () => {
-    if (checkMode === 'trial' && checkTrialIndex < word.length - 1) { checkTrialIndex++; checkStage('trial'); }
+    if (checkMode === 'trial' && checkTrialIndex < word.length - 1) { checkTrialResults.push(true); checkTrialIndex++; checkStage('trial'); }
     else if (checkMode === 'precision') finishPrecision();
     else finishAttempt();
   });

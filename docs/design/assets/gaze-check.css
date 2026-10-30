@@ -124,6 +124,7 @@ footer:has(#check-device-actions[hidden]) .check-flow-actions > span { display:n
 .check-eye-rows progress { width:100%; height:8px; accent-color:#8bd5f5; }
 .check-key { border-radius:10px; font-size:48px; font-weight:600; }
 .check-word { position:absolute; margin:0; text-align:center; font-size:56px; font-weight:600; letter-spacing:4px; }
+.check-word .missed { color:#efd092; text-decoration:line-through 4px; }
 /* Word-test instructions stay readable on a 14-inch laptop. */
 .check-stage.word .check-controls { width:min(960px, calc(100% - 32px)); height:210px; }
 .check-stage.word #check-test-copy { font-size:24px; }

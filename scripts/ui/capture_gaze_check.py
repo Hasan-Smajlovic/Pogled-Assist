@@ -264,6 +264,8 @@ class CaptureGazeCheck:
             run.add(
                 CheckSnapshot(
                     *valid,
+                    gaze=(0.5, 0.5) if any(valid) else None,
+                    gaze_at=min(at, now) if any(valid) else None,
                     measured_at=min(at, now),
                     telemetry_started_at=start,
                     left_seconds=seconds[0],

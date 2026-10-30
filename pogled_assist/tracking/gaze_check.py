@@ -430,7 +430,8 @@ class EyeTrackingRun:
     def _record_loss(self, snapshot: CheckSnapshot, at: float) -> None:
         if at < self._last_at:
             return
-        usable = eyes_usable(self.policy, snapshot.left, snapshot.right)
+        # Invalid gaze while the eyes stay valid is one continuous loss, not a counter tick each.
+        usable = snapshot.has_usable_gaze(self.policy, at)
         ongoing = self._losses[-1] if self._losses and self._losses[-1][1] is None else None
         if ongoing is None and at - self._last_at >= FRESH_SECONDS:
             # No report for FRESH_SECONDS is a loss even when the next one is valid.

@@ -780,6 +780,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._target.trial = phase == "trial"
         self._target.free = phase == "free"
         self._target.target_index = 0
+        self._target.word_results = ()
         self._target.gaze_point = None
         self._target.progress = 0.0
         self._target.progress_target = None
@@ -1519,6 +1520,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         ):
             self._trial_tracked_targets.add(len(self._trial_results))
         self._trial_results.append(selected)
+        self._target.word_results = tuple(self._trial_results)
         diagnostics.emit(
             "trial_result",
             trace=True,

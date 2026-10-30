@@ -425,16 +425,21 @@ def test_eye_run_does_not_bridge_a_telemetry_restart():
     assert run.result(10).left == pytest.approx(0.8, abs=0.002)
 
 
-def _feed_eyes(run, start, end, state, *, step=0.1, blinks=lambda _now: 0, seconds=None):
+def _feed_eyes(
+    run, start, end, state, *, step=0.1, blinks=lambda _now: 0, gaze=lambda _now: True, seconds=None
+):
     """Snapshots every `step` seconds with cumulative per-eye time, as CheckTelemetry sends."""
     seconds = [0.0, 0.0, 0.0] if seconds is None else seconds
     for index in range(round((end - start) / step) + 1):
         now = start + index * step
         left, right = state(now)
+        valid = gaze(now) and (left or right)
         run.add(
             CheckSnapshot(
                 left,
                 right,
+                gaze=(0.5, 0.5) if valid else None,
+                gaze_at=now if valid else None,
                 gaze_interruptions=blinks(now),
                 measured_at=now,
                 telemetry_started_at=0.0,
@@ -463,6 +468,24 @@ def test_eye_run_counts_a_blink_shorter_than_a_snapshot_from_the_provider_counte
     result = run.result(10)
     assert (result.interruptions, result.longest_interruption) == (1, 0.0)
     assert result.both == pytest.approx(1.0, abs=0.02)
+
+
+def test_eye_run_counts_continuous_invalid_gaze_with_valid_eyes_once():
+    # CheckTelemetry adds one interruption per invalid sample while gaze stays invalid.
+    run = EyeTrackingRun((1280, 720), 36, 0)
+    lost = lambda now: 4 <= now < 4.5  # noqa: E731
+    _feed_eyes(
+        run,
+        0,
+        10,
+        lambda _now: (True, True),
+        step=0.05,
+        gaze=lambda now: not lost(now),
+        blinks=lambda now: min(10, max(0, round((now - 4) / 0.05) + 1)),
+    )
+    result = run.result(10)
+    assert result.interruptions == 1
+    assert result.longest_interruption == pytest.approx(0.5, abs=0.06)
 
 
 def test_eye_run_interruptions_follow_the_saved_eye_policy():

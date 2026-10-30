@@ -450,6 +450,29 @@ def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check
     assert window._trial_rows[0].size_logical_px == window._target.key_size()
 
 
+def test_trial_word_marks_a_timed_out_letter_instead_of_showing_it_typed(gaze_check, qtbot):
+    window, now, screen = gaze_check
+    window._start_trial()
+    qtbot.wait(1)
+    now[0] = window._trial_deadline + 0.01
+    window._tick()
+    assert window._trial_results == [False]
+    assert window._target.word_letters() == [("V", False), ("_", None), ("_", None), ("_", None)]
+    correct = window._target.mapToGlobal(window._target.center())
+    gaze = (
+        (correct.x() - screen.left()) / (screen.width() - 1),
+        (correct.y() - screen.top()) / (screen.height() - 1),
+    )
+    for sample in range(60):
+        now[0] = window._trial_ready_at + sample * 0.02
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
+    assert window._trial_results == [False, True]
+    assert window._target.word_letters()[:2] == [("V", False), ("O", True)]
+    assert not window._target.grab().isNull()
+    window._start_trial()
+    assert window._target.word_letters() == [("_", None)] * WORD_LENGTH
+
+
 @pytest.mark.parametrize("loss", ["eyes", "invalid", "coalesced", "stale"])
 def test_trial_blink_cannot_repeat_an_already_selected_neighbor(gaze_check, loss):
     window, now, screen = gaze_check
@@ -1032,7 +1055,7 @@ def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, 
     window._start_trial()
     window._target.grab()
     assert {label for label in labels if label in TRIAL_KEYS} == set(TRIAL_KEYS)
-    assert " ".join("_" * WORD_LENGTH) in labels
+    assert labels.count("_") == WORD_LENGTH
     assert f"Pogledajte „{TRIAL_WORD[0]}“" in window._test_hint.text()
     point = window._target.mapToGlobal(window._target.button_rect(0).center())
     window.handle_snapshot(
@@ -1052,9 +1075,13 @@ def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, 
 
 
 def _eye_snapshot(now, left, right, *, origin=0.0, supported=False, pairs=()):
+    tracked = left > 0 or right > 0
     return CheckSnapshot(
         left > 0,
         right > 0,
+        # Away from the word-test keys, so it never selects a letter.
+        gaze=(0.5, 0.02) if tracked else None,
+        gaze_at=now if tracked else None,
         measured_at=now,
         telemetry_started_at=origin,
         left_seconds=left,
@@ -1140,7 +1167,14 @@ def test_tests_hide_the_live_panel_and_save_each_tests_interruptions(gaze_check,
         # One loss of 0.5 s in the middle of the word test.
         both = not 10 <= step < 15
         window.handle_snapshot(
-            CheckSnapshot(both, True, measured_at=now[0], telemetry_started_at=0)
+            CheckSnapshot(
+                both,
+                True,
+                gaze=(0.5, 0.02),
+                gaze_at=now[0],
+                measured_at=now[0],
+                telemetry_started_at=0,
+            )
         )
     window._test_back_button.click()
     eyes = window._report.trials[-1].eyes

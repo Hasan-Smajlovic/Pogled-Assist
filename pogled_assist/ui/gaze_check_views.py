@@ -134,6 +134,8 @@ class CheckTargetView(QWidget):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.target_index = 0
+        # One entry per finished letter: True when selected, False when it timed out.
+        self.word_results: tuple[bool, ...] = ()
         self.trial = False
         self.free = False
         self.gaze_point: QPoint | None = None
@@ -195,6 +197,13 @@ class CheckTargetView(QWidget):
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(self.gaze_point, 10, 10)
 
+    def word_letters(self) -> list[tuple[str, bool | None]]:
+        """Typed letters, timed-out letters marked False, and blanks for the rest."""
+        return [
+            (letter, self.word_results[index]) if index < len(self.word_results) else ("_", None)
+            for index, letter in enumerate(TRIAL_WORD)
+        ]
+
     def _paint_word(self, painter: QPainter) -> None:
         first = self.button_rect(0)
         font = QFont("Segoe UI")
@@ -207,11 +216,19 @@ class CheckTargetView(QWidget):
             self.button_rect(len(TRIAL_KEYS) - 1).right() - first.left(),
             80,
         )
-        letters = [
-            letter if index < self.target_index else "_" for index, letter in enumerate(TRIAL_WORD)
-        ]
-        painter.setPen(QColor("#edf2f7"))
-        painter.drawText(word, Qt.AlignCenter, " ".join(letters))
+        letters = self.word_letters()
+        metrics = painter.fontMetrics()
+        x = word.center().x() - metrics.horizontalAdvance(" ".join(t for t, _ in letters)) / 2
+        for text, selected in letters:
+            width = metrics.horizontalAdvance(text)
+            cell = QRectF(x, word.top(), width, word.height())
+            painter.setPen(QColor(COLORS[False] if selected is False else "#edf2f7"))
+            painter.drawText(cell, Qt.AlignCenter, text)
+            if selected is False:
+                painter.setPen(QPen(QColor(COLORS[False]), 4))
+                middle = cell.center().y()
+                painter.drawLine(QPointF(cell.left(), middle), QPointF(cell.right(), middle))
+            x += metrics.horizontalAdvance(text + " ")
         font.setPixelSize(48)
         painter.setFont(font)
         for index, letter in enumerate(TRIAL_KEYS):
