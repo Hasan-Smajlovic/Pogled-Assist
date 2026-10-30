@@ -16,6 +16,15 @@ TARGETS = (
     ("Dolje desno", 0.96, 0.94),
 )
 COLORS = {True: "#a3d5ba", False: "#efd092", None: "#b8c5d2"}
+# The word test types one fixed word, so results stay comparable between checks.
+TRIAL_WORD = "VODA"
+TRIAL_KEYS = tuple(sorted(set(TRIAL_WORD) | set("EIKMS")))
+KEY_SIZE = (140, 120)
+KEY_GAP = 16
+MIN_KEY_WIDTH = 64
+EDGE_MARGIN = 48
+# Precision threshold and the left/right agreement threshold, in logical px.
+TARGET_RADIUS = 36
 
 
 class PrecisionSummary(QFrame):
@@ -125,13 +134,15 @@ class CheckTargetView(QWidget):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.target_index = 0
+        # One entry per finished letter: True when selected, False when it timed out.
+        self.word_results: tuple[bool, ...] = ()
         self.trial = False
         self.free = False
         self.gaze_point: QPoint | None = None
         self.progress = 0.0
         self.paused = False
         self.progress_target: int | None = None
-        self.radius = 36
+        self.radius = TARGET_RADIUS
         self.hide()
 
     def center(self) -> QPoint:
@@ -142,16 +153,21 @@ class CheckTargetView(QWidget):
 
     @property
     def expected_button(self) -> int:
-        return (1, 0, 2)[self.target_index]
+        """The key of the next letter; target_index counts typed letters."""
+        return TRIAL_KEYS.index(TRIAL_WORD[min(self.target_index, len(TRIAL_WORD) - 1)])
+
+    def key_size(self) -> tuple[int, int]:
+        count = len(TRIAL_KEYS)
+        room = self.width() - 2 * EDGE_MARGIN - KEY_GAP * (count - 1)
+        return max(MIN_KEY_WIDTH, min(KEY_SIZE[0], room // count)), KEY_SIZE[1]
 
     def button_rect(self, index: int | None = None) -> QRect:
         index = self.expected_button if index is None else index
-        width, height, gap, left, top = (
-            (136, 64, 12, 64, 14),
-            (96, 88, 10, 64, self.height() - 290),
-            (180, 72, 12, self.width() // 2 - 282, self.height() // 2 - 36),
-        )[self.target_index]
-        return QRect(left + index * (width + gap), top, width, height)
+        width, height = self.key_size()
+        row = len(TRIAL_KEYS) * width + (len(TRIAL_KEYS) - 1) * KEY_GAP
+        left = (self.width() - row) // 2
+        top = self.height() // 2 - height // 2
+        return QRect(left + index * (width + KEY_GAP), top, width, height)
 
     def free_centers(self) -> list[QPoint]:
         return [
@@ -166,42 +182,76 @@ class CheckTargetView(QWidget):
         painter.fillRect(self.rect(), QColor("#15191f"))
         painter.setPen(QPen(QColor("#84c5d9"), 2))
         painter.setBrush(QColor("#283442"))
-        center = self.center()
         if self.trial:
-            font = QFont("Segoe UI")
-            font.setPixelSize(24)
-            painter.setFont(font)
-            for index in range(3):
-                rect = self.button_rect(index)
-                color = "#84c5d9" if index == self.expected_button else "#71869b"
-                painter.setPen(QPen(QColor(color), 2))
-                painter.drawRoundedRect(rect, 10, 10)
-                if index == self.progress_target:
-                    painter.fillRect(
-                        QRect(
-                            rect.left() + 4,
-                            rect.bottom() - 12,
-                            round((rect.width() - 8) * self.progress),
-                            8,
-                        ),
-                        QColor("#efd092" if self.paused else COLORS[index == self.expected_button]),
-                    )
-                painter.setPen(QColor("#edf2f7"))
-                label = "Pogledaj" if index == self.expected_button else "Drugo"
-                if self.paused and index == self.progress_target:
-                    label = "Ⅱ " + label
-                painter.drawText(rect, Qt.AlignCenter, label)
-        else:
-            for point in self.free_centers() if self.free else [center]:
-                painter.setPen(QPen(QColor("#84c5d9"), 2))
-                painter.drawEllipse(point, self.radius, self.radius)
-                painter.setPen(QPen(QColor("#edf2f7"), 3))
-                painter.drawLine(point + QPoint(-9, 0), point + QPoint(9, 0))
-                painter.drawLine(point + QPoint(0, -9), point + QPoint(0, 9))
-            if self.free and self.gaze_point is not None:
-                painter.setPen(QPen(QColor("#a3d5ba"), 3))
-                painter.setBrush(Qt.NoBrush)
-                painter.drawEllipse(self.gaze_point, 10, 10)
+            self._paint_word(painter)
+            return
+        center = self.center()
+        for point in self.free_centers() if self.free else [center]:
+            painter.setPen(QPen(QColor("#84c5d9"), 2))
+            painter.drawEllipse(point, self.radius, self.radius)
+            painter.setPen(QPen(QColor("#edf2f7"), 3))
+            painter.drawLine(point + QPoint(-9, 0), point + QPoint(9, 0))
+            painter.drawLine(point + QPoint(0, -9), point + QPoint(0, 9))
+        if self.free and self.gaze_point is not None:
+            painter.setPen(QPen(QColor("#a3d5ba"), 3))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(self.gaze_point, 10, 10)
+
+    def word_letters(self) -> list[tuple[str, bool | None]]:
+        """Typed letters, timed-out letters marked False, and blanks for the rest."""
+        return [
+            (letter, self.word_results[index]) if index < len(self.word_results) else ("_", None)
+            for index, letter in enumerate(TRIAL_WORD)
+        ]
+
+    def _paint_word(self, painter: QPainter) -> None:
+        first = self.button_rect(0)
+        font = QFont("Segoe UI")
+        font.setPixelSize(56)
+        font.setWeight(QFont.DemiBold)
+        painter.setFont(font)
+        word = QRect(
+            first.left(),
+            first.top() - 120,
+            self.button_rect(len(TRIAL_KEYS) - 1).right() - first.left(),
+            80,
+        )
+        letters = self.word_letters()
+        metrics = painter.fontMetrics()
+        x = word.center().x() - metrics.horizontalAdvance(" ".join(t for t, _ in letters)) / 2
+        for text, selected in letters:
+            width = metrics.horizontalAdvance(text)
+            cell = QRectF(x, word.top(), width, word.height())
+            painter.setPen(QColor(COLORS[False] if selected is False else "#edf2f7"))
+            painter.drawText(cell, Qt.AlignCenter, text)
+            if selected is False:
+                painter.setPen(QPen(QColor(COLORS[False]), 4))
+                middle = cell.center().y()
+                painter.drawLine(QPointF(cell.left(), middle), QPointF(cell.right(), middle))
+            x += metrics.horizontalAdvance(text + " ")
+        font.setPixelSize(48)
+        painter.setFont(font)
+        for index, letter in enumerate(TRIAL_KEYS):
+            rect = self.button_rect(index)
+            expected = index == self.expected_button
+            painter.setPen(QPen(QColor("#84c5d9" if expected else "#71869b"), 3 if expected else 2))
+            painter.setBrush(QColor("#283442"))
+            painter.drawRoundedRect(rect, 10, 10)
+            if index == self.progress_target:
+                painter.fillRect(
+                    QRect(
+                        rect.left() + 6,
+                        rect.bottom() - 14,
+                        round((rect.width() - 12) * self.progress),
+                        8,
+                    ),
+                    QColor("#efd092" if self.paused else COLORS[expected]),
+                )
+            painter.setPen(QColor("#edf2f7"))
+            label = letter
+            if self.paused and index == self.progress_target:
+                label = "Ⅱ " + label
+            painter.drawText(rect, Qt.AlignCenter, label)
 
 
 class ResultMapView(QWidget):

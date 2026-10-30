@@ -36,8 +36,11 @@ from ..interaction.mouse_controller import (
 from ..logging_setup import get_project_root
 from ..tracking.gaze_check import (
     FRESH_SECONDS,
+    HISTORY_SECONDS,
     TARGET_SECONDS,
     CheckSnapshot,
+    EyeTrackingResult,
+    EyeTrackingRun,
     FixationCheck,
     FixationResult,
     TrialGazeCoverage,
@@ -45,6 +48,7 @@ from ..tracking.gaze_check import (
 from ..tracking.gaze_check_report import (
     ENVIRONMENT_KEYS,
     SETTING_KEYS,
+    EyeTrackingSummary,
     GazeCheckReport,
     PrecisionRow,
     TrialAttempt,
@@ -54,10 +58,12 @@ from ..tracking.gaze_check_report import (
 )
 from ..tracking.gaze_check_store import GazeCheckStore
 from ..tracking.status import TrackingState, TrackingStatus
+from .gaze_check_eyes import EyeTrackingPanel
 from .gaze_check_feedback import result_advice
 from .gaze_check_history import GazeCheckHistory
 from .gaze_check_reports import GazeCheckReports
 from .gaze_check_text import (
+    eye_summary_text,
     free_gaze_is_visible,
     position_guidance,
     position_notice,
@@ -66,7 +72,10 @@ from .gaze_check_text import (
 )
 from .gaze_check_views import (
     COLORS,
+    TARGET_RADIUS,
     TARGETS,
+    TRIAL_KEYS,
+    TRIAL_WORD,
     CheckTargetView,
     EyePositionView,
     PrecisionSummary,
@@ -75,6 +84,10 @@ from .gaze_check_views import (
 from .information_button import InformationButton
 from .recording_badge import RecordingBadge
 from .theme import apply_theme
+
+# Word-test instructions in logical px; the panel grows so two lines stay unclipped.
+TRIAL_HINT_PX = 24
+TRIAL_CONTROLS_HEIGHT = 210
 
 STYLESHEET = """
 QWidget#gazeCheck { background: #15191f; color: #edf2f7; font-family: Segoe UI; }
@@ -86,6 +99,7 @@ QLabel#checkSimulation { font-size: 13px; color: #efd092; }
 QFrame#checkHeader { border: 0; border-bottom: 1px solid #394959; }
 QFrame#checkContext { border: 0; border-left: 1px solid #394959; }
 QFrame#checkCard { background: #1d242d; border: 1px solid #394959; border-radius: 12px; }
+QFrame#checkEyes { border: 0; border-top: 1px solid #394959; }
 QPushButton { background: #283442; color: #edf2f7; border: 1px solid #71869b;
     border-radius: 9px; padding: 10px 16px; font-size: 18px; font-weight: 600; }
 QPushButton:hover { background: #334355; border-color: #84c5d9; }
@@ -147,6 +161,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._snapshot = CheckSnapshot()
         self._snapshot_at: float | None = None
         self._check: FixationCheck | None = None
+        self._live_eyes = self._eye_run(window=HISTORY_SECONDS)
+        # Per-test availability, saved with that test's result.
+        self._stage_eyes: EyeTrackingRun | None = None
         self._phase = "position"
         self._selection = GazeSelectionTimer()
         self._trial_results: list[bool] = []
@@ -212,7 +229,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
         copy.addWidget(self._policy_label)
         self._simulation_label = _label(
-            "Simulacija mišem · Bez Tobii mjerenja", self, "checkSimulation"
+            "Simulacija uz riječ · Bez Tobii mjerenja", self, "checkSimulation"
         )
         self._simulation_label.setVisible(self._simulated)
         copy.addWidget(self._simulation_label)
@@ -265,9 +282,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         actions = QHBoxLayout()
         actions.setSpacing(16)
         self._free_button = self._button("Slobodna provjera", self._start_free)
-        self._primary_button = self._button("Provjeri preciznost", self._next)
+        self._primary_button = self._button("Pokreni provjeru", self._next)
         self._primary_button.setObjectName("checkPrimary")
-        self._repeat_button = self._button("Ponovi preciznost", self._repeat)
+        self._repeat_button = self._button("Ponovi provjeru", self._repeat)
         self._repeat_button.hide()
         for button in (self._free_button, self._primary_button, self._repeat_button):
             actions.addWidget(button, 1)
@@ -324,25 +341,18 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         card, layout = self._card(page, "Šta uređaj trenutno vidi")
         self._left_label = _label("— Lijevo oko · čekam podatke", card)
         self._right_label = _label("— Desno oko · čekam podatke", card)
-        self._stability_label = _label("— Oba oka · prikupljam podatke o praćenju", card)
         self._gaze_label = _label("— Čekam pogled na ekranu", card)
         self._guidance = _label("Pogledajte prema ekranu.", card)
         for label in (
             self._left_label,
             self._right_label,
             self._gaze_label,
-            self._stability_label,
             self._guidance,
         ):
             layout.addWidget(label)
+        self._eye_panel = EyeTrackingPanel(card)
+        layout.addWidget(self._eye_panel)
         layout.addStretch(1)
-        layout.addWidget(
-            _label(
-                "Kratak prekid može biti treptaj. Preciznost provjerite na metama.",
-                card,
-                "checkHint",
-            )
-        )
         columns.addWidget(card, 1)
         self._pages.addWidget(page)
 
@@ -414,6 +424,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._result_advice = _label("", card)
         self._trial_summary = _label("", card)
         self._trial_summary.hide()
+        self._eye_summary_label = _label("", card)
+        self._eye_summary_label.setStyleSheet("font-size: 16px;")
         summary = QHBoxLayout()
         summary.setSpacing(20)
         summary.addWidget(self._result_summary, 1)
@@ -423,6 +435,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         precision_layout.addLayout(columns, 1)
         precision_layout.addWidget(self._result_advice)
         precision_layout.addWidget(self._trial_summary)
+        precision_layout.addWidget(self._eye_summary_label)
         self._details_button = self._button("Prikaži mjerenja", self._render_result_details)
         self._details_button.setCheckable(True)
         self._details_button.setMinimumHeight(44)
@@ -454,6 +467,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        # Time spent in another window was not measured; start the live view again.
+        self._live_eyes = self._eye_run(window=HISTORY_SECONDS)
         self._timer.start()
         diagnostics.emit("gaze_check_open", priority=True, phase=self._phase)
 
@@ -463,6 +478,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._timer.stop()
         self._selection.cancel()
         self._check = None
+        self._stage_eyes = None
         self._snapshot = CheckSnapshot()
         self.closed.emit()
         super().closeEvent(event)
@@ -498,6 +514,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._snapshot_at = now
         if not self.isVisible() or self.isMinimized():
             return
+        self._live_eyes.add(snapshot)
+        if self._stage_eyes is not None:
+            self._stage_eyes.add(snapshot)
         if self._phase == "precision" and self._check is not None:
             self._check.add(snapshot, now)
         if self._phase == "trial":
@@ -590,6 +609,21 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             self._finish_trial_target(False, now)
         elif self._phase == "free":
             self._render_free()
+        self._render_eyes(now)
+
+    def _eye_run(self, *, window: float | None = None) -> EyeTrackingRun:
+        screen = QGuiApplication.primaryScreen().geometry()
+        return EyeTrackingRun(
+            (screen.width(), screen.height()),
+            TARGET_RADIUS,
+            time.monotonic(),
+            policy=self._settings.eye_tracking_policy,
+            window=window,
+        )
+
+    def _render_eyes(self, now: float) -> None:
+        result = self._live_eyes.result(now)
+        self._eye_panel.show_result(result)
 
     def _expire_snapshot(self, now: float) -> None:
         if self._snapshot_at is None or now - self._snapshot_at >= FRESH_SECONDS:
@@ -608,7 +642,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
     def _tick_precision(self, now: float) -> None:
         if self._check.advance(now):
             if self._check.finished:
-                self._show_results()
+                self._precision_finished()
                 return
             self._target.target_index = self._check.index
             self._target.update()
@@ -660,23 +694,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             }[depth],
         )
         self._state(
-            self._stability_label,
-            snapshot.stable,
-            {
-                True: "Oba oka · praćenje je uglavnom neprekinuto",
-                False: "Oba oka · praćenje ima prekide",
-                None: "Oba oka · prikupljam podatke o praćenju",
-            }[snapshot.stable],
-        )
-        self._state(
             self._gaze_label,
             True if snapshot.gaze is not None else None,
             "Pogled se prati" if snapshot.gaze is not None else "Čekam pogled na ekranu",
-        )
-        self._stability_label.setToolTip(
-            f"Oba oka: {snapshot.available_fraction:.0%} vremena "
-            f"u posljednjih {snapshot.observed_seconds:.1f} s. Pragovi aplikacije: "
-            "najmanje 85%, prekid najviše 0,5 s."
         )
         self._eyes_view.snapshot = snapshot
         self._eyes_view.update()
@@ -725,6 +745,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._step.show()
         self._policy_label.setText(f"Režim: {self._policy_text}")
         self._check = None
+        self._stage_eyes = None
         self._selection.cancel()
         self._trial_results.clear()
         self._trial_tracked_targets.clear()
@@ -735,7 +756,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._details_button.setChecked(False)
         self._pages.setCurrentIndex(0)
         self._step.setText("1 · Položaj i praćenje")
-        self._primary_button.setText("Provjeri preciznost")
+        self._primary_button.setText("Pokreni provjeru")
         self._primary_button.show()
         self._primary_button.setEnabled(True)
         self._repeat_button.hide()
@@ -759,6 +780,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._target.trial = phase == "trial"
         self._target.free = phase == "free"
         self._target.target_index = 0
+        self._target.word_results = ()
         self._target.gaze_point = None
         self._target.progress = 0.0
         self._target.progress_target = None
@@ -773,7 +795,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._trial_tracked_targets.clear()
         self._trial_losses = self._trial_wrong_selections = self._trial_departures = 0
         self._begin_attempt()
-        self._step.setText("2 · Preciznost · pet kratkih meta")
+        self._stage_eyes = self._eye_run()
+        self._step.setText("2 · Tačke · pet kratkih meta")
         self._set_test_hint(
             "Meta 1 od 5 · Gledajte križić u krugu.",
             "Meta se mijenja sama; ne trebate kliknuti.",
@@ -871,8 +894,48 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             settings=self._report_settings(),
             environment=self._environment.copy(),
             precision=rows,
+            precision_eyes=self._finish_stage_eyes("precision"),
         )
         self._observe_fixations(results)
+
+    def _finish_stage_eyes(self, stage: str) -> EyeTrackingSummary | None:
+        run, self._stage_eyes = self._stage_eyes, None
+        if run is None:
+            return None
+        result = run.result(time.monotonic())
+        diagnostics.emit(
+            "gaze_check_eye_tracking",
+            priority=True,
+            stage=stage,
+            observed_seconds=round(result.observed_seconds, 3),
+            left_fraction=round(result.left, 4),
+            right_fraction=round(result.right, 4),
+            both_fraction=round(result.both, 4),
+            interruptions=result.interruptions,
+            longest_interruption_seconds=round(result.longest_interruption, 3),
+            agreement_supported=result.agreement_supported,
+            agreement_samples=result.agreement_samples,
+            median_separation_px=result.median_separation,
+            agreement_fraction=result.agreement_fraction,
+            agreement_threshold_px=result.threshold,
+            eye_tracking_policy=self._settings.eye_tracking_policy,
+        )
+        return self._eye_summary(result)
+
+    @staticmethod
+    def _eye_summary(result: EyeTrackingResult) -> EyeTrackingSummary:
+        return EyeTrackingSummary(
+            result.observed_seconds,
+            result.left,
+            result.right,
+            result.both,
+            result.interruptions,
+            result.longest_interruption,
+            result.agreement_supported,
+            result.agreement_samples,
+            result.agreement_fraction,
+            result.median_separation,
+        )
 
     def _finalize_trial(self, attempt: dict, now: float) -> None:
         if self._report is None:
@@ -889,12 +952,18 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 [PrecisionRow(name, (x, y)) for name, x, y in TARGETS],
             )
         rows = list(self._trial_rows)
-        for index in range(len(rows), 3):
-            rows.append(TrialRow(index, ((136, 64), (96, 88), (180, 72))[index]))
-        if attempt["reason"] and len(self._trial_rows) < 3:
+        for index in range(len(rows), len(TRIAL_WORD)):
+            rows.append(TrialRow(index, self._target.key_size()))
+        if attempt["reason"] and len(self._trial_rows) < len(TRIAL_WORD):
             self._fill_interrupted_trial(rows[len(self._trial_rows)], now)
         self._report.trials.append(
-            TrialAttempt(**attempt, rows=rows, environment=self._environment.copy())
+            TrialAttempt(
+                **attempt,
+                rows=rows,
+                environment=self._environment.copy(),
+                word=TRIAL_WORD,
+                eyes=self._finish_stage_eyes("word"),
+            )
         )
 
     def _fill_interrupted_trial(self, row: TrialRow, now: float) -> None:
@@ -937,9 +1006,17 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._target.setGeometry(self.rect())
         self._target.show()
         self._target.raise_()
-        width = min(760, self.width() - 32)
-        top = round(self.height() * 0.72) - 70 if self._phase == "free" else self.height() - 178
-        self._test_controls.setGeometry((self.width() - width) // 2, top, width, 168)
+        # The word test's instructions are larger so they stay readable on a laptop screen.
+        word = self._phase == "trial"
+        width = min(960 if word else 760, self.width() - 32)
+        height = TRIAL_CONTROLS_HEIGHT if word else 168
+        top = (
+            round(self.height() * 0.72) - 70
+            if self._phase == "free"
+            else self.height() - height - 10
+        )
+        self._test_controls.setGeometry((self.width() - width) // 2, top, width, height)
+        self._test_hint.setStyleSheet(f"font-size: {TRIAL_HINT_PX}px;" if word else "")
         self._test_controls.show()
         self._test_controls.raise_()
         self._test_back_button.setText(
@@ -949,6 +1026,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
     def _start_free(self) -> None:
         self._set_test_mode("free")
         self._check = None
+        self._stage_eyes = None
         self._selection.cancel()
         self._show_test_stage()
         self._render_free()
@@ -976,13 +1054,18 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._target.update()
 
     def _set_test_hint(self, instruction: str, feedback: str, state: bool | None = None) -> None:
-        prefix = "SIMULACIJA MIŠEM · " if self._simulated else ""
+        prefix = "SIMULACIJA UZ RIJEČ · " if self._simulated else ""
         text = (
             f"{escape(prefix + instruction)}<br>"
             f'<span style="color: {COLORS[state]}">{escape(feedback)}</span>'
         )
         if self._test_hint.text() != text:
             self._test_hint.setText(text)
+
+    def _precision_finished(self) -> None:
+        # The word test follows the targets in the same check.
+        self._finalize_attempt(None)
+        self._start_trial()
 
     def _show_results(self) -> None:
         reason = None
@@ -1025,7 +1108,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         results = self._fixations()
         diagnostics.emit("gaze_check_phase", priority=True, phase="results")
         selected, tracked, losses, wrong, policy = self._report_trial_data()
-        trial_finished = len(selected) == 3
+        expected = self._report_trial_length()
+        trial_finished = len(selected) == expected
         self._render_precision_summary(results)
         self._render_result_details()
         self._result_map.results = self._fixations(include_unmeasured=True)
@@ -1045,14 +1129,16 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 losses=losses,
                 wrong_selections=wrong,
                 policy=policy,
+                expected=expected,
             )
         )
         if self._view_report is not None and self._view_report.state == "interrupted":
             self._result_advice.setText(
                 "Provjera je prekinuta. Završene mete su sačuvane; "
-                "izaberite „Ponovi preciznost“ za cijeli test."
+                "izaberite „Ponovi provjeru“ za cijeli test."
             )
-        self._render_trial_summary(selected, losses, wrong)
+        self._render_trial_summary(selected, losses, wrong, expected)
+        self._render_eye_summary()
         self._render_result_actions(trial_finished)
         self._render_report_identity()
 
@@ -1098,21 +1184,37 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._result_summary.setText(f"{mark} {summary}")
         self._result_summary.setStyleSheet(f"color: {COLORS[state]}; font-size: 19px;")
 
-    def _render_trial_summary(self, selected, losses, wrong) -> None:
-        trial_finished = len(selected) == 3
+    def _report_trial_length(self) -> int:
+        report = self._view_report
+        if report is not None and report.trials:
+            return len(report.trials[-1].rows)
+        return len(TRIAL_WORD)
+
+    def _render_trial_summary(self, selected, losses, wrong, expected) -> None:
+        trial_finished = len(selected) == expected
         self._trial_summary.setVisible(trial_finished)
         if trial_finished:
             trial_ok = all(selected) and not wrong
+            word = self._view_report.trials[-1].word if self._view_report else TRIAL_WORD
+            name = "Probni izbor" if word is None else f"Riječ „{word}“"
             self._state(
                 self._trial_summary,
                 trial_ok,
-                f"Probni izbor: {sum(selected)}/3 · "
+                f"{name}: {sum(selected)}/{expected} · "
                 f"pogrešni izbori: {wrong} · poništeni izbori: {losses}",
             )
 
+    def _render_eye_summary(self) -> None:
+        report = self._view_report
+        trial = report.trials[-1] if report is not None and report.trials else None
+        lines = [eye_summary_text("Tačke", report.precision_eyes if report else None)]
+        if trial is not None:
+            lines.append(eye_summary_text("Riječ", trial.eyes))
+        self._eye_summary_label.setText("\n".join(lines))
+
     def _render_result_actions(self, trial_finished: bool) -> None:
         self._primary_button.setText(
-            "Ponovi probu dugmadi" if trial_finished else "Probaj izbor dugmeta"
+            "Ponovi test riječi" if trial_finished else "Pokreni test riječi"
         )
         self._primary_button.show()
         self._primary_button.setEnabled(True)
@@ -1125,7 +1227,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._calibration_button.setVisible(not self._archived)
         self._calibration_button.setText("Podesi položaj")
         self._free_button.hide()
-        self._repeat_button.setText("Nazad na listu" if self._archived else "Ponovi preciznost")
+        self._repeat_button.setText("Nazad na listu" if self._archived else "Ponovi provjeru")
         self._repeat_button.show()
 
     def _render_report_identity(self) -> None:
@@ -1204,9 +1306,10 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
     def _start_trial(self) -> None:
         self._set_test_mode("trial")
         self._begin_attempt()
+        self._stage_eyes = self._eye_run()
         self._trial_rows = []
         self._trial_baseline = (0, 0, 0)
-        self._step.setText("3 · Probni izbor · bez klika drugim programima")
+        self._step.setText(f"3 · Riječ · napišite „{TRIAL_WORD}“ pogledom")
         self._trial_results.clear()
         self._trial_tracked_targets.clear()
         self._trial_losses = self._trial_departures = 0
@@ -1237,8 +1340,11 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         )
 
     def _set_trial_hint(self, feedback: str, state: bool | None = None) -> None:
+        index = min(len(self._trial_results), len(TRIAL_WORD) - 1)
         self._set_test_hint(
-            f"Dugme {len(self._trial_results) + 1} od 3 · Gledajte „Pogledaj“.", feedback, state
+            f"Slovo {index + 1} od {len(TRIAL_WORD)} · Pogledajte „{TRIAL_WORD[index]}“.",
+            feedback,
+            state,
         )
 
     def _trial_sample(self, snapshot: CheckSnapshot, now: float) -> None:
@@ -1311,7 +1417,12 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
     def _advance_trial_selection(self, point: QPoint, at: float):
         rect = self._target.button_rect()
         target = next(
-            (index for index in range(3) if self._target.button_rect(index).contains(point)), None
+            (
+                index
+                for index in range(len(TRIAL_KEYS))
+                if self._target.button_rect(index).contains(point)
+            ),
+            None,
         )
         previous = self._selection.target
         hold_rect = self._target.button_rect(previous) if previous is not None else rect
@@ -1346,11 +1457,11 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         if target == self._target.expected_button:
             self._set_trial_hint("Zadržite pogled dok se traka ne popuni.")
         elif target is None:
-            self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)
+            self._set_trial_hint("Pogled je izvan slova. Vratite ga na traženo slovo.", False)
         elif self._selection.is_blocked:
-            self._set_trial_hint("Odabrano je pogrešno dugme. Pogledajte „Pogledaj“.", False)
+            self._set_trial_hint("Odabrano je pogrešno slovo. Pogledajte traženo slovo.", False)
         else:
-            self._set_trial_hint("Pogled je na drugom dugmetu. Pogledajte „Pogledaj“.", False)
+            self._set_trial_hint("Pogled je na drugom slovu. Pogledajte traženo slovo.", False)
 
     def _cancel_trial_progress(self, *, loss: bool) -> None:
         self._target.paused = False
@@ -1360,7 +1471,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         else:
             self._selection.cancel()
             if self._phase == "trial":
-                self._set_trial_hint("Pogled je izvan dugmeta. Vratite ga na „Pogledaj“.", False)
+                self._set_trial_hint("Pogled je izvan slova. Vratite ga na traženo slovo.", False)
         self._target.progress = 0.0
         self._target.progress_target = None
         self._target.update()
@@ -1374,7 +1485,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             self._trial_losses += 1
             self._trial_feedback_loss = True
             self._set_trial_hint(
-                "Praćenje je prekinuto. Pogledajte „Pogledaj“ za novi izbor.", False
+                "Praćenje je prekinuto. Pogledajte traženo slovo za novi izbor.", False
             )
         elif not self._trial_feedback_loss:
             self._set_trial_hint("Čekam svjež validan pogled. Pogledajte prema ekranu.")
@@ -1389,7 +1500,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._trial_rows.append(
             TrialRow(
                 len(self._trial_results),
-                ((136, 64), (96, 88), (180, 72))[len(self._trial_results)],
+                self._target.key_size(),
                 "measured" if coverage >= 0.6 else "insufficient",
                 selected,
                 coverage,
@@ -1409,6 +1520,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         ):
             self._trial_tracked_targets.add(len(self._trial_results))
         self._trial_results.append(selected)
+        self._target.word_results = tuple(self._trial_results)
         diagnostics.emit(
             "trial_result",
             trace=True,
@@ -1423,7 +1535,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._selection.cancel()
         self._target.progress = 0.0
         self._target.progress_target = None
-        if len(self._trial_results) == 3:
+        if len(self._trial_results) == len(TRIAL_WORD):
             self._show_results()
         else:
             self._target.target_index = len(self._trial_results)

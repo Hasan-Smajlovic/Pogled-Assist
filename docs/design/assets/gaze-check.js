@@ -10,6 +10,8 @@
   const tabs = ['precision', 'trial', 'context'];
   let checkMode = 'position';
   let checkTrialIndex = 0;
+  // One entry per finished letter: true when selected, false when its time ran out.
+  let checkTrialResults = [];
   let checkDetails = false;
   let reportTab = 'precision';
   let currentReport = null;
@@ -20,6 +22,19 @@
   let attemptSequence = 0;
   let activeAttemptId = null;
   let returnMode = 'position';
+  const word = 'VODA';
+  const keys = [...new Set([...word, ...'EIKMS'])].sort();
+  const eyeRows = [['left', 'Lijevo oko'], ['right', 'Desno oko'], ['both', 'Oba oka']];
+  const eyeExamples = {
+    'eyes-live': { left: 98, right: 97, both: 96, seconds: 10, interruptions: 1, longest: 0.2, agreement: 'combined' },
+    'eyes-start': { left: 100, right: 100, both: 100, seconds: 2, interruptions: 0, longest: 0, agreement: 'combined' },
+    'eyes-one': { left: 92, right: 0, both: 0, seconds: 10, interruptions: 1, longest: 10, agreement: 'combined' },
+    'eyes-agreement': { left: 98, right: 97, both: 96, seconds: 10, interruptions: 2, longest: 0.3, agreement: { fraction: 94, median: 12 } },
+    'eyes-drift': { left: 97, right: 96, both: 95, seconds: 10, interruptions: 1, longest: 0.2, agreement: { fraction: 41, median: 58 } },
+    'eyes-blinks': { left: 88, right: 86, both: 84, seconds: 10, interruptions: 9, longest: 0.6, agreement: 'combined' },
+    'eyes-none': { left: 0, right: 0, both: 0, seconds: 10, interruptions: 1, longest: 10, agreement: 'combined' },
+  };
+  let eyeExample = eyeExamples['eyes-live'];
 
   function policyLabel(policy = ReferenceEyePolicy.read(), holdMs = ReferenceEyePolicy.holdMs()) {
     return policyNames[policy] + (policy === 'hold' ? ' · prekid do ' + holdMs + ' ms' : '');
@@ -32,6 +47,7 @@
       storage: 'saved', state: interrupted ? 'interrupted' : 'completed',
       reason: interrupted ? 'Provjera je prekinuta tokom treće mete.' : '',
       results: names.map((name, index) => samplePrecisionRow(name, index, interrupted)),
+      eyes: { left: 98, right: 97, both: 96, interruptions: 2, longest: 0.4 },
       trials: [],
     };
     if (noGazeExample && !interrupted) report.results.forEach((row, index) => {
@@ -54,8 +70,10 @@
     return {
       id, date: '22.10.2026. · 14:33', state: interrupted ? 'interrupted' : 'completed',
       duration: interrupted ? '4,2 s' : '8,6 s',
-      reason: interrupted ? 'Prekinuto: proba je zaustavljena tokom druge grupe.' : '',
-      rows: [0, 1, 2].map(index => sampleTrialRow(index, interrupted)),
+      reason: interrupted ? 'Prekinuto: test riječi je zaustavljen tokom drugog slova.' : '',
+      word, eyes: interrupted ? { left: 91, right: 62, both: 60, interruptions: 4, longest: 1.2 }
+        : { left: 99, right: 98, both: 98, interruptions: 1, longest: 0 },
+      rows: [...word].map((_letter, index) => sampleTrialRow(index, interrupted)),
     };
   }
 
@@ -63,8 +81,8 @@
     let state = noGazeExample ? 'insufficient' : 'measured';
     if (interrupted && index > 0) state = 'unmeasured';
     return {
-      size: ['136 × 64', '96 × 88', '180 × 72'][index], state,
-      coverage: noGazeExample ? [0, 12, 20][index] : [92, 85, 90][index],
+      size: '140 × 120', state,
+      coverage: noGazeExample ? [0, 12, 20, 8][index] : [92, 85, 90, 94][index],
       correct: !noGazeExample, wrong: Number(!noGazeExample && index === 1),
       losses: Number(!noGazeExample && index === 0), departures: !noGazeExample ? index + 1 : 0,
     };
@@ -97,6 +115,8 @@
     checkEl('check-test').hidden = !stage;
     renderCheckHeading(results, history);
     renderCheckActions(results, history, position);
+    checkEl('check-step').textContent = '1 · Položaj i praćenje';
+    renderEyePanels();
   }
   function renderCheckHeading(results, history) {
     checkEl('check-heading').textContent = history ? 'Sačuvani rezultati' : viewingArchive ? 'Raniji rezultat provjere' : 'Provjera pogleda';
@@ -126,8 +146,8 @@
   }
 
   function nextCheckLabel(results) {
-    if (!results) return 'Provjeri preciznost';
-    return displayedReport.trials.length ? 'Ponovi probu dugmadi' : 'Probaj izbor dugmeta';
+    if (!results) return 'Pokreni provjeru';
+    return displayedReport.trials.length ? 'Ponovi test riječi' : 'Pokreni test riječi';
   }
 
   function renderCheckTracking() {
@@ -138,10 +158,6 @@
     renderCheckEyes(eyes);
     checkEl('check-gaze-state').textContent = usable ? '✓ Pogled je dostupan u ovom režimu' : '— Čekam pogled dopušten u ovom režimu';
     checkEl('check-gaze-state').className = 'check-line ' + (usable ? 'check-pass' : 'check-attention');
-    const stableExample = state === 'both' || state === 'held';
-    checkEl('check-both-continuity').textContent = stableExample ? '✓ Oba oka · praćenje je uglavnom neprekinuto' : '— Oba oka · praćenje ima prekide';
-    checkEl('check-both-continuity').className = 'check-line ' + (stableExample ? 'check-pass' : 'check-attention');
-    checkEl('check-both-continuity').title = 'Izmišljeni primjer kontinuiteta oba oka kroz vrijeme; ovo nije ocjena izabranog režima niti mjerenje preciznosti.';
     checkEl('check-test-policy').textContent = 'Režim: ' + policyLabel();
     checkEl('check-gaze').hidden = checkMode !== 'free' || !usable;
     renderTrialTracking(usable, held);
@@ -166,7 +182,7 @@
     if (checkMode === 'trial') checkEl('check-test-copy').textContent = held
       ? 'Ⅱ Napredak je na čekanju. Rok: ' + ReferenceEyePolicy.holdMs() + ' ms.'
       : !usable ? 'Nema odabira bez dopuštenog svježeg pogleda.'
-        : 'Dugme ' + (checkTrialIndex + 1) + ' od 3 · Gledajte „Pogledaj“.';
+        : 'Slovo ' + (checkTrialIndex + 1) + ' od ' + word.length + ' · Pogledajte „' + word[checkTrialIndex] + '“.';
   }
 
   function renderPrecision() {
@@ -188,6 +204,14 @@
     checkEl('check-metrics-help').hidden = !checkDetails;
     checkEl('check-result-advice').textContent = precisionAdvice(report);
     renderPrecisionMap(report);
+    const trial = report.trials.at(-1);
+    checkEl('check-eye-summary').innerHTML = eyeSummary('Tačke', report.eyes) + '<br>' + eyeSummary('Riječ', trial?.eyes);
+  }
+  function seconds(value) { return value.toFixed(1).replace('.', ','); }
+  function eyeSummary(name, eyes) {
+    if (!eyes) return name + ' · praćenje po oku nije izmjereno';
+    return name + ' · lijevo ' + eyes.left + '% · desno ' + eyes.right + '% · oba ' + eyes.both + '% · prekidi '
+      + eyes.interruptions + (eyes.interruptions ? ', najduži ' + seconds(eyes.longest) + ' s' : '');
   }
   function precisionRow(result) {
     const tone = result.state !== 'measured' ? 'muted' : result.near ? 'check-pass' : 'check-attention';
@@ -207,11 +231,11 @@
   function precisionAdvice(report) {
     const count = state => report.results.filter(result => result.state === state).length;
     return report.state === 'interrupted'
-      ? 'Sačuvane su završene mete. Za cijeli test odaberite „Ponovi preciznost“.'
+      ? 'Sačuvane su završene mete. Za cijeli test izaberite „Ponovi provjeru“.'
       : count('insufficient') || count('unmeasured') ? 'Za neke mete nema dovoljno podataka. Podesite položaj pa ponovite provjeru.'
         : report.results.some(result => result.state === 'measured' && !result.near)
           ? 'Pogled je na nekim metama izvan kruga. Podesite položaj pa ponovite provjeru.'
-          : 'Pogled je blizu svih meta. Možete probati izbor dugmeta.';
+          : 'Pogled je blizu svih meta. Još napišite riječ pogledom.';
   }
   function renderPrecisionMap(report) {
     const map = checkEl('check-result-map');
@@ -241,14 +265,15 @@
     if (!trial) return;
     const measured = trial.rows.filter(row => row.state === 'measured');
     checkEl('check-trial-result').textContent = (trial.state === 'interrupted' ? trial.reason + ' ' : '')
-      + 'Izmjerene grupe: ' + measured.length + '/3 · Tačni izbori: ' + measured.filter(row => row.correct).length
+      + 'Riječ „' + trial.word + '“ · Izmjerena slova: ' + measured.length + '/' + trial.rows.length + ' · Tačna slova: ' + measured.filter(row => row.correct).length
       + ' · Pogrešni: ' + measured.reduce((sum, row) => sum + row.wrong, 0)
-      + ' · Poništeni: ' + measured.reduce((sum, row) => sum + row.losses, 0) + ' · Trajanje: ' + trial.duration;
-    checkEl('check-trial-table').innerHTML = '<thead><tr><th>Grupa · veličina (px)</th><th>Rezultat</th><th>Podaci</th><th>Pogrešni</th><th>Poništeni</th><th>Izlasci</th></tr></thead><tbody>'
+      + ' · Poništeni: ' + measured.reduce((sum, row) => sum + row.losses, 0) + ' · Trajanje: ' + trial.duration
+      + '. ' + eyeSummary('Praćenje', trial.eyes) + '.';
+    checkEl('check-trial-table').innerHTML = '<thead><tr><th>Slovo · veličina (px)</th><th>Rezultat</th><th>Podaci</th><th>Pogrešni</th><th>Poništeni</th><th>Izlasci</th></tr></thead><tbody>'
       + trial.rows.map((row, index) => {
         const measured = row.state === 'measured';
-        const status = row.state === 'unmeasured' ? '— Nije izmjereno' : row.state === 'insufficient' ? '— Premalo podataka' : '✓ Tačan izbor';
-        return `<tr><th scope="row">${index + 1} · ${row.size}</th><td class="${measured ? 'check-pass' : 'muted'}">${status}</td><td>${row.state === 'unmeasured' ? '—' : row.coverage + '%'}</td>`
+        const status = row.state === 'unmeasured' ? '— Nije izmjereno' : row.state === 'insufficient' ? '— Premalo podataka' : '✓ Tačno slovo';
+        return `<tr><th scope="row">${index + 1} · ${trial.word[index]} · ${row.size}</th><td class="${measured ? 'check-pass' : 'muted'}">${status}</td><td>${row.state === 'unmeasured' ? '—' : row.coverage + '%'}</td>`
           + [row.wrong, row.losses, row.departures].map(value => `<td>${row.state === 'unmeasured' ? '—' : value}</td>`).join('') + '</tr>';
       }).join('') + '</tbody>';
   }
@@ -271,7 +296,7 @@
     displayedReport = report;
     viewingArchive = archived;
     checkMode = 'results';
-    checkEl('check-result-title').textContent = report.state === 'interrupted' ? 'Provjera preciznosti · Prekinuto' : 'Provjera preciznosti · Završeno';
+    checkEl('check-result-title').textContent = report.state === 'interrupted' ? 'Provjera pogleda · Prekinuto' : 'Provjera pogleda · Završeno';
     checkEl('check-result-meta').textContent = report.date + ' · Trajanje: ' + report.duration + ' · ID: ' + report.id;
     renderPrecision();
     checkEl('check-trial-empty').hidden = report.trials.length > 0;
@@ -287,7 +312,7 @@
       ['Čuvanje uz rub', report.edgeMs + ' ms'], ['Pauza između radnji', report.cooldownMs + ' ms'],
     ].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('');
     checkEl('check-environment').innerHTML = [
-      ['Izvor podataka', 'Simulacija mišem · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
+      ['Izvor podataka', 'Simulacija uz riječ · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
       ['Lokalne izmjene izvora', 'Nije dostupno u ovom primjeru'],
       ['Tobii model / SDK', 'Nije dostupno u simulaciji'], ['Sistem', 'Windows 11 · primjer'],
       ['Ekran / skaliranje', '1920 × 1080 fizičkih px · 150%'], ['Prikaz aplikacije', '1280 × 720 logičkih px'],
@@ -317,7 +342,7 @@
     preview.innerHTML = '<h2>' + selected.date + '</h2><span class="check-badge">Simulacija</span><dl>'
       + [['Režim', policyLabel(selected.policy, selected.holdMs)], ['Preciznost', selected.state === 'interrupted' ? 'Prekinuto' : 'Završeno'],
         ['Obrađene mete', selected.results.filter(row => row.state !== 'unmeasured').length + ' od 5'],
-        ['Probe dugmadi', trialSummary(selected)],
+        ['Test riječi', trialSummary(selected)],
         ['Čuvanje', selected.storage === 'saved' ? 'Na ovom uređaju' : selected.storage === 'saving' ? 'U toku · zasad u memoriji' : 'Samo u memoriji'],
         ['Identifikator', selected.id]].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')
       + '</dl><p class="muted">Otvorite rezultat za mjerenja, korištene postavke i izvoz ZIP-a.</p>';
@@ -348,7 +373,7 @@
     const saved = document.createElement('small');
     saved.textContent = report.unreadable ? 'Datoteka je zadržana' : report.storage === 'saved' ? 'Sačuvano na uređaju · Simulacija' : 'Samo u memoriji · Simulacija';
     button.append(title, detail, saved);
-    if (report.trials?.length) { const trial = document.createElement('small'); trial.textContent = 'Probe: ' + trialSummary(report); button.append(trial); }
+    if (report.trials?.length) { const trial = document.createElement('small'); trial.textContent = 'Test riječi: ' + trialSummary(report); button.append(trial); }
     button.addEventListener('click', () => { selectedHistoryId = report.id; renderHistorySelection(); });
     return button;
   }
@@ -363,9 +388,55 @@
     renderCheckTracking();
   }
 
+  function renderEyePanels() {
+    renderEyePanel(checkEl('check-eye-panel'));
+  }
+
+  function renderEyePanel(panel) {
+    const example = eyeExample;
+    const settled = example.seconds >= 3;
+    panel.replaceChildren();
+    const title = document.createElement('h3');
+    title.textContent = 'Praćenje po oku · zadnjih 10 s';
+    title.title = 'Procenat je dio vremena u kojem uređaj javlja da vidi oko, a ne Tobii ocjena pouzdanosti. Prekid je svaki gubitak pogleda, i treptaj.';
+    const rows = document.createElement('div'); rows.className = 'check-eye-rows';
+    for (const [key, name] of eyeRows) {
+      const label = document.createElement('span');
+      label.textContent = name + ' · ' + example[key] + '%';
+      label.className = !settled ? 'muted' : example[key] >= 85 ? 'check-pass' : 'check-attention';
+      const bar = document.createElement('progress');
+      bar.max = 100; bar.value = example[key]; bar.setAttribute('aria-label', name + ': dio vremena s praćenjem');
+      rows.append(label, bar);
+    }
+    const interruptions = document.createElement('p');
+    interruptions.textContent = 'Prekidi: ' + example.interruptions + (example.interruptions ? ' · najduži ' + seconds(example.longest) + ' s' : '');
+    const agreement = document.createElement('p'); agreement.className = 'muted';
+    agreement.textContent = example.agreement === 'combined'
+      ? 'Isto mjesto · nije dostupno: uređaj šalje samo zajedničku tačku pogleda oba oka.'
+      : 'Isto mjesto · ' + example.agreement.fraction + '% uzoraka unutar 36 px · razmak ' + example.agreement.median + ' px';
+    panel.append(title, rows, interruptions, agreement);
+    if (!settled) return;
+    const [advice, ok] = eyeAdvice(example);
+    if (ok) return;
+    const note = document.createElement('p'); note.className = 'check-attention'; note.textContent = advice;
+    panel.append(note);
+  }
+
+  function eyeAdvice({ left, right, agreement }) {
+    if (Math.max(left, right) === 0) return ['Uređaj nije javio nijedno oko. Provjerite vezu, položaj i osvjetljenje.', false];
+    const low = Math.min(left, right);
+    if (low < 85 && Math.abs(left - right) >= 20) return [(left < right ? 'Lijevo' : 'Desno') + ' oko se često gubi. Podesite položaj i ponovite provjeru.', false];
+    if (low < 85) return ['Oba oka se često gube. Podesite položaj i ponovite provjeru.', false];
+    if (agreement !== 'combined' && agreement.fraction < 80) {
+      return ['Lijevo i desno oko često ne gledaju u istu tačku. Jedno oko možda odlazi ili kalibracija više ne odgovara.', false];
+    }
+    return ['Oba oka se uglavnom prate. Ako slova i dalje ne pogađate, pokrenite provjeru za položaj i kalibraciju.', true];
+  }
+
   function checkStage(mode) {
     if (checkMode !== mode) {
       checkTrialIndex = 0;
+      checkTrialResults = [];
       activeAttemptId = 'pokusaj-' + (++attemptSequence);
     }
     checkMode = mode;
@@ -382,35 +453,46 @@
       renderFreeTargets(targets, mode);
     }
     checkEl('check-progress').hidden = mode !== 'precision';
+    checkEl('check-word').hidden = mode !== 'trial';
+    checkEl('check-test').classList.toggle('word', mode === 'trial');
     checkEl('check-test-copy').innerHTML = mode === 'free' ? 'Gledajte križiće redom. Zelena oznaka pokazuje vaš pogled.'
-      : mode === 'trial' ? 'Gledajte „Pogledaj“. Zadržite pogled dok se traka ne popuni.'
-        : 'Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span>';
+      : mode === 'trial' ? '3 · Riječ · napišite „' + word + '“ pogledom.'
+        : '2 · Tačke · Meta 1 od 5 · Gledajte križić u krugu.<br><span class="muted">Meta se mijenja sama; ne trebate kliknuti.</span>';
     renderCheckTracking();
   }
 
   function renderTrialTargets(targets) {
-    const [width, height, gap, left, top] = [
-      [136, 64, 12, 64, 14],
-      [96, 88, 10, 64, window.innerHeight - 290],
-      [180, 72, 12, Math.floor(window.innerWidth / 2) - 282, Math.floor(window.innerHeight / 2) - 36],
-    ][checkTrialIndex];
-    const expected = [1, 0, 2][checkTrialIndex];
-    for (let i = 0; i < 3; i++) {
-      const button = document.createElement('span');
-      button.className = 'check-target';
-      button.style.cssText = `left:${left + i * (width + gap)}px;top:${top}px;`
-        + `width:${width}px;height:${height}px;border-radius:10px;font-size:24px;`
+    // One row centred across the full width, as in the application.
+    const margin = 48, gap = 16;
+    const room = window.innerWidth - 2 * margin - gap * (keys.length - 1);
+    const width = Math.max(64, Math.min(140, Math.floor(room / keys.length)));
+    const rowWidth = keys.length * width + (keys.length - 1) * gap;
+    const left = Math.floor((window.innerWidth - rowWidth) / 2);
+    const top = Math.floor(window.innerHeight / 2) - 60;
+    const expected = keys.indexOf(word[checkTrialIndex]);
+    keys.forEach((letter, i) => {
+      const key = document.createElement('span');
+      key.className = 'check-target check-key';
+      key.style.cssText = `left:${left + i * (width + gap)}px;top:${top}px;width:${width}px;height:120px;`
         + `border-color:${i === expected ? '#8bd5f5' : '#58647a'}`;
-      button.textContent = i === expected ? 'Pogledaj' : 'Drugo';
+      key.textContent = letter;
       if (i === expected) {
-        const progress = document.createElement('i'); progress.className = 'check-trial-progress'; button.append(progress);
+        const progress = document.createElement('i'); progress.className = 'check-trial-progress'; key.append(progress);
       }
-      targets.append(button);
-    }
-    checkEl('check-test-next').textContent = checkTrialIndex < 2 ? 'Sljedeća probna grupa' : 'Prikaži primjer rezultata';
+      targets.append(key);
+    });
+    const typed = checkEl('check-word');
+    typed.replaceChildren(...[...word].flatMap((letter, i) => {
+      const slot = document.createElement('span');
+      slot.textContent = i < checkTrialResults.length ? letter : '_';
+      if (checkTrialResults[i] === false) { slot.className = 'missed'; slot.title = 'Vrijeme za slovo je isteklo'; }
+      return i ? [' ', slot] : [slot];
+    }));
+    typed.style.left = left + 'px'; typed.style.width = rowWidth + 'px'; typed.style.top = (top - 110) + 'px';
+    checkEl('check-test-next').textContent = checkTrialIndex < word.length - 1 ? 'Sljedeće slovo' : 'Prikaži primjer rezultata';
   }
   function renderFreeTargets(targets, mode) {
-    checkEl('check-test-next').textContent = 'Prikaži primjer rezultata';
+    checkEl('check-test-next').textContent = mode === 'precision' ? 'Preskoči na test riječi' : 'Prikaži primjer rezultata';
     const rows = mode === 'free' ? [.06, .5, .94] : [.5];
     const columns = mode === 'free' ? [.04, .5, .96] : [.5];
     for (const y of rows) for (const x of columns) {
@@ -431,6 +513,14 @@
     showReport(currentReport);
   }
 
+  function finishPrecision() {
+    // The word test follows the targets; the target result is already kept.
+    currentReport = makeReport(activeAttemptId, '22.10.2026. · 14:32', ReferenceEyePolicy.read());
+    currentReport.storage = storageForPreview();
+    rememberReport(currentReport);
+    checkStage('trial');
+  }
+
   function storageForPreview() {
     return { 'logging-off': 'off', 'save-error': 'error', saving: 'saving' }[checkEl('check-view-preview').value] || 'saved';
   }
@@ -444,11 +534,14 @@
     returnMode = 'position';
     historyItems = [makeReport('provjera-014', '21.10.2026. · 17:45', 'hold'), makeReport('provjera-013', '21.10.2026. · 17:38', 'any', true)];
     if (view === 'empty') historyItems = [];
-    else if (view !== 'position') {
+    else if (!['position', 'word-timeout'].includes(view)) {
       currentReport = previewReport(view);
       rememberReport(currentReport);
     }
     if (view === 'history-error') historyItems.unshift({ id: 'provjera-016', date: '22.10.2026. · 14:40', unreadable: true });
+    eyeExample = eyeExamples[view.startsWith('eyes') ? view : 'eyes-live'];
+    if (view.startsWith('eyes')) { currentReport = null; renderFrame(); return; }
+    if (view === 'word-timeout') { checkStage('trial'); checkTrialResults = [false]; checkTrialIndex = 1; checkStage('trial'); return; }
     if (['history', 'empty', 'history-error'].includes(view)) showHistory();
     else if (currentReport) { reportTab = view.startsWith('trial') ? 'trial' : 'precision'; showReport(currentReport); }
   }
@@ -465,7 +558,8 @@
   checkEl('check-free').addEventListener('click', () => checkStage('free'));
   checkEl('check-repeat').addEventListener('click', () => checkStage('precision'));
   checkEl('check-test-next').addEventListener('click', () => {
-    if (checkMode === 'trial' && checkTrialIndex < 2) { checkTrialIndex++; checkStage('trial'); }
+    if (checkMode === 'trial' && checkTrialIndex < word.length - 1) { checkTrialResults.push(true); checkTrialIndex++; checkStage('trial'); }
+    else if (checkMode === 'precision') finishPrecision();
     else finishAttempt();
   });
   checkEl('check-test-back').addEventListener('click', () => finishAttempt(true));

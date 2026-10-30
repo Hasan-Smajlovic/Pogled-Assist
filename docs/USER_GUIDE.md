@@ -27,7 +27,7 @@ Connect and calibrate the Tobii Eye Tracker 4C with the matching Tobii software.
 2. A directly loadable Tobii Stream Engine DLL.
 3. The optional 32-bit Python bridge for 32-bit Stream Engine installations.
 
-The top-right status uses an icon, color, and visible text. **Praćenje spremno** requires a connected tracker, both eyes and fresh gaze. With the experimental one-eye policy, **Odabir jednim okom** identifies usable application selection with one eye; direct desktop input still needs both. **Odabir na čekanju** identifies a selection attempt whose progress is still retained during a short interruption. When an unfinished initial pause is discarded at the full-progress deadline, the status changes to **Praćenje pauzirano**; an already completed pause can remain on hold until 500 ms total from the loss. **Praćenje pauzirano** keeps both labeled eye indicators visible: a check means valid data and a dash means no valid data. These indicate SDK validity, not physical eye closure or calibration accuracy. **Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery, and **Uređaj nije povezan** reports automatic retry. Source simulation keeps the **Simulacija mišem** label; its [shortcuts](UI_DEVELOPMENT.md#mouse-gaze-simulation) use synthetic input. Application selection follows the [chosen policy](#eye-tracking-policy).
+The top-right status uses an icon, color, and visible text. **Praćenje spremno** requires a connected tracker, both eyes and fresh gaze. With the experimental one-eye policy, **Odabir jednim okom** identifies usable application selection with one eye; direct desktop input still needs both. **Odabir na čekanju** identifies a selection attempt whose progress is still retained during a short interruption. When an unfinished initial pause is discarded at the full-progress deadline, the status changes to **Praćenje pauzirano**; an already completed pause can remain on hold until 500 ms total from the loss. **Praćenje pauzirano** keeps both labeled eye indicators visible: a check means valid data and a dash means no valid data. These indicate SDK validity, not physical eye closure or calibration accuracy. **Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery, and **Uređaj nije povezan** reports automatic retry. Source simulation keeps the **Simulacija uz riječ** label; its [shortcuts](UI_DEVELOPMENT.md#mouse-gaze-simulation) use synthetic input. Application selection follows the [chosen policy](#eye-tracking-policy).
 
 Missing eye-status delivery pauses input. A prolonged interruption in the x86 bridge or a closed bridge starts automatic reconnection; normal invalid-eye samples do not restart the connection. A direct native connection stays paused until fresh data returns. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
 
@@ -47,7 +47,7 @@ The notice takes no focus and requires no acknowledgement. Buttons stay in place
 
 ## Gaze check
 
-Open **Postavke > Pogled i odabir > Pokazivač i provjera > Provjera pogleda**. A helper uses mouse or keyboard while the gaze user follows the targets. Normal gaze input stays paused until the check closes. The [gaze-check guide](features/gaze-check.md) covers positioning, precision, button trials and calibration.
+Open **Postavke > Pogled i odabir > Pokazivač i provjera > Provjera pogleda**. A helper uses mouse or keyboard while the gaze user follows the targets. Normal gaze input stays paused until the check closes. The [gaze-check guide](features/gaze-check.md) covers positioning, per-eye tracking, the target and word tests, and calibration.
 
 ### Saved gaze-check results
 
@@ -176,7 +176,7 @@ The edge duration applies when gaze moves just beyond a button. The short eye-tr
 
 ### Selection stability near edges
 
-Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's local button trial copies this setting when opened.
+Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's word test copies this setting when opened.
 
 While gaze is briefly outside A but still near its edge, the pause or ring freezes. Only returning inside the same unchanged A before expiry can resume it; outside time, including the interval up to the first returning point, earns no progress. If gaze stays on a nearby B until expiry, A is discarded and B starts its full pause and dwell from the first eligible sample after expiry. B earns no time while A is frozen. Moving farther away switches immediately. Changing the duration cancels an unfinished selection; completed buttons still require departure before repetition. A tracking interruption cannot extend an already running edge deadline.
 
@@ -206,7 +206,7 @@ For example, with an 850 ms initial pause, 650 ms fill and H = 300 ms, returning
 
 Both-eye loss, switching the sole tracked eye without fresh both-eye gaze between, a changed target/content/geometry, lost connection, suspended input or relevant timing/policy changes discard retained progress. Existing stale-data and delivery-gap checks take precedence and can discard it before 500 ms. Repeated eye reports do not restart either deadline, and tracking retention cannot extend an edge-hold deadline. Completed controls still require looking away before repetition.
 
-The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and button trial use the selected policy and display its name; eye indicators and both-eye availability remain actual measurements. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
+The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and word test use the selected policy and display its name; eye indicators, per-eye shares and both-eye availability remain actual measurements. Its interruption count follows the selected policy. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
 
 ### Speech settings
 
@@ -257,7 +257,7 @@ Runtime diagnostics are written to `logs\latest.txt` when logging is enabled. Th
 
 ### Diagnostic log collection
 
-Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets and button trials. Use a diagnostic recording to investigate what happened during application use. The two exports are separate; a support ZIP includes a gaze-check result only when you explicitly choose one.
+Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets, word tests and per-eye interruptions. Use a diagnostic recording to investigate what happened during application use. The two exports are separate; a support ZIP includes a gaze-check result only when you explicitly choose one.
 
 #### Record a problem
 
