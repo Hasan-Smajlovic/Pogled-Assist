@@ -30,7 +30,7 @@ With the application active and the hotbar visible, use these development-only s
 | F9 | Disconnect or reconnect; retain the selected eye and gaze states |
 | F10 | Restore both eyes, the connection, and gaze delivery; cancel pending dwell |
 
-Failures can be combined. The selected eye policy applies to synthetic gaze: the experimental mode emits coordinates with one eye; the hold mode preserves progress without emitting coordinates during a single-eye loss. Restoring an eye or connection never shows a cached marker. A gaze gap of at least 500 ms cancels pending dwell before the first resumed sample. Failure shortcuts do not change saved settings. The hotbar keeps **Simulacija mišem**, with the active failure beneath it. Tobii-specific notifications remain suppressed in simulation.
+Failures can be combined. The selected eye policy applies to synthetic gaze: the experimental mode emits coordinates with one eye; the hold mode preserves progress without emitting coordinates during a single-eye loss. Restoring an eye or connection never shows a cached marker. A gaze gap of at least 500 ms cancels pending dwell before the first resumed sample. Failure shortcuts do not change saved settings. The hotbar keeps **Simulacija rijecju**, with the active failure beneath it. Tobii-specific notifications remain suppressed in simulation.
 
 Use this to inspect selection cancellation, the gaze marker, and the caregiver check with synthetic input. It does not validate Tobii discovery, calibration, physical eye detection, automatic backend reconnection, sample quality, latency, or hardware accuracy. Report those hardware checks as Not run.
 

@@ -229,7 +229,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._policy_label = _label(f"Režim: {self._policy_text}", self, "checkHint")
         copy.addWidget(self._policy_label)
         self._simulation_label = _label(
-            "Simulacija mišem · Bez Tobii mjerenja", self, "checkSimulation"
+            "Simulacija rijecju · Bez Tobii mjerenja", self, "checkSimulation"
         )
         self._simulation_label.setVisible(self._simulated)
         copy.addWidget(self._simulation_label)
@@ -1053,7 +1053,7 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._target.update()
 
     def _set_test_hint(self, instruction: str, feedback: str, state: bool | None = None) -> None:
-        prefix = "SIMULACIJA MIŠEM · " if self._simulated else ""
+        prefix = "Simulacija rijecju · " if self._simulated else ""
         text = (
             f"{escape(prefix + instruction)}<br>"
             f'<span style="color: {COLORS[state]}">{escape(feedback)}</span>'

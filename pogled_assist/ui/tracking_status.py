@@ -51,7 +51,7 @@ def tracking_status_view(
             "#bec9d9",
         ),
         TrackingState.SIMULATING: (
-            "Simulacija mišem",
+            "Simulacija rijecju",
             status.detail or "Upravljanje mišem",
             "mouse-pointer",
             "#a0cef3",
