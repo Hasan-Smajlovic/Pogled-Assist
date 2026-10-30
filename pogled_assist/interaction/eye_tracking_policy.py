@@ -63,6 +63,7 @@ class EyeTrackingGate(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self.interruption_reason = "unknown"
         self.policy = BOTH_EYES
         self.hold_ms = 150
         self.eyes = (False, False)
@@ -86,10 +87,11 @@ class EyeTrackingGate(QObject):
     def configure(self, policy: str, hold_ms: int) -> None:
         policy = valid_policy(policy)
         if (policy, hold_ms) != (self.policy, self.hold_ms):
-            self.cancel()
+            self.cancel(reason="settings_changed")
         self.policy, self.hold_ms = policy, hold_ms
 
-    def cancel(self) -> None:
+    def cancel(self, *, reason: str = "cancelled_unknown") -> None:
+        self.interruption_reason = reason
         self._deadline.stop()
         self._freshness.stop()
         self._hold_until = None
@@ -105,7 +107,7 @@ class EyeTrackingGate(QObject):
         now = time.monotonic()
         at = now if received_at is None else received_at
         if self._hold_until is None or now >= self._hold_until or at < self._loss_at:
-            self.cancel()
+            self.cancel(reason="invalid_gaze")
 
     def update_eyes(self, left: bool, right: bool, received_at: float | None = None) -> None:
         now = time.monotonic()
@@ -113,19 +115,19 @@ class EyeTrackingGate(QObject):
         previous = self.eyes
         self.eyes = (bool(left), bool(right))
         if not any(self.eyes) or not self._eyes_are_fresh(at, now):
-            self.cancel()
+            self.cancel(reason="both_eyes_invalid" if not any(self.eyes) else "stale_eye_data")
             return
         if all(self.eyes):
             return
         if self._sole_eye is not None and self._sole_eye != self.eyes:
-            self.cancel()
+            self.cancel(reason="eligible_eye_changed")
         self._sole_eye = self.eyes
         if self.policy == ANY_EYE:
             return
         if self._can_hold(previous, at):
             self._start_hold(at, now)
         elif not self.holding:
-            self.cancel()
+            self.cancel(reason="eye_gate_closed")
 
     @staticmethod
     def _eyes_are_fresh(at: float, now: float) -> bool:
@@ -144,7 +146,7 @@ class EyeTrackingGate(QObject):
         self._hold_until = at + COMPLETED_PAUSE_RETENTION_MS / 1000
         self._pause_only = False
         if now >= self._hold_until:
-            self.cancel()
+            self.cancel(reason="tracking_hold_expired")
             return
         self._freshness.stop()
         self.hold_started.emit(self._full_hold_until * 1000, self._hold_until * 1000)
@@ -154,7 +156,7 @@ class EyeTrackingGate(QObject):
         now = time.monotonic()
         at = now if received_at is None else received_at
         if not math.isfinite(at) or not 0 <= now - at < GAZE_FRESH_SECONDS:
-            self.cancel()
+            self.cancel(reason="stale_gaze")
             return False
         if not eyes_usable(self.policy, *self.eyes):
             return False
@@ -168,7 +170,11 @@ class EyeTrackingGate(QObject):
 
     def _resume_hold(self, now: float) -> None:
         if now >= self._hold_until or now - self._last_gaze_at >= GAZE_FRESH_SECONDS:
-            self.cancel()
+            self.cancel(
+                reason="tracking_hold_expired"
+                if now >= self._hold_until
+                else "gaze_freshness_expired"
+            )
             return
         self._expire()
         self._hold_until = None
@@ -190,7 +196,7 @@ class EyeTrackingGate(QObject):
                     remaining = min(remaining, self._full_hold_until - now)
                 self._deadline.start(max(1, math.ceil(remaining * 1000)))
             else:
-                self.cancel()
+                self.cancel(reason="tracking_hold_expired")
 
     def _expire_gaze(self) -> None:
         if self.holding:
@@ -200,4 +206,4 @@ class EyeTrackingGate(QObject):
             if remaining > 0:
                 self._freshness.start(max(1, math.ceil(remaining * 1000)))
             else:
-                self.cancel()
+                self.cancel(reason="gaze_freshness_expired")

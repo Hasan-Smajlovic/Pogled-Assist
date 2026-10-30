@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from _clock import freeze_monotonic
 
+from pogled_assist.interaction.eye_tracking_policy import ANY_EYE
 from pogled_assist.tracking.gaze_check import (
     CheckSnapshot,
     CheckTelemetry,
@@ -422,6 +423,86 @@ def test_eye_run_does_not_bridge_a_telemetry_restart():
     run.add(second.snapshot(10))
     # Two seconds between the streams were not measured.
     assert run.result(10).left == pytest.approx(0.8, abs=0.002)
+
+
+def _feed_eyes(run, start, end, state, *, step=0.1, blinks=lambda _now: 0, seconds=None):
+    """Snapshots every `step` seconds with cumulative per-eye time, as CheckTelemetry sends."""
+    seconds = [0.0, 0.0, 0.0] if seconds is None else seconds
+    for index in range(round((end - start) / step) + 1):
+        now = start + index * step
+        left, right = state(now)
+        run.add(
+            CheckSnapshot(
+                left,
+                right,
+                gaze_interruptions=blinks(now),
+                measured_at=now,
+                telemetry_started_at=0.0,
+                left_seconds=seconds[0],
+                right_seconds=seconds[1],
+                both_seconds=seconds[2],
+            )
+        )
+        for eye, tracked in enumerate((left, right, left and right)):
+            seconds[eye] += step if tracked else 0.0
+    return seconds
+
+
+def test_eye_run_counts_each_loss_and_its_longest_duration():
+    run = EyeTrackingRun((1280, 720), 36, 0)
+    _feed_eyes(run, 0, 10, lambda now: (not 2 <= now < 3, not 6 <= now < 6.35))
+    result = run.result(10)
+    assert result.interruptions == 2
+    assert result.longest_interruption == pytest.approx(1.0, abs=0.01)
+    assert result.completed is False  # An open-ended run never finishes by itself.
+
+
+def test_eye_run_counts_a_blink_shorter_than_a_snapshot_from_the_provider_counter():
+    run = EyeTrackingRun((1280, 720), 36, 0)
+    _feed_eyes(run, 0, 10, lambda _now: (True, True), blinks=lambda now: int(now >= 4))
+    result = run.result(10)
+    assert (result.interruptions, result.longest_interruption) == (1, 0.0)
+    assert result.both == pytest.approx(1.0, abs=0.02)
+
+
+def test_eye_run_interruptions_follow_the_saved_eye_policy():
+    def right_lost(now):
+        return True, not 3 <= now < 4
+
+    both = EyeTrackingRun((1280, 720), 36, 0)
+    one = EyeTrackingRun((1280, 720), 36, 0, policy=ANY_EYE)
+    _feed_eyes(both, 0, 10, right_lost)
+    _feed_eyes(one, 0, 10, right_lost)
+    assert both.result(10).interruptions == 1
+    # The left eye kept application controls usable under the one-eye policy.
+    assert one.result(10).interruptions == 0
+    assert one.result(10).right == pytest.approx(0.9, abs=0.02)
+
+
+def test_eye_run_counts_missing_and_stale_snapshots_as_interruptions():
+    run = EyeTrackingRun((1280, 720), 36, 0)
+    seconds = _feed_eyes(run, 0, 3, lambda _now: (True, True))
+    _feed_eyes(run, 4, 6, lambda _now: (True, True), seconds=seconds)
+    gap = run.result(6)
+    # A report is valid for FRESH_SECONDS, so a one-second gap loses half a second.
+    assert gap.interruptions == 1
+    assert gap.longest_interruption == pytest.approx(0.5, abs=0.01)
+    stale = run.result(10)
+    assert stale.interruptions == 2
+    assert stale.longest_interruption == pytest.approx(3.5, abs=0.01)
+
+
+def test_rolling_eye_run_keeps_only_the_last_window():
+    run = EyeTrackingRun((1280, 720), 36, 0, window=10)
+    seconds = _feed_eyes(run, 0, 10, lambda now: (not 1 <= now < 3, True))
+    early = run.result(10)
+    assert early.interruptions == 1
+    assert early.left == pytest.approx(0.8, abs=0.02)
+    _feed_eyes(run, 10.1, 14, lambda _now: (True, True), seconds=seconds)
+    late = run.result(14)
+    assert late.observed_seconds == pytest.approx(10, abs=0.1)
+    assert (late.interruptions, late.longest_interruption) == (0, 0.0)
+    assert late.left == pytest.approx(1.0, abs=0.02)
 
 
 def _record_pairs(telemetry, left, right, start=0.0, end=10.0, step=0.02):

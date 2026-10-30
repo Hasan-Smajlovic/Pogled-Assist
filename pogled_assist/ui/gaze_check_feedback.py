@@ -16,6 +16,7 @@ def result_advice(
     losses: int,
     wrong_selections: int,
     policy: str = BOTH_EYES,
+    expected: int = 3,
 ) -> str:
     eyes = "najmanje jedno oko uz svjež pogled" if policy == ANY_EYE else "oba oka"
     tracking = "se prati" if policy == ANY_EYE else "se prate"
@@ -26,27 +27,27 @@ def result_advice(
             "Odaberite „Podesi položaj“. Ako pogled i dalje promašuje, "
             "otvorite Tobii postavke i ponovite kalibraciju korisnikovog profila."
         )
-    if len(trial_results) != 3:
-        return "Još provjerite izbor dugmeta pogledom."
+    if len(trial_results) != expected:
+        return "Još napišite riječ pogledom."
     if any(
         not selected and index not in tracked_targets
         for index, selected in enumerate(trial_results)
     ):
         return (
-            "Tokom dijela probe nije bilo dovoljno podataka o pogledu. Podesite položaj "
-            f"dok {tracking} {eyes}, pa ponovite probu."
+            "Tokom dijela testa riječi nije bilo dovoljno podataka o pogledu. Podesite "
+            f"položaj dok {tracking} {eyes}, pa ponovite test."
         )
     if losses and not all(trial_results):
         return (
             "Prekidi praćenja poništavali su izbor. Podesite ekran dok uređaj "
-            f"ne vidi {eyes}, pa ponovite probu."
+            f"ne vidi {eyes}, pa ponovite test."
         )
     if wrong_selections:
-        return "Odabrana su i pogrešna dugmad. Provjerite položaj i kalibraciju, pa ponovite probu."
+        return "Odabrana su i pogrešna slova. Provjerite položaj i kalibraciju, pa ponovite test."
     if not all(trial_results):
         return (
-            "Neka dugmad nisu odabrana na vrijeme. Ponovite probu; zadržite "
-            "pogled na „Pogledaj“ dok se traka ne popuni."
+            "Neka slova nisu odabrana na vrijeme. Ponovite test; zadržite "
+            "pogled na traženom slovu dok se traka ne popuni."
         )
     advice = "Zatvorite provjeru i probajte govornu tastaturu."
     if losses:

@@ -17,7 +17,6 @@ MEASURE_SECONDS = 2.0
 TARGET_SECONDS = SETTLE_SECONDS + MEASURE_SECONDS
 MIN_COVERAGE = 0.6
 COVERAGE_INTERVAL_SECONDS = 0.1
-EYE_RUN_SECONDS = 30.0
 EYE_LOW_FRACTION = 0.85
 EYE_GAP_FRACTION = 0.2
 AGREEMENT_MIN_FRACTION = 0.8
@@ -343,7 +342,7 @@ class FixationCheck:
 
 @dataclass(frozen=True)
 class EyeTrackingResult:
-    """Per-eye tracking availability and left/right gaze agreement for one run."""
+    """Per-eye tracking availability, interruptions and left/right gaze agreement."""
 
     observed_seconds: float
     left: float
@@ -355,10 +354,13 @@ class EyeTrackingResult:
     agreement_fraction: float | None
     threshold: float
     completed: bool
+    # Losses of the gaze the selected eye-tracking policy accepts, blinks included.
+    interruptions: int = 0
+    longest_interruption: float = 0.0
 
 
 class EyeTrackingRun:
-    """A fixed run measured from cumulative telemetry.
+    """Availability measured from cumulative telemetry, for a run or a rolling window.
 
     Time without a snapshot, including a telemetry restart, counts as not tracked.
     """
@@ -368,22 +370,34 @@ class EyeTrackingRun:
         screen_size: tuple[int, int],
         threshold: float,
         now: float,
-        duration: float = EYE_RUN_SECONDS,
+        duration: float | None = None,
+        *,
+        policy: str = BOTH_EYES,
+        window: float | None = None,
     ) -> None:
         self.screen_size = screen_size
         self.threshold = threshold
         self.started_at = now
         self.duration = duration
+        self.policy = policy
+        self.window = window
         self._closed = (0.0, 0.0, 0.0)
         self._origin: float | None = None
         self._base = self._last = (0.0, 0.0, 0.0)
+        self._totals: deque[tuple[float, tuple[float, float, float]]] = deque(
+            [(now, (0.0, 0.0, 0.0))]
+        )
         self._agreement_supported: bool | None = None
         self._last_pair_at = now
-        self._separations: list[float] = []
+        self._separations: deque[tuple[float, float]] = deque()
+        self._losses: deque[list[float | None]] = deque()
+        self._usable: bool | None = None
+        self._last_at = now
+        self._gaze_interruptions: int | None = None
 
     @property
     def deadline(self) -> float:
-        return self.started_at + self.duration
+        return math.inf if self.duration is None else self.started_at + self.duration
 
     def finished(self, now: float) -> bool:
         return now >= self.deadline
@@ -401,7 +415,11 @@ class EyeTrackingRun:
             # Telemetry that began during the run has measured all of its time.
             self._base = (0.0, 0.0, 0.0) if origin >= self.started_at else totals
         self._last = totals
+        if self.window is not None:
+            self._totals.append((at, self._valid_seconds()))
+        self._record_loss(snapshot, at)
         self._add_pairs(snapshot.eye_gaze_pairs)
+        self._prune(at)
 
     def _valid_seconds(self) -> tuple[float, float, float]:
         return tuple(
@@ -409,27 +427,94 @@ class EyeTrackingRun:
             for closed, last, base in zip(self._closed, self._last, self._base, strict=True)
         )
 
+    def _record_loss(self, snapshot: CheckSnapshot, at: float) -> None:
+        if at < self._last_at:
+            return
+        usable = eyes_usable(self.policy, snapshot.left, snapshot.right)
+        ongoing = self._losses[-1] if self._losses and self._losses[-1][1] is None else None
+        if ongoing is None and at - self._last_at >= FRESH_SECONDS:
+            # No report for FRESH_SECONDS is a loss even when the next one is valid.
+            ongoing = [self._last_at + FRESH_SECONDS if self._usable else self._last_at, None]
+            self._losses.append(ongoing)
+        counted = self._gaze_interruptions
+        self._gaze_interruptions = snapshot.gaze_interruptions
+        if usable:
+            if ongoing is not None:
+                ongoing[1] = at
+            elif counted is not None and snapshot.gaze_interruptions != counted:
+                # A loss shorter than the snapshot interval is known only from the counter.
+                self._losses.append([at, at])
+        elif ongoing is None:
+            self._losses.append([at, None])
+        self._usable = usable
+        self._last_at = at
+
     def _add_pairs(self, pairs: tuple[EyeGazePair, ...]) -> None:
         width, height = self.screen_size
         for left_x, left_y, right_x, right_y, at in pairs:
             if not self._last_pair_at < at <= self.deadline:
                 continue
             self._last_pair_at = at
-            self._separations.append(
-                math.hypot((left_x - right_x) * (width - 1), (left_y - right_y) * (height - 1))
+            separation = math.hypot(
+                (left_x - right_x) * (width - 1), (left_y - right_y) * (height - 1)
             )
+            self._separations.append((at, separation))
+
+    def _prune(self, now: float) -> None:
+        if self.window is None:
+            return
+        start = now - self.window
+        while len(self._totals) > 1 and self._totals[1][0] <= start:
+            self._totals.popleft()
+        while self._separations and self._separations[0][0] < start:
+            self._separations.popleft()
+        while self._losses and self._losses[0][1] is not None and self._losses[0][1] < start:
+            self._losses.popleft()
+
+    def _interval(self, now: float) -> tuple[float, float]:
+        end = min(now, self.deadline)
+        start = self.started_at if self.window is None else max(self.started_at, end - self.window)
+        return start, end
+
+    def _fractions(self, start: float, end: float) -> tuple[float, tuple[float, ...]]:
+        base_at, base = self._totals[0]
+        for at, totals in self._totals:
+            if at > start:
+                break
+            # The newest total at the window start; a run counts from zero.
+            base_at, base = at, totals
+        observed = max(0.0, end - base_at)
+        current = self._valid_seconds()
+        return observed, tuple(
+            min(1.0, max(0.0, total - before) / observed) if observed > 0 else 0.0
+            for total, before in zip(current, base, strict=True)
+        )
+
+    def _interruptions(self, start: float, end: float) -> tuple[int, float]:
+        losses = [list(loss) for loss in self._losses]
+        ongoing = losses and losses[-1][1] is None
+        if not ongoing and end - self._last_at >= FRESH_SECONDS:
+            losses.append([self._last_at + FRESH_SECONDS if self._usable else self._last_at, None])
+        count, longest = 0, 0.0
+        for loss_start, loss_end in losses:
+            loss_end = end if loss_end is None else loss_end
+            if loss_end < start or loss_start > end:
+                continue
+            count += 1
+            longest = max(longest, min(end, loss_end) - max(start, loss_start))
+        return count, longest
 
     def result(self, now: float) -> EyeTrackingResult:
-        observed = max(0.0, min(now, self.deadline) - self.started_at)
-        left, right, both = (
-            min(1.0, seconds / observed) if observed > 0 else 0.0
-            for seconds in self._valid_seconds()
-        )
-        separations = self._separations
+        start, end = self._interval(now)
+        observed, (left, right, both) = self._fractions(start, end)
+        if self.window is None:
+            observed = max(0.0, end - self.started_at)
+        separations = [value for at, value in self._separations if start <= at <= end]
         median_separation = agreement = None
         if self._agreement_supported and len(separations) >= MIN_AGREEMENT_SAMPLES:
             median_separation = median(separations)
             agreement = sum(value <= self.threshold for value in separations) / len(separations)
+        interruptions, longest = self._interruptions(start, end)
         return EyeTrackingResult(
             observed,
             left,
@@ -441,4 +526,6 @@ class EyeTrackingRun:
             agreement,
             self.threshold,
             self.finished(now),
+            interruptions,
+            longest,
         )

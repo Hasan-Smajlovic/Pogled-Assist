@@ -38,8 +38,8 @@ def test_rate_limited_event_counts_are_visible_and_reset_on_segment(monkeypatch)
     monkeypatch.setattr(diagnostics, "diagnostic_writer", lambda: writer)
     monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: now[0]))
     metrics = diagnostics.StreamMetrics()
-    for _ in range(40):
-        metrics.event("eye_gate_received")
+    for index in range(40):
+        metrics.event("eye_gate_received", sample=index)
     now[0] = 11
     metrics.summary(generation=1, backend="fake")
     assert len([name for name, _ in events if name == "eye_gate_received"]) == 4
@@ -369,8 +369,9 @@ def test_logging_shutdown_flushes_partial_summaries_before_session_end(monkeypat
         assert writer.stop()
     report = summarize(next((latest.parent / "diagnostics").glob("*.jsonl")))
     assert report["complete"]
-    assert report["analysis"]["evidence_incomplete"]
-    assert report["analysis"]["suppressed_events"]["suppressed:selection_end"] == 6
+    assert not report["analysis"]["evidence_incomplete"]
+    assert report["events"]["selection_end"] == 10
+    assert report["analysis"]["reason_totals_from_counters"]["outcome:unknown"] == 10
 
 
 @pytest.mark.parametrize("rotate", [False, True])
@@ -421,6 +422,6 @@ def test_logging_toggle_keeps_partial_summaries_when_the_writer_is_blocked(
     path = latest.parent / "diagnostics" / f"{session}.jsonl"
     report = summarize(path)
     assert report["lifecycle_complete"]
-    assert report["analysis"]["suppressed_events"]["suppressed:selection_end"] == 6
+    assert report["analysis"]["reason_totals_from_counters"]["outcome:unknown"] == 10
     events = [json.loads(line)["event"] for line in path.read_text().splitlines()]
     assert events.index("selection_summary") < events.index("session_end")

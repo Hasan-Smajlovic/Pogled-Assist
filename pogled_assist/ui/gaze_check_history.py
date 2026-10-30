@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..interaction.eye_tracking_policy import EYE_TRACKING_POLICY_CHOICES
 from ..tracking.gaze_check_report import ENVIRONMENT_KEYS, SETTING_KEYS
+from .gaze_check_text import eye_summary_text
 
 STATES = {"completed": "Završeno", "interrupted": "Prekinuto"}
 STORAGE = {
@@ -58,7 +59,7 @@ class GazeCheckHistory:
         trial_page = QWidget()
         trial_layout = QVBoxLayout(trial_page)
         self._trial_attempts = QComboBox(trial_page)
-        self._trial_attempts.setAccessibleName("Pokušaj probnog izbora")
+        self._trial_attempts.setAccessibleName("Pokušaj testa riječi")
         self._trial_attempts.setMinimumHeight(48)
         self._trial_attempts.currentIndexChanged.connect(self._render_trial_attempt)
         trial_layout.addWidget(self._trial_attempts)
@@ -67,7 +68,7 @@ class GazeCheckHistory:
         self._trial_detail.setTextFormat(Qt.RichText)
         self._trial_detail.setAlignment(Qt.AlignTop)
         trial_layout.addWidget(scroll_content(self._trial_detail), 1)
-        self._result_tabs.addTab(trial_page, "Probni izbor")
+        self._result_tabs.addTab(trial_page, "Test riječi")
         self._context_detail = QLabel()
         self._context_detail.setWordWrap(True)
         self._context_detail.setTextFormat(Qt.PlainText)
@@ -142,7 +143,6 @@ class GazeCheckHistory:
         self._flow_title.hide()
         self._calibration_button.hide()
         self._free_button.hide()
-        self._eyes_button.hide()
         self._reports.load()
         self._refresh_history()
 
@@ -159,7 +159,7 @@ class GazeCheckHistory:
             policy = dict(EYE_TRACKING_POLICY_CHOICES).get(
                 report.settings.get("eye_tracking_policy"), "—"
             )
-            trial = f" · proba: {STATES[report.trials[-1].state]}" if report.trials else ""
+            trial = f" · riječ: {STATES[report.trials[-1].state]}" if report.trials else ""
             storage = "disk" if self._reports.states.get(report.id) == "saved" else "memorija"
             text = f"{report.started_at[:19].replace('T', ' ')} · {STATES[report.state]}{trial}\n{policy} · {storage}"
             if report.simulated:
@@ -186,7 +186,7 @@ class GazeCheckHistory:
         if self._reports.history_error:
             text = "Lista s diska nije učitana. Zatvorite i ponovo otvorite listu za novi pokušaj."
         elif not self._reports.loading and not self._history_list.count():
-            text = "Još nema rezultata. Pokrenite provjeru preciznosti."
+            text = "Još nema rezultata. Pokrenite provjeru."
         self._history_status.setText(text)
 
     def _history_selected(self, *_args) -> None:
@@ -204,7 +204,7 @@ class GazeCheckHistory:
             text = (
                 f"{STATES[report.state]} · {report.started_at}\n\nRežim: {policy}\n"
                 f"Preciznost: {measured} od {len(report.precision)} meta završeno\n"
-                f"Probni izbor: {len(report.trials)} pokušaja · {trial}\n"
+                f"Test riječi: {len(report.trials)} pokušaja · {trial}\n"
                 f"Simulacija: {'Da' if report.simulated else 'Ne'}\n"
                 f"ID: {report.id}\n\nOtvorite rezultat za mjerenja, korištene postavke i izvoz ZIP-a."
             )
@@ -295,13 +295,18 @@ class GazeCheckHistory:
         for index, trial in enumerate(report.trials, 1):
             if index - 1 != selected:
                 continue
+            name = "Probni izbor" if trial.word is None else f"Riječ „{trial.word}“"
             trials.append(
-                f"<p><b>Pokušaj {index} · {STATES[trial.state]}</b> · {escape(trial.started_at)} · {trial.duration_seconds:.1f} s<br>{escape(trial.reason or '')}</p>"
+                f"<p><b>Pokušaj {index} · {escape(name)} · {STATES[trial.state]}</b> · {escape(trial.started_at)} · {trial.duration_seconds:.1f} s<br>{escape(trial.reason or '')}<br>{escape(eye_summary_text('Praćenje', trial.eyes))}</p>"
             )
+            heading = "Grupa / px" if trial.word is None else "Slovo / px"
             trials.append(
-                '<table width="100%" cellspacing="8"><tr><th>Grupa / px</th><th>Rezultat</th><th>Podaci</th><th>Pogrešni / poništeni / izlasci</th></tr>'
+                f'<table width="100%" cellspacing="8"><tr><th>{heading}</th><th>Rezultat</th><th>Podaci</th><th>Pogrešni / poništeni / izlasci</th></tr>'
             )
             for row in trial.rows:
+                label = str(row.index + 1)
+                if trial.word is not None:
+                    label += f" ({escape(trial.word[row.index])})"
                 status = (
                     "Nije izmjereno"
                     if row.state == "unmeasured"
@@ -315,12 +320,12 @@ class GazeCheckHistory:
                 )
                 coverage = f"{row.coverage:.0%}" if row.coverage is not None else "—"
                 trials.append(
-                    f"<tr><td>{row.index + 1} · {row.size_logical_px[0]} &times; {row.size_logical_px[1]}</td><td>{status}</td><td>{coverage}</td><td>{row.wrong_selections} / {row.cancelled_selections} / {row.departures}</td></tr>"
+                    f"<tr><td>{label} · {row.size_logical_px[0]} &times; {row.size_logical_px[1]}</td><td>{status}</td><td>{coverage}</td><td>{row.wrong_selections} / {row.cancelled_selections} / {row.departures}</td></tr>"
                 )
             trials.append("</table>")
         self._trial_detail.setText(
             "".join(trials)
-            or "Probni izbor još nije pokrenut. Preciznost je već dostupna za čuvanje i izvoz."
+            or "Test riječi još nije pokrenut. Tačke su već dostupne za čuvanje i izvoz."
         )
 
     def _export_report(self) -> None:

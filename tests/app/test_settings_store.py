@@ -9,6 +9,17 @@ from pogled_assist.settings_store import load_app_settings, save_app_settings
 from pogled_assist.speech.speech_service import SpeechSettings
 
 
+@pytest.mark.parametrize("value, expected", [(None, 4), ("bad", 4), (-1, 1), (11, 10), ("7", 7)])
+def test_log_budget_coercion_and_decimal_storage(tmp_path, monkeypatch, value, expected):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"gaze": {"log_storage_gb": value}}), encoding="utf-8")
+    gaze, speech = load_app_settings()
+    assert gaze.log_storage_gb == expected
+    assert save_app_settings(gaze, speech)
+    assert load_app_settings()[0].log_storage_gb == expected
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [(None, 80), ("bad", 80), (-20, 0), (120, 100), ("42", 42)],

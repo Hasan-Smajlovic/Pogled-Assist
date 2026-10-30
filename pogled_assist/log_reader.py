@@ -8,14 +8,35 @@ from collections import Counter
 from pathlib import Path
 
 from .diagnostic_report import SessionAnalysis
+from .log_validation import diagnostic_fields_valid
 
 
 def summarize(path: Path) -> dict:
+    if path.is_dir():
+        from .log_folder import summarize_folder
+
+        return summarize_folder(path)
     session = _SessionReader()
-    with path.open(encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, 1):
-            session.read(line_number, line)
+    _read_file(path, session)
     return session.result()
+
+
+def _read_file(path, session, observe=None):
+    try:
+        with path.open(encoding="utf-8", errors="replace") as stream:
+            number = 0
+            while line := stream.readline(65537):
+                number += 1
+                if len(line) > 65536:
+                    while line and not line.endswith("\n"):
+                        line = stream.readline(65537)
+                    session.warn(number, "oversized_record")
+                    continue
+                item = session.read(number, line)
+                if item is not None and observe is not None:
+                    observe(item)
+    except OSError:
+        session.warn(0, "file_unavailable")
 
 
 class _SessionReader:
@@ -24,6 +45,7 @@ class _SessionReader:
         self.rejected: Counter = Counter()
         self.cancellations: Counter = Counter()
         self.warnings: list[dict] = []
+        self.warning_count = 0
         self.session = None
         self.process = None
         self.identity_set = False
@@ -33,20 +55,26 @@ class _SessionReader:
         self.end_reason: str | None = None
         self.analysis = SessionAnalysis()
 
-    def read(self, line_number: int, line: str) -> None:
+    def warn(self, line_number, reason):
+        self.warning_count += 1
+        if len(self.warnings) < 200:
+            self.warnings.append({"line": line_number, "reason": reason})
+
+    def read(self, line_number: int, line: str) -> dict | None:
         try:
             item = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             reason = "invalid_json" if line.endswith("\n") else "partial_last_line"
         else:
             reason = self._reject_reason(item)
         if reason is not None:
-            self.warnings.append({"line": line_number, "reason": reason})
+            self.warn(line_number, reason)
             return
         self.session = item.get("session_id")
         self.process = item.get("process_instance")
         self.identity_set = True
         self._observe(item)
+        return item
 
     def _reject_reason(self, item: object) -> str | None:
         if not isinstance(item, dict):
@@ -59,6 +87,8 @@ class _SessionReader:
                 return mismatch
         if not isinstance(item.get("event"), str):
             return "missing_event"
+        if not diagnostic_fields_valid(item["data"]):
+            return "invalid_diagnostic_fields"
         return None
 
     def _identity_mismatch(self, item: dict) -> str | None:
@@ -142,6 +172,8 @@ class _SessionReader:
             "recording_health": self.recording_health,
             "session_end_reason": self.end_reason,
             "parse_warnings": self.warnings,
+            "parse_warning_count": self.warning_count,
+            "warnings_truncated": self.warning_count > len(self.warnings),
             "lifecycle_complete": started and ended,
             "complete": complete,
             "analysis": self.analysis.result(complete=complete),

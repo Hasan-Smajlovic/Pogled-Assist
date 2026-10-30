@@ -8,7 +8,6 @@ from _clock import freeze_monotonic
 from _hotbar_fixtures import app_control
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint, QRect
-from PySide6.QtGui import QGuiApplication
 
 from pogled_assist.interaction.mouse_controller import QUICK_ACTIONS, GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -425,6 +424,15 @@ def test_settings_one_eye_selection_requires_eye_validity_and_fresh_point(qtbot,
 
 @pytest.mark.parametrize("policy", ["any", "hold"])
 def test_check_trial_completes_with_policy_and_excludes_held_time(qtbot, monkeypatch, policy):
+    from types import SimpleNamespace
+
+    from pogled_assist.ui import gaze_check_window as module
+
+    # The word test needs a screen wide enough for its letter row.
+    rect = QRect(0, 0, 1280, 720)
+    monkeypatch.setattr(
+        module.QGuiApplication, "primaryScreen", lambda: SimpleNamespace(geometry=lambda: rect)
+    )
     now = freeze_monotonic(monkeypatch, 10.0)
     window = GazeCheckWindow(
         GazeSettings(
@@ -434,11 +442,10 @@ def test_check_trial_completes_with_policy_and_excludes_held_time(qtbot, monkeyp
         )
     )
     qtbot.addWidget(window)
-    window.resize(1280, 720)
+    window.setGeometry(rect)
     window.show()
     qtbot.wait(1)
     window._start_trial()
-    rect = QGuiApplication.primaryScreen().geometry()
     point = window._target.mapToGlobal(window._target.button_rect().center())
     gaze = (
         (point.x() - rect.left()) / (rect.width() - 1),
@@ -516,10 +523,18 @@ def test_queued_gaze_keeps_native_freshness_through_application_gates(
     if surface == "settings":
         hotbar._open_settings()
         window = hotbar._settings_window
+        # Fullscreen geometry follows the offscreen display, not this test's target size.
+        window.showNormal()
         window.setGeometry(0, 0, 1280, 720)
         window._select_tab(1)
         qtbot.wait(1)
         button = window._gaze_page._interaction_overlay_button
+        qtbot.waitUntil(
+            lambda: (
+                window.geometry() == QRect(0, 0, 1280, 720)
+                and button.visibleRegion().contains(button.rect().center())
+            )
+        )
         selection = window._gaze_selection
         gate = window._eye_gate
     else:

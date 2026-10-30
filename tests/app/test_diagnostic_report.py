@@ -25,6 +25,164 @@ def read_report(tmp_path, records):
     return summarize(path)
 
 
+def test_counter_copy_without_baseline_counts_only_visible_intervals(tmp_path):
+    result = read_report(
+        tmp_path,
+        [
+            record("session_start", 10),
+            record(
+                "selection_summary",
+                11,
+                observation_stream_id="stream",
+                interval_index=7,
+                counts={"outcome:completed": 1},
+                cumulative_counts={"outcome:completed": 42},
+            ),
+            record(
+                "selection_summary",
+                13,
+                observation_stream_id="stream",
+                interval_index=9,
+                cumulative_counts={"outcome:completed": 44},
+            ),
+            record("session_end", 14),
+        ],
+    )
+    analysis = result["analysis"]
+    assert analysis["reason_totals_from_counters"] == {"outcome:completed": 3}
+    assert analysis["missing_counter_intervals"] == 1
+    assert analysis["partial_counter_streams"] == 1
+    assert analysis["evidence_incomplete"]
+
+
+def test_overlapping_counter_context_with_equal_timestamps_keeps_earlier_intervals(tmp_path):
+    # Folder traversal reads the manual destination first. Its boundary snapshot
+    # and later intervals must not hide the earlier ordinary interval.
+    manual = tmp_path / "a.jsonl"
+    ordinary = tmp_path / "z.jsonl"
+    summary = dict(observation_stream_id="stream")
+    manual.write_text(
+        "\n".join(
+            json.dumps(item)
+            for item in [
+                record("session_start", 10),
+                record(
+                    "segment_context",
+                    10,
+                    snapshot={
+                        "event": "selection_summary",
+                        "data": {
+                            **summary,
+                            "interval_index": 2,
+                            "cumulative_counts": {"outcome:target_departure": 4},
+                        },
+                    },
+                ),
+                record(
+                    "selection_summary",
+                    10,
+                    **summary,
+                    interval_index=3,
+                    counts={"outcome:completed": 2},
+                    cumulative_counts={"outcome:target_departure": 4, "outcome:completed": 2},
+                ),
+                record("session_end", 11),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rows = [
+        record("session_start", 10),
+        record(
+            "selection_summary",
+            10,
+            **summary,
+            interval_index=1,
+            cumulative_counts={"outcome:target_departure": 3},
+        ),
+        record("session_end", 11),
+    ]
+    ordinary.write_text(
+        "\n".join(json.dumps({**item, "session_id": "session-z"}) for item in rows),
+        encoding="utf-8",
+    )
+    assert summarize(tmp_path)["analysis"]["reason_totals_from_counters"] == {
+        "outcome:target_departure": 4,
+        "outcome:completed": 2,
+    }
+
+
+def test_manual_baseline_does_not_hide_missing_initial_ordinary_intervals(tmp_path):
+    ordinary = tmp_path / "ordinary.jsonl"
+    ordinary.write_text(
+        "\n".join(
+            json.dumps(row) for row in [record("session_start", 0), record("session_end", 4)]
+        ),
+        encoding="utf-8",
+    )
+    initial = {
+        "observation_stream_id": "stream",
+        "observation_started_monotonic_s": 0.5,
+        "observation_start_sessions": ["session-a"],
+    }
+    rows = [
+        record("session_start", 2),
+        record(
+            "segment_context",
+            2,
+            snapshot={
+                "event": "selection_summary",
+                "data": {
+                    **initial,
+                    "interval_index": 2,
+                    "cumulative_counts": {"outcome:completed": 4},
+                },
+            },
+        ),
+        record(
+            "selection_summary",
+            3,
+            **initial,
+            interval_index=3,
+            counts={"outcome:completed": 2},
+            cumulative_counts={"outcome:completed": 6},
+        ),
+        record("session_end", 4),
+    ]
+    manual = tmp_path / "manual.jsonl"
+    manual.write_text(
+        "\n".join(json.dumps({**row, "session_id": "session-manual"}) for row in rows),
+        encoding="utf-8",
+    )
+    assert summarize(manual)["analysis"]["reason_totals_from_counters"] == {"outcome:completed": 2}
+    merged = summarize(tmp_path)["analysis"]
+    assert merged["reason_totals_from_counters"] == {"outcome:completed": 6}
+    assert merged["missing_counter_intervals"] == 2
+
+
+@pytest.mark.parametrize("index", [2**63, 2**100])
+def test_folder_reader_keeps_evidence_with_large_counter_index(tmp_path, index):
+    read_report(
+        tmp_path,
+        [
+            record("session_start", 0),
+            record(
+                "selection_summary",
+                1,
+                observation_stream_id="stream",
+                interval_index=index,
+                counts={"outcome:completed": 1},
+                cumulative_counts={"outcome:completed": 42},
+            ),
+            record("selection_end", 2, reason="completed"),
+            record("session_end", 3),
+        ],
+    )
+    result = summarize(tmp_path)
+    assert result["analysis"]["reason_totals_from_counters"] == {"outcome:completed": 1}
+    assert result["analysis"]["observed_selection_outcomes"] == {"completed": 1}
+
+
 def test_bridge_observations_keep_failure_separate_from_shutdown_and_drop_extra_fields(tmp_path):
     result = read_report(
         tmp_path,

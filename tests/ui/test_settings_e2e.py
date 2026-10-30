@@ -12,6 +12,28 @@ from pogled_assist.windows.windows_startup import StartupTaskResult
 
 
 @pytest.mark.e2e
+def test_shared_log_budget_control_clamps_and_emits_settings(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._select_tab(3)
+    updates = []
+    window.gaze_settings_changed.connect(updates.append)
+    assert window._support_page._budget_value.text() == "4 GB"
+    window._adjust_log_storage(1)
+    assert updates[-1].log_storage_gb == 5
+    assert window._support_page._budget_value.text() == "5 GB"
+    window._adjust_log_storage(100)
+    assert updates[-1].log_storage_gb == 10
+    window._adjust_log_storage(-100)
+    assert updates[-1].log_storage_gb == 1
+
+
+@pytest.mark.e2e
 @pytest.mark.parametrize("width", [800, 1280])
 def test_gaze_guidance_stays_with_active_tab_without_clipping(qtbot, monkeypatch, width):
     monkeypatch.setattr(
