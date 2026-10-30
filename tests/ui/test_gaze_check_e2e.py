@@ -6,9 +6,13 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
-from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationResult
+from pogled_assist.tracking.gaze_check import HISTORY_SECONDS, CheckSnapshot, FixationResult
+from pogled_assist.ui.gaze_check_eyes import EyeTrackingPanel
+from pogled_assist.ui.gaze_check_views import TRIAL_KEYS, TRIAL_WORD
+from pogled_assist.ui.gaze_check_window import TRIAL_HINT_PX
 
 pytestmark = pytest.mark.e2e
+WORD_LENGTH = len(TRIAL_WORD)
 
 
 @pytest.fixture
@@ -150,6 +154,12 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
         window._tick()
         assert window._check.results[index].name == name
         assert window._check.results[index].near is True
+    # The word test follows the targets; the targets are already saved.
+    assert window._phase == "trial"
+    assert window._step.text().startswith("3 · Riječ")
+    assert [row.near for row in window._report.precision] == [True] * 5
+    assert window._report.precision_eyes is not None
+    window._test_back_button.click()
     assert window._phase == "results"
     assert "5 od 5" in window._result_summary.text()
     window._repeat_button.click()
@@ -169,7 +179,7 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
     ]
     window._show_results()
     window._start_trial()
-    for _ in range(3):
+    for _ in range(WORD_LENGTH):
         now[0] = window._trial_ready_at + 0.1
         if missing == "eyes":
             snapshot = CheckSnapshot(True, False)
@@ -181,13 +191,13 @@ def test_trial_without_fresh_gaze_explains_missing_data_and_retry(gaze_check, qt
         now[0] = window._trial_deadline + 0.01
         window._tick()
     assert window._phase == "results"
-    assert window._trial_results == [False] * 3
+    assert window._trial_results == [False] * WORD_LENGTH
     assert window._trial_losses == 0  # No pending selection ever started.
     assert "poništeni izbori: 0" in window._trial_summary.text()
     assert "nije bilo dovoljno podataka o pogledu" in window._result_advice.text()
     assert "Podesite položaj" in window._result_advice.text()
     assert "nisu odabrana na vrijeme" not in window._result_advice.text()
-    assert "0/3" in window._trial_summary.text()
+    assert f"0/{WORD_LENGTH}" in window._trial_summary.text()
     window._start_trial()
     assert not window._trial_tracked_targets
 
@@ -221,7 +231,7 @@ def test_trial_with_isolated_gaze_prioritizes_tracking_over_fixation(gaze_check,
     window._show_results()
     window._start_trial()
     interruptions = 0
-    for _ in range(3):
+    for _ in range(WORD_LENGTH):
         interruptions = _feed_isolated_trial(window, now, samples, interruptions)
         now[0] = window._trial_deadline + 0.01
         window._tick()
@@ -239,7 +249,7 @@ def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(g
     ]
     window._show_results()
     window._start_trial()
-    for _ in range(3):
+    for _ in range(WORD_LENGTH):
         start = window._trial_ready_at
         # Sustained fresh gaze outside the buttons is data without pending dwell.
         for index in range(100):
@@ -247,11 +257,11 @@ def test_trial_distinguishes_available_gaze_from_missing_data_and_clears_retry(g
             window.handle_snapshot(CheckSnapshot(True, True, gaze=(0.99, 0.5), gaze_at=now[0]))
         now[0] = window._trial_deadline + 0.01
         window._tick()
-    assert window._trial_tracked_targets == {0, 1, 2}
+    assert window._trial_tracked_targets == set(range(WORD_LENGTH))
     assert "nisu odabrana na vrijeme" in window._result_advice.text()
     assert "nije bilo dovoljno podataka o pogledu" not in window._result_advice.text()
     window._start_trial()
-    for _ in range(3):
+    for _ in range(WORD_LENGTH):
         now[0] = window._trial_deadline + 0.01
         window._tick()
     assert "nije bilo dovoljno podataka o pogledu" in window._result_advice.text()
@@ -398,10 +408,14 @@ def test_trial_neighbors_remain_visible_beside_caregiver_controls(gaze_check, qt
     qtbot.wait(1)
     window._start_trial()
     qtbot.wait(1)
-    for scenario in range(3):
+    for scenario in range(WORD_LENGTH):
         assert window._target.target_index == scenario
         controls = window._test_controls.geometry().adjusted(-8, -8, 8, 8)
-        for index in range(3):
+        # Larger word-test instructions stay unclipped inside the caregiver panel.
+        hint = window._test_hint
+        assert hint.font().pixelSize() == TRIAL_HINT_PX
+        assert hint.height() >= hint.heightForWidth(hint.width())
+        for index in range(len(TRIAL_KEYS)):
             button = window._target.button_rect(index)
             assert window._target.rect().contains(button.adjusted(-2, -2, 2, 2))
             assert not controls.intersects(button), (scenario, index)
@@ -433,7 +447,30 @@ def test_trial_counts_wrong_neighbor_once_and_requires_correct_button(gaze_check
         window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
     assert window._trial_results == [True]
     assert window._trial_wrong_selections == 1
-    assert window._target.button_rect().size().width() == 96
+    assert window._trial_rows[0].size_logical_px == window._target.key_size()
+
+
+def test_trial_word_marks_a_timed_out_letter_instead_of_showing_it_typed(gaze_check, qtbot):
+    window, now, screen = gaze_check
+    window._start_trial()
+    qtbot.wait(1)
+    now[0] = window._trial_deadline + 0.01
+    window._tick()
+    assert window._trial_results == [False]
+    assert window._target.word_letters() == [("V", False), ("_", None), ("_", None), ("_", None)]
+    correct = window._target.mapToGlobal(window._target.center())
+    gaze = (
+        (correct.x() - screen.left()) / (screen.width() - 1),
+        (correct.y() - screen.top()) / (screen.height() - 1),
+    )
+    for sample in range(60):
+        now[0] = window._trial_ready_at + sample * 0.02
+        window.handle_snapshot(CheckSnapshot(True, True, gaze=gaze, gaze_at=now[0]))
+    assert window._trial_results == [False, True]
+    assert window._target.word_letters()[:2] == [("V", False), ("O", True)]
+    assert not window._target.grab().isNull()
+    window._start_trial()
+    assert window._target.word_letters() == [("_", None)] * WORD_LENGTH
 
 
 @pytest.mark.parametrize("loss", ["eyes", "invalid", "coalesced", "stale"])
@@ -668,12 +705,12 @@ def test_trial_cancels_on_eye_loss_and_uses_fresh_samples_to_complete(gaze_check
     for i in range(56):
         feed(12 + i * 0.02)
     assert window._trial_results == [True]
-    for _ in range(2):
+    for _ in range(WORD_LENGTH - 1):
         start = window._trial_ready_at
         for i in range(56):
             feed(start + i * 0.02)
     assert window._phase == "results"
-    assert "3/3" in window._trial_summary.text()
+    assert f"{WORD_LENGTH}/{WORD_LENGTH}" in window._trial_summary.text()
 
 
 @pytest.mark.parametrize(
@@ -764,7 +801,7 @@ def _show_fit_phase(window, phase):
     elif phase == "trial":
         window._start_trial()
     elif phase == "trial-no-gaze":
-        for _index in range(3):
+        for _index in range(WORD_LENGTH):
             window._finish_trial_target(False, window._trial_deadline)
     elif phase == "free":
         window._start_free()
@@ -810,7 +847,7 @@ def test_check_buttons_and_labels_fit_at_150_percent(gaze_check, qtbot, simulate
 @pytest.mark.parametrize(
     "states,advice",
     [
-        ([True] * 5, "izbor dugmeta"),
+        ([True] * 5, "napišite riječ"),
         ([True, False, True, False, True], "Tobii postavke"),
         ([True, False, True, None, True], "Podesi položaj"),
         ([None] * 5, "Podesi položaj"),
@@ -855,8 +892,8 @@ def test_gaze_check_feedback_results_explain_next_action_without_metrics(
 @pytest.mark.parametrize(
     "selected,wrong,loss,advice",
     [
-        ([True, True, True], 0, 1, "govornu tastaturu"),
-        ([True, True, False], 1, 0, "pogrešna dugmad"),
+        ([True, True, True, True], 0, 1, "govornu tastaturu"),
+        ([True, True, True, False], 1, 0, "pogrešna slova"),
     ],
 )
 def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
@@ -881,8 +918,9 @@ def test_gaze_check_feedback_trial_result_replaces_pending_trial_advice(
     assert window._trial_summary.isVisible()
     assert f"pogrešni izbori: {wrong}" in window._trial_summary.text()
     assert f"poništeni izbori: {loss}" in window._trial_summary.text()
-    assert window._primary_button.text() == "Ponovi probu dugmadi"
-    assert "Izlasci iz dugmeta" not in window._trial_summary.text()
+    assert window._primary_button.text() == "Ponovi test riječi"
+    assert f"Riječ „{TRIAL_WORD}“" in window._trial_summary.text()
+    assert "Riječ · lijevo" in window._eye_summary_label.text()
     if all(selected) and not wrong:
         assert window._trial_summary.text().startswith("✓")
         assert "Podesite ekran" not in window._result_advice.text()
@@ -900,7 +938,7 @@ def test_gaze_check_feedback_successful_trial_never_overrides_precision_problem(
     ]
     window._show_results()
     window._start_trial()
-    for _index in range(3):
+    for _index in range(WORD_LENGTH):
         start = window._trial_ready_at
         for sample in range(100):
             window._trial_coverage.add(start + sample * 0.02)
@@ -939,7 +977,10 @@ def test_gaze_check_feedback_precision_does_not_claim_stale_gaze_is_ready(gaze_c
     assert "Zadržite pogled" not in window._test_hint.text()
 
 
-@pytest.mark.parametrize("button,color", [(0, "#efd092"), (1, "#a3d5ba")])
+EXPECTED_KEY = TRIAL_KEYS.index(TRIAL_WORD[0])
+
+
+@pytest.mark.parametrize("button,color", [(0, "#efd092"), (EXPECTED_KEY, "#a3d5ba")])
 def test_gaze_check_feedback_trial_progress_distinguishes_neighbor(
     gaze_check, monkeypatch, button, color
 ):
@@ -982,10 +1023,10 @@ def test_gaze_check_feedback_trial_explains_neighbor_and_lost_progress(gaze_chec
 
     for _ in range(60):
         feed(0)
-    assert "Odabrano je pogrešno dugme" in window._test_hint.text()
+    assert "Odabrano je pogrešno slovo" in window._test_hint.text()
     assert window._trial_wrong_selections == 1
     for _ in range(40):
-        feed(1)
+        feed(EXPECTED_KEY)
     assert window._target.progress > 0
     window.handle_eye_status(False, True)
     assert window._target.progress == 0
@@ -993,7 +1034,7 @@ def test_gaze_check_feedback_trial_explains_neighbor_and_lost_progress(gaze_chec
     now[0] += 0.1
     window._tick()
     assert "prekinuto" in window._test_hint.text()
-    feed(1)
+    feed(EXPECTED_KEY)
     assert "Zadržite pogled" in window._test_hint.text()
     assert window._trial_results == []
 
@@ -1013,8 +1054,9 @@ def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, 
     window, now, screen = gaze_check
     window._start_trial()
     window._target.grab()
-    assert labels.count("Drugo") == 2
-    assert labels.count("Pogledaj") == 1
+    assert {label for label in labels if label in TRIAL_KEYS} == set(TRIAL_KEYS)
+    assert labels.count("_") == WORD_LENGTH
+    assert f"Pogledajte „{TRIAL_WORD[0]}“" in window._test_hint.text()
     point = window._target.mapToGlobal(window._target.button_rect(0).center())
     window.handle_snapshot(
         CheckSnapshot(
@@ -1027,6 +1069,117 @@ def test_trial_copy_distinguishes_other_button_from_wrong_selection(gaze_check, 
             gaze_at=now[0],
         )
     )
-    assert "Pogled je na drugom dugmetu" in window._test_hint.text()
+    assert "Pogled je na drugom slovu" in window._test_hint.text()
     assert "Odabrano" not in window._test_hint.text()
     assert window._trial_wrong_selections == 0
+
+
+def _eye_snapshot(now, left, right, *, origin=0.0, supported=False, pairs=()):
+    tracked = left > 0 or right > 0
+    return CheckSnapshot(
+        left > 0,
+        right > 0,
+        # Away from the word-test keys, so it never selects a letter.
+        gaze=(0.5, 0.02) if tracked else None,
+        gaze_at=now if tracked else None,
+        measured_at=now,
+        telemetry_started_at=origin,
+        left_seconds=left,
+        right_seconds=right,
+        both_seconds=min(left, right),
+        eye_gaze_supported=supported,
+        eye_gaze_pairs=pairs,
+    )
+
+
+def _restart_live_eyes(window):
+    # The window was shown before the test froze the clock.
+    window._live_eyes = window._eye_run(window=HISTORY_SECONDS)
+
+
+def test_live_eye_panel_reports_one_tracked_eye_beside_positioning(gaze_check):
+    window, now, _screen = gaze_check
+    _restart_live_eyes(window)
+    for step in range(101):
+        now[0] = 10 + step * 0.1
+        window.handle_snapshot(_eye_snapshot(now[0], step * 0.1, 0))
+    window._tick()
+    panel = window._eye_panel
+    assert window._phase == "position"
+    assert panel.isVisible()
+    assert panel.parentWidget().isAncestorOf(window._guidance)
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 100%"
+    assert panel.eye_labels["right"].text() == "Desno oko · 0%"
+    assert panel.eye_labels["both"].text() == "Oba oka · 0%"
+    # Both-eye policy: one eye alone is an interruption for the whole window.
+    assert panel.interruptions_label.text() == "Prekidi: 1 · najduži 10,0 s"
+    assert panel.advice_label.text().startswith("Desno oko se često gubi.")
+    assert "samo zajedničku tačku pogleda" in panel.agreement_label.text()
+
+
+def test_live_eye_panel_without_any_eye_data_shows_zero_and_one_loss(gaze_check):
+    window, now, _screen = gaze_check
+    _restart_live_eyes(window)
+    now[0] += 10
+    window._tick()
+    panel = window._eye_panel
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 0%"
+    assert panel.eye_labels["right"].text() == "Desno oko · 0%"
+    assert panel.interruptions_label.text() == "Prekidi: 1 · najduži 10,0 s"
+    assert panel.advice_label.text().startswith("Uređaj nije javio nijedno oko.")
+    assert "nije dostupno" in panel.agreement_label.text()
+
+
+def test_live_eye_panel_keeps_only_the_last_ten_seconds(gaze_check):
+    window, now, _screen = gaze_check
+    _restart_live_eyes(window)
+    pairs = tuple((0.5, 0.5, 0.51, 0.5, 15 + index * 0.05) for index in range(1, 201))
+    for step in range(201):
+        now[0] = 10 + step * 0.1
+        # The left eye is lost for the first two seconds only.
+        left = max(0.0, step * 0.1 - 2)
+        window.handle_snapshot(_eye_snapshot(now[0], left, step * 0.1, supported=True, pairs=pairs))
+    window._tick()
+    panel = window._eye_panel
+    assert panel.eye_labels["left"].text() == "Lijevo oko · 100%"
+    assert panel.interruptions_label.text() == "Prekidi: 0"
+    assert panel.agreement_label.text() == (
+        "Isto mjesto · 100% uzoraka unutar 36 px · razmak 13 px"
+    )
+    assert not panel.advice_label.isVisible()
+
+
+def test_tests_hide_the_live_panel_and_save_each_tests_interruptions(gaze_check, qtbot):
+    window, now, _screen = gaze_check
+    _restart_live_eyes(window)
+    window._start_precision()
+    qtbot.wait(1)
+    # Percentages are measured during the tests but shown only beside positioning.
+    assert not window._eye_panel.isVisible()
+    assert not window._target.findChildren(EyeTrackingPanel)
+    _pass_precision(window)
+    window._start_trial()
+    qtbot.wait(1)
+    assert not window._eye_panel.isVisible()
+    started = now[0]
+    for step in range(30):
+        now[0] = started + step * 0.1
+        # One loss of 0.5 s in the middle of the word test.
+        both = not 10 <= step < 15
+        window.handle_snapshot(
+            CheckSnapshot(
+                both,
+                True,
+                gaze=(0.5, 0.02),
+                gaze_at=now[0],
+                measured_at=now[0],
+                telemetry_started_at=0,
+            )
+        )
+    window._test_back_button.click()
+    eyes = window._report.trials[-1].eyes
+    assert eyes.interruptions == 1
+    assert eyes.longest_interruption_seconds == pytest.approx(0.5)
+    assert window._report.precision_eyes is not None
+    assert "Riječ · lijevo" in window._eye_summary_label.text()
+    assert "prekidi 1, najduži 0,5 s" in window._eye_summary_label.text()

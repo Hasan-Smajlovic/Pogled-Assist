@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from uuid import UUID, uuid4
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+# Version 1 reports have no per-eye summaries and only the three-button trial.
+READABLE_SCHEMA_VERSIONS = (1, 2)
+TRIAL_BUTTONS = 3
+WORD_PATTERN = re.compile(r"[A-ZČĆĐŠŽ]{1,12}\Z")
 MAX_REPORT_BYTES = 10 * 1024 * 1024
 SETTING_KEYS = (
     "eye_tracking_policy",
@@ -179,10 +184,33 @@ def _validate_trial_counters(row):
 def _validate_trial(trial):
     _validate_attempt(trial)
     _validate_context(trial.environment)
-    if len(trial.rows) != 3:
+    if trial.word is not None and (
+        not isinstance(trial.word, str) or not WORD_PATTERN.fullmatch(trial.word)
+    ):
+        raise ValueError("Invalid trial word")
+    expected = TRIAL_BUTTONS if trial.word is None else len(trial.word)
+    if len(trial.rows) != expected:
         raise ValueError("Invalid trial")
     for index, row in enumerate(trial.rows):
         _validate_trial_row(row, index)
+    _validate_eyes(trial.eyes)
+
+
+def _validate_eyes(eyes):
+    if eyes is None:
+        return
+    _validate_number(eyes.observed_seconds)
+    for value in (eyes.left, eyes.right, eyes.both):
+        _validate_number(value, maximum=1)
+    if type(eyes.interruptions) is not int or eyes.interruptions < 0:
+        raise ValueError("Invalid interruption count")
+    _validate_number(eyes.longest_interruption_seconds)
+    if eyes.agreement_supported is not None and type(eyes.agreement_supported) is not bool:
+        raise ValueError("Invalid agreement support")
+    if type(eyes.agreement_samples) is not int or eyes.agreement_samples < 0:
+        raise ValueError("Invalid agreement samples")
+    _validate_number(eyes.agreement_fraction, nullable=True, maximum=1)
+    _validate_number(eyes.median_separation_logical_px, nullable=True)
 
 
 _ROW_LABELS = {
@@ -210,20 +238,41 @@ def _precision_report_lines(report):
     return lines
 
 
+def _eye_report_lines(eyes):
+    if eyes is None:
+        return ["Praćenje po oku: Nije dostupno"]
+    return [
+        f"Praćenje po oku (0-1) · lijevo: {eyes.left:.3f}; desno: {eyes.right:.3f}; "
+        f"oba: {eyes.both:.3f}; izmjereno: {eyes.observed_seconds:.3f} s",
+        f"Prekidi praćenja: {eyes.interruptions}; najduži: "
+        f"{eyes.longest_interruption_seconds:.3f} s",
+        f"Isto mjesto · podržano: {_show_value(eyes.agreement_supported)}; parovi: "
+        f"{eyes.agreement_samples}; unutar praga (0-1): {_show_value(eyes.agreement_fraction)}; "
+        f"razmak (medijan px): {_show_value(eyes.median_separation_logical_px)}",
+    ]
+
+
 def _trial_report_lines(trial):
     states = {"completed": "Završeno", "interrupted": "Prekinuto"}
+    title = "PROBNI IZBOR" if trial.word is None else f"TEST RIJEČI · {trial.word}"
     lines = [
         "",
-        f"PROBNI IZBOR · {trial.id} · {states[trial.state]}",
+        f"{title} · {trial.id} · {states[trial.state]}",
         f"Početak: {trial.started_at}; kraj: {trial.ended_at}; "
         f"trajanje: {trial.duration_seconds:.3f} s",
         f"Razlog prekida: {_show_value(trial.reason)}",
     ]
     lines.extend(f"{key}: {_show_value(trial.environment.get(key))}" for key in ENVIRONMENT_KEYS)
+    lines.extend(_eye_report_lines(trial.eyes))
     for row in trial.rows:
+        name = (
+            f"Grupa {row.index + 1}"
+            if trial.word is None
+            else (f"Slovo {row.index + 1} ({trial.word[row.index]})")
+        )
         lines.extend(
             [
-                f"  Grupa {row.index + 1}: {_ROW_LABELS[row.state]}; veličina: "
+                f"  {name}: {_ROW_LABELS[row.state]}; veličina: "
                 f"{_show_value(row.size_logical_px)} logičkih px",
                 f"  Odabrano: {_show_value(row.selected)}; pokrivenost (0-1): "
                 f"{_show_value(row.coverage)}; trajanje: {_show_value(row.duration_seconds)} s",
@@ -248,11 +297,16 @@ def _decode_precision_rows(rows):
     return [PrecisionRow(**row) for row in rows]
 
 
+def _decode_eyes(value):
+    return None if value is None else EyeTrackingSummary(**value)
+
+
 def _decode_trial_rows(trials):
     decoded = []
     for trial in trials:
         value = dict(trial)
         value["rows"] = [TrialRow(**row) for row in trial["rows"]]
+        value["eyes"] = _decode_eyes(value.get("eyes"))
         decoded.append(TrialAttempt(**value))
     return decoded
 
@@ -261,7 +315,7 @@ def _has_supported_schema(data) -> bool:
     return (
         isinstance(data, dict)
         and type(data.get("schema_version")) is int
-        and data["schema_version"] == SCHEMA_VERSION
+        and data["schema_version"] in READABLE_SCHEMA_VERSIONS
     )
 
 
@@ -271,6 +325,22 @@ def timestamp() -> str:
 
 def identity() -> str:
     return str(uuid4())
+
+
+@dataclass
+class EyeTrackingSummary:
+    """Per-eye availability during one test, as shares of its measured time."""
+
+    observed_seconds: float
+    left: float
+    right: float
+    both: float
+    interruptions: int
+    longest_interruption_seconds: float
+    agreement_supported: bool | None = None
+    agreement_samples: int = 0
+    agreement_fraction: float | None = None
+    median_separation_logical_px: float | None = None
 
 
 @dataclass
@@ -309,6 +379,9 @@ class TrialAttempt:
     reason: str | None
     rows: list[TrialRow]
     environment: dict = field(default_factory=dict)
+    # None identifies the three-button trial of version 1 reports.
+    word: str | None = None
+    eyes: EyeTrackingSummary | None = None
 
 
 @dataclass
@@ -325,6 +398,7 @@ class GazeCheckReport:
     precision: list[PrecisionRow]
     trials: list[TrialAttempt] = field(default_factory=list)
     schema_version: int = SCHEMA_VERSION
+    precision_eyes: EyeTrackingSummary | None = None
 
     def to_json(self) -> bytes:
         payload = json.dumps(asdict(self), ensure_ascii=False, allow_nan=False, indent=2)
@@ -339,6 +413,9 @@ class GazeCheckReport:
             raise ValueError("Unsupported report")
         data["precision"] = _decode_precision_rows(data["precision"])
         data["trials"] = _decode_trial_rows(data["trials"])
+        data["precision_eyes"] = _decode_eyes(data.get("precision_eyes"))
+        # A read report is written back in the current format.
+        data["schema_version"] = SCHEMA_VERSION
         report = cls(**data)
         report.validate()
         return report
@@ -353,6 +430,7 @@ class GazeCheckReport:
             raise ValueError("Too many measurements")
         for row in self.precision:
             _validate_precision_row(row)
+        _validate_eyes(self.precision_eyes)
         for trial in self.trials:
             _validate_trial(trial)
 
@@ -373,6 +451,7 @@ def report_text(report: GazeCheckReport) -> str:
         "",
     ]
     lines.extend(_precision_report_lines(report))
+    lines.extend(_eye_report_lines(report.precision_eyes))
     for trial in report.trials:
         lines.extend(_trial_report_lines(trial))
     lines.extend(["", "POSTAVKE · nazivi polja odgovaraju JSON podacima"])

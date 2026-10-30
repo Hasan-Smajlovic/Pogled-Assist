@@ -11,9 +11,11 @@ from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.tracking.gaze_check import FixationResult
 from pogled_assist.tracking.gaze_check_store import GazeCheckStore
 from pogled_assist.ui.gaze_check_reports import GazeCheckReports
+from pogled_assist.ui.gaze_check_views import TRIAL_WORD
 from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 
 pytestmark = pytest.mark.e2e
+WORD_LENGTH = len(TRIAL_WORD)
 
 
 @pytest.fixture
@@ -103,7 +105,7 @@ def test_interruption_finalizes_once_without_fabricating_misses(check, qtbot, tr
     assert len(reports.reports) == 1
     if trigger == "cancel":
         assert not window._primary_button.isEnabled()
-        assert "Ponovi preciznost" in window._result_advice.text()
+        assert "Ponovi provjeru" in window._result_advice.text()
         assert "govornu tastaturu" not in window._result_advice.text()
         assert len(window._result_map.targets) == 5
 
@@ -114,7 +116,7 @@ def test_repeated_trials_keep_attempt_ids_and_per_group_counts(check, qtbot):
     report_id = window._report.id
     for _attempt in range(2):
         window._start_trial()
-        for index in range(3):
+        for index in range(WORD_LENGTH):
             now[0] = window._trial_ready_at + 2
             window._trial_wrong_selections += index + 1
             window._trial_departures += 1
@@ -122,9 +124,10 @@ def test_repeated_trials_keep_attempt_ids_and_per_group_counts(check, qtbot):
     saved = reports.reports[report_id]
     assert len(saved.trials) == 2
     assert len({trial.id for trial in saved.trials}) == 2
-    assert [row.wrong_selections for row in saved.trials[-1].rows] == [1, 2, 3]
-    assert [row.departures for row in saved.trials[-1].rows] == [1, 1, 1]
-    assert [row.state for row in saved.trials[-1].rows] == ["insufficient"] * 3
+    assert [row.wrong_selections for row in saved.trials[-1].rows] == [1, 2, 3, 4]
+    assert [row.departures for row in saved.trials[-1].rows] == [1] * WORD_LENGTH
+    assert {trial.word for trial in saved.trials} == {TRIAL_WORD}
+    assert [row.state for row in saved.trials[-1].rows] == ["insufficient"] * WORD_LENGTH
     assert window._trial_attempts.count() == 2
     assert saved.id == report_id
 
@@ -238,7 +241,7 @@ def test_finalized_trial_summary_survives_reset_history_return_and_archived_deta
     window, reports, now = check
     complete_precision(window, qtbot)
     window._start_trial()
-    for _index in range(3):
+    for _index in range(WORD_LENGTH):
         start = window._trial_ready_at
         for sample in range(100):
             window._trial_coverage.add(start + sample * 0.02)

@@ -7,11 +7,14 @@ from zipfile import ZipFile
 import pytest
 
 from pogled_assist.tracking.gaze_check_report import (
+    SCHEMA_VERSION,
+    EyeTrackingSummary,
     GazeCheckReport,
     PrecisionRow,
     TrialAttempt,
     TrialRow,
     identity,
+    report_text,
 )
 from pogled_assist.tracking.gaze_check_store import GazeCheckStore
 
@@ -243,4 +246,107 @@ def test_corrupt_trial_counters_are_unreadable_instead_of_breaking_result_view(
     entry = GazeCheckStore(tmp_path).load()[0]
     assert entry.report is None
     assert entry.error
+    assert path.exists()
+
+
+def word_report():
+    value = report()
+    value.precision_eyes = EyeTrackingSummary(15.2, 0.98, 0.97, 0.96, 2, 0.4)
+    value.trials.append(
+        TrialAttempt(
+            identity(),
+            value.started_at,
+            value.ended_at,
+            12,
+            "completed",
+            None,
+            [TrialRow(index, (140, 120), "measured", True, 0.9, 1) for index in range(4)],
+            word="VODA",
+            eyes=EyeTrackingSummary(11.8, 0.99, 0.5, 0.5, 1, 0.0, True, 300, 0.95, 12.5),
+        )
+    )
+    return value
+
+
+def test_word_test_and_per_test_eye_tracking_survive_restart_and_export(tmp_path):
+    store = GazeCheckStore(tmp_path / "reports")
+    original = word_report()
+    store.save(original)
+    loaded = GazeCheckStore(store.directory).load()[0].report
+    assert loaded.to_json() == original.to_json()
+    assert json.loads(loaded.to_json())["schema_version"] == SCHEMA_VERSION == 2
+    assert loaded.precision_eyes == original.precision_eyes
+    assert loaded.trials[0].eyes == original.trials[0].eyes
+    destination = tmp_path / "word.zip"
+    store.export(loaded, destination)
+    with ZipFile(destination) as archive:
+        text = archive.read("izvjestaj.txt").decode("utf-8")
+    for expected in (
+        f"TEST RIJEČI · VODA · {original.trials[0].id} · Završeno",
+        "Slovo 2 (O): Izmjereno",
+        "Praćenje po oku (0-1) · lijevo: 0.980; desno: 0.970; oba: 0.960; izmjereno: 15.200 s",
+        "Prekidi praćenja: 2; najduži: 0.400 s",
+        "Prekidi praćenja: 1; najduži: 0.000 s",
+        "Isto mjesto · podržano: Da; parovi: 300; unutar praga (0-1): 0.95",
+    ):
+        assert expected in text
+
+
+def test_version_1_report_without_eye_tracking_still_loads(tmp_path):
+    report_with_rows = report()
+    report_with_rows.trials.append(
+        TrialAttempt(
+            identity(),
+            report_with_rows.started_at,
+            report_with_rows.ended_at,
+            4,
+            "completed",
+            None,
+            [TrialRow(index, (136, 64)) for index in range(3)],
+        )
+    )
+    data = json.loads(report().to_json())
+    data["schema_version"] = 1
+    del data["precision_eyes"]
+    data["trials"] = [
+        {
+            "id": identity(),
+            "started_at": data["started_at"],
+            "ended_at": data["ended_at"],
+            "duration_seconds": 4,
+            "state": "completed",
+            "reason": None,
+            "rows": json.loads(report_with_rows.to_json())["trials"][0]["rows"],
+            "environment": {},
+        }
+    ]
+    path = tmp_path / f"gaze-check-{data['id']}.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    loaded = GazeCheckStore(tmp_path).load()[0].report
+    assert loaded is not None
+    assert loaded.precision_eyes is None
+    assert (loaded.trials[0].word, loaded.trials[0].eyes) == (None, None)
+    assert "Praćenje po oku: Nije dostupno" in report_text(loaded)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["lowercase-word", "row-count", "negative-interruptions", "fraction", "agreement"]
+)
+def test_invalid_word_or_eye_tracking_values_are_unreadable(tmp_path, mutation):
+    data = json.loads(word_report().to_json())
+    trial = data["trials"][0]
+    if mutation == "lowercase-word":
+        trial["word"] = "voda"
+    elif mutation == "row-count":
+        trial["rows"].pop()
+    elif mutation == "negative-interruptions":
+        data["precision_eyes"]["interruptions"] = -1
+    elif mutation == "fraction":
+        trial["eyes"]["left"] = 1.5
+    else:
+        trial["eyes"]["agreement_supported"] = "yes"
+    path = tmp_path / f"gaze-check-{data['id']}.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    entry = GazeCheckStore(tmp_path).load()[0]
+    assert entry.report is None and entry.error
     assert path.exists()

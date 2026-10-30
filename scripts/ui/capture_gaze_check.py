@@ -6,10 +6,19 @@ from dataclasses import replace
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
 
-from pogled_assist.tracking.gaze_check import CheckSnapshot, FixationCheck, FixationResult
+from pogled_assist.tracking.gaze_check import (
+    HISTORY_SECONDS,
+    CheckSnapshot,
+    EyeTrackingRun,
+    FixationCheck,
+    FixationResult,
+)
+from pogled_assist.tracking.gaze_check_report import EyeTrackingSummary
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
-from pogled_assist.ui.gaze_check_views import TARGETS
+from pogled_assist.ui.gaze_check_views import TARGETS, TRIAL_WORD
 from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+SAMPLE_SECONDS = 0.1
 
 
 class CaptureGazeCheck:
@@ -83,6 +92,7 @@ class CaptureGazeCheck:
         self._capture_trial(window, size)
         self._capture_reports(window, size)
         self._capture_free(window, size)
+        self._capture_eyes(window, size)
         single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
         self.widgets.append(single)
         single.resize(*size)
@@ -180,15 +190,9 @@ class CaptureGazeCheck:
         window._finish_trial_target(True, time.monotonic())
         window._target.progress = 0.6
         window._target.progress_target = window._target.expected_button
-        self.capture(
-            window, "gaze-check-trial-keyboard", "Gaze check: keyboard-sized neighbors", size=size
-        )
-        window._finish_trial_target(True, time.monotonic())
-        window._target.progress = 0.6
-        window._target.progress_target = window._target.expected_button
-        self.capture(
-            window, "gaze-check-trial-words", "Gaze check: suggestion-sized neighbors", size=size
-        )
+        self.capture(window, "gaze-check-trial-typed", "Gaze check: first letter typed", size=size)
+        for _ in range(len(TRIAL_WORD) - 2):
+            window._finish_trial_target(True, time.monotonic())
         window._finish_trial_target(False, time.monotonic())
         for row in window._report.trials[-1].rows:
             row.state, row.coverage = "measured", 0.9
@@ -196,21 +200,82 @@ class CaptureGazeCheck:
         self.capture(
             window, "gaze-check-trial-results", "Gaze check: trial needs adjustment", size=size
         )
-        window._trial_results = [True] * 3
+        window._trial_results = [True] * len(TRIAL_WORD)
         window._trial_losses = window._trial_wrong_selections = 0
         for row in window._report.trials[-1].rows:
             row.selected = True
             row.wrong_selections = row.cancelled_selections = 0
+        window._report.precision_eyes = EyeTrackingSummary(15.2, 0.98, 0.97, 0.96, 2, 0.4)
+        window._report.trials[-1].eyes = EyeTrackingSummary(11.8, 0.99, 0.98, 0.98, 1, 0.2)
         window._render_report()
         self.capture(
             window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
         )
         window._start_trial()
-        for _ in range(3):
+        for _ in TRIAL_WORD:
             window._finish_trial_target(False, time.monotonic())
         self.capture(
             window, "gaze-check-trial-no-gaze", "Gaze check: trial without gaze data", size=size
         )
+
+    def _capture_eyes(self, window, size):
+        window.reset_check()
+        window._snapshot = CheckSnapshot(
+            True,
+            False,
+            (0.6, 0.5, 0.45),
+            None,
+            gaze=(0.5, 0.5),
+            observed_seconds=10,
+            available_fraction=0.98,
+        )
+        window._render_position()
+        window._live_eyes = self._synthetic_eyes(window, right=lambda step: False)
+        window._render_eyes(time.monotonic())
+        self.capture(window, "gaze-check-eyes-one-eye", "Gaze check: one eye tracked", size=size)
+        window._snapshot = replace(window._snapshot, right=True, right_position=(0.4, 0.5, 0.45))
+        window._render_position()
+        window._live_eyes = self._synthetic_eyes(
+            window, left=lambda step: step % 40 not in (7, 8), pairs=True
+        )
+        window._render_eyes(time.monotonic())
+        self.capture(
+            window, "gaze-check-eyes-agreement", "Gaze check: left/right agreement", size=size
+        )
+        window.reset_check()
+
+    @staticmethod
+    def _synthetic_eyes(window, *, left=lambda step: True, right=lambda step: True, pairs=False):
+        """Ten seconds of cumulative telemetry ending now; a False step is a lost eye."""
+        now = time.monotonic()
+        start = now - HISTORY_SECONDS
+        live = window._live_eyes
+        run = EyeTrackingRun(
+            live.screen_size, live.threshold, start, policy=live.policy, window=HISTORY_SECONDS
+        )
+        seconds = [0.0, 0.0, 0.0]
+        steps = round(HISTORY_SECONDS / SAMPLE_SECONDS)
+        for step in range(1, steps + 1):
+            at = start + step * SAMPLE_SECONDS
+            valid = left(step), right(step)
+            for index, tracked in enumerate((*valid, all(valid))):
+                seconds[index] += SAMPLE_SECONDS if tracked else 0.0
+            offset = 0.004 if step % 5 else 0.04
+            run.add(
+                CheckSnapshot(
+                    *valid,
+                    gaze=(0.5, 0.5) if any(valid) else None,
+                    gaze_at=min(at, now) if any(valid) else None,
+                    measured_at=min(at, now),
+                    telemetry_started_at=start,
+                    left_seconds=seconds[0],
+                    right_seconds=seconds[1],
+                    both_seconds=seconds[2],
+                    eye_gaze_supported=pairs,
+                    eye_gaze_pairs=((0.5, 0.5, 0.5 + offset, 0.5, at),) if pairs else (),
+                )
+            )
+        return run
 
     def _capture_free(self, window, size):
         window._start_free()
