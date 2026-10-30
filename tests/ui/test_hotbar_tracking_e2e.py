@@ -183,12 +183,12 @@ def test_hotbar_status_uses_real_simulator_state_and_ignores_diagnostic_text(hot
     hotbar, _controller, _feed, _actions, _progress = hotbar_gaze
     hotbar._gaze.start()
     status = hotbar._tracking_status
-    assert status._title.text() == "Simulacija rijecju"
+    assert status._title.text() == "Simulacija mišem"
     assert status._detail.text() == "Upravljanje mišem"
     hotbar._gaze.status_changed.emit("Praćenje simulacijom miša je aktivno.")
     hotbar._gaze.tracker_changed.emit("retrying")
     hotbar._set_status("Otvoren je meni brzih radnji.")
-    assert status._title.text() == "Simulacija rijecju"
+    assert status._title.text() == "Simulacija mišem"
     hotbar._gaze.stop()
     assert status._title.text() == "Praćenje zaustavljeno"
 
@@ -205,7 +205,7 @@ def test_hotbar_status_stays_available_when_icon_fonts_cannot_load(hotbar_gaze, 
     monkeypatch.setattr(tracking_status.qta, "icon", unavailable_font)
     status = hotbar._tracking_status
     status.set_tracking_status(TrackingStatus(TrackingState.SIMULATING))
-    assert status._title.text() == "Simulacija rijecju"
+    assert status._title.text() == "Simulacija mišem"
     assert status._icon.text() == "↖"
     assert status._icon.isVisible()
 

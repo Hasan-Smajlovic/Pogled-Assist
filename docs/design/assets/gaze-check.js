@@ -310,7 +310,7 @@
       ['Čuvanje uz rub', report.edgeMs + ' ms'], ['Pauza između radnji', report.cooldownMs + ' ms'],
     ].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('');
     checkEl('check-environment').innerHTML = [
-      ['Izvor podataka', 'Simulacija rijecju · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
+      ['Izvor podataka', 'Simulacija mišem · izmišljeni podaci'], ['Verzija / revizija aplikacije', 'Nije dostupno u ovom primjeru'],
       ['Lokalne izmjene izvora', 'Nije dostupno u ovom primjeru'],
       ['Tobii model / SDK', 'Nije dostupno u simulaciji'], ['Sistem', 'Windows 11 · primjer'],
       ['Ekran / skaliranje', '1920 × 1080 fizičkih px · 150%'], ['Prikaz aplikacije', '1280 × 720 logičkih px'],
@@ -339,10 +339,10 @@
     }
     preview.innerHTML = '<h2>' + selected.date + '</h2><span class="check-badge">Simulacija</span><dl>'
       + [['Režim', policyLabel(selected.policy, selected.holdMs)], ['Preciznost', selected.state === 'interrupted' ? 'Prekinuto' : 'Završeno'],
-      ['Obrađene mete', selected.results.filter(row => row.state !== 'unmeasured').length + ' od 5'],
-      ['Test riječi', trialSummary(selected)],
-      ['Čuvanje', selected.storage === 'saved' ? 'Na ovom uređaju' : selected.storage === 'saving' ? 'U toku · zasad u memoriji' : 'Samo u memoriji'],
-      ['Identifikator', selected.id]].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')
+        ['Obrađene mete', selected.results.filter(row => row.state !== 'unmeasured').length + ' od 5'],
+        ['Test riječi', trialSummary(selected)],
+        ['Čuvanje', selected.storage === 'saved' ? 'Na ovom uređaju' : selected.storage === 'saving' ? 'U toku · zasad u memoriji' : 'Samo u memoriji'],
+        ['Identifikator', selected.id]].map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')
       + '</dl><p class="muted">Otvorite rezultat za mjerenja, korištene postavke i izvoz ZIP-a.</p>';
   }
 
