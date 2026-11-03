@@ -109,6 +109,14 @@ The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the re
 dist\PogledAssist-v<version>-windows-x64.zip
 ```
 
+The executable icon is written during the build from `assets/icon.png`, the same image the app window shows, at 16, 24, 32, 48, 64, 128 and 256 pixels. That PNG is rendered from the SVG master `docs/design/assets/app-icon.svg`; after editing the master, regenerate it and commit both files:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.release.windows_icon
+```
+
+`tests/release/test_windows_icon.py` fails while the PNG differs from the master.
+
 The build downloads the pinned eSpeak MSI, Python x86 ZIP, and source archives into `.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without installing it globally, and freezes both Edge commands with a shared Python runtime. The first build needs internet; cached assets are rechecked on every build. A checksum mismatch fails the build before extraction.
 
 Each package also includes `BUILD_INFO.json`, generated from the source revision and local dirty state. The frozen smoke check validates that identity; recordings, normal logs and gaze-check reports use the same source. See the [build identity contract](DIAGNOSTICS.md#build-identity). Verify the packaged revision/dirty state in a local support export before release. Logs and diagnostic recordings are preserved with the rest of `logs/` during installation and rollback.

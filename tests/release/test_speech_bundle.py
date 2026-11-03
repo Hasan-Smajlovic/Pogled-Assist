@@ -89,6 +89,7 @@ def test_frozen_smoke_fails_when_bundled_speech_is_missing(monkeypatch, tmp_path
     report = tmp_path / "smoke.txt"
     monkeypatch.setenv(main_module.PACKAGE_SMOKE_REPORT_ENV, str(report))
     monkeypatch.setattr(main_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(main_module, "resolve_build_identity", lambda: {"build_revision": "a" * 40})
 
     def missing_bundle(_root):
         raise FileNotFoundError("missing bundled speech")
