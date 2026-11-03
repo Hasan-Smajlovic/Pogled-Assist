@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Pogled Assist</title>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1d242d" stroke="#394959" stroke-width="1.5"/>
+  <ellipse cx="20.5" cy="37.5" rx="9" ry="13.5" fill="#edf2f7"/>
+  <ellipse cx="39.5" cy="37.5" rx="9" ry="13.5" fill="#edf2f7"/>
+  <circle cx="23.2" cy="33.2" r="5.5" fill="#84c5d9"/>
+  <circle cx="24.1" cy="32.1" r="2.6" fill="#15191f"/>
+  <circle cx="41.75" cy="32.75" r="5.5" fill="#84c5d9"/>
+  <circle cx="42.4" cy="31.6" r="2.6" fill="#15191f"/>
+  <circle cx="50" cy="14" r="6.25" fill="none" stroke="#84c5d9" stroke-width="2" opacity="0.5"/>
+  <circle cx="50" cy="14" r="3.25" fill="#84c5d9"/>
+</svg>

@@ -49,6 +49,7 @@ On macOS, use `python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/des
 | Surface | HTML document | Styles and interaction |
 | --- | --- | --- |
 | Visual direction, fonts and component states | [design-system.html](design/design-system.html) | `docs/design/assets/design-system.css`, `docs/design/assets/design-system.js`; palette, typography and control-state reference |
+| Application icon | [design-system.html](design/design-system.html#icon-title) | `docs/design/assets/app-icon.svg`, the master for `assets/icon.png` and the [executable icon](WINDOWS_RELEASE.md#build-locally) |
 | Speech and its dialogs | [speech.html](design/speech.html) | `docs/design/assets/speech.css`, `docs/design/assets/speech.js` |
 | Settings and learned words | [settings.html](design/settings.html) | `docs/design/assets/settings.css`, `docs/design/assets/settings.js` |
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
