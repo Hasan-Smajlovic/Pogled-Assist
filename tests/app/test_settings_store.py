@@ -77,6 +77,30 @@ def test_invalid_keyboard_script_loads_as_latin(monkeypatch, tmp_path, value):
     assert load_app_settings()[1].keyboard_script == "latin"
 
 
+@pytest.mark.parametrize("value", ["unknown", "", 3, [], None])
+def test_invalid_letter_layout_loads_as_all_letters(monkeypatch, tmp_path, value):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {"letter_layout": value}}), encoding="utf-8")
+    assert load_app_settings()[1].letter_layout == "all"
+
+
+def test_settings_without_letter_layout_open_speech_with_all_letters(monkeypatch, tmp_path):
+    path = point_settings_at(monkeypatch, tmp_path)
+    path.parent.mkdir()
+    path.write_text(json.dumps({"speech": {"letters_per_group": 7}}), encoding="utf-8")
+    speech = load_app_settings()[1]
+    assert speech.letter_layout == "all"
+    assert speech.letters_per_group == 7
+
+
+def test_letter_groups_choice_survives_restart(monkeypatch, tmp_path):
+    point_settings_at(monkeypatch, tmp_path)
+    speech = SpeechSettings(letter_layout="groups", letters_per_group=4)
+    save_app_settings(GazeSettings(), speech)
+    assert load_app_settings()[1] == speech
+
+
 def test_arabic_script_round_trip_preserves_latin_voice_and_other_settings(monkeypatch, tmp_path):
     point_settings_at(monkeypatch, tmp_path)
     gaze = GazeSettings(dwell_ms=950)

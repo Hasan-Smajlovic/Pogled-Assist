@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint, QRect, Qt
@@ -199,6 +201,34 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     assert updates[-1].voice_preset == preset
     assert window._speech_page._voice_buttons[preset].isChecked()
     assert window._speech_page._voice_choices.isVisible()
+
+
+@pytest.mark.e2e
+def test_speech_letter_layout_choice_is_saved_and_reflects_the_current_setting(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings(letter_layout="groups"))
+    qtbot.addWidget(window)
+    window._select_tab(2)
+    window.resize(1280, 720)
+    window.show()
+    combo = window._speech_page._letter_layout_combo
+    assert combo.currentText() == "Grupe slova"
+    updates = []
+    window.speech_settings_changed.connect(updates.append)
+
+    window._cycle_letter_layout()
+    qtbot.wait(1)
+    assert updates[-1].letter_layout == "all"
+    assert combo.currentText() == "Sva slova"
+    assert window._status_label.text() == "Raspored slova u Govoru je ažuriran."
+    assert window.width() <= 1280 and window.height() <= 720
+    assert combo.height() >= 58
+
+    window.update_speech_settings(replace(updates[-1], letter_layout="groups"))
+    assert combo.currentText() == "Grupe slova"
+    assert len(updates) == 1
 
 
 @pytest.mark.e2e

@@ -40,7 +40,7 @@ class SpeechLibraryActions:
         self._show_group_level()
         self._view_title.setText(self._editor_title())
         self._update_view_controls()
-        self._set_status("Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.")
+        self._set_status("Unesite tekst, zatim odaberite Sačuvaj.")
 
     def _save_editor(self) -> None:
         if self._editor is None:

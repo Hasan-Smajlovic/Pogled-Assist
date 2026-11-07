@@ -6,6 +6,7 @@
   const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 4, KEY_PAGE_SIZE = 12;
   const gazeDemo = createReferenceGaze();
   let arabic = readScript();
+  let letterGroups = new URLSearchParams(location.search).get('layout') === 'groups';
   let activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
   const message = $('message');
   const content = $('content');
@@ -62,7 +63,10 @@
     editor = null;
     message.value = '';
     savedMessage = '';
-    if (previewState.includes('single')) activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
+    if (previewState.includes('single')) {
+      letterGroups = true;
+      activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
+    }
     if (previewState === 'editor-single') editor = { kind: 'phrase', view: 'phrases', category: null, page: 0 };
   }
   if (requestedVoiceState && !message.value) message.value = 'TREBAM VODE, MOLIM TE.';
@@ -115,14 +119,25 @@
   }
 
   $('library-read-error').addEventListener('change', () => { deleting = false; render(); });
+  $('letter-groups-preview').checked = letterGroups;
+  $('letter-groups-preview').addEventListener('change', event => {
+    letterGroups = event.target.checked;
+    activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
+    selectedLetters = null; symbols = false; page = 0; render();
+  });
   $('single-letter-preview').addEventListener('click', () => {
+    showLetterGroups();
     activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
     switchView('keyboard');
   });
   $('twelve-letters-preview').addEventListener('click', () => {
+    showLetterGroups();
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
     switchView('keyboard'); openLetters(0, 12);
   });
+  function showLetterGroups() { letterGroups = true; $('letter-groups-preview').checked = true; }
+  // Settings choose the layout; Arabic always keeps its groups.
+  function showsAlphabet() { return !arabic && !letterGroups; }
   for (const button of document.querySelectorAll('[data-script-toggle]')) button.addEventListener('click', () => {
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
@@ -230,7 +245,8 @@
     if (editor) return editorTitle();
     if (view === 'phrases') return 'Moje fraze';
     if (view !== 'keyboard') return library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs') || 'Kategorije';
-    return symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
+    if (symbols) return 'Brojevi i znakovi';
+    return showsAlphabet() ? 'Odaberite slovo' : 'Odaberite grupu slova';
   }
 
   function renderViewHeader() {
@@ -266,7 +282,8 @@
 
   function renderKeyboardGrid() {
     const browsing = view !== 'keyboard';
-    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
+    const lettersLabel = showsAlphabet() ? 'Slova' : 'Grupe slova';
+    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? lettersLabel : 'Brojevi i znakovi';
     content.replaceChildren();
     content.className = browsing ? 'item-grid' : 'key-grid';
     content.style.gridTemplateColumns = '';
@@ -277,6 +294,13 @@
   }
 
   function fillKeyboard() {
+    if (!symbols && showsAlphabet()) {
+      // One gaze selection types each letter; the keys stay in place after typing.
+      $('paging').hidden = true;
+      content.className = 'key-grid alphabet';
+      content.replaceChildren(...GROUPS.flat().map(letter => makeButton(letter, 'alphabet-letter', letter, 'alphabet-key')));
+      return;
+    }
     if (selectedLetters) {
       $('paging').hidden = true;
       const columns = selectedLetters.length < 6 ? 3 : 4;
@@ -309,6 +333,7 @@
     'group': value => { openLetters(Number(value)); },
     'symbol-group': value => { openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); },
     'letter': value => { append(value); selectedLetters = null; render(); },
+    'alphabet-letter': value => { append(value); },
     'symbol': value => { append(value); },
     'close-letters': value => { selectedLetters = null; render(); },
     'word': value => { appendWord(value, true); },
@@ -442,7 +467,7 @@
     deleting = false;
     symbols = false;
     render();
-    say('Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.');
+    say('Unesite tekst, zatim odaberite Sačuvaj.');
   }
 
   function editorTitle() {

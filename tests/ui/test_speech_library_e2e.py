@@ -20,7 +20,7 @@ def test_speech_keyboard_entry_playback_and_phrase_workflow(qtbot, make_speech_w
     window = make_speech_window(speech, library_store=store)
     window.show()
 
-    for command in ("group:1", "letter:1:1", "space", "group:0", "letter:0:0"):
+    for command in ("letter:6", "space", "letter:0"):
         click_speech_action(qtbot, window, command)
     window._play_button.click()
 

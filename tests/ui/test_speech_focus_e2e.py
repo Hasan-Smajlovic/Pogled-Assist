@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
@@ -9,6 +10,7 @@ from _ui_fakes import FakeLibraryStore, FakeSpeech, click_speech_action
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QLineEdit
 
+from pogled_assist.keyboard_layouts import LETTER_GROUPS_LAYOUT
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
@@ -101,6 +103,7 @@ def test_speech_control_click_keeps_selection_and_its_direction(
 @pytest.mark.e2e
 def test_inline_letters_keep_typing_focus_and_escape_returns_to_groups(qtbot, speech_focus):
     qapp, window = speech_focus
+    window.update_settings(replace(window._speech_settings, letter_layout=LETTER_GROUPS_LAYOUT))
     window._input.setText("PORUKA")
     click_speech_action(qtbot, window, "group:0")
     assert window._dialogs.active is None

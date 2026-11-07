@@ -19,7 +19,13 @@ from ..interaction.gaze_selection import (
     GazeSelectionTimer,
 )
 from ..interaction.mouse_controller import GazeSettings
-from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LATIN_SCRIPT
+from ..keyboard_layouts import (
+    ALL_LETTERS_LAYOUT,
+    ARABIC_SCRIPT,
+    KEYBOARD_SCRIPTS,
+    LATIN_SCRIPT,
+    LETTER_LAYOUTS,
+)
 from ..logging_setup import set_application_logging_enabled
 from ..release_update import ReleaseUpdateManager
 from ..settings_limits import (
@@ -703,6 +709,20 @@ class SettingsWindow(QWidget):
         self.cancel_gaze_interaction(require_leave=True)
         self._speech_settings = replace(self._speech_settings, keyboard_script=script)
         self._emit_speech_settings("Pismo tastature je ažurirano.")
+
+    def _letter_layout_combo_changed(self, index: int) -> None:
+        layout = self._speech_page._letter_layout_combo.itemData(index)
+        if layout not in dict(LETTER_LAYOUTS):
+            layout = ALL_LETTERS_LAYOUT
+        if layout == self._speech_settings.letter_layout:
+            return
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_settings = replace(self._speech_settings, letter_layout=layout)
+        self._emit_speech_settings("Raspored slova u Govoru je ažuriran.")
+
+    def _cycle_letter_layout(self) -> None:
+        combo = self._speech_page._letter_layout_combo
+        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
 
     def _cycle_keyboard_script(self) -> None:
         self._speech_page._script_combo.setCurrentIndex(

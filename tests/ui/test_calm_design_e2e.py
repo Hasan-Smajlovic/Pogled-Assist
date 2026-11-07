@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 from _clock import freeze_monotonic
 from _speech_fixtures import make_speech_window as make_speech_window
-from _ui_fakes import FakeLibraryStore, FakeSpeech
+from _ui_fakes import FakeLibraryStore, FakeSpeech, grouped_fake_speech
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QFrame, QToolButton, QWidget
 
@@ -170,7 +170,9 @@ def test_gaze_highlight_stays_steady_during_selection_and_hold(qtbot):
 
 
 def test_voice_update_preserves_the_displayed_keyboard_page(qtbot, make_speech_window):
-    window = make_speech_window(FakeSpeech(), letters_per_group=1, library_store=FakeLibraryStore())
+    window = make_speech_window(
+        grouped_fake_speech(), letters_per_group=1, library_store=FakeLibraryStore()
+    )
     window.resize(1280, 720)
     window.show()
     window._next_page_button.click()
@@ -291,10 +293,10 @@ def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
     assert len(window.findChildren(QFrame, "speechDivider")) == 3
     if script == "latin":
         for row, command in enumerate(("alarm:start", "sleep:start", "exit")):
-            group = window._action_buttons[window._action(f"group:{row * 2}")]
+            letter = window._action_buttons[window._action(f"letter:{row * 10}")]
             system = window._action_buttons[window._action(command)]
-            assert group.mapTo(window, QPoint()).y() == system.mapTo(window, QPoint()).y()
-            assert abs(group.height() - system.height()) <= 1
+            assert letter.mapTo(window, QPoint()).y() == system.mapTo(window, QPoint()).y()
+            assert abs(letter.height() - system.height()) <= 1
     for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
         rect = QRect(button.mapTo(window, QPoint()), button.size())

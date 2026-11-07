@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QDialog, QPushButton, QWidget
 
 from .. import diagnostics
 from ..keyboard_layouts import (
+    ALL_LETTERS_LAYOUT,
     ARABIC_SCRIPT,
     key_label,
     letters_for_script,
@@ -49,6 +50,7 @@ SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 PHRASE_BUTTON_MIN_HEIGHT = 64
 GROUP_GRID_MAX_COLUMNS = 6
 KEYS_PER_PAGE = 12
+ALPHABET_COLUMNS = 10
 
 
 class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
@@ -162,11 +164,13 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
     def update_settings(self, settings: SpeechSettings) -> None:
         old_letters_per_group = self._letters_per_group
         old_script = self._speech_settings.keyboard_script
+        old_layout = self._speech_settings.letter_layout
         self._speech_settings = replace(settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
         if (
             self._letters_per_group != old_letters_per_group
             or old_script != settings.keyboard_script
+            or old_layout != settings.letter_layout
         ):
             self._keyboard_page = 0
             self._close_dialog()
@@ -299,10 +303,40 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if self._editor is None:
             self._view_mode = "keyboard"
         self._clear_main_grid()
+        alphabet = self._shows_alphabet()
         self._view_title.setText(
-            self._editor_title() if self._editor is not None else "Odaberite grupu slova"
+            self._editor_title()
+            if self._editor is not None
+            else "Odaberite slovo"
+            if alphabet
+            else "Odaberite grupu slova"
+        )
+        if alphabet:
+            self._add_alphabet_keys()
+        else:
+            self._add_group_keys()
+        self._update_view_controls()
+        self._set_status("")
+        self._context_changed()
+
+    def _shows_alphabet(self) -> bool:
+        # Arabic keeps its groups; Settings may keep the larger Latin group keys.
+        return (
+            self._speech_settings.letter_layout == ALL_LETTERS_LAYOUT
+            and self._speech_settings.keyboard_script != ARABIC_SCRIPT
         )
 
+    def _add_alphabet_keys(self) -> None:
+        # One selection types each letter, so all 30 stay on one page in alphabetical rows.
+        self._keyboard_pages = 1
+        self._keyboard_page = 0
+        self._set_grid_stretch(len(BOSNIAN_LETTERS), ALPHABET_COLUMNS)
+        for index, letter in enumerate(BOSNIAN_LETTERS):
+            action = self._action(f"letter:{index}")
+            button = self._make_dynamic_button(letter, action, "alphabetButton")
+            self._key_grid.addWidget(button, index // ALPHABET_COLUMNS, index % ALPHABET_COLUMNS)
+
+    def _add_group_keys(self) -> None:
         visible = self._keyboard_items(self._letter_groups)
         group_count = min(KEYS_PER_PAGE, len(self._letter_groups))
         columns = _group_column_count(group_count)
@@ -313,10 +347,6 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             action = self._action(f"group:{index}")
             button = self._make_dynamic_button(" ".join(group), action, "groupButton")
             self._key_grid.addWidget(button, position // columns, position % columns)
-
-        self._update_view_controls()
-        self._set_status("")
-        self._context_changed()
 
     def _show_symbols_level(self) -> None:
         self._active_group_index = None
@@ -620,7 +650,11 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._view_title.setVisible(list_mode or editor_mode)
         self._message_label.setText(self._editor_title() if editor_mode else "Vaša poruka")
         self._input.setPlaceholderText(
-            "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
+            "Unesite tekst…"
+            if editor_mode
+            else "Odaberite slovo…"
+            if self._shows_alphabet()
+            else "Odaberite grupu slova…"
         )
         self._refresh_keyboard_toggle(list_mode)
         self._refresh_suggestions()
@@ -629,7 +663,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if list_mode:
             self._keyboard_toggle_button.setText("Tastatura")
         elif self._symbols_mode:
-            self._keyboard_toggle_button.setText("Grupe slova")
+            self._keyboard_toggle_button.setText(
+                "Slova" if self._shows_alphabet() else "Grupe slova"
+            )
         else:
             self._keyboard_toggle_button.setText("Brojevi i znakovi")
 
@@ -719,8 +755,12 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._select_list_item(int(command.rsplit(":", 1)[1]))
 
     def _select_letter(self, value):
-        group_index, letter_index = (int(index) for index in value.split(":"))
-        self._append_text(self._letter_groups[group_index][letter_index])
+        group_index, _, letter_index = value.rpartition(":")
+        if not group_index:
+            # Alphabet keys stay in place; the same letter repeats only after gaze leaves.
+            self._append_text(BOSNIAN_LETTERS[int(letter_index)])
+            return
+        self._append_text(self._letter_groups[int(group_index)][int(letter_index)])
         self._show_group_level()
 
     def _select_symbol(self, index):

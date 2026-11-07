@@ -35,7 +35,7 @@ from .theme import apply_theme
 from .tracking_feedback import MessageTrackingHeader
 
 SPEECH_WINDOW_ACTION_PREFIX = "speech_window:"
-KEY_GRID_MAX_COLUMNS = 8
+KEY_GRID_MAX_COLUMNS = 10
 KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 LIST_ACTION_MIN_HEIGHT = 80
@@ -849,6 +849,10 @@ SPEECH_STYLE = """
             QDialog#speechDialog QLabel#dialogCopy { color: #dce6f3; font-size: 22px; }
             QPushButton#letterButton {
                 font-size: 56px;
+            }
+            QPushButton#alphabetButton {
+                font-size: 40px;
+                padding: 0px;
             }
             QPushButton#lettersBackButton {
                 font-size: 22px;

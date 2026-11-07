@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _speech_fixtures import make_speech_window as make_speech_window
-from _ui_fakes import FakeAppBar, FakeControllerInput, FakeLibraryStore, FakeSpeech
+from _ui_fakes import (
+    FakeAppBar,
+    FakeControllerInput,
+    FakeLibraryStore,
+    FakeSpeech,
+    grouped_fake_speech,
+)
 from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
@@ -293,7 +299,7 @@ def _check_controller_key_row(window, key_command, check_row):
 @pytest.mark.e2e
 def test_twelve_inline_letters_fit_150_percent_display_and_accept_gaze(qtbot, make_speech_window):
     window = make_speech_window(
-        FakeSpeech(), letters_per_group=12, library_store=FakeLibraryStore()
+        grouped_fake_speech(), letters_per_group=12, library_store=FakeLibraryStore()
     )
     window.resize(1280, 720)
     window.show()
@@ -320,7 +326,9 @@ def test_twelve_inline_letters_fit_150_percent_display_and_accept_gaze(qtbot, ma
 
 @pytest.mark.e2e
 def test_single_letter_groups_fit_150_percent_display(qtbot, make_speech_window):
-    window = make_speech_window(FakeSpeech(), letters_per_group=1, library_store=FakeLibraryStore())
+    window = make_speech_window(
+        grouped_fake_speech(), letters_per_group=1, library_store=FakeLibraryStore()
+    )
     window.resize(1280, 720)
     window.show()
     qtbot.waitUntil(window.isVisible)
@@ -372,6 +380,7 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, make_speech_window):
 
     qtbot.mouseClick(window._keyboard_toggle_button, Qt.LeftButton)
     assert window._symbols_mode is True
+    assert window._keyboard_toggle_button.text() == "Slova"
     symbol = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}symbol:0"]
     qtbot.waitUntil(symbol.isVisible)
     qtbot.mouseClick(symbol, Qt.LeftButton)
@@ -379,7 +388,7 @@ def test_speech_symbols_backspace_clear_and_play(qtbot, make_speech_window):
 
     qtbot.mouseClick(window._keyboard_toggle_button, Qt.LeftButton)
     assert window._symbols_mode is False
-    assert f"{SPEECH_WINDOW_ACTION_PREFIX}group:0" in window._action_buttons
+    assert f"{SPEECH_WINDOW_ACTION_PREFIX}letter:0" in window._action_buttons
 
     for value in ("DŽ", "LJ", "NJ", "dž", "lj", "nj"):
         window._input.setText(value)

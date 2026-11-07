@@ -11,7 +11,7 @@ from typing import Any
 from .interaction.eye_tracking_policy import valid_policy
 from .interaction.gaze_selection import MAX_SELECTION_PAUSE_MS, MIN_SELECTION_PAUSE_MS
 from .interaction.mouse_controller import GazeSettings
-from .keyboard_layouts import KEYBOARD_SCRIPTS, LATIN_SCRIPT
+from .keyboard_layouts import ALL_LETTERS_LAYOUT, KEYBOARD_SCRIPTS, LATIN_SCRIPT, LETTER_LAYOUTS
 from .logging_setup import get_project_root
 from .settings_limits import (
     CLICK_COOLDOWN_MS_RANGE,
@@ -175,6 +175,11 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
             settings.keyboard_script
             if settings.keyboard_script in dict(KEYBOARD_SCRIPTS)
             else LATIN_SCRIPT
+        ),
+        letter_layout=(
+            settings.letter_layout
+            if settings.letter_layout in dict(LETTER_LAYOUTS)
+            else ALL_LETTERS_LAYOUT
         ),
         speed=clamp(settings.speed, SPEECH_SPEED_RANGE),
         pitch=clamp(settings.pitch, SPEECH_PITCH_RANGE),
