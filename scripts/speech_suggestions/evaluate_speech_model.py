@@ -1,4 +1,5 @@
-"""Reproduce the frozen grouped-keyboard comparison without gaze hardware."""
+"""Reproduce the frozen grouped-keyboard comparison, and the all-letters keyboard beside it,
+without gaze hardware."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import statistics
 import sys
 import time
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -27,6 +29,10 @@ from pogled_assist.suggestions.model import (
 from pogled_assist.suggestions.text import START, Word, insert_word, words
 
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "speech_suggestions"
+# The frozen protocol opens a letter group, then selects the letter. The default Latin
+# Speech layout, Sva slova, enters a letter with one selection.
+GROUPED_LETTER_ACTIVATIONS = 2
+ALL_LETTERS_ACTIVATIONS = 1
 
 
 def fixture_sha256(path: Path) -> str:
@@ -44,16 +50,27 @@ def letters(word: str) -> list[str]:
     return result
 
 
-def simulate(text: str, model: WordModel | None, *, contextual: bool = True) -> dict:
-    return _Simulation(model, contextual=contextual).run(text.upper())
+def simulate(
+    text: str,
+    model: WordModel | None,
+    *,
+    contextual: bool = True,
+    letter_activations: int = GROUPED_LETTER_ACTIVATIONS,
+) -> dict:
+    return _Simulation(model, contextual=contextual, letter_activations=letter_activations).run(
+        text.upper()
+    )
 
 
 class _Simulation:
-    """Count grouped-keyboard actions while preserving the exact target text."""
+    """Count keyboard actions while preserving the exact target text."""
 
-    def __init__(self, model: WordModel | None, *, contextual: bool) -> None:
+    def __init__(
+        self, model: WordModel | None, *, contextual: bool, letter_activations: int
+    ) -> None:
         self.model = model
         self.contextual = contextual
+        self.letter_activations = letter_activations
         self.composed = ""
         self.counts = dict.fromkeys(
             (
@@ -102,12 +119,13 @@ class _Simulation:
         has_space = token.end < len(text) and text[token.end] == " "
         for index in range(len(units) + 1):
             candidates = self.predict(token, index)
-            if target in candidates and 2 * (len(units) - index) + int(has_space) > 1:
+            remaining = self.letter_activations * (len(units) - index) + int(has_space)
+            if target in candidates and remaining > 1:
                 self.select(target, candidates.index(target), completion=bool(index))
                 break
             if index < len(units):
                 self.composed += units[index]
-                self.counts["activations"] += 2
+                self.counts["activations"] += self.letter_activations
                 self.counts["letters"] += 1
                 self.last_slot = None
 
@@ -192,41 +210,9 @@ def evaluate(
     else:
         model = load_model_from_paths(model_path, metadata_path)
     loading_ms = (time.perf_counter() - started) * 1000
-    results = []
-    totals: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    categories: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    timings: dict[str, list[float]] = defaultdict(list)
-    miss_totals: Counter[str] = Counter()
-    for case in cases:
-        row = {"id": case["id"], "category": case["category"]}
-        for name, engine, contextual in (
-            ("keyboard", None, False),
-            ("frequency", model, False),
-            ("contextual", model, True),
-        ):
-            outcome = simulate(case["text"], engine, contextual=contextual)
-            timings[name].extend(outcome.pop("durations_ms"))
-            row[name] = outcome
-            for key, value in outcome.items():
-                totals[name][key] += value
-            categories[case["category"]][name] += outcome["activations"]
-        row["misses"] = diagnose(model, case["text"])
-        miss_totals.update(miss["reason"] for miss in row["misses"])
-        results.append(row)
-    for name in ("frequency", "contextual"):
-        totals[name]["activation_reduction_percent"] = round(
-            100 * (1 - totals[name]["activations"] / totals["keyboard"]["activations"]), 2
-        )
-        for kind in ("sentence_start", "next_word", "completion"):
-            count = totals[name][f"{kind}_queries"]
-            for top in ("one", "five"):
-                totals[name][f"{kind}_top_{top}_percent"] = (
-                    round(100 * totals[name][f"{kind}_top_{top}_hits"] / count, 2) if count else 0.0
-                )
-    for values in categories.values():
-        values["contextual_reduction_percent"] = round(
-            100 * (1 - values["contextual"] / values["keyboard"]), 2
-        )
+    tally = _Tally()
+    results = [tally.add(case, model) for case in cases]
+    totals, categories, timings = tally.finish()
     model_metadata = [json.loads(metadata_path.read_text(encoding="utf-8"))]
     if model_path == MODEL_PATH and metadata_path == MODEL_METADATA_PATH:
         model_metadata.append(json.loads(ISLAMIC_MODEL_METADATA_PATH.read_text(encoding="utf-8")))
@@ -256,6 +242,7 @@ def evaluate(
             "sentence_start": "One query before typing each sentence-initial word, reported separately.",
             "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
             "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending.",
+            "all_letters": "Measured after the protocol was frozen: one activation per letter, as with Sva slova in Latin Speech. Spaces, punctuation and the selection rule follow the protocol; the grouped comparison is unchanged.",
         },
         "loading_ms": round(loading_ms, 2),
         "latency": {
@@ -269,9 +256,89 @@ def evaluate(
         },
         "totals": dict(totals),
         "categories": dict(categories),
-        "miss_reasons": dict(miss_totals),
+        "all_letters": _all_letters_summary(results),
+        "miss_reasons": dict(tally.misses),
         "cases": results,
     }
+
+
+@dataclass
+class _Tally:
+    """Add each message's frozen comparison and all-letters activations to the totals."""
+
+    totals: dict = field(default_factory=lambda: defaultdict(lambda: defaultdict(int)))
+    categories: dict = field(default_factory=lambda: defaultdict(lambda: defaultdict(int)))
+    timings: dict = field(default_factory=lambda: defaultdict(list))
+    misses: Counter = field(default_factory=Counter)
+
+    def add(self, case: dict, model: WordModel) -> dict:
+        row = {"id": case["id"], "category": case["category"]}
+        for name, engine, contextual in (
+            ("keyboard", None, False),
+            ("frequency", model, False),
+            ("contextual", model, True),
+        ):
+            outcome = simulate(case["text"], engine, contextual=contextual)
+            self.timings[name].extend(outcome.pop("durations_ms"))
+            row[name] = outcome
+            for key, value in outcome.items():
+                self.totals[name][key] += value
+            self.categories[case["category"]][name] += outcome["activations"]
+        # Latency stays measured on the frozen comparison only.
+        row["all_letters"] = {
+            name: simulate(case["text"], engine, letter_activations=ALL_LETTERS_ACTIVATIONS)[
+                "activations"
+            ]
+            for name, engine in (("keyboard", None), ("contextual", model))
+        }
+        row["misses"] = diagnose(model, case["text"])
+        self.misses.update(miss["reason"] for miss in row["misses"])
+        return row
+
+    def finish(self) -> tuple[dict, dict, dict]:
+        for name in ("frequency", "contextual"):
+            totals = self.totals[name]
+            totals["activation_reduction_percent"] = _reduction(
+                totals["activations"], self.totals["keyboard"]["activations"]
+            )
+            for kind in ("sentence_start", "next_word", "completion"):
+                for top in ("one", "five"):
+                    totals[f"{kind}_top_{top}_percent"] = _percent(
+                        totals[f"{kind}_top_{top}_hits"], totals[f"{kind}_queries"]
+                    )
+        for values in self.categories.values():
+            values["contextual_reduction_percent"] = _reduction(
+                values["contextual"], values["keyboard"]
+            )
+        return self.totals, self.categories, self.timings
+
+
+def _all_letters_summary(results: list[dict]) -> dict:
+    categories: dict[str, dict[str, float]] = defaultdict(lambda: {"keyboard": 0, "contextual": 0})
+    for row in results:
+        for name, activations in row["all_letters"].items():
+            categories[row["category"]][name] += activations
+    keyboard = sum(values["keyboard"] for values in categories.values())
+    contextual = sum(values["contextual"] for values in categories.values())
+    for values in categories.values():
+        values["contextual_reduction_percent"] = _reduction(
+            values["contextual"], values["keyboard"]
+        )
+    return {
+        "letter_activations": ALL_LETTERS_ACTIVATIONS,
+        "keyboard_activations": keyboard,
+        "contextual_activations": contextual,
+        "activation_reduction_percent": _reduction(contextual, keyboard),
+        "categories": dict(categories),
+    }
+
+
+def _reduction(activations: float, keyboard: float) -> float:
+    return round(100 * (1 - activations / keyboard), 2)
+
+
+def _percent(hits: int, queries: int) -> float:
+    return round(100 * hits / queries, 2) if queries else 0.0
 
 
 def _load_cases(

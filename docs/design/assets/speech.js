@@ -585,7 +585,8 @@
     const letters = partial.match(/dj|./gu) || [];
     const variants = { dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' };
     const pattern = new RegExp('^' + letters.map(letter => variants[letter] || letter).join(''), 'iu');
-    return WORDS.filter(word => pattern.test(word));
+    // The word typed in full is not offered: selecting it would only add the space.
+    return WORDS.filter(word => pattern.test(word) && word.toLocaleLowerCase('bs') !== partial);
   }
 
   function predictionsEnabled(partial) {

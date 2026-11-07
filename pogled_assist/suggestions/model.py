@@ -91,7 +91,9 @@ class WordModel:
         learned = _personal_model(personal)
         contexts = _contexts(context) if contextual else [()]
         if prefix:
-            candidates = self.matching(prefix) | learned.matching(prefix)
+            # Offering the word exactly as typed would only add the space; its slot
+            # shows a longer word. Another spelling, such as želim for zelim, stays.
+            candidates = (self.matching(prefix) | learned.matching(prefix)) - {prefix}
         else:
             candidates = self._next_word_candidates(contexts, learned, limit)
         if not candidates:

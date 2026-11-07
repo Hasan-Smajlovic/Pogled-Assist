@@ -100,6 +100,16 @@ def test_quran_apostrophe_is_one_word_and_can_be_completed_without_typing_the_ma
     assert insert_word("Čitam kur", "kur'an") == "Čitam KUR'AN "
 
 
+def test_completion_leaves_out_the_word_already_typed_but_keeps_corrections():
+    model = WordModel({("ja",): 100, ("jako",): 5, ("jasno",): 4, ("želim",): 3})
+    personal = Counter({("ja",): 9, ("jaje",): 2})
+
+    # Selecting JA after typing JA would only add the space, so the slot shows longer words.
+    assert model.predict("JA", personal) == ["JAJE", "JAKO", "JASNO"]
+    assert model.predict("zelim") == ["ŽELIM"]
+    assert model.predict("želim") == []
+
+
 def test_longer_context_changes_prediction_and_unknown_prefix_is_empty():
     model = WordModel({("voda",): 100, ("piti",): 1, ("želim", "piti"): 20})
     assert model.predict("želim ")[0] == "PITI"
