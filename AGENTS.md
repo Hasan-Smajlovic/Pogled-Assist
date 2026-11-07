@@ -1,6 +1,6 @@
 # Agent guide
 
-Pogled Assist is a Windows/PySide6 application used through a Tobii Eye Tracker 4C. Preserve the installed user's gaze, input, speech, settings, data and installation flows. Current `development` behavior is the compatibility baseline unless a linked issue explicitly changes it.
+Pogled Assist is a Windows/PySide6 application used with a Tobii Eye Tracker 5 or Eye Tracker 4C. Preserve the installed user's gaze, input, speech, settings, data and installation flows. Current `development` behavior is the compatibility baseline unless a linked issue explicitly changes it.
 
 ## Start here
 
