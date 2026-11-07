@@ -28,6 +28,15 @@ class FakeAlarmSound(QObject):
         self.stop_calls += 1
 
 
+class FakeSelectionSound(QObject):
+    def __init__(self):
+        super().__init__()
+        self.levels = []
+
+    def play(self, level):
+        self.levels.append(level)
+
+
 def click_speech_action(qtbot, window, command):
     button = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}{command}"]
     qtbot.waitUntil(button.isVisible)

@@ -4,12 +4,13 @@ from dataclasses import replace
 
 import pytest
 from _clock import freeze_monotonic
+from _ui_fakes import FakeSelectionSound
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QAbstractButton, QLabel, QStyle, QStyleOptionComboBox
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
-from pogled_assist.ui.settings_window import SettingsWindow
+from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.windows.windows_startup import StartupTaskResult
 
 
@@ -229,6 +230,41 @@ def test_speech_letter_layout_choice_is_saved_and_reflects_the_current_setting(q
     window.update_speech_settings(replace(updates[-1], letter_layout="groups"))
     assert combo.currentText() == "Grupe slova"
     assert len(updates) == 1
+
+
+@pytest.mark.e2e
+def test_selection_sound_level_is_saved_and_previewed_at_the_chosen_level(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    sound = FakeSelectionSound()
+    window = SettingsWindow(
+        GazeSettings(), SpeechSettings(), services=SettingsServices(selection_sound=sound)
+    )
+    qtbot.addWidget(window)
+    window._select_tab(0)
+    window.resize(1280, 720)
+    window.show()
+    combo = window._general_page._selection_sound_combo
+    assert combo.currentText() == "Tih"
+    updates = []
+    window.speech_settings_changed.connect(updates.append)
+
+    for _ in range(3):
+        window._cycle_selection_sound()
+    qtbot.wait(1)
+    assert [update.selection_sound for update in updates] == ["medium", "loud", "off"]
+    assert sound.levels == ["medium", "loud", "off"]
+    assert combo.currentText() == "Isključen"
+    assert window._status_label.text() == "Zvuk pri odabiru je ažuriran."
+    assert window.width() <= 1280 and window.height() <= 720
+    assert combo.height() >= 58
+    assert window.rect().contains(QRect(combo.mapTo(window, QPoint()), combo.size()))
+
+    window.update_speech_settings(replace(updates[-1], selection_sound="quiet"))
+    assert combo.currentText() == "Tih"
+    assert len(updates) == 3
+    assert len(sound.levels) == 3
 
 
 @pytest.mark.e2e

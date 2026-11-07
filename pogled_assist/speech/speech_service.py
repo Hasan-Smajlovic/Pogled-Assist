@@ -22,6 +22,7 @@ from .audio_cache import AudioCache, cache_root
 from .audio_playback import AudioPlayback, PlaybackResult
 from .eleven_account import ElevenAccount
 from .elevenlabs import DEFAULT_MODEL, ElevenConfig, configuration
+from .selection_sound import SELECTION_SOUND_QUIET
 from .voice_router import Playback, VoiceRouter
 from .voice_state import (
     ACTIVE_PLAYBACK_STATES,
@@ -66,6 +67,7 @@ class SpeechSettings:
     voice_preset: str = VOICE_PRESET_DEFAULT
     keyboard_script: str = LATIN_SCRIPT
     letter_layout: str = ALL_LETTERS_LAYOUT
+    selection_sound: str = SELECTION_SOUND_QUIET
     elevenlabs_voice_id: str = field(default="", repr=False)
     elevenlabs_model_id: str = field(default=DEFAULT_MODEL, repr=False)
     elevenlabs_stability: int = ELEVENLABS_STABILITY_DEFAULT

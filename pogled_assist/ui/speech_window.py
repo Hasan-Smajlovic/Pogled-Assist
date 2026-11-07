@@ -26,6 +26,7 @@ from ..keyboard_layouts import BOSNIAN_LETTERS as BOSNIAN_LETTERS
 from ..keyboard_layouts import group_keys as _group_letters
 from ..logging_setup import get_project_root
 from ..speech.alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
+from ..speech.selection_sound import SelectionSound
 from ..speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -51,6 +52,8 @@ PHRASE_BUTTON_MIN_HEIGHT = 64
 GROUP_GRID_MAX_COLUMNS = 6
 KEYS_PER_PAGE = 12
 ALPHABET_COLUMNS = 10
+# Speaking and the alarm are their own confirmation; a tick would only cover them.
+OWN_SOUND_COMMANDS = frozenset({"play", "alarm:start", "alarm:stop"})
 
 
 class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
@@ -72,6 +75,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         library_store: SpeechLibraryStore | None = None,
         alarm_sound: AlarmSound | None = None,
         suggestions: SuggestionService | None = None,
+        selection_sound: SelectionSound | None = None,
     ) -> None:
         initial_settings = speech.settings
         if letters_per_group is not None:
@@ -98,6 +102,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._library_store = library_store or speech_library_store(get_project_root())
         self._alarm_sound = alarm_sound or AlarmSound(self)
         self._alarm_sound.failed.connect(self._alarm_failed)
+        self._selection_sound = selection_sound or SelectionSound(self)
         self._library = self._library_store.load()
         self._sync_saved_audio()
         self._list_page = 0
@@ -734,6 +739,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         else:
             self._trigger_indexed_action(command)
         self._restore_input_focus()
+        if source == "gaze" and command not in OWN_SOUND_COMMANDS:
+            self._selection_sound.play(self._speech_settings.selection_sound)
 
     def _trigger_indexed_action(self, command: str) -> None:
         kind, _, value = command.partition(":")

@@ -32,6 +32,7 @@ from .settings_limits import (
     clamp,
 )
 from .speech.elevenlabs import DEFAULT_MODEL, valid_identifier
+from .speech.selection_sound import SELECTION_SOUND_LEVELS, SELECTION_SOUND_QUIET
 from .speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESET_LABELS, SpeechSettings
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,11 @@ def _coerce_speech_settings(value: Any) -> SpeechSettings:
             settings.letter_layout
             if settings.letter_layout in dict(LETTER_LAYOUTS)
             else ALL_LETTERS_LAYOUT
+        ),
+        selection_sound=(
+            settings.selection_sound
+            if settings.selection_sound in dict(SELECTION_SOUND_LEVELS)
+            else SELECTION_SOUND_QUIET
         ),
         speed=clamp(settings.speed, SPEECH_SPEED_RANGE),
         pitch=clamp(settings.pitch, SPEECH_PITCH_RANGE),
