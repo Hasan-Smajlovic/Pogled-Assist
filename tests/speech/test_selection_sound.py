@@ -102,13 +102,20 @@ def test_without_windows_the_tick_is_silent(qtbot, monkeypatch):
     sound.play("loud")
 
 
-def test_windows_player_loads_the_bundled_tick(qtbot):
-    from PySide6.QtMultimedia import QSoundEffect
-
+def test_windows_player_uses_the_bundled_tick(qapp):
     parent = QObject()
     effect = create_real_effect(parent)
     assert effect.parent() is parent
     assert effect.source() == QUrl.fromLocalFile(str(SELECTION_SOUND_FILE))
+
+
+def test_windows_player_loads_the_bundled_tick(qtbot):
+    from PySide6.QtMultimedia import QMediaDevices, QSoundEffect
+
+    if QMediaDevices.defaultAudioOutput().isNull():
+        pytest.skip("Native selection sound loading needs an available audio output")
+    parent = QObject()
+    effect = create_real_effect(parent)
     qtbot.waitUntil(lambda: effect.status() != QSoundEffect.Status.Loading)
     assert effect.status() == QSoundEffect.Status.Ready
 

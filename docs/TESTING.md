@@ -74,6 +74,7 @@ A complete run discovers the suite, but a test can still require an unavailable 
 | Test | When it runs | What remains unproven |
 | --- | --- | --- |
 | `test_native_buffer_replacement_and_completion_keep_qt_responsive` in `tests/speech/test_audio_playback.py` | When Qt finds an audio output. A probe exits with code 77 and pytest skips it otherwise. | A passing muted, isolated native-decoder probe checks replacement/stop/completion and Qt responsiveness, not audible speech or MP3 quality. |
+| `test_windows_player_loads_the_bundled_tick` in `tests/speech/test_selection_sound.py` | When Qt finds a default audio output; pytest skips it otherwise. | Checks native loading of the bundled selection tick, not audible playback. The WAV contents and player source/ownership are checked even without an audio output. |
 | `test_gaze_logging_performance` in `tests/ui/test_gaze_performance.py` | Windows, explicit environment opt-in and `-Workers 1`. Ordinary CI does not enable it. | Software logging overhead under synthetic input, not physical Tobii latency, native input correctness or audible speech. |
 
 To run the software benchmark on the reference Windows PC, close competing workloads and use:
