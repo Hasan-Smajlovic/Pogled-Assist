@@ -137,13 +137,20 @@ def test_recovery_records_native_delivery_age_and_pretermination_process_state(
     }
 
 
-def test_live_invalid_eyes_do_not_restart_backend(active_stream):
+@pytest.mark.parametrize(
+    "backend_name", ["stream-engine", "stream-engine-x86-bridge", "tobii-research"]
+)
+def test_live_invalid_eyes_do_not_restart_backend(active_stream, backend_name):
     provider, now, stopped = active_stream
+    provider._backend_name = backend_name
     tracking = []
     provider.tracking_status_changed.connect(tracking.append)
     for _index in range(20):
         now[0] += 0.2
-        provider._on_stream_engine_eye_status(False, False, 1)
+        if backend_name == "tobii-research":
+            provider._on_gaze_data({})
+        else:
+            provider._on_stream_engine_eye_status(False, False, 1)
         provider._emit_latest_gaze_sample()
     assert stopped == []
     assert provider._running is True
@@ -205,14 +212,20 @@ def test_resumed_gaze_cannot_complete_dwell_from_before_delivery_gap(
     assert actions == ["speech"]
 
 
-def test_direct_native_outage_pauses_without_spawning_replacement(active_stream):
+@pytest.mark.parametrize("failure", [False, True])
+def test_native_outage_retries_without_bridge_process_observations(active_stream, qtbot, failure):
     provider, now, stopped = active_stream
     provider._backend_name = "stream-engine"
-    now[0] += 4
+    provider._stream_engine = SimpleNamespace(
+        stop=lambda: stopped.append(True), connection_error="disconnected" if failure else None
+    )
+    if not failure:
+        now[0] += 4
     provider._emit_latest_gaze_sample()
+    qtbot.waitUntil(provider._retry_timer.isActive)
     assert provider._last_eye_status == (False, False)
-    assert stopped == []
-    assert not provider._retry_timer.isActive()
+    assert stopped == [True]
+    assert not provider._running
 
 
 def test_delivery_gap_preserves_completed_target_repeat_lock(active_stream):

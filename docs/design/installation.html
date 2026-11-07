@@ -27,6 +27,8 @@
       <button type="button" onclick="document.getElementById('installation-note').textContent='Zatvara se provjera instalacije.'">Zatvori</button>
     </div>
     <p id="installation-note" role="status">Kalibracija je dostupna kada se pronađe Tobii softver. Greška provjere prikazuje se kao „Nije provjereno”, a ne kao odsutan uređaj.</p>
+    <!-- Experience opens its profile UI; the Core calibration route retains its
+         existing Guest shortcut. This check does not open a tracker stream. -->
   </main>
 </body>
 </html>

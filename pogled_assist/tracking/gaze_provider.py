@@ -189,8 +189,7 @@ class TobiiGazeProvider(QObject):
         self._research_callback = connection.callback
         self._backend_name = connection.name
         self._running = True
-        if connection.backend is not None:
-            self._stream_started_at = time.monotonic()
+        self._stream_started_at = time.monotonic()
         diagnostics.emit(
             "backend_metadata", priority=True, backend=connection.name, **connection.metadata
         )
@@ -433,6 +432,7 @@ class TobiiGazeProvider(QObject):
             self.tracking_status_changed.emit(status)
 
     def _on_gaze_data(self, gaze_data: dict[str, Any]) -> None:
+        self._last_stream_eye_sample_at = time.monotonic()
         self._metrics.count("research_callback")
         left = _valid_gaze_point(gaze_data, "left")
         right = _valid_gaze_point(gaze_data, "right")
@@ -736,15 +736,17 @@ class TobiiGazeProvider(QObject):
                 self._mark_stream_stale(age, failure)
             elif self._stream_stale:
                 self._mark_stream_resumed()
-            restart = self._bridge_needs_restart(age, failure)
+            restart = self._start_requested and (bool(failure) or age >= STREAM_RESTART_SECONDS)
         if restart:
-            observation = getattr(self._stream_engine, "failure_observation", None)
-            if observation is None:
-                observation = self._stream_engine.process_observation("missing_delivery")
-            diagnostics.emit("bridge_connection", priority=True, decision="recovery", **observation)
-            # This runs on the Qt thread; reader threads never stop their own backend.
-            # Only the isolated bridge can be forcibly stopped. A stalled native DLL
-            # thread must not be replaced with another live device subscription.
+            if self._backend_name == "stream-engine-x86-bridge":
+                observation = getattr(self._stream_engine, "failure_observation", None)
+                if observation is None:
+                    observation = self._stream_engine.process_observation("missing_delivery")
+                diagnostics.emit(
+                    "bridge_connection", priority=True, decision="recovery", **observation
+                )
+            # The session retains its slot until native pump shutdown/unsubscribe
+            # succeeds. A timeout never permits a second live subscription.
             self.stop()
             self._start_requested = True
             self._emit_timer.start()
@@ -757,7 +759,7 @@ class TobiiGazeProvider(QObject):
     def _stream_is_monitored(self) -> bool:
         return (
             self._running
-            and self._stream_engine is not None
+            and (self._stream_engine is not None or self._tracker is not None)
             and self._stream_started_at is not None
         )
 
@@ -784,11 +786,6 @@ class TobiiGazeProvider(QObject):
         # Publish recovery on Qt after rechecking the current connection,
         # so a queued worker status cannot overwrite a newer failure.
         self.status_changed.emit("Praćenje je aktivno. Podaci o očima ponovo stižu.")
-
-    def _bridge_needs_restart(self, age: float, failure: object) -> bool:
-        if not self._start_requested or self._backend_name != "stream-engine-x86-bridge":
-            return False
-        return bool(failure) or age >= STREAM_RESTART_SECONDS
 
     def _clear_pending_gaze_sample(self) -> None:
         with self._sample_lock:

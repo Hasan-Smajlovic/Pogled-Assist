@@ -12,12 +12,15 @@ from ctypes import wintypes
 from pathlib import Path
 
 from ..windows.windows_input import WindowsInputController
+from .tobii_device import is_eye_tracker_5
 
 logger = logging.getLogger(__name__)
 
 SW_SHOWNORMAL = 1
 SHELLEXECUTE_SUCCESS_MIN = 32
 CALIBRATION_COMMAND_ENV = "TOBII_CALIBRATION_COMMAND"
+EXPERIENCE_FAMILY = "TobiiAB.TobiiEyeTrackingPortal_j9ea20k37yd2w"
+EXPERIENCE_TARGET = f"shell:AppsFolder\\{EXPERIENCE_FAMILY}!App"
 
 _TOBII_PROTOCOLS = (
     "tobii://calibration",
@@ -48,6 +51,7 @@ _EXCLUDED_EXE_KEYWORDS = (
     "stream",
     "crash",
     "diagnostic",
+    "headless",
 )
 
 _UI_KEYWORDS = (
@@ -73,14 +77,18 @@ _PATH_KEYWORD_SCORES = (
 )
 
 
-def launch_tobii_guest_calibration() -> str:
+def launch_tobii_guest_calibration(*, device_model: str = "") -> str:
     """Open Tobii Core/Experience calibration through the installed Tobii UI."""
 
     if sys.platform != "win32":
         raise RuntimeError("Tobii kalibracija se može pokrenuti samo na Windowsu.")
 
     errors: list[str] = []
-    opened = _open_calibration_ui(errors)
+    opened = _open_calibration_ui(errors, device_model=device_model)
+    if is_eye_tracker_5(device_model) or (opened and _is_experience_target(opened)):
+        if opened:
+            return "Otvaranje Tobii postavki je zatraženo."
+        raise RuntimeError("Tobii Experience se nije otvorio. Otvorite Tobii ikonu pored sata.")
     launched_methods = [opened] if opened else []
     if _send_calibration_shortcut(errors):
         launched_methods.append("Ctrl+Shift+F10")
@@ -95,32 +103,78 @@ def launch_tobii_guest_calibration() -> str:
     )
 
 
-def launch_tobii_settings() -> str:
+def launch_tobii_settings(*, device_model: str = "") -> str:
     """Open the installed settings UI without sending the Guest shortcut."""
     if sys.platform != "win32":
         raise RuntimeError("Tobii postavke se mogu otvoriti samo na Windowsu.")
     errors: list[str] = []
-    for target in _ranked_tobii_launch_targets(settings_only=True):
-        if _shell_execute(str(target), errors):
-            logger.info("Tobii settings launch requested: %s", _short_display_path(target))
+    for target in _ordered_tobii_launch_targets(settings_only=True, device_model=device_model):
+        if _shell_execute(target, errors):
+            logger.info("Tobii settings launch requested: %s", target)
             return "Otvaranje Tobii postavki je zatraženo."
     raise RuntimeError("Tobii postavke se nisu mogle otvoriti. Otvorite Tobii ikonu pored sata.")
 
 
-def _open_calibration_ui(errors: list[str]) -> str | None:
+def _open_calibration_ui(errors: list[str], *, device_model: str = "") -> str | None:
     configured = os.environ.get(CALIBRATION_COMMAND_ENV, "").strip()
     if configured and _launch_configured_command(configured, errors):
         return CALIBRATION_COMMAND_ENV
 
-    target = _best_tobii_launch_target()
-    if target is not None and _shell_execute(str(target), errors):
-        time.sleep(1.25)
-        return _short_display_path(target)
+    for target in _ordered_tobii_launch_targets(device_model=device_model):
+        if _shell_execute(target, errors):
+            time.sleep(1.25)
+            return target
 
+    if is_eye_tracker_5(device_model):
+        return None
     uri = _first_working_protocol(errors)
     if uri:
         time.sleep(1.0)
     return uri
+
+
+def _experience_is_installed() -> bool:
+    """Query the current user's package without starting PowerShell or an app."""
+    if sys.platform != "win32":
+        return False
+    try:
+        query = ctypes.WinDLL("kernel32", use_last_error=True).GetPackagesByPackageFamily
+        query.argtypes = [
+            wintypes.LPCWSTR,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.POINTER(wintypes.LPWSTR),
+            ctypes.POINTER(ctypes.c_uint32),
+            wintypes.LPWSTR,
+        ]
+        query.restype = wintypes.LONG
+        count, length = ctypes.c_uint32(), ctypes.c_uint32()
+        status = query(EXPERIENCE_FAMILY, ctypes.byref(count), None, ctypes.byref(length), None)
+        return status in (0, 122) and count.value > 0  # ERROR_INSUFFICIENT_BUFFER
+    except (OSError, AttributeError):
+        return False
+
+
+def _ordered_tobii_launch_targets(
+    *, settings_only: bool = False, device_model: str = ""
+) -> list[str]:
+    targets = _ranked_tobii_launch_targets(settings_only=settings_only)
+    experience = [EXPERIENCE_TARGET] if _experience_is_installed() else []
+    model = "".join(character for character in device_model.lower() if character.isalnum())
+    if is_eye_tracker_5(device_model):
+        # An identified ET5 must not be handed to a coinstalled Core/Guest UI.
+        return experience + [
+            str(target) for target in targets if _is_experience_target(str(target))
+        ]
+    core_found = any(
+        target.name.lower() in _KNOWN_CONFIG_NAMES and "experience" not in target.name.lower()
+        for target in targets
+    )
+    paths = [str(target) for target in targets]
+    return paths + experience if core_found or "4c" in model else experience + paths
+
+
+def _is_experience_target(target: str) -> bool:
+    return target == EXPERIENCE_TARGET or "experience" in Path(target).stem.lower()
 
 
 def _launch_configured_command(command: str, errors: list[str]) -> bool:
@@ -295,7 +349,7 @@ def _send_calibration_shortcut(errors: list[str]) -> bool:
 
 def _looks_like_uri(value: str) -> bool:
     normalized = value.strip().lower()
-    return "://" in normalized or normalized.startswith(("ms-", "tobii:"))
+    return "://" in normalized or normalized.startswith(("ms-", "tobii:", "shell:"))
 
 
 def _short_display_path(path: Path) -> str:

@@ -149,3 +149,31 @@ def test_bridge_check_validates_without_starting_tracker(monkeypatch, capsys):
     monkeypatch.setattr(tobii_stream_engine_bridge, "TobiiStreamEngineBackend", unexpected_tracking)
     assert tobii_stream_engine_bridge.main() == 0
     assert json.loads(capsys.readouterr().out) == {"type": "checked", "python_bits": 32}
+
+
+def test_bridge_propagates_native_terminal_failure_and_closes_backend(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    closed = []
+    backend = SimpleNamespace(
+        start=lambda: None,
+        stop=lambda: closed.append(True),
+        label="synthetic",
+        dll_path="fake.dll",
+        eye_position_supported=False,
+        connection_error="synthetic connection lost",
+    )
+    monkeypatch.setattr(tobii_stream_engine_bridge, "TobiiStreamEngineBackend", lambda *_: backend)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_pointer_size", lambda: 4)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_install_signal_handlers", lambda: None)
+    monkeypatch.setattr(tobii_stream_engine_bridge, "_running", True)
+    monkeypatch.setattr(tobii_stream_engine_bridge.sys, "argv", ["bridge.py"])
+    monkeypatch.setattr(
+        tobii_stream_engine_bridge.time,
+        "sleep",
+        lambda *_: setattr(tobii_stream_engine_bridge, "_running", False),
+    )
+    assert tobii_stream_engine_bridge.main() == 3
+    assert closed == [True]
+    messages = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [message["type"] for message in messages] == ["started", "error"]

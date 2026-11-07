@@ -21,15 +21,19 @@ Pogled Assist places a toolbar at the top of the primary Windows display. It can
 
 Opening the app again keeps the existing instance and its current focus. It does not start another tracker, keyboard, or copy of the saved data.
 
-Connect and calibrate the Tobii Eye Tracker 4C with the matching Tobii software. The app tries these tracking backends in order:
+Connect and calibrate one Tobii Eye Tracker 4C or Eye Tracker 5 with its matching Tobii software. Eye Tracker 5 uses Tobii Experience; existing 4C Core installations remain supported. The app detects the attached tracker without a device selector and tries these tracking backends in order:
 
 1. Tobii Pro SDK through `tobii-research`.
 2. A directly loadable Tobii Stream Engine DLL.
 3. The optional 32-bit Python bridge for 32-bit Stream Engine installations.
 
+Eye Tracker 5 uses Stream Engine even if Pro SDK discovery lists the device; Pro SDK does not provide its gaze stream. The existing backend order remains in place for 4C.
+
 The top-right status uses an icon, color, and visible text. **Praćenje spremno** requires a connected tracker, both eyes and fresh gaze. With the experimental one-eye policy, **Odabir jednim okom** identifies usable application selection with one eye; direct desktop input still needs both. **Odabir na čekanju** identifies a selection attempt whose progress is still retained during a short interruption. When an unfinished initial pause is discarded at the full-progress deadline, the status changes to **Praćenje pauzirano**; an already completed pause can remain on hold until 500 ms total from the loss. **Praćenje pauzirano** keeps both labeled eye indicators visible: a check means valid data and a dash means no valid data. These indicate SDK validity, not physical eye closure or calibration accuracy. **Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery, and **Uređaj nije povezan** reports automatic retry. Source simulation keeps the **Simulacija uz riječ** label; its [shortcuts](UI_DEVELOPMENT.md#mouse-gaze-simulation) use synthetic input. Application selection follows the [chosen policy](#eye-tracking-policy).
 
-Missing eye-status delivery pauses input. A prolonged interruption in the x86 bridge or a closed bridge starts automatic reconnection; normal invalid-eye samples do not restart the connection. A direct native connection stays paused until fresh data returns. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
+Missing eye-status delivery pauses input. After three seconds without delivery, or a reported Stream Engine failure, the app closes the old connection and searches again. This applies to Pro SDK, direct Stream Engine and the x86 bridge. A blocked native thread or unfinished cleanup keeps input paused and prevents a second subscription; restart the app if it cannot recover. Normal invalid-eye samples do not restart the connection. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
+
+To use the spare tracker, disconnect the first and connect the replacement. Fresh data and the saved eye policy still govern input; timings and settings are not changed for the model. Calibrate the replacement in Tobii software. Automatic app discovery does not install or switch drivers: Tobii's [4C-to-5 instructions](https://help.tobii.com/hc/en-us/articles/360009708277-Upgrading-from-4C-to-ET5) require removing the older driver, and [Experience lists 4C support as beta](https://help.tobii.com/hc/en-us/articles/360002918474-Which-app-do-I-need-for-my-device). Verify the intended driver combination before relying on USB replacement as a backup procedure.
 
 The action overlay uses a steady cyan progress ring with a transparent center on application controls. It freezes with a pause mark during a hold and shows a full ring for 220 ms after confirmation. This changes feedback, not selection timing or eye eligibility.
 

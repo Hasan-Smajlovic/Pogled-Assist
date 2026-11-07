@@ -1549,15 +1549,12 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             return
         self._finalize_attempt("Otvorene Tobii postavke")
         self.reset_check()
-        self._notice.setText(
-            "U Tobii Core odaberite profil korisnika > Test and recalibrate > Recalibrate. "
-            "Vratite se ovdje i ponovite provjeru."
-        )
+        self.set_calibration_notice("Otvaram Tobii postavke…")
         self.showMinimized()
         self.calibration_requested.emit()
 
     def set_calibration_notice(self, message: str) -> None:
         self._notice.setText(
-            f"{message}\nOdaberite profil korisnika > Test and recalibrate > Recalibrate, "
-            "zatim se vratite ovdje i ponovite provjeru."
+            f"{message}\nU Tobii softveru odaberite profil korisnika i opciju za ponovnu kalibraciju. "
+            "Vratite se ovdje i ponovite provjeru."
         )

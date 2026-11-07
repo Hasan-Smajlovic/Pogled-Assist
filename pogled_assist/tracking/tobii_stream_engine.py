@@ -9,13 +9,13 @@ import math
 import os
 import sys
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 TOBII_ERROR_NO_ERROR = 0
+TOBII_ERROR_TIMED_OUT = 6
 TOBII_VALIDITY_VALID = 1
 CALLBACK_POLL_INTERVAL_SECONDS = 1 / 120
 
@@ -27,7 +27,7 @@ DLL_NAMES = (
 DLL_ENV = "TOBII_STREAM_ENGINE_DLL"
 APP_ROOT_ENV = "POGLED_ASSIST_APP_ROOT"
 DEVICE_CREATE_ARG_ENV = "TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS"
-FIELD_OF_USE_INTERACTIVE = 0
+FIELD_OF_USE_INTERACTIVE = 1
 
 GazeCallback = Callable[[float, float, int], None]
 EyeStatusCallback = Callable[[bool, bool, int], None]
@@ -134,6 +134,16 @@ class TobiiStreamEngineBackend:
         self._eye_sample_count = 0
         self._eye_position_api_available = False
         self._gaze_origin_api_available = False
+        self._api_version: tuple[int, int, int, int] | None = None
+        self._connection_error: str | None = None
+        self._last_cleanup_failure: tuple[str, int] | None = None
+
+    @property
+    def connection_error(self) -> str | None:
+        return self._connection_error
+
+    def request_stop(self) -> None:
+        self._stop_event.set()
 
     @property
     def eye_position_supported(self) -> bool:
@@ -148,47 +158,63 @@ class TobiiStreamEngineBackend:
         return self._dll_path
 
     def start(self) -> None:
-        try:
-            self._lib, self._dll_path = _load_stream_engine_library()
-            self._configure_signatures()
-            self._log_version()
-            self._create_api()
-            self._device_url = self._find_device_url()
-            self._create_device()
-            self._device_label = self._read_device_label()
-            self._subscribe()
-            self._start_pump_thread()
+        errors = []
+        for self._lib, self._dll_path in _stream_engine_libraries():
+            if self._stop_event.is_set():
+                raise TobiiStreamEngineError("Stream Engine startup cancelled.")
+            self._api_version = None
+            self._eye_position_api_available = False
+            self._gaze_origin_api_available = False
+            self.diagnostic_metadata = {"eye_validity_source": "unknown"}
+            try:
+                self._configure_signatures()
+                self._log_version()
+                self._create_api()
+                self._device_url = self._find_device_url()
+                self._create_device()
+                self._device_label = self._read_device_label()
+                self._subscribe()
+                self._start_pump_thread()
+            except Exception as exc:
+                errors.append(f"{self._dll_path}: {exc}")
+                cleaned = self.stop() if self._thread is not None else self._destroy_resources()
+                if not cleaned:
+                    raise TobiiStreamEngineError(
+                        "Stream Engine startup failed and cleanup is still pending."
+                    ) from exc
+                logger.warning("Tobii runtime candidate failed: %s", errors[-1])
+                continue
             logger.info(
                 "Tobii Stream Engine backend started with %s via %s.",
                 self._device_label,
                 self._dll_path,
             )
-        except Exception:
-            self._destroy_resources()
-            raise
+            return
+        raise TobiiStreamEngineError("No usable Stream Engine runtime: " + "; ".join(errors))
 
     def stop(self) -> bool:
         self._stop_event.set()
         if self._thread is not None:
-            self._thread.join(timeout=1.5)
+            if self._thread.is_alive():
+                self._thread.join(timeout=1.5)
             if self._thread.is_alive():
                 logger.warning("Tobii Stream Engine pump thread did not stop cleanly.")
                 return False
             self._thread = None
 
-        self._destroy_resources()
+        if not self._destroy_resources():
+            return False
         logger.info("Tobii Stream Engine backend stopped.")
         return True
 
-    def _destroy_resources(self) -> None:
+    def _destroy_resources(self) -> bool:
         if self._lib is None:
-            return
-        if self._device:
-            self._destroy_device()
-        if self._api:
-            self._destroy_api()
+            return True
+        if self._device and not self._destroy_device():
+            return False
+        return not self._api or self._destroy_api()
 
-    def _destroy_device(self) -> None:
+    def _destroy_device(self) -> bool:
         assert self._lib is not None
         with contextlib.suppress(Exception):
             self._lib.tobii_eye_position_normalized_unsubscribe(self._device)
@@ -200,18 +226,39 @@ class TobiiStreamEngineBackend:
             self._lib.tobii_gaze_point_unsubscribe(self._device)
 
         try:
-            self._lib.tobii_device_destroy(self._device)
+            status = self._lib.tobii_device_destroy(self._device)
+            if not self._cleanup_succeeded("device", status):
+                return False
         except Exception:
             logger.exception("Tobii Stream Engine device destroy failed.")
+            return False
         self._device = ctypes.c_void_p()
+        self._eye_position_receiver = None
+        self._gaze_origin_receiver = None
+        self._gaze_receiver = None
+        return True
 
-    def _destroy_api(self) -> None:
+    def _destroy_api(self) -> bool:
         assert self._lib is not None
         try:
-            self._lib.tobii_api_destroy(self._api)
+            status = self._lib.tobii_api_destroy(self._api)
+            if not self._cleanup_succeeded("API", status):
+                return False
         except Exception:
             logger.exception("Tobii Stream Engine API destroy failed.")
+            return False
         self._api = ctypes.c_void_p()
+        return True
+
+    def _cleanup_succeeded(self, resource: str, status: int) -> bool:
+        if status == TOBII_ERROR_NO_ERROR:
+            self._last_cleanup_failure = None
+            return True
+        failure = (resource, status)
+        if failure != self._last_cleanup_failure:
+            logger.warning("Stream Engine %s cleanup pending: %s", resource, self._error(status))
+            self._last_cleanup_failure = failure
+        return False
 
     def _configure_signatures(self) -> None:
         assert self._lib is not None
@@ -219,8 +266,9 @@ class TobiiStreamEngineBackend:
         self._lib.tobii_error_message.argtypes = [ctypes.c_uint32]
         self._lib.tobii_error_message.restype = ctypes.c_char_p
 
-        self._lib.tobii_get_api_version.argtypes = [ctypes.POINTER(TobiiVersion)]
-        self._lib.tobii_get_api_version.restype = ctypes.c_uint32
+        with contextlib.suppress(AttributeError):
+            self._lib.tobii_get_api_version.argtypes = [ctypes.POINTER(TobiiVersion)]
+            self._lib.tobii_get_api_version.restype = ctypes.c_uint32
 
         self._lib.tobii_api_create.argtypes = [
             ctypes.POINTER(ctypes.c_void_p),
@@ -239,11 +287,8 @@ class TobiiStreamEngineBackend:
         ]
         self._lib.tobii_enumerate_local_device_urls.restype = ctypes.c_uint32
 
-        # Stream Engine versions differ here. Some expose:
-        #   tobii_device_create(api, url, device)
-        # and consumer builds commonly expose:
-        #   tobii_device_create(api, url, field_of_use, device)
-        # Keep argtypes unset and choose call shapes in _create_device.
+        # The exact device-create signature is selected after reading the API
+        # version. A wrong-arity native call can corrupt memory before returning.
         self._lib.tobii_device_create.restype = ctypes.c_uint32
 
         self._lib.tobii_device_destroy.argtypes = [ctypes.c_void_p]
@@ -304,8 +349,13 @@ class TobiiStreamEngineBackend:
         assert self._lib is not None
 
         version = TobiiVersion()
-        status = self._lib.tobii_get_api_version(ctypes.byref(version))
+        try:
+            status = self._lib.tobii_get_api_version(ctypes.byref(version))
+        except AttributeError:
+            logger.warning("Stream Engine API version is unavailable.")
+            return
         if status == TOBII_ERROR_NO_ERROR:
+            self._api_version = (version.major, version.minor, version.revision, version.build)
             self.diagnostic_metadata["sdk_version"] = (
                 f"{version.major}.{version.minor}.{version.revision}.{version.build}"
             )
@@ -356,35 +406,17 @@ class TobiiStreamEngineBackend:
         assert self._lib is not None
 
         url = self._device_url.encode("utf-8")
-        errors: list[str] = []
-
-        for arg_count in _device_create_arg_counts():
-            device = ctypes.c_void_p()
-            logger.info("Trying tobii_device_create with %s arguments.", arg_count)
-            if arg_count == "4":
-                status = self._lib.tobii_device_create(
-                    self._api,
-                    ctypes.c_char_p(url),
-                    ctypes.c_uint32(FIELD_OF_USE_INTERACTIVE),
-                    ctypes.byref(device),
-                )
-            else:
-                status = self._lib.tobii_device_create(
-                    self._api,
-                    ctypes.c_char_p(url),
-                    ctypes.byref(device),
-                )
-
-            if status == TOBII_ERROR_NO_ERROR and device:
-                self._device = device
-                return
-
-            errors.append(f"{arg_count} args: {self._error(status)}")
-            logger.warning(
-                "tobii_device_create with %s arguments failed: %s", arg_count, self._error(status)
-            )
-
-        raise TobiiStreamEngineError(f"tobii_device_create failed: {'; '.join(errors)}")
+        arg_count = _device_create_arg_counts(self._api_version)[0]
+        arguments = [self._api, ctypes.c_char_p(url)]
+        signature = [ctypes.c_void_p, ctypes.c_char_p]
+        if arg_count == "4":
+            arguments.append(ctypes.c_uint32(FIELD_OF_USE_INTERACTIVE))
+            signature.append(ctypes.c_uint32)
+        signature.append(ctypes.POINTER(ctypes.c_void_p))
+        self._lib.tobii_device_create.argtypes = signature
+        status = self._lib.tobii_device_create(*arguments, ctypes.byref(self._device))
+        if status != TOBII_ERROR_NO_ERROR or not self._device:
+            raise TobiiStreamEngineError(f"tobii_device_create failed: {self._error(status)}")
 
     def _read_device_label(self) -> str:
         assert self._lib is not None
@@ -569,12 +601,22 @@ class TobiiStreamEngineBackend:
 
         logger.info("Tobii Stream Engine callback pump started.")
         while not self._stop_event.is_set():
-            status = self._lib.tobii_device_process_callbacks(self._device)
-            if status != TOBII_ERROR_NO_ERROR:
-                logger.warning("Stream Engine callback processing failed: %s", self._error(status))
-                time.sleep(0.25)
-            else:
-                time.sleep(CALLBACK_POLL_INTERVAL_SECONDS)
+            try:
+                status = self._lib.tobii_device_process_callbacks(self._device)
+            except Exception:
+                logger.exception("Stream Engine callback processing raised an exception.")
+                self._connection_error = "Stream Engine callback processing failed."
+                break
+            if status not in (TOBII_ERROR_NO_ERROR, TOBII_ERROR_TIMED_OUT):
+                self._connection_error = (
+                    f"Stream Engine callback processing failed: {self._error(status)}"
+                )
+                logger.warning("%s", self._connection_error)
+                break
+            self._stop_event.wait(CALLBACK_POLL_INTERVAL_SECONDS)
+
+        if self._connection_error is not None and not self._stop_event.is_set():
+            self._eye_status_callback(False, False, 0)
 
         logger.info("Tobii Stream Engine callback pump stopped.")
 
@@ -615,28 +657,23 @@ def finite_eye_position(value: object, validity: object = 1) -> EyePosition | No
     return xyz if all(math.isfinite(component) for component in xyz) else None
 
 
-def _load_stream_engine_library() -> tuple[ctypes.CDLL, str]:
+def _stream_engine_libraries():
     errors: list[str] = []
     for candidate in _stream_engine_candidates():
         try:
             logger.info("Trying Tobii Stream Engine DLL: %s", candidate)
-            return _load_candidate_dll(candidate), str(candidate)
+            yield _load_candidate_dll(candidate), str(candidate)
         except OSError as exc:
             errors.append(f"{candidate}: {exc}")
 
     for dll_name in DLL_NAMES:
         try:
             logger.info("Trying Tobii Stream Engine DLL from loader path: %s", dll_name)
-            return ctypes.CDLL(dll_name), dll_name
+            yield ctypes.CDLL(dll_name), dll_name
         except OSError as exc:
             errors.append(f"{dll_name}: {exc}")
 
     logger.warning("Tobii Stream Engine DLL load attempts failed: %s", errors)
-    raise TobiiStreamEngineError(
-        "tobii_stream_engine.dll could not be loaded by this Python process. "
-        "If the log includes WinError 193, the installed Tobii DLL is 32-bit and "
-        "the x86 bridge runtime is required. Rerun setup_windows.ps1."
-    )
 
 
 def app_root() -> Path:
@@ -699,12 +736,22 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def _device_create_arg_counts() -> list[str]:
+def _device_create_arg_counts(version: tuple[int, int, int, int] | None = None) -> list[str]:
     configured = os.environ.get(DEVICE_CREATE_ARG_ENV, "").strip()
     if configured in ("3", "4"):
         return [configured]
 
-    return ["4", "3"]
+    if configured:
+        raise TobiiStreamEngineError(f"{DEVICE_CREATE_ARG_ENV} must be 3 or 4.")
+    if version is not None and all(value >= 0 for value in version):
+        if version[0] in (1, 2, 3):
+            return ["3"]
+        if version[0] == 4:
+            return ["4"]
+    raise TobiiStreamEngineError(
+        "Unknown Stream Engine device-create ABI. Configure "
+        f"{DEVICE_CREATE_ARG_ENV}=3 or 4 only from the matching SDK documentation."
+    )
 
 
 def _load_candidate_dll(candidate: Path) -> ctypes.CDLL:

@@ -14,6 +14,85 @@ from pogled_assist.tracking.gaze_provider import TobiiGazeProvider
 from pogled_assist.tracking.status import TrackingState
 
 
+@pytest.mark.parametrize(
+    ("model", "device_name", "native_fails", "expected_backend"),
+    [
+        ("IS5_Large_Eyetracker_5", "", False, "stream-engine"),
+        ("Tobii Eye Tracker 5", "", False, "stream-engine"),
+        ("Eye Tracker 5", "", True, "stream-engine-x86-bridge"),
+        ("", "Eye Tracker 5", False, "stream-engine"),
+        ("Eye Tracker 4C", "", False, "tobii-research"),
+        ("Eye Tracker 4C", "Eye Tracker 5", False, "tobii-research"),
+        ("Tobii Pro Fusion", "", False, "tobii-research"),
+        ("Tobii Pro Fusion", "Eye Tracker 5", False, "tobii-research"),
+        ("IS5_Large_Eyetracker_5", "Eye Tracker 4C", False, "stream-engine"),
+        ("unknown", "", False, "tobii-research"),
+    ],
+)
+def test_discovered_et5_uses_stream_engine_while_legacy_research_path_is_preserved(
+    qtbot, monkeypatch, model, device_name, native_fails, expected_backend
+):
+    subscriptions = []
+    callbacks = {}
+    tracker = SimpleNamespace(
+        model=model,
+        device_name=device_name,
+        subscribe_to=lambda _event, callback, **_kwargs: subscriptions.append(callback),
+        unsubscribe_from=lambda *_: None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tobii_research",
+        SimpleNamespace(find_all_eyetrackers=lambda: [tracker], EYETRACKER_GAZE_DATA="gaze"),
+    )
+
+    def backend(name):
+        def create(gaze, eyes):
+            callbacks[name] = lambda: (eyes(True, True, 1), gaze(0.5, 0.5, 1))
+
+            def start():
+                if name == "stream-engine" and native_fails:
+                    raise RuntimeError("synthetic native startup failure")
+
+            return SimpleNamespace(start=start, stop=lambda: True, label="Eye Tracker 5")
+
+        return create
+
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", backend("stream-engine"))
+    monkeypatch.setattr(
+        gaze_provider,
+        "TobiiStreamEngineBridgeBackend",
+        backend("stream-engine-x86-bridge"),
+    )
+    provider = TobiiGazeProvider()
+    samples = []
+    provider.gaze_updated.connect(lambda *sample: samples.append(sample))
+    try:
+        provider.start()
+        qtbot.waitUntil(lambda: provider._running)
+        assert provider._backend_name == expected_backend
+        if expected_backend == "tobii-research":
+            assert len(subscriptions) == 1
+            assert callbacks == {}
+            subscriptions[0](
+                {
+                    "left_gaze_point_validity": 1,
+                    "left_gaze_point_on_display_area": (0.5, 0.5),
+                    "right_gaze_point_validity": 1,
+                    "right_gaze_point_on_display_area": (0.5, 0.5),
+                }
+            )
+        else:
+            assert subscriptions == []
+            callbacks[expected_backend]()
+        provider._emit_latest_gaze_sample()
+        assert len(samples) == 1
+        assert provider._last_stream_eye_sample_at is not None
+    finally:
+        provider.stop()
+        qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
 @pytest.mark.parametrize("phase", ["discovery", "native", "bridge"])
 def test_startup_waits_leave_qt_events_responsive(qtbot, monkeypatch, phase):
     release = threading.Event()
@@ -186,6 +265,86 @@ def test_native_cleanup_must_finish_before_a_new_subscription(qtbot, monkeypatch
         assert started == [True, True]
     finally:
         released.set()
+        provider.stop()
+        qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
+@pytest.mark.parametrize("backend_name", ["research", "native"])
+def test_device_replacement_waits_for_cleanup_and_discards_old_callbacks(
+    qtbot, monkeypatch, backend_name
+):
+    from _clock import freeze_monotonic
+
+    now = freeze_monotonic(monkeypatch, 10.0)
+    release = threading.Event()
+    closing = threading.Event()
+    callbacks = []
+    starts = []
+    connected = [True]
+
+    def cleanup(*_):
+        closing.set()
+        return release.is_set()
+
+    def unsubscribe(*_):
+        closing.set()
+        if not release.is_set():
+            raise RuntimeError("synthetic unsubscribe still busy")
+
+    tracker = SimpleNamespace(
+        model="Eye Tracker 4C",
+        subscribe_to=lambda _event, callback, **_kwargs: callbacks.append(callback),
+        unsubscribe_from=unsubscribe,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tobii_research",
+        SimpleNamespace(
+            find_all_eyetrackers=lambda: (
+                [tracker] if backend_name == "research" and connected[0] else []
+            ),
+            EYETRACKER_GAZE_DATA="gaze",
+        ),
+    )
+
+    def native(gaze, eyes):
+        is_old = connected[0]
+        callbacks.append(lambda *_: (eyes(True, True, 1), gaze(0.5, 0.5, 1)))
+        return SimpleNamespace(
+            label="Eye Tracker 4C" if is_old else "Eye Tracker 5",
+            start=lambda: starts.append(is_old),
+            stop=cleanup if is_old else lambda: True,
+        )
+
+    monkeypatch.setattr(gaze_provider, "TobiiStreamEngineBackend", native)
+    provider = TobiiGazeProvider()
+    emitted = []
+    provider.gaze_updated.connect(lambda *sample: emitted.append(sample))
+    try:
+        provider.start()
+        qtbot.waitUntil(lambda: provider._running)
+        old_callback = callbacks[-1]
+        connected[0] = False
+        now[0] += 3.1
+        provider._check_stream_health()
+        qtbot.waitUntil(closing.is_set)
+        provider._attempt_start()
+        old_callback({})
+        assert emitted == []
+        assert not provider._running
+        assert starts == ([] if backend_name == "research" else [True])
+        release.set()
+        qtbot.waitUntil(provider._retry_timer.isActive)
+        provider._retry_timer.stop()
+        provider._attempt_start()
+        qtbot.waitUntil(lambda: provider._running)
+        assert provider._tracking_status.detail == "Eye Tracker 5"
+        old_callback({})
+        assert provider._pending_gaze_sample is None
+        callbacks[-1]()
+        assert provider._pending_gaze_sample is not None
+    finally:
+        release.set()
         provider.stop()
         qtbot.waitUntil(lambda: provider._connection_session is None)
 

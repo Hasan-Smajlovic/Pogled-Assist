@@ -26,12 +26,17 @@ class FakeFunction:
 
 
 class FakeLibrary:
-    def __init__(self):
+    def __init__(self, *, create_args=4, field_of_use=1, version=(4, 25, 0, 3), missing=()):
         self.calls = []
         self.errors = {}
         self.functions = {}
         self.callbacks = {}
+        self.create_args = create_args
+        self.field_of_use = field_of_use
+        self.version = version
+        self.missing = set(missing)
         self.effects = {
+            "tobii_get_api_version": self.get_version,
             "tobii_api_create": self.create_api,
             "tobii_enumerate_local_device_urls": self.enumerate_urls,
             "tobii_device_create": self.create_device,
@@ -42,7 +47,7 @@ class FakeLibrary:
         }
 
     def __getattr__(self, name):
-        if not name.startswith("tobii_"):
+        if not name.startswith("tobii_") or name in self.missing:
             raise AttributeError(name)
         if name not in self.functions:
             self.functions[name] = FakeFunction(self, name)
@@ -52,11 +57,19 @@ class FakeLibrary:
         ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p)).contents.value = 10
         return 0
 
+    def get_version(self, output):
+        version = ctypes.cast(output, ctypes.POINTER(engine.TobiiVersion)).contents
+        version.major, version.minor, version.revision, version.build = self.version
+        return 0
+
     def enumerate_urls(self, _api, receiver, _user_data):
         receiver(b"tobii://synthetic-device", None)
         return 0
 
     def create_device(self, *arguments):
+        assert len(arguments) == self.create_args, "The native ABI must be chosen before calling"
+        if self.create_args == 4:
+            assert arguments[2].value == self.field_of_use
         ctypes.cast(arguments[-1], ctypes.POINTER(ctypes.c_void_p)).contents.value = 20
         return 0
 
@@ -80,8 +93,8 @@ def native_backend(monkeypatch):
     backend = engine.TobiiStreamEngineBackend(
         lambda *sample: gaze.append(sample), lambda *sample: eyes.append(sample)
     )
-    monkeypatch.setattr(engine, "_load_stream_engine_library", lambda: (library, "fake.dll"))
-    monkeypatch.setattr(engine, "_device_create_arg_counts", lambda: ("4", "3"))
+    monkeypatch.delenv(engine.DEVICE_CREATE_ARG_ENV, raising=False)
+    monkeypatch.setattr(engine, "_stream_engine_libraries", lambda: iter([(library, "fake.dll")]))
     monkeypatch.setattr(backend, "_start_pump_thread", lambda: library.calls.append("pump"))
     yield backend, library, gaze, eyes
     backend._thread = None
@@ -315,3 +328,193 @@ def test_native_stop_keeps_resources_while_callback_thread_is_still_running(nati
     assert backend._api.value == 10
     assert backend._device.value == 20
     assert library.calls == calls
+
+
+@pytest.mark.parametrize(
+    "version,arity",
+    [((1, 1, 1, 1741), 3), ((2, 2, 2, 3002), 3), ((3, 0, 4, 6031), 3), ((4, 0, 0, 16), 4)],
+)
+def test_sdk_major_selects_one_exact_legacy_or_modern_abi(native_backend, version, arity):
+    backend, library, _gaze, _eyes = native_backend
+    library.version = version
+    library.create_args = arity
+    backend.start()
+    assert library.calls.count("tobii_device_create") == 1
+    assert len(library.tobii_device_create.argtypes) == arity
+    assert library.tobii_device_create.argtypes[-1] == ctypes.POINTER(ctypes.c_void_p)
+
+
+@pytest.mark.parametrize("version", [(0, 0, 0, 0), (5, 0, 0, 0), (4, -1, 0, 0)])
+def test_unknown_or_malformed_sdk_never_calls_device_create(native_backend, version):
+    backend, library, _gaze, _eyes = native_backend
+    library.version = version
+    with pytest.raises(engine.TobiiStreamEngineError, match="Unknown Stream Engine"):
+        backend.start()
+    assert "tobii_device_create" not in library.calls
+
+
+@pytest.mark.parametrize("arity", [3, 4])
+def test_explicit_abi_override_is_authoritative(native_backend, monkeypatch, arity):
+    backend, library, _gaze, _eyes = native_backend
+    library.version = (99, 0, 0, 0)
+    library.create_args = arity
+    monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, str(arity))
+    backend.start()
+    assert len(library.tobii_device_create.argtypes) == arity
+
+
+@pytest.mark.parametrize("override", [None, "3"])
+def test_missing_sdk_version_requires_an_explicit_abi(native_backend, monkeypatch, override):
+    backend, library, _gaze, _eyes = native_backend
+    library.missing.add("tobii_get_api_version")
+    if override:
+        library.create_args = 3
+        monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, override)
+        backend.start()
+    else:
+        with pytest.raises(engine.TobiiStreamEngineError, match="Unknown Stream Engine"):
+            backend.start()
+        assert "tobii_device_create" not in library.calls
+
+
+def test_failed_version_read_and_device_error_do_not_probe_another_abi(native_backend):
+    backend, library, _gaze, _eyes = native_backend
+    library.errors["tobii_get_api_version"] = 1
+    with pytest.raises(engine.TobiiStreamEngineError, match="Unknown Stream Engine"):
+        backend.start()
+    assert "tobii_device_create" not in library.calls
+    library.errors.clear()
+    library.errors["tobii_device_create"] = 5
+    with pytest.raises(engine.TobiiStreamEngineError):
+        backend.start()
+    assert library.calls.count("tobii_device_create") == 1
+
+
+@pytest.mark.parametrize("resource", ["device", "api"])
+def test_failed_native_destroy_retains_ownership_until_success(native_backend, resource):
+    backend, library, _gaze, _eyes = native_backend
+    backend.start()
+    library.errors[f"tobii_{resource}_destroy"] = 1
+    assert backend.stop() is False
+    assert backend._api
+    if resource == "device":
+        assert backend._device
+        assert "tobii_api_destroy" not in library.calls
+    library.errors.clear()
+    assert backend.stop() is True
+    assert not backend._device and not backend._api
+
+
+def test_pending_cleanup_reports_only_changed_sdk_failures(native_backend, caplog):
+    backend, library, _gaze, _eyes = native_backend
+    backend.start()
+    caplog.clear()
+    library.errors["tobii_device_destroy"] = 1
+    assert backend.stop() is False
+    assert backend.stop() is False
+    warnings = [record for record in caplog.records if "cleanup pending" in record.message]
+    assert len(warnings) == 1
+    library.errors.clear()
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_native_pump_reports_terminal_failure_and_invalidates_eyes(native_backend, raises):
+    backend, library, _gaze, eyes = native_backend
+    backend.start()
+
+    def fail(_device):
+        if raises:
+            raise OSError("synthetic native failure")
+        return 5
+
+    library.effects["tobii_device_process_callbacks"] = fail
+    backend._pump_loop()
+    assert backend.connection_error
+    assert eyes == [(False, False, 0)]
+    assert library.calls.count("tobii_device_process_callbacks") == 1
+
+
+def test_native_pump_timeout_is_not_a_terminal_connection_failure(native_backend):
+    backend, library, _gaze, eyes = native_backend
+    backend.start()
+    statuses = iter([6, 0])
+
+    def process(_device):
+        status = next(statuses)
+        if status == 0:
+            backend.request_stop()
+        return status
+
+    library.effects["tobii_device_process_callbacks"] = process
+    backend._pump_loop()
+    assert backend.connection_error is None
+    assert eyes == []
+    assert library.calls.count("tobii_device_process_callbacks") == 2
+
+
+@pytest.mark.parametrize("failure", ["device", "eyes", "exports"])
+def test_unusable_preserved_runtime_is_cleaned_before_installed_candidate(
+    native_backend, monkeypatch, failure
+):
+    backend, old, _gaze, _eyes = native_backend
+    new = FakeLibrary()
+    if failure == "device":
+        old.errors["tobii_device_create"] = 5
+    elif failure == "eyes":
+        old.errors.update(tobii_eye_position_normalized_subscribe=3, tobii_gaze_origin_subscribe=3)
+    else:
+        old.missing.add("tobii_gaze_point_subscribe")
+    started = []
+
+    def candidates():
+        yield old, "preserved.dll"
+        assert not backend._device and not backend._api
+        started.append(True)
+        yield new, "installed.dll"
+
+    monkeypatch.setattr(engine, "_stream_engine_libraries", candidates)
+    backend.start()
+    assert started == [True]
+    assert backend.dll_path == "installed.dll"
+    assert new.calls.count("tobii_device_create") == 1
+
+
+def test_candidate_cleanup_failure_blocks_every_later_runtime(native_backend, monkeypatch):
+    backend, old, _gaze, _eyes = native_backend
+    old.errors.update(tobii_gaze_point_subscribe=3, tobii_device_destroy=1)
+    new = FakeLibrary()
+    monkeypatch.setattr(
+        engine, "_stream_engine_libraries", lambda: iter([(old, "old.dll"), (new, "new.dll")])
+    )
+    with pytest.raises(engine.TobiiStreamEngineError, match="cleanup is still pending"):
+        backend.start()
+    assert new.calls == []
+    old.errors.clear()
+
+
+def test_pump_start_failure_releases_partial_device(native_backend, monkeypatch):
+    backend, _library, _gaze, _eyes = native_backend
+
+    def fail():
+        raise RuntimeError("synthetic thread start failed")
+
+    monkeypatch.setattr(backend, "_start_pump_thread", fail)
+    with pytest.raises(engine.TobiiStreamEngineError):
+        backend.start()
+    assert not backend._device and not backend._api
+
+
+def test_loader_skips_wrong_bitness_before_yielding_a_usable_dll(monkeypatch, tmp_path):
+    old, current = tmp_path / "x86.dll", tmp_path / "x64.dll"
+    library = FakeLibrary()
+    monkeypatch.setattr(engine, "_stream_engine_candidates", lambda: [old, current])
+
+    def load(path):
+        if path == old:
+            raise OSError("WinError 193: wrong bitness")
+        return library
+
+    monkeypatch.setattr(engine, "_load_candidate_dll", load)
+    candidates = engine._stream_engine_libraries()
+    assert next(candidates) == (library, str(current))
+    candidates.close()

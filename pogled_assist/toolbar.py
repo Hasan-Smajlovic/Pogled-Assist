@@ -1055,7 +1055,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
             diagnostics.emit(
                 "gaze_check_handoff", priority=True, action="tobii_settings", outcome="requested"
             )
-            message = launch_tobii_settings()
+            message = launch_tobii_settings(
+                device_model=self._gaze.check_environment().get("model") or ""
+            )
             diagnostics.emit(
                 "gaze_check_handoff",
                 priority=True,
@@ -1275,7 +1277,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._interaction_overlay.clear()
 
         try:
-            message = launch_tobii_guest_calibration()
+            message = launch_tobii_guest_calibration(
+                device_model=self._gaze.check_environment().get("model") or ""
+            )
             self._set_status(message)
             if self._settings_window is not None:
                 self._settings_window.set_status(message)

@@ -54,7 +54,8 @@ def test_stream_engine_candidates_use_packaged_app_root(monkeypatch, tmp_path):
 
 def test_stream_engine_argument_order_and_decode(monkeypatch):
     monkeypatch.delenv("TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS", raising=False)
-    assert _device_create_arg_counts() == ["4", "3"]
+    assert _device_create_arg_counts((4, 25, 0, 3)) == ["4"]
+    assert _device_create_arg_counts((1, 1, 1, 1741)) == ["3"]
     monkeypatch.setenv("TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS", "3")
     assert _device_create_arg_counts() == ["3"]
 
