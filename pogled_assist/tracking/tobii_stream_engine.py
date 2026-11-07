@@ -406,10 +406,10 @@ class TobiiStreamEngineBackend:
         assert self._lib is not None
 
         url = self._device_url.encode("utf-8")
-        arg_count = _device_create_arg_counts(self._api_version)[0]
+        arg_count = _device_create_arg_count(self._api_version)
         arguments = [self._api, ctypes.c_char_p(url)]
         signature = [ctypes.c_void_p, ctypes.c_char_p]
-        if arg_count == "4":
+        if arg_count == 4:
             arguments.append(ctypes.c_uint32(FIELD_OF_USE_INTERACTIVE))
             signature.append(ctypes.c_uint32)
         signature.append(ctypes.POINTER(ctypes.c_void_p))
@@ -736,18 +736,25 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
     return unique
 
 
-def _device_create_arg_counts(version: tuple[int, int, int, int] | None = None) -> list[str]:
+def _device_create_arg_count(version: tuple[int, int, int, int] | None = None) -> int:
     configured = os.environ.get(DEVICE_CREATE_ARG_ENV, "").strip()
-    if configured in ("3", "4"):
-        return [configured]
-
-    if configured:
+    if configured not in ("", "3", "4"):
         raise TobiiStreamEngineError(f"{DEVICE_CREATE_ARG_ENV} must be 3 or 4.")
+
+    known = None
     if version is not None and all(value >= 0 for value in version):
-        if version[0] in (1, 2, 3):
-            return ["3"]
-        if version[0] == 4:
-            return ["4"]
+        known = 3 if version[0] in (1, 2, 3) else 4 if version[0] == 4 else None
+    if known is not None:
+        # The override applies to every runtime candidate, so it may only fill in
+        # an unknown ABI, never contradict the version this DLL reports.
+        if configured and int(configured) != known:
+            raise TobiiStreamEngineError(
+                f"{DEVICE_CREATE_ARG_ENV}={configured} conflicts with Stream Engine "
+                f"API major {version[0]}, which takes {known} device-create arguments."
+            )
+        return known
+    if configured:
+        return int(configured)
     raise TobiiStreamEngineError(
         "Unknown Stream Engine device-create ABI. Configure "
         f"{DEVICE_CREATE_ARG_ENV}=3 or 4 only from the matching SDK documentation."

@@ -107,8 +107,9 @@
         </section>
         <section class="settings-control-group" aria-labelledby="calibration-actions-title"><h3 id="calibration-actions-title">Kalibracija i provjera</h3>
           <button type="button">Pokreni Tobii kalibraciju</button>
-          <!-- Core retains its Guest shortcut. Eye Tracker 5 opens the installed
-               Experience app for profile calibration without sending that shortcut. -->
+          <!-- Eye Tracker 5, or an unknown model with Experience installed, opens
+               Experience for profile calibration without the Guest shortcut. Another
+               connected tracker opens Core first, which retains that shortcut. -->
           <button type="button" data-open-view="gaze-check">Provjera pogleda</button>
         </section>
         </div>

@@ -11,7 +11,7 @@ from pogled_assist.tracking.tobii_calibration import _looks_like_uri, _target_sc
 from pogled_assist.tracking.tobii_stream_engine import (
     APP_ROOT_ENV,
     _decode_char_array,
-    _device_create_arg_counts,
+    _device_create_arg_count,
     _stream_engine_candidates,
 )
 from pogled_assist.tracking.tobii_stream_engine_bridge_backend import _prepend_pythonpath
@@ -54,10 +54,10 @@ def test_stream_engine_candidates_use_packaged_app_root(monkeypatch, tmp_path):
 
 def test_stream_engine_argument_order_and_decode(monkeypatch):
     monkeypatch.delenv("TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS", raising=False)
-    assert _device_create_arg_counts((4, 25, 0, 3)) == ["4"]
-    assert _device_create_arg_counts((1, 1, 1, 1741)) == ["3"]
+    assert _device_create_arg_count((4, 25, 0, 3)) == 4
+    assert _device_create_arg_count((1, 1, 1, 1741)) == 3
     monkeypatch.setenv("TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS", "3")
-    assert _device_create_arg_counts() == ["3"]
+    assert _device_create_arg_count() == 3
 
     value = (ctypes.c_char * 8)(*b"Tobii\0\0\0")
     assert _decode_char_array(value) == "Tobii"

@@ -43,6 +43,7 @@ def test_eye_tracker_5_activates_experience_without_guest_shortcut(monkeypatch, 
 
 
 def test_core_stays_first_when_experience_is_also_installed(monkeypatch):
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
     monkeypatch.setattr(calibration, "_experience_is_installed", lambda: True)
     monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
     core = Path("Tobii.EyeX.Config.exe")
@@ -80,7 +81,61 @@ def test_experience_file_target_never_sends_core_guest_shortcut(monkeypatch, mod
     assert launches == [str(target)]
 
 
+@pytest.mark.parametrize("guest", [False, True])
+def test_unknown_model_prefers_installed_experience_over_core(monkeypatch, guest):
+    # Eye Tracker 5 is the primary device. Without an identified model, for example
+    # in the installation check or during reconnection, Experience opens first.
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
+    monkeypatch.setattr(calibration, "_experience_is_installed", lambda: True)
+    monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
+    core = Path("Tobii.EyeX.Config.exe")
+    monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [core])
+    monkeypatch.setattr(calibration.time, "sleep", lambda *_: None)
+    monkeypatch.delenv(calibration.CALIBRATION_COMMAND_ENV, raising=False)
+    launches = []
+    monkeypatch.setattr(
+        calibration, "_shell_execute", lambda target, _: launches.append(target) or True
+    )
+    monkeypatch.setattr(
+        calibration,
+        "_send_calibration_shortcut",
+        lambda *_: pytest.fail("Experience must never receive the Core Guest shortcut"),
+    )
+    launch = (
+        calibration.launch_tobii_guest_calibration if guest else calibration.launch_tobii_settings
+    )
+    assert "postavki" in launch(device_model="")
+    assert launches == [calibration.EXPERIENCE_TARGET]
+
+
+@pytest.mark.parametrize("guest", [False, True])
+def test_connected_non_et5_tracker_keeps_core_first_and_its_guest_route(monkeypatch, guest):
+    # The spare tracker's Stream Engine model need not contain "4C".
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
+    monkeypatch.setattr(calibration, "_experience_is_installed", lambda: True)
+    monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
+    core = Path("Tobii.EyeX.Config.exe")
+    monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [core])
+    monkeypatch.setattr(calibration.time, "sleep", lambda *_: None)
+    monkeypatch.delenv(calibration.CALIBRATION_COMMAND_ENV, raising=False)
+    launches = []
+    monkeypatch.setattr(
+        calibration, "_shell_execute", lambda target, _: launches.append(target) or True
+    )
+    shortcuts = []
+    monkeypatch.setattr(
+        calibration, "_send_calibration_shortcut", lambda *_: shortcuts.append(True) or True
+    )
+    launch = (
+        calibration.launch_tobii_guest_calibration if guest else calibration.launch_tobii_settings
+    )
+    launch(device_model="IS4_Large_Peripheral")
+    assert launches == [str(core)]
+    assert shortcuts == ([True] if guest else [])
+
+
 def test_failed_experience_activation_does_not_open_incompatible_core(monkeypatch):
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
     monkeypatch.setattr(calibration, "_experience_is_installed", lambda: True)
     monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
     core = Path("Tobii.EyeX.Config.exe")
@@ -97,6 +152,8 @@ def test_failed_experience_activation_does_not_open_incompatible_core(monkeypatc
 
 
 def test_missing_experience_never_sends_core_shortcut_for_eye_tracker_5(monkeypatch):
+    monkeypatch.setattr(calibration.sys, "platform", "win32")
+    monkeypatch.delenv(calibration.CALIBRATION_COMMAND_ENV, raising=False)
     monkeypatch.setattr(calibration, "_start_menu_shortcuts", lambda: [])
     monkeypatch.setattr(calibration, "_installed_tobii_executables", lambda: [])
     monkeypatch.setattr(

@@ -59,6 +59,7 @@ class TobiiGazeProvider(QObject):
         self._stream_engine: Any | None = None
         self._connection_session: GazeConnectionSession | None = None
         self._retry_after_cleanup = False
+        self._skip_research_once = False
         self._running = False
         self._start_requested = False
         self._backend_name = ""
@@ -127,6 +128,7 @@ class TobiiGazeProvider(QObject):
         self._set_tracking_status(TrackingState.CONNECTING)
         gaze, eyes = self._new_stream_callbacks()
         generation = self._stream_generation
+        skip_research, self._skip_research_once = self._skip_research_once, False
 
         def research(data):
             with self._sample_lock:
@@ -143,6 +145,7 @@ class TobiiGazeProvider(QObject):
             ),
             backend_types=(TobiiStreamEngineBackend, TobiiStreamEngineBridgeBackend),
             generation=generation,
+            skip_research=skip_research,
         )
         self._launch_session(session)
 
@@ -384,6 +387,7 @@ class TobiiGazeProvider(QObject):
     def stop(self) -> None:
         self._start_requested = False
         self._retry_after_cleanup = False
+        self._skip_research_once = False
         self._retry_timer.stop()
         self._emit_timer.stop()
         self._invalidate_stream_callbacks()
@@ -738,7 +742,8 @@ class TobiiGazeProvider(QObject):
                 self._mark_stream_resumed()
             restart = self._start_requested and (bool(failure) or age >= STREAM_RESTART_SECONDS)
         if restart:
-            if self._backend_name == "stream-engine-x86-bridge":
+            backend_name = self._backend_name
+            if backend_name == "stream-engine-x86-bridge":
                 observation = getattr(self._stream_engine, "failure_observation", None)
                 if observation is None:
                     observation = self._stream_engine.process_observation("missing_delivery")
@@ -748,6 +753,12 @@ class TobiiGazeProvider(QObject):
             # The session retains its slot until native pump shutdown/unsubscribe
             # succeeds. A timeout never permits a second live subscription.
             self.stop()
+            # A Pro SDK subscription that never delivered (for example an ET5 whose
+            # model name the filter does not recognize) must not hide Stream Engine
+            # on every retry. Only the next search skips Pro SDK.
+            if backend_name == "tobii-research" and last_sample is None:
+                logger.warning("Pro SDK delivered no samples; the next search skips it once.")
+                self._skip_research_once = True
             self._start_requested = True
             self._emit_timer.start()
             self._retry_after_cleanup = True

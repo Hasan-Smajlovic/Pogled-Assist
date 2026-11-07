@@ -363,6 +363,32 @@ def test_explicit_abi_override_is_authoritative(native_backend, monkeypatch, ari
     assert len(library.tobii_device_create.argtypes) == arity
 
 
+@pytest.mark.parametrize("version,override", [((4, 25, 0, 3), "3"), ((3, 0, 4, 6031), "4")])
+def test_abi_override_cannot_contradict_a_known_sdk_major(
+    native_backend, monkeypatch, version, override
+):
+    # One override applies to every runtime candidate. A preserved legacy DLL
+    # override must not reach an installed modern DLL with the wrong arity.
+    backend, library, _gaze, _eyes = native_backend
+    library.version = version
+    monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, override)
+    with pytest.raises(engine.TobiiStreamEngineError, match="conflicts"):
+        backend.start()
+    assert "tobii_device_create" not in library.calls
+
+
+@pytest.mark.parametrize("version,arity", [((4, 25, 0, 3), 4), ((2, 2, 2, 3002), 3)])
+def test_matching_abi_override_accepts_a_known_sdk_major(
+    native_backend, monkeypatch, version, arity
+):
+    backend, library, _gaze, _eyes = native_backend
+    library.version = version
+    library.create_args = arity
+    monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, str(arity))
+    backend.start()
+    assert library.calls.count("tobii_device_create") == 1
+
+
 @pytest.mark.parametrize("override", [None, "3"])
 def test_missing_sdk_version_requires_an_explicit_abi(native_backend, monkeypatch, override):
     backend, library, _gaze, _eyes = native_backend

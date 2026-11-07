@@ -93,6 +93,66 @@ def test_discovered_et5_uses_stream_engine_while_legacy_research_path_is_preserv
         qtbot.waitUntil(lambda: provider._connection_session is None)
 
 
+@pytest.mark.parametrize("delivered", [False, True])
+def test_silent_research_subscription_yields_one_search_to_stream_engine(
+    qtbot, monkeypatch, delivered
+):
+    # An ET5 model name the filter does not recognize still reaches Pro SDK. A
+    # subscription that never delivers must not hide Stream Engine on every retry.
+    from _clock import freeze_monotonic
+
+    now = freeze_monotonic(monkeypatch, 10.0)
+    subscriptions = []
+    native_starts = []
+    tracker = SimpleNamespace(
+        model="Unrecognized consumer tracker",
+        subscribe_to=lambda _event, callback, **_kwargs: subscriptions.append(callback),
+        unsubscribe_from=lambda *_: None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tobii_research",
+        SimpleNamespace(find_all_eyetrackers=lambda: [tracker], EYETRACKER_GAZE_DATA="gaze"),
+    )
+    monkeypatch.setattr(
+        gaze_provider,
+        "TobiiStreamEngineBackend",
+        lambda *_: SimpleNamespace(
+            start=lambda: native_starts.append(True), stop=lambda: True, label="Eye Tracker 5"
+        ),
+    )
+    provider = TobiiGazeProvider()
+
+    def replace_stale_connection():
+        now[0] += 3.1
+        provider._check_stream_health()
+        qtbot.waitUntil(provider._retry_timer.isActive)
+        provider._retry_timer.stop()
+        provider._attempt_start()
+        qtbot.waitUntil(lambda: provider._running)
+
+    try:
+        provider.start()
+        qtbot.waitUntil(lambda: provider._running)
+        assert provider._backend_name == "tobii-research"
+        if delivered:
+            subscriptions[-1]({"left_gaze_point_validity": 0, "right_gaze_point_validity": 0})
+        replace_stale_connection()
+        if delivered:
+            assert provider._backend_name == "tobii-research"
+            assert (len(subscriptions), native_starts) == (2, [])
+            return
+        assert provider._backend_name == "stream-engine"
+        assert (len(subscriptions), native_starts) == (1, [True])
+        # The skip is one search only; Pro SDK keeps its normal priority afterwards.
+        replace_stale_connection()
+        assert provider._backend_name == "tobii-research"
+        assert (len(subscriptions), native_starts) == (2, [True])
+    finally:
+        provider.stop()
+        qtbot.waitUntil(lambda: provider._connection_session is None)
+
+
 @pytest.mark.parametrize("phase", ["discovery", "native", "bridge"])
 def test_startup_waits_leave_qt_events_responsive(qtbot, monkeypatch, phase):
     release = threading.Event()

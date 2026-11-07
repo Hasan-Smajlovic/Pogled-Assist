@@ -157,20 +157,14 @@ def _experience_is_installed() -> bool:
 def _ordered_tobii_launch_targets(
     *, settings_only: bool = False, device_model: str = ""
 ) -> list[str]:
-    targets = _ranked_tobii_launch_targets(settings_only=settings_only)
+    paths = [str(target) for target in _ranked_tobii_launch_targets(settings_only=settings_only)]
     experience = [EXPERIENCE_TARGET] if _experience_is_installed() else []
-    model = "".join(character for character in device_model.lower() if character.isalnum())
     if is_eye_tracker_5(device_model):
         # An identified ET5 must not be handed to a coinstalled Core/Guest UI.
-        return experience + [
-            str(target) for target in targets if _is_experience_target(str(target))
-        ]
-    core_found = any(
-        target.name.lower() in _KNOWN_CONFIG_NAMES and "experience" not in target.name.lower()
-        for target in targets
-    )
-    paths = [str(target) for target in targets]
-    return paths + experience if core_found or "4c" in model else experience + paths
+        return experience + [path for path in paths if _is_experience_target(path)]
+    # Eye Tracker 5 is the primary device, so an unknown model prefers Experience.
+    # Any other connected tracker is the Core-supported spare.
+    return paths + experience if device_model.strip() else experience + paths
 
 
 def _is_experience_target(target: str) -> bool:
