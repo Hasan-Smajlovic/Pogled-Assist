@@ -309,4 +309,38 @@ def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
     assert [button.geometry() for button in utility] == before
     window._switch_keyboard_script()
     qtbot.waitUntil(lambda: window._speech_settings.keyboard_script != script)
+    qtbot.wait(1)
+    after = [QRect(button.geometry()) for button in utility]
+    assert [(rect.top(), rect.height()) for rect in after] == [
+        (rect.top(), rect.height()) for rect in before
+    ]
+    # Latin all-letters uses the narrow app-control column and Arabic always uses groups,
+    # so the script button widens or narrows toward the keys. Its right edge stays put, and
+    # the wider button covers the narrower one, so gaze resting on it stays on it.
+    assert after[3].right() == before[3].right()
+    assert after[3].contains(before[3]) or before[3].contains(after[3])
+    system = window._action_buttons[window._action("alarm:start")]
+    assert window._script_button.mapTo(window, QPoint()).x() == system.mapTo(window, QPoint()).x()
+    assert window._script_button.width() == system.width()
+
+
+def test_switching_script_with_letter_groups_keeps_the_bottom_row_in_place(
+    qtbot, make_speech_window
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(letter_layout="groups")
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(lambda: window._space_button.width() > 200)
+    utility = (
+        window._space_button,
+        window._backspace_button,
+        window._keyboard_toggle_button,
+        window._script_button,
+    )
+    before = [QRect(button.geometry()) for button in utility]
+    window._switch_keyboard_script()
+    qtbot.waitUntil(lambda: window._speech_settings.keyboard_script == "arabic")
+    qtbot.wait(1)
     assert [button.geometry() for button in utility] == before

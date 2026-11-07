@@ -175,7 +175,8 @@ def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
     window.show()
     window._input.setText("TREBAM ODMOR")
     rest = window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:start"]
-    assert rest.text() == "Odmor\nOdmori oči"
+    # Latin all-letters shows titles only; Arabic groups keep the description.
+    assert rest.text() == ("Odmor" if script == "latin" else "Odmor\nOdmori oči")
     rest.click()
     qtbot.waitUntil(lambda: window._dialogs.active is window._dialogs.sleep)
     window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake")

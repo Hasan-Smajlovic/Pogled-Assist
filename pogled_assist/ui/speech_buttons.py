@@ -36,6 +36,12 @@ class WrappedButton(QPushButton):
     def _draw_system_text(self, painter, rect, palette, text) -> None:
         title, _, subtitle = text.partition("\n")
         title_font = self.font()
+        if not subtitle:
+            painter.setFont(title_font)
+            painter.drawItemText(
+                rect, Qt.AlignCenter, palette, self.isEnabled(), title, QPalette.ButtonText
+            )
+            return
         subtitle_font = QFont(title_font)
         subtitle_font.setPixelSize(15)
         subtitle_font.setWeight(QFont.Normal)

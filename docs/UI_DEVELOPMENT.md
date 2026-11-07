@@ -172,7 +172,9 @@ On a normal development machine, verify:
 - In Speech, mouse and gaze group selection replace the group grid with inline letters. Check Back and Escape without input, return to the same page after a letter, both scripts, grouped Arabic marks, twelve-letter groups, editing, available message/actions, and cancelled dwell requiring departure before a replacement can activate.
 - The Controller Speech tab, hidden hotbar, Quick actions, precision zoom, and gaze feedback remain usable.
 - With `Zvuk pri odabiru` at each level, a gaze-selected letter, word suggestion, Space and Backspace tick once, audibly and without noticeable delay after the letter appears. `Isključen`, mouse clicks, `Izgovori` and the alarm buttons stay silent. A tick during speech leaves speech playing.
-- Opening Keyboard closes Controller and opening Controller closes Keyboard.
+- Opening Keyboard closes Controller and opening Controller closes Keyboard. In both directions, the new panel takes the same place at the right edge and maximized windows stay narrowed by one panel width, not two.
+- Start the app, wait a few seconds, then open Speech. The gaze pointer and progress ring continue without a pause, and suggestions appear for the first letters.
+- In Speech with all letters, Alarm, Odmor and Izlaz form a narrow column with titles only, separated from the letters by a thin line, and each stays easy to select by gaze. With letter groups or Arabic, the wider column with descriptions returns.
 - Settings survive an application restart.
 - During delayed Tobii discovery, bridge readiness, recovery and cleanup, ordinary UI events remain responsive. Closing during pending startup must not restore input or leave a bridge process behind.
 - ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed credentials, masked input after a failed save, and refusal to use an unsaved key.

@@ -40,6 +40,14 @@ KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 LIST_ACTION_MIN_HEIGHT = 80
 LIST_ACTION_MIN_WIDTH = 160
+SYSTEM_ACTIONS = (
+    ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
+    ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
+    ("Izlaz", "Izađi ili ugasi aplikaciju", "exit", "systemExit"),
+)
+# All letters need width, so the app controls narrow to about an eighth of the row;
+# group keyboards keep the quarter-width column. Keys:compact -> (stretch, min, max).
+SYSTEM_COLUMN = {False: (3, 280, 480), True: (7, 150, 240)}
 
 
 class SpeechSurface(QWidget):
@@ -235,11 +243,17 @@ class SpeechSurface(QWidget):
         self._recording_badge.setFixedHeight(24)
         status.addWidget(self._recording_badge)
         workspace.addLayout(status)
-        panels = QHBoxLayout()
-        panels.setSpacing(12)
-        panels.addWidget(self._build_main_panel(), 3)
-        panels.addWidget(self._build_system_panel(), 1)
-        workspace.addLayout(panels, 1)
+        self._panels = QHBoxLayout()
+        self._panels.setSpacing(0)
+        self._panels.addWidget(self._build_main_panel(), 3)
+        # A subtle line in the middle of the 12 px gap separates the keys from the app controls.
+        self._panels.addSpacing(6)
+        self._system_divider = self._divider(vertical=True)
+        self._system_divider.setObjectName("systemDivider")
+        self._panels.addWidget(self._system_divider)
+        self._panels.addSpacing(5)
+        self._panels.addWidget(self._build_system_panel(), 1)
+        workspace.addLayout(self._panels, 1)
         return workspace
 
     def _build_main_panel(self) -> QWidget:
@@ -353,32 +367,47 @@ class SpeechSurface(QWidget):
         return paging
 
     def _build_system_panel(self) -> QWidget:
-        system_panel = QWidget(self)
-        system_panel.setMinimumWidth(280)
-        system_panel.setMaximumWidth(480)
-        system_layout = QVBoxLayout(system_panel)
+        self._system_panel = QWidget(self)
+        system_layout = QVBoxLayout(self._system_panel)
         system_layout.setContentsMargins(0, 0, 0, 0)
         system_layout.setSpacing(12)
-        for title, subtitle, command, object_name in (
-            ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
-            ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
-            ("Izlaz", "Izađi ili ugasi aplikaciju", "exit", "systemExit"),
-        ):
+        for title, subtitle, command, object_name in SYSTEM_ACTIONS:
             button = self._make_button(
                 f"{title}\n{subtitle}",
                 command,
                 object_name,
-                parent=system_panel,
+                parent=self._system_panel,
                 minimum_height=100,
             )
             system_layout.addWidget(button, 1)
 
-        return system_panel
+        return self._system_panel
+
+    def _set_compact_system_column(self, compact: bool) -> None:
+        """Narrow Alarm, Odmor and Izlaz for all letters; group keyboards keep them wide."""
+        if compact == self._compact_system_column:
+            return
+        self._compact_system_column = compact
+        stretch, minimum, maximum = SYSTEM_COLUMN[compact]
+        # The script button below stays aligned with the column above.
+        self._panels.setStretch(0, stretch)
+        self._utility_row.setStretch(0, stretch)
+        for widget in (self._system_panel, self._script_button):
+            widget.setMinimumWidth(minimum)
+            widget.setMaximumWidth(maximum)
+        for title, subtitle, command, _object_name in SYSTEM_ACTIONS:
+            button = self._action_buttons[self._action(command)]
+            # Subtitles would wrap in the narrow column; the titles name each action.
+            button.setText(title if compact else f"{title}\n{subtitle}")
+            button.setProperty("compact", compact)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
     def _build_utility_row(self, keyboard_script: str) -> QHBoxLayout:
         utility_row = QHBoxLayout()
         utility_row.setContentsMargins(0, 0, 0, 0)
         utility_row.setSpacing(12)
+        self._utility_row = utility_row
         main = QHBoxLayout()
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(12)
@@ -402,10 +431,10 @@ class SpeechSurface(QWidget):
             "utilityButton",
             minimum_height=95,
         )
-        # Match the system panel above, including its width limits on large screens.
-        self._script_button.setMinimumWidth(280)
-        self._script_button.setMaximumWidth(480)
         utility_row.addWidget(self._script_button, 1)
+        # Match the system panel above, including its width limits on large screens.
+        self._compact_system_column: bool | None = None
+        self._set_compact_system_column(False)
 
         return utility_row
 
@@ -824,6 +853,7 @@ SPEECH_STYLE = """
                 color: #edf2f7;
                 font-size: 24px;
             }
+            QPushButton#systemExit[compact="true"] { font-size: 27px; }
             QPushButton#phraseButton {
                 font-size: 19px;
             }

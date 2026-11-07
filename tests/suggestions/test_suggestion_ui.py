@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 from _speech_fakes import FakeLibraryStore, FakeSpeech
 from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
@@ -463,3 +465,29 @@ def test_unreadable_personal_file_is_preserved_while_base_suggestions_work(qtbot
         assert "nisu učitane" in service.status
     finally:
         service.close()
+
+
+def test_preload_loads_the_dictionary_once_in_the_background(qtbot, monkeypatch):
+    loads = []
+
+    def load():
+        loads.append(threading.current_thread() is threading.main_thread())
+        return WordModel(conversation_model())
+
+    monkeypatch.setattr("pogled_assist.suggestions.service.load_model", load)
+    service = SuggestionService()
+    try:
+        service.preload()
+        service.preload()
+        qtbot.waitUntil(lambda: service._model is not None)
+        received = []
+        service.predictions_ready.connect(lambda *result: received.append(result))
+        service.request("owner", 1, "")
+        qtbot.waitUntil(lambda: bool(received))
+        # One load, off the Qt thread; the first prediction reuses it.
+        assert loads == [False]
+        assert received[0][2]
+    finally:
+        service.close()
+    service.preload()
+    assert loads == [False]

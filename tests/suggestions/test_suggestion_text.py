@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import json
 from collections import Counter
 
 import pytest
 
+from pogled_assist.suggestions import model as model_module
 from pogled_assist.suggestions.model import (
     ISLAMIC_MODEL_METADATA_PATH,
     ISLAMIC_MODEL_PATH,
     MODEL_METADATA_PATH,
     MODEL_PATH,
+    MODEL_VERSION,
     WordModel,
+    load_counts_from_paths,
     load_model,
 )
 from pogled_assist.suggestions.text import START, insert_word, query, words
@@ -268,3 +272,46 @@ def test_frozen_fixture_hash_is_stable_across_windows_line_endings(tmp_path):
     fixture.write_bytes(b"id\ttext\n1\tmessage\n")
 
     assert fixture_sha256(fixture) == windows_digest
+
+
+def _prepared_model(tmp_path, rows):
+    data = gzip.compress(json.dumps({"version": MODEL_VERSION, "counts": rows}).encode())
+    model_path = tmp_path / "model.json.gz"
+    metadata_path = tmp_path / "model.meta.json"
+    model_path.write_bytes(data)
+    metadata_path.write_text(
+        json.dumps({"model_sha256": hashlib.sha256(data).hexdigest()}), encoding="utf-8"
+    )
+    return model_path, metadata_path
+
+
+def test_model_loading_checks_each_word_once_with_the_same_result(tmp_path, monkeypatch):
+    rows = [
+        ["voda", 9],
+        ["piti", 4],
+        ["želim piti", 5],
+        [f"{START} želim", 3],
+        ["želim piti vodu", 2],
+        ["piti vodu", 2],
+    ]
+    checked = []
+    original = model_module.valid_word
+
+    def counted(word):
+        checked.append(word)
+        return original(word)
+
+    monkeypatch.setattr(model_module, "valid_word", counted)
+    counts = load_counts_from_paths(*_prepared_model(tmp_path, rows))
+
+    # Loading time on the target laptop is dominated by these checks; repeated words
+    # in 290 000 n-grams must not be checked again.
+    assert sorted(checked) == sorted({"voda", "piti", "želim", "vodu"})
+    assert counts == Counter({tuple(key.split(" ")): count for key, count in rows})
+
+
+@pytest.mark.parametrize("bad", ["piti 1x", "a b c d", "piti piti!"])
+def test_model_loading_still_rejects_invalid_words_after_they_were_seen(tmp_path, bad):
+    rows = [["piti", 4], ["voda piti", 2], [bad, 1]]
+    with pytest.raises(ValueError, match="Invalid prediction word"):
+        load_counts_from_paths(*_prepared_model(tmp_path, rows))

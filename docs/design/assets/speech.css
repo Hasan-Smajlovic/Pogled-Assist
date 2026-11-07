@@ -84,6 +84,13 @@
 .system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
 .sleep { background: var(--panel); border-color: var(--border); color: var(--text); }
+/* All letters: half-width app controls with titles only; groups keep the wider column. */
+.speech-screen[data-layout="alphabet"] { --system-column: clamp(150px, 12.5%, 240px); }
+.speech-screen[data-layout="alphabet"] .system-actions small { display: none; }
+.speech-screen[data-layout="alphabet"] .system-actions button[data-action="exit"] { font-size: clamp(24px, 2.2vw, 36px); }
+/* A subtle line in the middle of the gap separates the keys from the app controls. */
+.speech-screen .system-actions { position: relative; }
+.speech-screen .system-actions::before { content: ''; position: absolute; top: 0; bottom: 0; left: calc(var(--gap) / -2); width: 1px; background: var(--divider); }
 .utility-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 1px repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 .utility-divider { background: var(--divider); align-self: stretch; }
 .speech-screen > .utility-row { grid-template-columns: minmax(0, 1fr) var(--system-column); }
@@ -141,6 +148,7 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .prediction-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .prediction-row button { min-height: 71px; }
   .workspace { display: flex; flex-direction: column; }
+  .speech-screen .system-actions::before { display: none; }
   .key-grid, .item-grid { min-height: 310px; }
   .system-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto 100px; }
   .speech-screen .system-actions { grid-template-rows: 100px; }

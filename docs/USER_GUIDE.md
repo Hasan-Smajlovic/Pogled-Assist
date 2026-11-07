@@ -114,7 +114,7 @@ The offline dictionary also includes reviewed Bosnian Islamic terminology and co
 
 The same suggestions are available while adding a phrase or category answer. That editor has its own undo state and cannot replace the saved conversation message. A phrase or answer contributes to personal learning only after it is successfully saved. Category names are never learned.
 
-The controls on the right remain available while browsing or adding entries:
+The controls on the right remain available while browsing or adding entries. A thin vertical line separates them from the keyboard and lists. With all letters they form a narrow column that shows only their names, so the letter keys get more width. With letter groups or Arabic the column is wider and adds a short description under each name. The column width follows the saved layout and script, so it does not move while Fraze, Kategorije or symbols are open.
 
 - `Alarm` stops speech, repeats a distinct local emergency sound, and opens a dialog. Select `Zaustavi alarm` to silence it and return to the same Speech state.
 - `Odmor` stops speech and blacks out the display. Select `Nastavi` by gaze or mouse to restore the message, current list and page, and any unfinished entry.
@@ -146,11 +146,11 @@ Automated checks verify Unicode entry, switching, layout, and voice commands. Th
 
 ## Keyboard
 
-Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
+Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Letters always appear in groups here; **Raspored slova u Govoru** changes only Speech. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
 
 ## Controller
 
-Controller opens a right-side panel with General, Keyboard, Speech, and Settings tabs. General provides left, right, and double-click actions, Enter, and scrolling. The embedded Keyboard tab contains the same letters, numpad, and symbols controls. Only Keyboard or Controller can reserve the right work area at one time.
+Controller opens a right-side panel with General, Keyboard, Speech, and Settings tabs. General provides left, right, and double-click actions, Enter, and scrolling. The embedded Keyboard tab contains the same letters, numpad, and symbols controls. Only Keyboard or Controller can reserve the right work area at one time. Switching from one to the other puts the new panel in the same place, so the work area stays narrowed by one panel width.
 
 ## Settings
 

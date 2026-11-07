@@ -7,7 +7,7 @@ import hashlib
 import json
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from functools import lru_cache
 from heapq import nsmallest
 from pathlib import Path
@@ -193,11 +193,20 @@ def _personal_model(personal: Counter[tuple[str, ...]] | WordModel | None) -> Wo
 
 
 def _validated_counts(rows: Iterable[tuple[str, int]]) -> Iterable[tuple[tuple[str, ...], int]]:
+    # The bundled n-grams reuse about one word in five, so check each word once.
+    checked: dict[str, bool] = {}
+
+    def is_valid(word: str) -> bool:
+        valid = checked.get(word)
+        if valid is None:
+            valid = checked[word] = valid_word(word)
+        return valid
+
     for key, count in rows:
         parts = tuple(key.split(" "))
         if not _valid_count(count):
             raise ValueError("Invalid prediction count")
-        if not _valid_key(parts):
+        if not _valid_key(parts, is_valid):
             raise ValueError("Invalid prediction word")
         yield parts, count
 
@@ -206,9 +215,9 @@ def _valid_count(count: object) -> bool:
     return isinstance(count, int) and count > 0
 
 
-def _valid_key(parts: tuple[str, ...]) -> bool:
+def _valid_key(parts: tuple[str, ...], is_valid: Callable[[str], bool]) -> bool:
     words = parts[1:] if len(parts) > 1 and parts[0] == START else parts
-    return 1 <= len(parts) <= 3 and all(valid_word(word) for word in words)
+    return 1 <= len(parts) <= 3 and all(is_valid(word) for word in words)
 
 
 @lru_cache(maxsize=1)

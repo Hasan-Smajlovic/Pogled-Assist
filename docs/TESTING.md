@@ -35,6 +35,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
 | AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
 | External window and cursor tracking | `tests/ui/test_foreground_tracker.py` |
+| Keyboard and Controller replacing each other at the right edge | `tests/ui/test_hotbar_e2e.py` (`StaleWorkArea` and `WorkAreaAppBar` model Qt's delayed work-area refresh) |
 | ElevenLabs account, requests and cancellation | `tests/speech/test_eleven_account.py`, `tests/speech/test_elevenlabs.py` and `tests/speech/test_elevenlabs_cancellation.py` |
 | Efendija routing, cache and playback | `tests/speech/test_voice_router.py`, `tests/speech/test_audio_cache.py`, `tests/speech/test_audio_playback.py`, `tests/speech/test_efendija_service.py` and `tests/ui/test_elevenlabs_e2e.py` |
 | Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |

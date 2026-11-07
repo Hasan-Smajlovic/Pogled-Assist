@@ -198,6 +198,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._input.setLayoutDirection(direction)
         self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
         self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
+        # Follow the saved layout and script, not the current view, so the column stays put
+        # while Phrases, Categories or symbols are open.
+        self._set_compact_system_column(self._shows_alphabet())
         self._prediction_divider.setVisible(not arabic)
         for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
             widget.setVisible(not arabic)

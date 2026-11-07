@@ -239,6 +239,8 @@
     message.dir = arabic ? 'rtl' : 'ltr';
     message.style.textAlign = arabic ? 'right' : 'center';
     document.querySelector('.predictions').hidden = arabic;
+    // All letters need width, so the app controls narrow; groups keep the wider column.
+    $('speech-screen').dataset.layout = showsAlphabet() ? 'alphabet' : 'groups';
   }
 
   function viewTitle() {

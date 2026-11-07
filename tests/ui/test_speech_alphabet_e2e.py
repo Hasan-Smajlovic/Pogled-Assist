@@ -54,7 +54,8 @@ def test_all_bosnian_letters_fit_one_page_in_alphabetical_rows(qtbot, make_speec
         assert window.rect().contains(rect), button.text()
         assert rect.bottom() < window._space_button.mapTo(window, QPoint()).y()
         assert button.height() >= 72, button.text()
-        assert button.width() >= 80, button.text()
+        # The narrow app-control column leaves near-square keys at 1280 x 720.
+        assert button.width() >= 95, button.text()
     if editor:
         assert window._save_item_button.isVisible()
         assert window._status_label.text() == "Unesite tekst, zatim odaberite Sačuvaj."
@@ -106,6 +107,58 @@ def test_group_choice_and_arabic_keep_the_group_keyboard(qtbot, make_speech_wind
     window._script_button.click()
     qtbot.waitUntil(lambda: window._speech_settings.keyboard_script == "latin")
     assert [button.text() for button in _alphabet_buttons(window)] == BOSNIAN_LETTERS
+
+
+def _left(window, widget):
+    return widget.mapTo(window, QPoint()).x()
+
+
+def _app_controls(window):
+    return [
+        window._action_buttons[window._action(name)]
+        for name in ("alarm:start", "sleep:start", "exit")
+    ]
+
+
+def test_all_letters_narrow_the_app_controls_and_groups_keep_them_wide(qtbot, make_speech_window):
+    window = _open_alphabet(qtbot, make_speech_window)
+    alarm, sleep, exit_button = _app_controls(window)
+    last_letter = _alphabet_buttons(window)[9]
+
+    assert [button.text() for button in (alarm, sleep, exit_button)] == ["Alarm", "Odmor", "Izlaz"]
+    assert 150 <= alarm.width() <= 240
+    assert alarm.width() > last_letter.width()
+    # Aligned with the script button below, and separated from the keys by a line in the gap.
+    assert (_left(window, window._script_button), window._script_button.width()) == (
+        _left(window, alarm),
+        alarm.width(),
+    )
+    letters_end = _left(window, last_letter) + last_letter.width()
+    divider = window._system_divider
+    assert divider.isVisible() and divider.width() == 1
+    assert letters_end < _left(window, divider) < _left(window, alarm)
+    assert _left(window, alarm) - letters_end == 12
+    assert divider.height() >= alarm.height() * 3
+
+    # The column follows the saved layout, not the open view.
+    window._phrases_button.click()
+    qtbot.wait(1)
+    assert alarm.width() <= 240
+
+    window.update_settings(replace(window._speech_settings, letter_layout="groups"))
+    qtbot.wait(1)
+    assert alarm.width() >= 280
+    assert alarm.text() == "Alarm\nPozovi pomoć"
+    assert window._script_button.width() == alarm.width()
+    assert divider.isVisible()
+
+    window.update_settings(replace(window._speech_settings, letter_layout="all"))
+    window._script_button.click()
+    qtbot.waitUntil(lambda: window._speech_settings.keyboard_script == "arabic")
+    qtbot.wait(1)
+    # Arabic always uses groups, so its app controls stay wide.
+    assert alarm.width() >= 280
+    assert exit_button.text() == "Izlaz\nIzađi ili ugasi aplikaciju"
 
 
 def test_alphabet_diagnostics_never_name_the_selected_letter(qtbot, make_speech_window):
