@@ -737,28 +737,37 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
 
 
 def _device_create_arg_count(version: tuple[int, int, int, int] | None = None) -> int:
+    configured = _configured_device_create_arg_count()
+    known = _reported_device_create_arg_count(version)
+    if known is None:
+        if configured is None:
+            raise TobiiStreamEngineError(
+                "Unknown Stream Engine device-create ABI. Configure "
+                f"{DEVICE_CREATE_ARG_ENV}=3 or 4 only from the matching SDK documentation."
+            )
+        return configured
+    # The override applies to every runtime candidate, so it may only fill in
+    # an unknown ABI, never contradict the version this DLL reports.
+    if configured not in (None, known):
+        raise TobiiStreamEngineError(
+            f"{DEVICE_CREATE_ARG_ENV}={configured} conflicts with Stream Engine "
+            f"API major {version[0]}, which takes {known} device-create arguments."
+        )
+    return known
+
+
+def _configured_device_create_arg_count() -> int | None:
     configured = os.environ.get(DEVICE_CREATE_ARG_ENV, "").strip()
     if configured not in ("", "3", "4"):
         raise TobiiStreamEngineError(f"{DEVICE_CREATE_ARG_ENV} must be 3 or 4.")
+    return int(configured) if configured else None
 
-    known = None
-    if version is not None and all(value >= 0 for value in version):
-        known = 3 if version[0] in (1, 2, 3) else 4 if version[0] == 4 else None
-    if known is not None:
-        # The override applies to every runtime candidate, so it may only fill in
-        # an unknown ABI, never contradict the version this DLL reports.
-        if configured and int(configured) != known:
-            raise TobiiStreamEngineError(
-                f"{DEVICE_CREATE_ARG_ENV}={configured} conflicts with Stream Engine "
-                f"API major {version[0]}, which takes {known} device-create arguments."
-            )
-        return known
-    if configured:
-        return int(configured)
-    raise TobiiStreamEngineError(
-        "Unknown Stream Engine device-create ABI. Configure "
-        f"{DEVICE_CREATE_ARG_ENV}=3 or 4 only from the matching SDK documentation."
-    )
+
+def _reported_device_create_arg_count(version: tuple[int, int, int, int] | None) -> int | None:
+    if version is None or any(value < 0 for value in version):
+        return None
+    # API majors 1-3 create a device with three arguments; API 4 adds a fourth.
+    return {1: 3, 2: 3, 3: 3, 4: 4}.get(version[0])
 
 
 def _load_candidate_dll(candidate: Path) -> ctypes.CDLL:

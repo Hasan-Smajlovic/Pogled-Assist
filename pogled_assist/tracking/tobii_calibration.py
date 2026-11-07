@@ -85,10 +85,14 @@ def launch_tobii_guest_calibration(*, device_model: str = "") -> str:
 
     errors: list[str] = []
     opened = _open_calibration_ui(errors, device_model=device_model)
-    if is_eye_tracker_5(device_model) or (opened and _is_experience_target(opened)):
+    if _experience_calibrates(opened, device_model):
         if opened:
             return "Otvaranje Tobii postavki je zatraženo."
         raise RuntimeError("Tobii Experience se nije otvorio. Otvorite Tobii ikonu pored sata.")
+    return _request_core_guest_calibration(opened, errors)
+
+
+def _request_core_guest_calibration(opened: str | None, errors: list[str]) -> str:
     launched_methods = [opened] if opened else []
     if _send_calibration_shortcut(errors):
         launched_methods.append("Ctrl+Shift+F10")
@@ -101,6 +105,13 @@ def launch_tobii_guest_calibration(*, device_model: str = "") -> str:
         "Tobii kalibracija se nije mogla pokrenuti. Pokušani su Tobii programi, veze i "
         "prečica Ctrl+Shift+F10."
     )
+
+
+def _experience_calibrates(opened: str | None, device_model: str) -> bool:
+    """Experience calibrates the saved profile, so the Core Guest shortcut must not follow."""
+    if is_eye_tracker_5(device_model):
+        return True
+    return bool(opened) and _is_experience_target(opened)
 
 
 def launch_tobii_settings(*, device_model: str = "") -> str:

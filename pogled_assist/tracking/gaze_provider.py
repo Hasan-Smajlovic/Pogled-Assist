@@ -736,36 +736,40 @@ class TobiiGazeProvider(QObject):
                 last_sample if last_sample is not None else self._stream_started_at
             )
             failure = getattr(self._stream_engine, "connection_error", None)
-            if failure or age >= STREAM_EYE_STALE_SECONDS:
-                self._mark_stream_stale(age, failure)
-            elif self._stream_stale:
-                self._mark_stream_resumed()
+            self._update_stream_freshness(age, failure)
             restart = self._start_requested and (bool(failure) or age >= STREAM_RESTART_SECONDS)
         if restart:
-            backend_name = self._backend_name
-            if backend_name == "stream-engine-x86-bridge":
-                observation = getattr(self._stream_engine, "failure_observation", None)
-                if observation is None:
-                    observation = self._stream_engine.process_observation("missing_delivery")
-                diagnostics.emit(
-                    "bridge_connection", priority=True, decision="recovery", **observation
-                )
-            # The session retains its slot until native pump shutdown/unsubscribe
-            # succeeds. A timeout never permits a second live subscription.
-            self.stop()
-            # A Pro SDK subscription that never delivered (for example an ET5 whose
-            # model name the filter does not recognize) must not hide Stream Engine
-            # on every retry. Only the next search skips Pro SDK.
-            if backend_name == "tobii-research" and last_sample is None:
-                logger.warning("Pro SDK delivered no samples; the next search skips it once.")
-                self._skip_research_once = True
-            self._start_requested = True
-            self._emit_timer.start()
-            self._retry_after_cleanup = True
-            self._set_tracking_status(TrackingState.RETRYING)
-            self.status_changed.emit("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
-            if self._connection_session is None:
-                self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+            self._restart_stream(delivered=last_sample is not None)
+
+    def _update_stream_freshness(self, age: float, failure: object) -> None:
+        if failure or age >= STREAM_EYE_STALE_SECONDS:
+            self._mark_stream_stale(age, failure)
+        elif self._stream_stale:
+            self._mark_stream_resumed()
+
+    def _restart_stream(self, *, delivered: bool) -> None:
+        backend_name = self._backend_name
+        if backend_name == "stream-engine-x86-bridge":
+            observation = getattr(self._stream_engine, "failure_observation", None)
+            if observation is None:
+                observation = self._stream_engine.process_observation("missing_delivery")
+            diagnostics.emit("bridge_connection", priority=True, decision="recovery", **observation)
+        # The session retains its slot until native pump shutdown/unsubscribe
+        # succeeds. A timeout never permits a second live subscription.
+        self.stop()
+        # A Pro SDK subscription that never delivered (for example an ET5 whose
+        # model name the filter does not recognize) must not hide Stream Engine
+        # on every retry. Only the next search skips Pro SDK.
+        if backend_name == "tobii-research" and not delivered:
+            logger.warning("Pro SDK delivered no samples; the next search skips it once.")
+            self._skip_research_once = True
+        self._start_requested = True
+        self._emit_timer.start()
+        self._retry_after_cleanup = True
+        self._set_tracking_status(TrackingState.RETRYING)
+        self.status_changed.emit("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+        if self._connection_session is None:
+            self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
 
     def _stream_is_monitored(self) -> bool:
         return (

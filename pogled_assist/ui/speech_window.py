@@ -162,16 +162,12 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         logger.info("Speech window shown full-screen.")
 
     def update_settings(self, settings: SpeechSettings) -> None:
-        old_letters_per_group = self._letters_per_group
-        old_script = self._speech_settings.keyboard_script
-        old_layout = self._speech_settings.letter_layout
+        old = self._speech_settings
+        old_keyboard = (self._letters_per_group, old.keyboard_script, old.letter_layout)
         self._speech_settings = replace(settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        if (
-            self._letters_per_group != old_letters_per_group
-            or old_script != settings.keyboard_script
-            or old_layout != settings.letter_layout
-        ):
+        keyboard = (self._letters_per_group, settings.keyboard_script, settings.letter_layout)
+        if keyboard != old_keyboard:
             self._keyboard_page = 0
             self._close_dialog()
             self._letter_groups = _group_letters(
