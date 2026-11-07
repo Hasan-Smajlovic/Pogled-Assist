@@ -83,13 +83,12 @@
 .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
 .system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
-/* Role tones: muted shades separate words, editing, view switches and app controls.
-   Letters and list items keep the control colour; cyan and blue stay for gaze, focus,
-   pressed buttons and the main action. Disabled and pressed states keep their shared look. */
+/* Blue-based role tones share the application palette. Bright cyan and stronger blue
+   remain the gaze, focus and active-state accents. */
 .speech-screen {
-  --tone-word: #2a3b38; --tone-word-border: #6f9187; --tone-word-hover: #324640;
-  --tone-edit: #20272f; --tone-edit-border: #66788b; --tone-edit-hover: #29323c;
-  --tone-view: #2f3048; --tone-view-border: #7f81ab; --tone-view-hover: #383a56;
+  --tone-word: #293d49; --tone-word-border: #7897a5; --tone-word-hover: #324a59;
+  --tone-edit: #202c3a; --tone-edit-border: #6b8198; --tone-edit-hover: #2a394b;
+  --tone-view: #2b354b; --tone-view-border: #8091b1; --tone-view-hover: #35425b;
   --tone-system: #1d242d; --tone-system-border: #66788b; --tone-system-hover: #262f3a;
 }
 .edit-key { background: var(--tone-edit); border-color: var(--tone-edit-border); }

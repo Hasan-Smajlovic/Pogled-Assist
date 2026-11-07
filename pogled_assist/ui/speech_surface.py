@@ -821,8 +821,8 @@ SPEECH_STYLE = """
                 color: #8595a6;
             }
             QPushButton#predictionButton {
-                background: #2a3b38;
-                border-color: #6f9187;
+                background: #293d49;
+                border-color: #7897a5;
                 color: #edf2f7;
                 font-size: 27px;
                 padding: 2px 8px;
@@ -843,22 +843,21 @@ SPEECH_STYLE = """
             QPushButton#systemSleep { font-size: 27px; }
             QPushButton#systemExit { font-size: 24px; }
             QPushButton#systemExit[compact="true"] { font-size: 27px; }
-            /* Role tones match docs/design/assets/speech.css. Letters and lists keep
-               the control colour; pressed, checked and disabled keep the shared look. */
-            QPushButton#utilityButton { background: #20272f; border-color: #66788b; }
+            /* Role tones match docs/design/assets/speech.css. */
+            QPushButton#utilityButton { background: #202c3a; border-color: #6b8198; }
             QPushButton#topButton, QPushButton#viewButton {
-                background: #2f3048;
-                border-color: #7f81ab;
+                background: #2b354b;
+                border-color: #8091b1;
             }
             QPushButton#systemSleep, QPushButton#systemExit {
                 background: #1d242d;
                 border-color: #66788b;
                 color: #edf2f7;
             }
-            QPushButton#predictionButton:hover { background: #324640; border-color: #84c5d9; }
-            QPushButton#utilityButton:hover { background: #29323c; border-color: #84c5d9; }
+            QPushButton#predictionButton:hover { background: #324a59; border-color: #84c5d9; }
+            QPushButton#utilityButton:hover { background: #2a394b; border-color: #84c5d9; }
             QPushButton#topButton:hover, QPushButton#viewButton:hover {
-                background: #383a56;
+                background: #35425b;
                 border-color: #84c5d9;
             }
             QPushButton#systemSleep:hover, QPushButton#systemExit:hover {

@@ -367,9 +367,9 @@ def test_speech_role_tones_separate_words_editing_views_and_app_controls(qtbot, 
 
     tones = {
         "#283442": [action("letter:0")],
-        "#2a3b38": [word],
-        "#20272f": [window._space_button, window._backspace_button],
-        "#2f3048": [
+        "#293d49": [word],
+        "#202c3a": [window._space_button, window._backspace_button],
+        "#2b354b": [
             window._categories_button,
             window._phrases_button,
             window._keyboard_toggle_button,
