@@ -418,7 +418,7 @@ class SpeechSurface(QWidget):
             "Obriši slovo", "backspace", "utilityButton", minimum_height=95
         )
         self._keyboard_toggle_button = self._make_button(
-            "Brojevi i znakovi", "keyboard-toggle", "utilityButton", minimum_height=95
+            "Brojevi i znakovi", "keyboard-toggle", "viewButton", minimum_height=95
         )
         main.addWidget(self._space_button, 1)
         main.addWidget(self._backspace_button, 1)
@@ -428,7 +428,7 @@ class SpeechSurface(QWidget):
         self._script_button = self._make_button(
             switch_label(keyboard_script),
             "script-toggle",
-            "utilityButton",
+            "viewButton",
             minimum_height=95,
         )
         utility_row.addWidget(self._script_button, 1)
@@ -805,8 +805,8 @@ SPEECH_STYLE = """
                 color: #8595a6;
             }
             QPushButton#clearButton {
-                border-color: #84c5d9;
-                background: #252b36;
+                border-color: #a38b5d;
+                background: #3b3325;
                 color: #efd092;
             }
             QPushButton#primaryButton {
@@ -821,39 +821,65 @@ SPEECH_STYLE = """
                 color: #8595a6;
             }
             QPushButton#predictionButton {
-                background: #283442;
-                border-color: #71869b;
+                background: #2a3b38;
+                border-color: #6f9187;
                 color: #edf2f7;
                 font-size: 27px;
                 padding: 2px 8px;
             }
-            QPushButton#predictionButton:disabled { color: #8595a6; background: #222b35; }
             QPushButton#groupButton {
                 background: #283442;
                 font-size: 29px;
                 letter-spacing: 2px;
             }
             QPushButton#symbolButton { font-size: 32px; }
-            QPushButton#utilityButton { font-size: 22px; }
+            QPushButton#utilityButton, QPushButton#viewButton { font-size: 22px; }
             QPushButton#systemAlarm {
                 background: #442b33;
                 border-color: #af7a86;
                 color: #f7d9dc;
                 font-size: 27px;
             }
-            QPushButton#systemSleep {
-                background: #283442;
-                border-color: #71869b;
-                color: #edf2f7;
-                font-size: 27px;
-            }
-            QPushButton#systemExit {
-                background: #283442;
-                border-color: #71869b;
-                color: #edf2f7;
-                font-size: 24px;
-            }
+            QPushButton#systemSleep { font-size: 27px; }
+            QPushButton#systemExit { font-size: 24px; }
             QPushButton#systemExit[compact="true"] { font-size: 27px; }
+            /* Role tones match docs/design/assets/speech.css. Letters and lists keep
+               the control colour; pressed, checked and disabled keep the shared look. */
+            QPushButton#utilityButton { background: #20272f; border-color: #66788b; }
+            QPushButton#topButton, QPushButton#viewButton {
+                background: #2f3048;
+                border-color: #7f81ab;
+            }
+            QPushButton#systemSleep, QPushButton#systemExit {
+                background: #1d242d;
+                border-color: #66788b;
+                color: #edf2f7;
+            }
+            QPushButton#predictionButton:hover { background: #324640; border-color: #84c5d9; }
+            QPushButton#utilityButton:hover { background: #29323c; border-color: #84c5d9; }
+            QPushButton#topButton:hover, QPushButton#viewButton:hover {
+                background: #383a56;
+                border-color: #84c5d9;
+            }
+            QPushButton#systemSleep:hover, QPushButton#systemExit:hover {
+                background: #262f3a;
+                border-color: #84c5d9;
+            }
+            QPushButton#clearButton:hover { background: #463c2b; border-color: #84c5d9; }
+            QPushButton#predictionButton:pressed, QPushButton#utilityButton:pressed,
+            QPushButton#topButton:pressed, QPushButton#topButton:checked,
+            QPushButton#viewButton:pressed, QPushButton#systemSleep:pressed,
+            QPushButton#systemExit:pressed, QPushButton#clearButton:pressed {
+                background: #2e6478;
+                border-color: #84c5d9;
+            }
+            QPushButton#predictionButton:disabled, QPushButton#utilityButton:disabled,
+            QPushButton#topButton:disabled, QPushButton#viewButton:disabled,
+            QPushButton#clearButton:disabled {
+                background: #222b35;
+                border-color: #455363;
+                color: #8595a6;
+            }
             QPushButton#phraseButton {
                 font-size: 19px;
             }

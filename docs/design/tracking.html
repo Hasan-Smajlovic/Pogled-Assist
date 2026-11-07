@@ -29,14 +29,14 @@
       <div class="tracking-app speech-screen">
         <header class="topbar">
           <button class="warning" type="button" data-tracking-context="confirm">Obriši</button>
-          <button type="button">Kategorije</button>
+          <button class="view-key" type="button">Kategorije</button>
           <div class="message-box"><div class="tracking-message-heading"><label for="tracking-message">Vaša poruka</label><div id="tracking-background-feedback"></div></div><input id="tracking-message" value="TREBAM VODE" autocomplete="off" spellcheck="false"></div>
           <button class="primary" type="button">Izgovori</button>
-          <button type="button">Fraze</button>
+          <button class="view-key" type="button">Fraze</button>
         </header>
         <section class="predictions" aria-label="Ponuđene riječi">
           <h2 class="visually-hidden">Ponuđene riječi</h2>
-          <div class="prediction-controls"><div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button class="word" type="button">MOŽE</button></div><button id="undo-word" type="button" disabled>Poništi riječ</button></div>
+          <div class="prediction-controls"><div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button class="word" type="button">MOŽE</button></div><button id="undo-word" class="edit-key" type="button" disabled>Poništi riječ</button></div>
         </section>
         <div class="workspace">
           <section class="main-panel">
@@ -51,9 +51,9 @@
             <button type="button" data-tracking-letter>Č</button><button type="button" data-tracking-letter>Ć</button><button class="back" type="button" data-tracking-context="message">Nazad na grupe</button>
           </div>
           </section>
-          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Izađi ili ugasi aplikaciju</small></button></aside>
+          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="system-key" type="button">Odmor<small>Odmori oči</small></button><button class="system-key" type="button">Izlaz<small>Izađi ili ugasi aplikaciju</small></button></aside>
         </div>
-        <footer class="utility-row"><div class="utility-main"><button type="button">Razmak</button><button type="button">Obriši slovo</button><span class="utility-divider" aria-hidden="true"></span><button type="button">Brojevi i znakovi</button></div><button type="button">Arapski</button></footer>
+        <footer class="utility-row"><div class="utility-main"><button class="edit-key" type="button">Razmak</button><button class="edit-key" type="button">Obriši slovo</button><span class="utility-divider" aria-hidden="true"></span><button class="view-key" type="button">Brojevi i znakovi</button></div><button class="view-key" type="button">Arapski</button></footer>
       </div>
       <div class="tracking-modal-layer">
         <section class="tracking-modal" aria-labelledby="tracking-dialog-title">

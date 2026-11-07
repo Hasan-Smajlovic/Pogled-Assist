@@ -52,8 +52,8 @@
 .prediction-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); flex: 1; min-width: 0; }
 .prediction-row button { overflow-wrap: anywhere; }
 #undo-word { flex: 0 0 170px; min-height: var(--prediction-height, 83px); font-size: 20px; }
-.word { min-height: var(--prediction-height, 83px); padding: 2px 8px; font-size: 27px; border-color: var(--border); background: var(--surface); color: var(--text); }
-.word:hover { background: #334355; }
+.word { min-height: var(--prediction-height, 83px); padding: 2px 8px; font-size: 27px; border-color: var(--tone-word-border); background: var(--tone-word); color: var(--text); }
+.word:hover { background: var(--tone-word-hover); }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) var(--system-column, clamp(280px, 25%, 480px)); gap: var(--gap); min-height: 0; }
 .speech-screen > .workspace { grid-row: 3; position: relative; padding-top: 30px; }
 .main-panel { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
@@ -83,7 +83,22 @@
 .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
 .system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
-.sleep { background: var(--panel); border-color: var(--border); color: var(--text); }
+/* Role tones: muted shades separate words, editing, view switches and app controls.
+   Letters and list items keep the control colour; cyan and blue stay for gaze, focus,
+   pressed buttons and the main action. Disabled and pressed states keep their shared look. */
+.speech-screen {
+  --tone-word: #2a3b38; --tone-word-border: #6f9187; --tone-word-hover: #324640;
+  --tone-edit: #20272f; --tone-edit-border: #66788b; --tone-edit-hover: #29323c;
+  --tone-view: #2f3048; --tone-view-border: #7f81ab; --tone-view-hover: #383a56;
+  --tone-system: #1d242d; --tone-system-border: #66788b; --tone-system-hover: #262f3a;
+}
+.edit-key { background: var(--tone-edit); border-color: var(--tone-edit-border); }
+.view-key { background: var(--tone-view); border-color: var(--tone-view-border); }
+.system-key { background: var(--tone-system); border-color: var(--tone-system-border); color: var(--text); }
+.edit-key:hover { background: var(--tone-edit-hover); }
+.view-key:hover { background: var(--tone-view-hover); }
+.system-key:hover { background: var(--tone-system-hover); }
+.speech-screen .warning:not(:disabled):hover { background: #463c2b; }
 /* All letters: half-width app controls with titles only; groups keep the wider column. */
 .speech-screen[data-layout="alphabet"] { --system-column: clamp(150px, 12.5%, 240px); }
 .speech-screen[data-layout="alphabet"] .system-actions small { display: none; }

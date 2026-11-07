@@ -344,3 +344,46 @@ def test_switching_script_with_letter_groups_keeps_the_bottom_row_in_place(
     qtbot.waitUntil(lambda: window._speech_settings.keyboard_script == "arabic")
     qtbot.wait(1)
     assert [button.geometry() for button in utility] == before
+
+
+def test_speech_role_tones_separate_words_editing_views_and_app_controls(qtbot, make_speech_window):
+    window = make_speech_window(FakeSpeech(), library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(lambda: window._space_button.width() > 200)
+    # Predictions arrive asynchronously, so fix one offered word and one empty slot.
+    word, empty_word = window._prediction_buttons[:2]
+    word.setText("DA")
+    word.setEnabled(True)
+    empty_word.setText("·")
+    empty_word.setEnabled(False)
+
+    def fill(button):
+        # Sample the fill above the centred label, inside the one-pixel border.
+        return button.grab().toImage().pixelColor(button.width() // 2, 6).name()
+
+    def action(name):
+        return window._action_buttons[window._action(name)]
+
+    tones = {
+        "#283442": [action("letter:0")],
+        "#2a3b38": [word],
+        "#20272f": [window._space_button, window._backspace_button],
+        "#2f3048": [
+            window._categories_button,
+            window._phrases_button,
+            window._keyboard_toggle_button,
+            window._script_button,
+        ],
+        "#1d242d": [action("sleep:start"), action("exit")],
+        "#3b3325": [window._clear_button],
+        "#442b33": [action("alarm:start")],
+        "#2e6478": [window._play_button],
+        # Disabled controls keep one shared look whatever their role.
+        "#222b35": [empty_word, window._undo_word_button],
+    }
+    assert {name: [fill(button) for button in buttons] for name, buttons in tones.items()} == {
+        name: [name] * len(buttons) for name, buttons in tones.items()
+    }
+    window._categories_button.setChecked(True)
+    assert fill(window._categories_button) == "#2e6478"
