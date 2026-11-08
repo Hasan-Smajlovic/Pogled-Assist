@@ -128,3 +128,37 @@ def test_gallery_profiles_filter_before_grabbing_widgets(qapp, tmp_path, monkeyp
     session.capture(widget, "gaze-check-precision", "Fixation target")
     assert dispatched == [True]  # Omitted states must still finish deferred Qt setup.
     widget.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("phase", ["precision", "trial", "free"])
+def test_capture_keeps_active_gaze_check_when_native_reshow_delivers_resize(qapp, tmp_path, phase):
+    from PySide6.QtGui import QResizeEvent
+
+    from pogled_assist.interaction.mouse_controller import GazeSettings
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+    from scripts.ui.capture_ui import _capture_widget
+
+    class NativeResizeCheck(GazeCheckWindow):
+        def showEvent(self, event):
+            super().showEvent(event)
+            if self._phase in ("precision", "trial", "free"):
+                # Windows can deliver a resize on re-show even at the same size.
+                qapp.sendEvent(self, QResizeEvent(self.size(), self.size()))
+
+    window = NativeResizeCheck(GazeSettings())
+    window.resize(1280, 720)
+    window.show()
+    window._timer.timeout.disconnect(window._tick)
+    qapp.processEvents()
+    getattr(window, f"_start_{phase}")()
+    qapp.processEvents()
+    check = window._check
+    if phase == "precision":
+        assert check is not None
+
+    snapshot = _capture_widget(qapp, window, tmp_path, "gaze-check-precision", (1280, 720))
+
+    assert window._phase == phase
+    assert window._check is check
+    assert not QImage(str(snapshot)).isNull()

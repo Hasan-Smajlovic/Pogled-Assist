@@ -103,6 +103,8 @@ The CI `tests` job also uploads a `ui-gallery` artifact, using the screenshots a
 
 The local and published galleries share six review groups, a six-image Overview, thumbnail grids and full-size image links. Overview reuses existing PNGs. Groups show their screenshot counts and order representative states before extended variants; unknown images from older or newer CI artifacts appear under Other previews. Images load lazily. No application UI or interaction behavior changes when selecting a gallery profile.
 
+Synthetic gaze-check windows keep the requested fixed size, and capture leaves active precision, word and free checks visible. Native Windows layout growth or re-showing a window can otherwise deliver a resize that correctly cancels the measurement. Rendering tests emulate resize on re-show; they do not establish physical gaze accuracy.
+
 The default `core` profile renders:
 
 | Group (`-UiGroup`) | Screenshots | Representative coverage |

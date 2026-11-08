@@ -35,6 +35,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
@@ -238,10 +239,18 @@ def _capture_widget(
     size: tuple[int, int],
 ) -> Path:
     width, height = size
-    # Re-show each state so reused native windows apply child visibility changes.
-    widget.hide()
+    # Re-show reused native windows to settle child visibility. An active gaze
+    # check must stay shown: Windows can emit a resize on re-show and end it.
+    keep_shown = (
+        isinstance(widget, GazeCheckWindow)
+        and widget.isVisible()
+        and widget._phase in ("precision", "trial", "free")
+    )
+    if not keep_shown:
+        widget.hide()
     widget.resize(width, height)
-    widget.show()
+    if not keep_shown:
+        widget.show()
     app.processEvents()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     widget.resize(width, height)
