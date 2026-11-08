@@ -10,6 +10,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 SPEECH_LIBRARY_VERSION = 2
+STARTER_CONTENT_REVISION = 1
 SPEECH_LIBRARY_FILE = "speech_library.json"
 LEGACY_PHRASES_FILE = "speech_phrases.json"
 
@@ -30,6 +31,7 @@ class CategoryRecord:
 class SpeechLibrary:
     categories: list[CategoryRecord] = field(default_factory=list)
     phrases: list[PhraseRecord] = field(default_factory=list)
+    starter_revision: int = STARTER_CONTENT_REVISION
 
 
 def saved_entry_texts(store, library: SpeechLibrary) -> set[str] | None:
@@ -40,6 +42,44 @@ def saved_entry_texts(store, library: SpeechLibrary) -> set[str] | None:
         *(answer for category in library.categories for answer in category.answers),
     }
 
+
+PEOPLE_ADDITIONS = ("Kako su naši?", "Prenesi im selam.")
+STARTER_CATEGORIES = (
+    (
+        "Selami i dove",
+        (
+            "Selam alejkum.",
+            "Alejkumu selam.",
+            "Allah razi olsun.",
+            "Neka vam Allah podari svako dobro.",
+        ),
+    ),
+    (
+        "Namaz i ibadet",
+        (
+            "Je li vrijeme za namaz?",
+            "Želim klanjati.",
+            "Pomozi mi da uzmem abdest.",
+            "Okreni me prema kibli.",
+        ),
+    ),
+    (
+        "Kur'an i čitanje",
+        (
+            "Želim slušati učenje Kur'ana.",
+            "Pročitaj mi prijevod ovog ajeta.",
+            "Otvori tefsir.",
+            "Pročitaj mi još jednom.",
+        ),
+    ),
+)
+STARTER_PHRASES = (
+    "Drago mi je što ste došli.",
+    "Molim vas ponovite.",
+    "Molim vas sačekajte da napišem.",
+    "Nisam to htio reći.",
+    "Razgovarat ćemo kasnije.",
+)
 
 DEFAULT_CATEGORIES = (
     (
@@ -70,8 +110,10 @@ DEFAULT_CATEGORIES = (
             "Želim razgovarati",
             "Ko je ovdje?",
             "Ostani sa mnom",
+            *PEOPLE_ADDITIONS,
         ),
     ),
+    *STARTER_CATEGORIES,
 )
 
 
@@ -79,6 +121,39 @@ def default_categories() -> list[CategoryRecord]:
     return [
         CategoryRecord(name=name, answers=list(answers)) for name, answers in DEFAULT_CATEGORIES
     ]
+
+
+def _default_library() -> SpeechLibrary:
+    return SpeechLibrary(
+        categories=default_categories(),
+        phrases=[PhraseRecord(text) for text in STARTER_PHRASES],
+    )
+
+
+def _extend_starter_content(library: SpeechLibrary) -> bool:
+    if library.starter_revision >= STARTER_CONTENT_REVISION:
+        return False
+    categories = {category.name.casefold(): category for category in library.categories}
+    people = categories.get("ljudi")
+    if people is not None:
+        for text in PEOPLE_ADDITIONS:
+            if not entry_exists(people.answers, text):
+                people.answers.append(text)
+    for name, answers in STARTER_CATEGORIES:
+        category = categories.get(name.casefold())
+        if category is None:
+            library.categories.append(CategoryRecord(name, list(answers)))
+        else:
+            for text in answers:
+                if not entry_exists(category.answers, text):
+                    category.answers.append(text)
+    phrases = [phrase.text for phrase in library.phrases]
+    library.phrases.extend(
+        PhraseRecord(text) for text in STARTER_PHRASES if not entry_exists(phrases, text)
+    )
+    library.phrases = sorted_phrases(library.phrases)
+    library.starter_revision = STARTER_CONTENT_REVISION
+    return True
 
 
 def speech_library_store(root: Path) -> SpeechLibraryStore:
@@ -121,7 +196,10 @@ class SpeechLibraryStore:
         if library is None:
             self._unreadable_paths.add(self.path)
             return self._fallback_after_invalid_primary()
-        self._sync_legacy_file(library)
+        legacy_changed = self._import_legacy_phrases(library)
+        starter_changed = not self.read_error and _extend_starter_content(library)
+        if (legacy_changed or starter_changed) and not self.save(library):
+            logger.warning("Could not synchronize the speech library at %s.", self.path)
         return library
 
     def save(self, library: SpeechLibrary) -> bool:
@@ -168,46 +246,47 @@ class SpeechLibraryStore:
 
     def _load_legacy_for_migration(self) -> SpeechLibrary:
         if self.legacy_path is None:
-            return SpeechLibrary(categories=default_categories())
+            return _default_library()
 
         data = self._read(self.legacy_path)
         if data is _MISSING or data is _INVALID:
-            return SpeechLibrary(categories=default_categories())
+            return _default_library()
         library = _parse_library(data, self.legacy_path)
         if library is None:
             self._unreadable_paths.add(self.legacy_path)
-            return SpeechLibrary(categories=default_categories())
+            return _default_library()
 
+        _extend_starter_content(library)
         if not self.save(library):
             logger.warning("Could not migrate the speech library from %s.", self.legacy_path)
         return library
 
     def _fallback_after_invalid_primary(self) -> SpeechLibrary:
         if self.legacy_path is None:
-            return SpeechLibrary(categories=default_categories())
+            return _default_library()
 
         legacy_data = self._read(self.legacy_path)
         if not isinstance(legacy_data, list):
-            return SpeechLibrary(categories=default_categories())
+            return _default_library()
         return SpeechLibrary(
             categories=default_categories(),
             phrases=_parse_phrases(legacy_data),
         )
 
-    def _sync_legacy_file(self, library: SpeechLibrary) -> None:
+    def _import_legacy_phrases(self, library: SpeechLibrary) -> bool:
         if self.legacy_path is None:
-            return
+            return False
 
         legacy_data = self._read(self.legacy_path)
         if legacy_data is _INVALID:
-            return
+            return False
         if legacy_data is not _MISSING and not isinstance(legacy_data, (list, dict)):
             self._unreadable_paths.add(self.legacy_path)
-            return
+            return False
         if isinstance(legacy_data, list):
             legacy_phrases = _parse_phrases(legacy_data)
             if legacy_phrases == library.phrases:
-                return
+                return False
             if self._legacy_is_newer():
                 library.phrases = legacy_phrases
         elif isinstance(legacy_data, dict) and self._legacy_is_newer():
@@ -217,8 +296,7 @@ class SpeechLibraryStore:
                 # list-only file, so only its phrase changes are safe to import.
                 library.phrases = legacy_library.phrases
 
-        if not self.save(library):
-            logger.warning("Could not synchronize the rollback-compatible phrase file.")
+        return True
 
     def _legacy_is_newer(self) -> bool:
         if self.legacy_path is None:
@@ -245,7 +323,9 @@ def _read_json(path: Path) -> object:
 
 def _parse_library(data: object, path: Path) -> SpeechLibrary | None:
     if isinstance(data, list):
-        return SpeechLibrary(categories=default_categories(), phrases=_parse_phrases(data))
+        return SpeechLibrary(
+            categories=default_categories(), phrases=_parse_phrases(data), starter_revision=0
+        )
     if not isinstance(data, dict):
         logger.warning("Speech library did not contain an object or legacy list: %s", path)
         return None
@@ -258,12 +338,17 @@ def _parse_library(data: object, path: Path) -> SpeechLibrary | None:
     )
     phrases_value = data.get("phrases", [])
     phrases = _parse_phrases(phrases_value) if isinstance(phrases_value, list) else []
-    return SpeechLibrary(categories=categories, phrases=phrases)
+    return SpeechLibrary(
+        categories=categories,
+        phrases=phrases,
+        starter_revision=max(0, _safe_int(data.get("starter_revision", 0))),
+    )
 
 
 def _library_payload(library: SpeechLibrary) -> dict[str, object]:
     return {
         "version": SPEECH_LIBRARY_VERSION,
+        "starter_revision": library.starter_revision,
         "categories": [
             {"name": category.name, "answers": list(category.answers)}
             for category in library.categories

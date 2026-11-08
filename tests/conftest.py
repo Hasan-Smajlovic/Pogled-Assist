@@ -35,6 +35,23 @@ def isolate_elevenlabs_credentials_and_cache(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def silence_selection_sound(monkeypatch):
+    """Windows test runs must never play the gaze-selection tick through the speakers."""
+
+    class SilentEffect:
+        def setVolume(self, _volume):
+            pass
+
+        def play(self):
+            pass
+
+    monkeypatch.setattr(
+        "pogled_assist.speech.selection_sound._create_windows_effect",
+        lambda _parent: SilentEffect(),
+    )
+
+
+@pytest.fixture(autouse=True)
 def close_top_level_widgets(qapp) -> Iterator[None]:
     from PySide6.QtCore import QEvent
 

@@ -16,6 +16,10 @@ datas = [
         str(repo_root / "pogled_assist" / "assets" / "emergency_alarm.wav"),
         "pogled_assist/assets",
     ),
+    (
+        str(repo_root / "pogled_assist" / "assets" / "selection_tick.wav"),
+        "pogled_assist/assets",
+    ),
     (str(repo_root / "pogled_assist" / "assets" / "checkbox_x.svg"), "pogled_assist/assets"),
     (
         str(repo_root / "pogled_assist" / "assets" / "bosnian-model.json.gz"),

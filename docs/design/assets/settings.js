@@ -80,6 +80,17 @@
     for (const option of document.querySelectorAll('[data-voice]')) option.checked = option.dataset.voice === selectedVoice;
     $('test-selected-voice').textContent = !arabic && selectedVoice === 'efendija' ? 'Isprobaj Efendiju' : 'Isprobaj govor';
   }
+  $('settings-letter-layout-preview').addEventListener('click', event => {
+    const groups = event.currentTarget.textContent === 'Sva slova';
+    event.currentTarget.textContent = groups ? 'Grupe slova' : 'Sva slova';
+    $('settings-status').textContent = 'Raspored slova u Govoru je ažuriran.';
+  });
+  const selectionSoundLevels = ['Isključen', 'Tih', 'Srednji', 'Glasan'];
+  $('settings-selection-sound-preview').addEventListener('click', event => {
+    const next = (selectionSoundLevels.indexOf(event.currentTarget.textContent) + 1) % selectionSoundLevels.length;
+    event.currentTarget.textContent = selectionSoundLevels[next];
+    $('settings-status').textContent = 'Zvuk pri odabiru je ažuriran.';
+  });
   $('settings-script-preview').addEventListener('click', () => {
     arabic = !arabic;
     ReferenceKeyboard.writeScript(arabic);

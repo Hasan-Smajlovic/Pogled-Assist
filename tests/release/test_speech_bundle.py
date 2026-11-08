@@ -4,13 +4,33 @@ import hashlib
 import io
 import subprocess
 import wave
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 import pogled_assist.main as main_module
 from pogled_assist.speech import bundle_check, speech_service
 from scripts.release import prepare_speech_bundle as bundler
+
+
+def test_edge_dependency_includes_current_service_authentication():
+    # 7.3 adds the v2 handshake; 7.3.1 also fixes locale-dependent server dates.
+    assert Version(bundler.EDGE_TTS_VERSION) >= Version("7.3.1")
+    assert version("edge-tts") == bundler.EDGE_TTS_VERSION
+
+
+def test_edge_requirement_and_distributed_source_match_bundle_version():
+    root = Path(__file__).resolve().parents[2]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    assert f"edge-tts=={bundler.EDGE_TTS_VERSION}" in requirements
+    name, url, _checksum, license_member, _license_name = next(
+        asset for asset in bundler.SOURCE_ASSETS if asset[0].startswith("edge_tts-")
+    )
+    assert name == f"edge_tts-{bundler.EDGE_TTS_VERSION}.tar.gz"
+    assert url.endswith("/" + name)
+    assert license_member == f"edge_tts-{bundler.EDGE_TTS_VERSION}/LICENSE"
 
 
 def test_bundle_discovery_precedes_external_tools_but_keeps_overrides(monkeypatch, tmp_path):

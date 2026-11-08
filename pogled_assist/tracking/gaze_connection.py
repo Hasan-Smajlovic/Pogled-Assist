@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .tobii_device import is_eye_tracker_5
 from .tobii_stream_engine import TobiiStreamEngineError
 from .tobii_stream_engine_bridge_backend import TobiiStreamEngineBridgeError
 
@@ -44,8 +45,10 @@ class GazeConnectionSession:
         backend_types: tuple[Callable, ...] = (),
         connection: GazeConnection | None = None,
         generation: int = 0,
+        skip_research: bool = False,
     ) -> None:
         self.events: queue.SimpleQueue = queue.SimpleQueue()
+        self._skip_research = skip_research
         self.done = threading.Event()
         self.cancelled = threading.Event()
         self.connection = connection
@@ -105,7 +108,7 @@ class GazeConnectionSession:
         return deliver
 
     def _connect(self) -> GazeConnection | None:
-        connection = self._research()
+        connection = None if self._skip_research else self._research()
         if connection is not None or self.cancelled.is_set():
             return connection
         for name, backend_type in zip(
@@ -164,7 +167,15 @@ class GazeConnectionSession:
             import tobii_research as tr
 
             failure_message = "Pretraga Tobii uređaja putem Pro SDK-a nije uspjela."
-            trackers = tr.find_all_eyetrackers()
+            # Pro SDK can discover ET5 and accept a subscription without ever
+            # delivering samples. Use Stream Engine for this consumer device.
+            trackers = [
+                tracker
+                for tracker in tr.find_all_eyetrackers()
+                if not is_eye_tracker_5(
+                    getattr(tracker, "model", "") or getattr(tracker, "device_name", "")
+                )
+            ]
             if self.cancelled.is_set():
                 return None
             if not trackers:

@@ -63,6 +63,9 @@ from .windows.windows_input import WindowsInputController
 
 logger = logging.getLogger(__name__)
 
+# After the hotbar and gaze start, so the one-time load does not compete with them.
+PREDICTION_PRELOAD_DELAY_MS = 2000
+
 
 class HotbarWindow(HotbarSpeech, QWidget):
     """Frameless top toolbar that reserves desktop work area on Windows."""
@@ -391,6 +394,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.start()
         self._foreground.start()
         self._gaze.start()
+        # Load word predictions before Speech first needs them, after startup settles.
+        QTimer.singleShot(PREDICTION_PRELOAD_DELAY_MS, self, self._suggestions.preload)
 
     def _position_on_primary_screen(self) -> None:
         screen = QGuiApplication.primaryScreen()
@@ -694,6 +699,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._hide_keyboard_sidebar()
 
     def _show_keyboard_sidebar(self) -> None:
+        replaced = self._controller_window if _is_visible(self._controller_window) else None
         self._hide_controller_sidebar()
         if self._keyboard_window is None:
             self._keyboard_window = KeyboardWindow(self._speech.settings, self)
@@ -711,7 +717,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._keyboard_window.set_target_window(self._foreground.window)
         self._keyboard_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._keyboard_window.update_settings(self._speech.settings)
-        self._keyboard_window.show_sidebar(full_height=not self.isVisible())
+        self._keyboard_window.show_sidebar(full_height=not self.isVisible(), replacing=replaced)
         self._recording_changed()
         self._set_keyboard_button_checked(True)
         self._set_status("Tastatura je otvorena.")
@@ -744,6 +750,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         return not _is_visible(window)
 
     def _show_controller_sidebar(self) -> None:
+        replaced = self._keyboard_window if _is_visible(self._keyboard_window) else None
         self._hide_keyboard_sidebar()
         if self._controller_window is None:
             self._controller_window = ControllerWindow(
@@ -769,7 +776,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._controller_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._controller_window.update_gaze_settings(self._mouse.settings)
         self._controller_window.update_speech_settings(self._speech.settings)
-        self._controller_window.show_sidebar(full_height=not self.isVisible())
+        self._controller_window.show_sidebar(full_height=not self.isVisible(), replacing=replaced)
         self._recording_changed()
         self._set_controller_button_checked(True)
         self._set_status("Upravljač je otvoren.")
@@ -801,6 +808,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
                 self,
                 library_store=self._speech_library_store,
                 suggestions=self._suggestions,
+                selection_sound=self._selection_sound,
             )
             self._speech_window.keyboard_script_changed.connect(self._change_keyboard_script)
             self._speech_window.closed.connect(
@@ -846,6 +854,15 @@ class HotbarWindow(HotbarSpeech, QWidget):
                 notice, immediate=not self._mouse.settings.show_tracking_notifications
             )
 
+    def _settings_services(self) -> SettingsServices:
+        return SettingsServices(
+            update_manager=self._release_update_manager,
+            suggestions=self._suggestions,
+            selection_sound=self._selection_sound,
+            account=self._speech.account,
+            clear_audio=self._speech.audio_cache.clear,
+        )
+
     def _open_settings(self) -> None:
         if self._diagnostics_window is not None:
             self._diagnostics_window.raise_()
@@ -875,12 +892,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._mouse.settings,
             self._speech.settings,
             self,
-            services=SettingsServices(
-                update_manager=self._release_update_manager,
-                suggestions=self._suggestions,
-                account=self._speech.account,
-                clear_audio=self._speech.audio_cache.clear,
-            ),
+            services=self._settings_services(),
         )
         diagnostics.emit(
             "settings_constructed",
@@ -1055,7 +1067,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
             diagnostics.emit(
                 "gaze_check_handoff", priority=True, action="tobii_settings", outcome="requested"
             )
-            message = launch_tobii_settings()
+            message = launch_tobii_settings(
+                device_model=self._gaze.check_environment().get("model") or ""
+            )
             diagnostics.emit(
                 "gaze_check_handoff",
                 priority=True,
@@ -1275,7 +1289,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._interaction_overlay.clear()
 
         try:
-            message = launch_tobii_guest_calibration()
+            message = launch_tobii_guest_calibration(
+                device_model=self._gaze.check_environment().get("model") or ""
+            )
             self._set_status(message)
             if self._settings_window is not None:
                 self._settings_window.set_status(message)

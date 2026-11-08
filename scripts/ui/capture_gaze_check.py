@@ -26,6 +26,9 @@ class CaptureGazeCheck:
         window = GazeCheckWindow(self.gaze_settings)
         self.widgets.append(window)
         size = min(self.size[0], 1280), min(self.size[1], 720)
+        # Native Windows layouts can otherwise expand a preview by a few pixels
+        # between states; resizing it back would cancel an active measurement.
+        window.setFixedSize(*size)
         # Static synthetic data and frozen UI ticks keep the gallery deterministic.
         window._timer.timeout.disconnect(window._tick)
         self.capture(window, "gaze-check-unavailable", "Gaze check: data unavailable", size=size)
@@ -95,7 +98,7 @@ class CaptureGazeCheck:
         self._capture_eyes(window, size)
         single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
         self.widgets.append(single)
-        single.resize(*size)
+        single.setFixedSize(*size)
         single._timer.timeout.disconnect(single._tick)
         single.show()
         self.app.processEvents()
@@ -105,7 +108,7 @@ class CaptureGazeCheck:
         self.capture(single, "gaze-check-one-eye-free", "Gaze check: one-eye free view", size=size)
         held = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="hold"))
         self.widgets.append(held)
-        held.resize(*size)
+        held.setFixedSize(*size)
         held._timer.timeout.disconnect(held._tick)
         held.show()
         self.app.processEvents()

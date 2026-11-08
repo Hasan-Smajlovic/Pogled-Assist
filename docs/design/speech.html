@@ -19,7 +19,7 @@
   <main id="speech-screen" class="speech-screen" aria-label="Pogled Assist govorna tastatura">
     <header class="topbar">
       <button class="warning" type="button" data-action="clear">Obriši</button>
-      <button id="categories-toggle" type="button" data-action="categories" aria-pressed="false">Kategorije</button>
+      <button id="categories-toggle" class="view-key" type="button" data-action="categories" aria-pressed="false">Kategorije</button>
       <div class="message-box">
         <div class="message-header">
           <label id="message-label" for="message">Vaša poruka</label>
@@ -29,30 +29,41 @@
             <p><strong id="voice-notice-title"></strong><span id="voice-notice-detail"></span></p>
           </div>
         </div>
-        <input id="message" type="text" aria-labelledby="message-label" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite grupu slova…">
+        <input id="message" type="text" aria-labelledby="message-label" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Odaberite slovo…">
       </div>
       <div class="speech-playback"><button id="speak-button" class="primary" type="button" data-action="speak">Izgovori</button><span id="speech-progress" class="speech-activity" aria-hidden="true" hidden></span></div>
-      <button id="phrases-toggle" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
+      <button id="phrases-toggle" class="view-key" type="button" data-action="phrases" aria-pressed="false">Fraze</button>
     </header>
     <section class="predictions" aria-label="Ponuđene riječi">
       <h2 class="visually-hidden">Ponuđene riječi</h2>
       <div class="prediction-controls">
         <div id="predictions" class="prediction-row"></div>
-        <button id="undo-word" type="button" data-action="undo-word" disabled>Poništi riječ</button>
+        <button id="undo-word" class="edit-key" type="button" data-action="undo-word" disabled>Poništi riječ</button>
       </div>
     </section>
     <div class="workspace">
-      <section class="main-panel" aria-labelledby="view-title">
+      <section id="main-panel" class="main-panel" aria-labelledby="view-title">
+        <div id="list-heading" class="list-heading" hidden><h1 id="list-title">Kategorije</h1><span id="list-page"></span></div>
         <div id="view-header" class="view-header" hidden>
-          <h1 id="view-title">Odaberite grupu slova</h1>
-          <button id="back" type="button" data-action="back" hidden>Nazad</button>
-          <button id="add" class="primary" type="button" data-action="add" hidden>Dodaj</button>
-          <button id="manage" type="button" data-action="manage" aria-pressed="false" hidden>Obriši</button>
-          <button id="retry-library" type="button" data-action="retry-library" hidden>Učitaj ponovo</button>
+          <h1 id="view-title">Odaberite slovo</h1>
           <button id="cancel-edit" type="button" data-action="cancel-edit" hidden>Odustani</button>
           <button id="save" class="primary" type="button" data-action="save" hidden>Sačuvaj</button>
         </div>
-        <div id="content" class="key-grid"></div>
+        <div class="list-body">
+          <div id="content" class="key-grid"></div>
+          <aside id="list-controls" class="list-controls" aria-label="Komande liste" hidden>
+            <div class="list-slot" data-slot="back"><button id="back" class="view-key" type="button" data-action="back" hidden>‹ Kategorije</button></div>
+            <div class="list-slot" data-slot="edit">
+              <button id="add" class="add-key" type="button" data-action="add">+ Dodaj</button>
+              <button id="manage" class="warning" type="button" data-action="manage" aria-pressed="false">Obriši</button>
+              <button id="retry-library" type="button" data-action="retry-library" hidden>Učitaj ponovo</button>
+            </div>
+            <div class="list-slot" data-slot="pages">
+              <button id="list-previous" class="view-key" type="button" data-action="list-previous">‹ Prethodna</button>
+              <button id="list-next" class="view-key" type="button" data-action="list-next">Sljedeća ›</button>
+            </div>
+          </aside>
+        </div>
         <nav id="paging" class="paging" aria-label="Stranice" hidden>
           <button type="button" data-action="previous">Prethodna</button>
           <span id="page-number"></span>
@@ -62,23 +73,24 @@
       <aside class="system-actions" aria-label="Kontrole aplikacije">
         <div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div>
         <button class="danger" type="button" data-action="alarm">Alarm<small>Pozovi pomoć</small></button>
-        <button class="sleep" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
-        <button type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
+        <button class="system-key" type="button" data-action="sleep">Odmor<small>Odmori oči</small></button>
+        <button class="system-key" type="button" data-action="exit">Izlaz<small>Izađi ili ugasi aplikaciju</small></button>
       </aside>
     </div>
     <div class="utility-row">
       <div class="utility-main">
-      <button type="button" data-action="space">Razmak</button>
-      <button type="button" data-action="backspace">Obriši slovo</button>
+      <button class="edit-key" type="button" data-action="space">Razmak</button>
+      <button class="edit-key" type="button" data-action="backspace">Obriši slovo</button>
       <span class="utility-divider" aria-hidden="true"></span>
-      <button id="keyboard-toggle" type="button" data-action="keyboard-toggle">Brojevi i znakovi</button>
+      <button id="keyboard-toggle" class="view-key" type="button" data-action="keyboard-toggle">Brojevi i znakovi</button>
       </div>
-      <button type="button" data-script-toggle>Arapski</button>
+      <button class="view-key" type="button" data-script-toggle>Arapski</button>
     </div>
   </main>
   <details class="reference-tools">
     <summary>Opcije pregleda</summary>
     <label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label>
+    <label><input id="letter-groups-preview" type="checkbox"> Grupe slova umjesto svih slova</label>
     <button id="single-letter-preview" type="button">1 slovo u grupi</button>
     <button id="twelve-letters-preview" type="button">12 slova u grupi</button>
     <label><input id="library-read-error" type="checkbox"> Biblioteka nije učitana</label>
@@ -129,7 +141,7 @@
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 
 <details class="design-notes"><summary>Pravila ovog prikaza</summary>
-    <p>Poravnanje: ponuđene riječi i Poništi riječ dijele istu visinu (96 px, odnosno 88 px pri visini ekrana do 760 px). Osnovni raspored nema vidljive naslove Brzi izbor, Odaberite grupu slova i Kontrole; sekcije odvaja linija. Pristupačni nazivi ostaju dostupni, a naslovi i radnje biblioteke i uređivanja prikazuju se kada su potrebni. Oznaka snimanja ima rezervisan prostor iznad dugmadi. Indikator govora je nepomičan. Svaka sekcija ima svoj red u mreži: skrivanje prijedloga u arapskom pismu povećava prostor tastature, dok visina i položaj donjih komandi ostaju isti. Preglednik ne pomjera prikaz pri promjeni pisma. HTML koristi demonstracijske podatke; stvarna stanja provjeravaju se u Qt galeriji.</p>
+    <p>Poravnanje: ponuđene riječi i Poništi riječ dijele istu visinu (96 px, odnosno 88 px pri visini ekrana do 760 px). Osnovni raspored nema vidljive naslove Brzi izbor, Odaberite slovo i Kontrole; sekcije odvaja linija. Pristupačni nazivi ostaju dostupni, a naslovi i radnje biblioteke i uređivanja prikazuju se kada su potrebni. Oznaka snimanja ima rezervisan prostor iznad dugmadi. Indikator govora je nepomičan. Svaka sekcija ima svoj red u mreži: skrivanje prijedloga u arapskom pismu povećava prostor tastature, dok visina i položaj donjih komandi ostaju isti. Preglednik ne pomjera prikaz pri promjeni pisma. HTML koristi demonstracijske podatke; stvarna stanja provjeravaju se u Qt galeriji.</p>
     <p>Dok radi <a href="diagnostics.html">dijagnostičko snimanje</a>, mala nepulsirajuća oznaka s preostalim vremenom stoji uz naslov Kontrole. Koristi postojeći prostor naslova, bez pomjeranja dugmadi ili prekrivanja obavijesti o praćenju i glasu. Ne uzima fokus i nije novo dugme. Snimanje se može zaustaviti iz Postavki; primjer se otvara pomoću <code>?recording=demo</code>. Ovaj HTML ne snima poruku.</p>
     <p>izabrani Efendija prvo koristi važeći sačuvani snimak cijele spremljene fraze ili odgovora. Za ostale poruke pokušava ElevenLabs, pa Prirodni, pa Standardni. Izbor glasa ostaje sačuvan. Efendija ima najviše 30 sekundi za pripremu zvuka, Prirodni još najviše 3 sekunde; potvrđena greška pokreće zamjenu odmah. To su pragovi za pripremu, ne obećanje početka zvuka u 33 sekunde. Dostupni sačuvani zvuk se može koristiti i kada nema interneta ili kredita.</p>
     <p>Obavijest koristi postojeće zaglavlje poruke. Unutar gornjeg reda od 96 px zaglavlje se proširi sa 18 na 38 px, a polje poruke se smanji; dugmad i tastatura ostaju na istim mjestima. Razlog i dodatna poruka stoje jedan uz drugi, u dvije kolone koje po potrebi prelamaju tekst. Obavijest se ne zatvara potvrdom i ne uzima fokus. Obavijest o zamjenskom glasu ostaje nakon završetka izgovora dok se taj glas koristi. Tekst navodi stvarni korišteni glas i razlog zamjene. Izgovor sačuvanim Efendijinim glasom ne prikazuje da se koristi Prirodni. Obavijest o praćenju ima prednost; nakon nje vraća se aktuelno stanje govora.</p>
@@ -137,12 +149,14 @@
     <ul>
       <li>Red prijedloga koristi tekst veličine 27 px i visinu 88 px pri 1280 × 720. Redoslijed, odabir i poništavanje prijedloga se ne mijenjaju. Razmaci između dugmadi su 12 px; linije odvajaju veće sekcije.</li>
       <li>Prva tri donja dugmeta dijele širinu prostora za slova, a izbor pisma prati kolonu Alarm, Odmor i Izlaz iznad. Razmak između Brojevi i znakovi i izbora pisma nastavlja istu vertikalnu granicu. Visina svih donjih dugmadi ostaje 95 px. Redoslijed, oznake i radnje se ne mijenjaju. Guste tastature koriste do 12 tipki po stranici, u dva reda po šest. Visina tipki ostaje najmanje 72 px, a razmak 12 px. Prethodna i Sljedeća ostaju iznad donjih komandi, i tokom uređivanja.</li>
-      <li>Šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje svih 30 slova kroz tri stranice. Fraze, kategorije i odgovori prikazuju do četiri stavke po stranici u dva reda; naslov, uređivanje i stranice ne prekrivaju donje komande. Odabrana grupa zamjenjuje grupe pojedinačnim slovima u istom prostoru tastature, bez modala. Pregled 12 slova koristi četiri kolone i četiri reda, slova od 56 px i tipke visoke najmanje 72 px pri 1280 × 720. Tokom uređivanja najveća grupa koristi pet kolona i tri reda kako bi ostale dostupne komande Sačuvaj i Odustani. Odabir slova vraća istu stranicu grupa. Nazad na grupe ili Escape vraća grupe bez unosa. Poruka, prijedlozi i ostale komande ostaju dostupni.</li>
-<li>Kategorije su lijevo od poruke, fraze desno. Polje poruke zauzima cijelu dostupnu širinu; gornji red zadržava visinu od 96 px. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista. Obavijesti o prekidima i povratku praćenja imaju <a href="tracking.html">zaseban pregled</a>; koriste postojeće zaglavlje i ne pomjeraju dugmad.</li>
-<li>Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu grupnu tastaturu. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
+      <li>Latinica zadano prikazuje svih 30 slova abecednim redom, u tri reda po deset, bez stranica i bez praznih mjesta. Jedan odabir pogledom upisuje slovo; DŽ, LJ i NJ su po jedna tipka. Tipke ostaju na istom mjestu nakon unosa, pa se isto slovo ponavlja tek nakon odlaska i povratka pogleda. Pri 1280 × 720 tipke imaju oko 98 × 108 px, a tokom dodavanja stavke najmanje 72 px visine, uz slova od 40 px. Nema dugmeta Nazad na grupe, a Escape ne mijenja prikaz. Grupe slova bira pomoćnik u Postavkama, pod Raspored slova u Govoru; arapsko pismo uvijek koristi grupe. Opcija pregleda Grupe slova umjesto svih slova prikazuje taj raspored, kao i <code>?layout=groups</code>.</li>
+      <li>S grupama, šest grupa ostaje na početnom ekranu sa zadanim brojem od pet slova po grupi. Pregled 1 slovo prikazuje svih 30 slova kroz tri stranice. Odabrana grupa zamjenjuje grupe pojedinačnim slovima u istom prostoru tastature, bez modala. Pregled 12 slova koristi četiri kolone i četiri reda, slova od 56 px i tipke visoke najmanje 72 px pri 1280 × 720. Tokom uređivanja najveća grupa koristi pet kolona i tri reda kako bi ostale dostupne komande Sačuvaj i Odustani. Odabir slova vraća istu stranicu grupa. Nazad na grupe ili Escape vraća grupe bez unosa. Poruka, prijedlozi i ostale komande ostaju dostupni.</li>
+<li>Kategorije su lijevo od poruke, fraze desno. Polje poruke zauzima cijelu dostupnu širinu; gornji red zadržava visinu od 96 px. Latinični unos je poravnat ulijevo, pa početak kratke poruke ostaje na istom mjestu tokom pisanja. Arapski unos je poravnat udesno. Isto pravilo vrijedi tokom dodavanja kategorije, odgovora ili fraze. Dugme prebacuje između odabrane liste i tastature. Kategorije sadrže svoje odgovore; fraze su zasebna lista. Obavijesti o prekidima i povratku praćenja imaju <a href="tracking.html">zaseban pregled</a>; koriste postojeće zaglavlje i ne pomjeraju dugmad.</li>
+<li>Fraze, kategorije i odgovori prikazuju do devet stavki po stranici u tri kolone i tri reda. Pri 1280 × 720 kartica ima oko 271 × 107 px, istu visinu kao slovo, i tekst od 22 px; stranica s manje stavki zadržava iste redove. Naziv liste stoji na tankoj liniji iznad kartica: Moje fraze, Kategorije ili Kategorije › naziv kategorije, uz · stranica 1 od 2 kada ima više stranica. Desno od kartica, iza iste tanke vertikalne linije kao kod kolone Alarm, Odmor i Izlaz, stoji traka komandi širine 240 px. Njena tri reda poravnata su s redovima kartica: na vrhu ‹ Kategorije, samo u odgovorima; zatim + Dodaj i Obriši; na dnu ‹ Prethodna i Sljedeća ›. Tanke horizontalne linije odvajaju te grupe; u Frazama i Kategorijama gornje mjesto i linija ispod njega ostaju prazni, pa pogled tu može odmoriti. Kategorija je škriljasto-plava mapa s podebljanim nazivom, strelicom › i manjim podnaslovom: 1 odgovor, 6 odgovora ili Nema odgovora; dugi nazivi prelaze u drugi red. Odgovori i fraze ostaju u boji kontrole jer dodaju tekst. Kategorije, njihovi odgovori i fraze mogu se dodavati i brisati. Poruka i sav sadržaj kategorija, odgovora i fraza prikazuju se i unose velikim slovima. Dodavanje koristi istu tastaturu kao poruka. Sačuvaj vraća listu, Odustani odbacuje novi unos. Poruka za razgovor ostaje sačuvana tokom dodavanja.</li>
 <li>Aplikacija se pokreće s hotbarom. Otvaranje Govora i povratak u Govor nakon Alt+Tab vraćaju fokus u Vaša poruka bez dodatnog klika. Akcije u Govoru i zatvaranje dijaloga vraćaju fokus u aktivni unos, uz sačuvan položaj kursora i odabrani tekst. Tokom dodavanja tipkanje pripada novoj stavci. Modalni dijalozi i Odmor blokiraju tipkanje iza sebe; Postavke i druge aplikacije zadržavaju svoj fokus dok se korisnik ne vrati u Govor.</li>
 <li>Pet slova i povratak čine mrežu od tri kolone i dva reda. Arapska slova i grupe znakova koriste isti prikaz, uz redoslijed zdesna nalijevo. Obavijesti ostaju u zaglavlju poruke, a snimanje uz Kontrole. Promjena grupe poništava napredak pogleda; novi cilj zahtijeva odlazak i povratak pogleda.</li>
-<li>Glavni sadržaj koristi približno tri četvrtine radnog prostora, dok su Alarm, Odmor i Izlaz u užoj koloni ograničenoj na 480 px. Akcije liste i stranica imaju najmanje 160 × 72 px, a modalne akcije najmanje 128 px visine.</li>
+<li>Sa svim slovima Alarm, Odmor i Izlaz stoje u koloni od oko osmine širine, od 150 do 240 px, i prikazuju samo naslove, pa slova dobiju više širine. S grupama slova i u arapskom pismu kolona zauzima oko četvrtine širine, najviše 480 px, uz podnaslove. Širina prati raspored iz Postavki i pismo, a ne trenutni prikaz, pa se kolona ne pomjera pri otvaranju Fraza, Kategorija ili znakova. Tanka vertikalna linija u sredini razmaka od 12 px odvaja tastaturu i liste od ove kolone. Komande trake liste imaju najmanje 100 × 72 px, stranice tastature najmanje 160 × 72 px, a modalne akcije najmanje 128 px visine.</li>
+<li>Prigušene plave nijanse razlikuju uloge dugmadi i prate paletu ostatka aplikacije. Slova, grupe, fraze i odgovori zadržavaju boju kontrole. Pet prijedloga je petrol-plavo. Razmak, Obriši slovo i Poništi riječ su tamnije plavo-sivi. Kategorije, Fraze, Brojevi i znakovi i izbor pisma su škriljasto-plavi. Odmor i Izlaz koriste najtamniju boju panela. U traci liste ‹ Kategorije, ‹ Prethodna i Sljedeća › te mape kategorija su škriljasto-plavi, + Dodaj je prigušeno zelen, a Obriši jantaran kao Obriši poruku. Obriši ostaje jantarno upozorenje, Izgovori izraženija plava glavna radnja, a Alarm crven. Svijetli cyan ostaje za pogled i fokus. Nedostupna i uključena dugmad zadržavaju zajednički izgled. Tekst na osnovnim nijansama ima kontrast najmanje 10 : 1, pri prelasku miša najmanje 8 : 1, a okviri najmanje 3 : 1 prema pozadini ekrana i dugmeta. Natpisi i položaji se ne mijenjaju, pa boja nije jedini znak uloge.</li>
 <li>Odabir odgovora ili fraze dodaje tekst u poruku. Izgovori pokreće čitanje. Prijedlozi u ovoj HTML referenci koristi demonstracijske riječi; aplikacija koristi pripremljeni offline model.</li>
 <li>Pet stalnih mjesta prikazuje velike bosanske riječi. Izbor dovršava započetu riječ ili dodaje narednu i razmak. Poništi riječ vraća tačan prethodni tekst jednim izborom. Novo uređivanje ukida poništavanje. Poruka se ne izgovara automatski.</li>
 <li>Prijedlozi su neaktivni kod odabranog teksta, pomjerenog kursora i unosa naziva kategorije. U editoru fraze ili odgovora mijenjaju samo taj unos. Prazna mjesta ostaju neaktivna. Promjena riječi ispod pogleda ne dopušta ponovljeni izbor bez odlaska i povratka.</li>
@@ -153,13 +167,14 @@
 <li>Trajanje čuvanja uz rub podešava se u Postavkama pogleda, na kartici Stabilnost uz rub: 0 do 300 ms, korak 20 ms, zadano 120 ms. Nula isključuje čuvanje. Dok je A zamrznut, ni A ni susjedni B ne skupljaju vrijeme. Nakon isteka B počinje punu novu pauzu i zadržavanje. Promjena trajanja poništava tekući odabir. Povratak nakon isteka tolerancije započinje punu novu pauzu i zadržavanje, uključujući ponavljanje već potvrđenog dugmeta, čak i kada nije stigao dodatni uzorak pogleda dok je pogled bio izvan dugmeta. Prekid praćenja ne produžava rok već započetog čuvanja uz rub.</li>
 <li>Promjena prikaza, riječi ili veličine prozora poništava prethodni odabir. Gubitak praćenja oka prati izabrani režim, bez produžavanja već započetog roka čuvanja uz rub; HTML simulacija ne provjerava oči. Toleranciju treba provjeriti s korisnikom na Tobii uređaju.</li>
 <li>Alarm ponavlja zvučni signal do odabira Zaustavi alarm. Ne šalje poruke niti zove telefonski broj. Zvuk zahtijeva podršku i dozvolu preglednika.</li>
-<li>Indikator dijagnostičkog snimanja ima rezervisan red ispod naslova Kontrole i mjesto u zaglavljima dijaloga za brisanje, izlaz i alarm. Odbrojavanje ne mijenja položaje dugmadi. U aplikaciji dugme Izlaz koristi tekst od 24 px kako bi cijeli opis stao pri 1280 × 720, uz iste granice dugmeta i cilj za pogled. Stanja i izgled definiše <a href="diagnostics.html">nacrt dijagnostike</a>; primjeri se biraju u Opcijama pregleda.</li>
+<li>Indikator dijagnostičkog snimanja ima rezervisan red ispod naslova Kontrole i mjesto u zaglavljima dijaloga za brisanje, izlaz i alarm. Odbrojavanje ne mijenja položaje dugmadi. U širokoj koloni dugme Izlaz koristi tekst od 24 px kako bi cijeli opis stao pri 1280 × 720, uz iste granice dugmeta i cilj za pogled. Stanja i izgled definiše <a href="diagnostics.html">nacrt dijagnostike</a>; primjeri se biraju u Opcijama pregleda.</li>
 <li>Odmor zacrni cijeli prikaz. Jedno prigušeno dugme Nastavi omogućava samostalan povratak pogledom. Poruka i unos ostaju sačuvani.</li>
 <li>Izlaz nudi tri izbora. Odustani zadržava trenutno stanje, Izađi prikazuje zatvoren govorni način, a Ugasi aplikaciju prikazuje zatvorenu aplikaciju. HTML ne zatvara Python aplikaciju niti prozor preglednika.</li>
+<li>Početna biblioteka sadrži Trebam, Brzi odgovor, Kako se osjećam, Ljudi, Selami i dove, Namaz i ibadet i Kur'an i čitanje. Ljudi uključuju Kako su naši? i Prenesi im selam. Pet početnih fraza služi za čekanje dok se piše, ponavljanje, ispravku nesporazuma, odgodu razgovora i dobrodošlicu. Kategorije imaju stalan redoslijed, a aplikacija fraze poreda prema broju korištenja, zatim abecedno. Odgovor ili fraza dodaje se u poruku prije odabira Izgovori.</li>
 <li>Dodane stavke čuvaju se samo u ovom pregledniku, ako dozvoljava lokalno čuvanje. Izgovor zavisi od instaliranih glasova. Ovo nije veza s Tobii uređajem.</li></ul>
-<p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje Dodaj i Obriši. Uspješan pokušaj vraća sačuvane stavke bez promjene poruke.</p><p>Izgovori prikazuje Pokrećem govor., zatim Poruka se izgovara., Čitanje je završeno. ili Govor nije uspio. Pokušajte ponovo. Poruka ostaje sačuvana. Završetak procesa nije potvrda da se zvuk čuo. Novo pokretanje aplikacije zadržava samo postojeću instancu bez promjene fokusa.</p>
+<p>Neučitana biblioteka ostaje zaštićena od upisa, uključujući brojače korištenja. Dostupne fraze i poruka se mogu koristiti. U Kategorijama i Frazama naslov na liniji prikazuje Biblioteka nije učitana, a Učitaj ponovo zamjenjuje + Dodaj i Obriši u srednjem redu trake. Uspješan pokušaj vraća sačuvane stavke bez promjene poruke.</p><p>Izgovori prikazuje Pokrećem govor., zatim Poruka se izgovara., Čitanje je završeno. ili Govor nije uspio. Pokušajte ponovo. Poruka ostaje sačuvana. Završetak procesa nije potvrda da se zvuk čuo. Novo pokretanje aplikacije zadržava samo postojeću instancu bez promjene fokusa.</p>
 <p>Poruke o čuvanju koriste Čuvam promjenu… i Čuvanje nije uspjelo. Novi unos nije sačuvan. Status brzih radnji glasi Otvoren je meni brzih radnji. Nakon desnog klika: Desni klik je otvorio meni. Lijevi klik je spreman za odabir.</p>
-<p>Qt prati ovu referencu. Zaglavlje potvrde čuva još jedan red od 32 px za obavijest o praćenju, ispod naslova i snimanja; pojava obavijesti ne pomjera ciljeve. Gusta tastatura prikazuje najviše 12 tipki po stranici, a biblioteka četiri stavke.</p>
+<p>Qt prati ovu referencu. Zaglavlje potvrde čuva još jedan red od 32 px za obavijest o praćenju, ispod naslova i snimanja; pojava obavijesti ne pomjera ciljeve. Gusta tastatura prikazuje najviše 12 tipki po stranici, a biblioteka devet stavki.</p>
   </details>
 </body>
 </html>

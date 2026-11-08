@@ -66,6 +66,8 @@ def _run_bridge() -> int:
             diagnostic_metadata=getattr(backend, "diagnostic_metadata", {}),
         )
         while _running:
+            if failure := getattr(backend, "connection_error", None):
+                raise RuntimeError(failure)
             time.sleep(0.25)
     except KeyboardInterrupt:
         logger.info("Tobii Stream Engine bridge interrupted.")

@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from pogled_assist import toolbar as toolbar_module
 from pogled_assist.interaction.mouse_controller import GazeSettings
-from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT
+from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT, LETTER_GROUPS_LAYOUT
 from pogled_assist.release_update import ReleaseCheckResult, StableVersion
 from pogled_assist.speech.audio_cache import AudioCache
 from pogled_assist.speech.eleven_account import ElevenAccount
@@ -35,6 +35,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
 from pogled_assist.ui.controller_window import ControllerWindow
+from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
@@ -238,10 +239,18 @@ def _capture_widget(
     size: tuple[int, int],
 ) -> Path:
     width, height = size
-    # Re-show each state so reused native windows apply child visibility changes.
-    widget.hide()
+    # Re-show reused native windows to settle child visibility. An active gaze
+    # check must stay shown: Windows can emit a resize on re-show and end it.
+    keep_shown = (
+        isinstance(widget, GazeCheckWindow)
+        and widget.isVisible()
+        and widget._phase in ("precision", "trial", "free")
+    )
+    if not keep_shown:
+        widget.hide()
     widget.resize(width, height)
-    widget.show()
+    if not keep_shown:
+        widget.show()
     app.processEvents()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     widget.resize(width, height)
@@ -538,10 +547,19 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
 
     def capture_speech(self) -> None:
+        # Eleven phrases show a full first page and the list paging controls.
         sample_phrases = [
             PhraseRecord("Trebam pomoć", 8),
             PhraseRecord("Molim vas sačekajte", 5),
             PhraseRecord("Hvala", 3),
+            PhraseRecord("Upali televizor", 2),
+            PhraseRecord("Otvori prozor", 2),
+            PhraseRecord("Ugasi svjetlo", 1),
+            PhraseRecord("Pojačaj zvuk", 1),
+            PhraseRecord("Koliko je sati?", 1),
+            PhraseRecord("Pozovi doktora", 1),
+            PhraseRecord("Donesi mi naočale", 0),
+            PhraseRecord("Želim se odmoriti", 0),
         ]
         suggestions = PreviewSuggestionService()
         suggestions.store = LearningStore()
@@ -552,21 +570,26 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             suggestions=suggestions,
         )
         self.widgets.append(self.speech)
-        self.capture(self.speech, "speech", "Speech keyboard")
+        self.capture(self.speech, "speech", "Speech keyboard: all letters")
+        alphabet = self.speech._speech_settings
+        groups = replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT)
+        self.speech.update_settings(groups)
+        self.capture(self.speech, "speech-groups", "Speech: letter groups")
         self.speech._show_letter_group(0)
         self.capture(self.speech, "speech-letters", "Speech: inline letters")
-        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=12))
+        self.speech.update_settings(replace(groups, letters_per_group=12))
         self.speech._show_letter_group(0)
         self.capture(self.speech, "speech-letters-twelve", "Speech: twelve inline letters")
-        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=5))
+        self.speech.update_settings(alphabet)
         self.speech.bind_recording_indicator(RecordingIndicator(self.speech))
         self.speech._recording_badge.set_status(
             {"busy": True, "remaining_seconds": 83, "state": "recording"}
         )
         self.capture(self.speech, "speech-recording", "Speech: passive recording status")
+        self.speech.update_settings(groups)
         self.speech._show_letter_group(0)
         self.capture(self.speech, "speech-recording-letters", "Speech letters: recording")
-        self.speech._show_group_level()
+        self.speech.update_settings(alphabet)
         for state, busy, complete in (
             ("finishing", True, False),
             ("completed", False, True),
@@ -599,10 +622,15 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.speech._library_store.read_error = False
         self.speech._show_list_level()
         self.speech._start_editor()
-        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=12))
-        self.speech._show_letter_group(0)
         self.capture(self.speech, "speech-editor", "Speech shared editor")
-        self.speech.update_settings(replace(self.speech._speech_settings, letters_per_group=5))
+        alphabet = self.speech._speech_settings
+        twelve = replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT, letters_per_group=12)
+        self.speech.update_settings(twelve)
+        self.speech._show_letter_group(0)
+        self.capture(
+            self.speech, "speech-editor-letters-twelve", "Speech editor: twelve inline letters"
+        )
+        self.speech.update_settings(alphabet)
         self.capture_speech_dialogs()
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
@@ -634,6 +662,8 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         ):
             self.speech.set_tracking_notice(notice, immediate=True)
             self.capture(self.speech, f"speech-tracking-{name}", f"Speech tracking: {name}")
+        alphabet = self.speech._speech_settings
+        self.speech.update_settings(replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT))
         self.speech._show_letter_group(0)
         self.speech.set_tracking_notice(
             TrackingNotice(
@@ -646,7 +676,7 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             "speech-tracking-letters",
             "Speech letters: tracking interrupted",
         )
-        self.speech._show_group_level()
+        self.speech.update_settings(alphabet)
         self.speech._recording_badge.set_status(
             {"busy": True, "remaining_seconds": 83, "state": "recording"}
         )

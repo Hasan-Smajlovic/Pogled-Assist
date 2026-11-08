@@ -59,6 +59,7 @@ class TobiiGazeProvider(QObject):
         self._stream_engine: Any | None = None
         self._connection_session: GazeConnectionSession | None = None
         self._retry_after_cleanup = False
+        self._skip_research_once = False
         self._running = False
         self._start_requested = False
         self._backend_name = ""
@@ -127,6 +128,7 @@ class TobiiGazeProvider(QObject):
         self._set_tracking_status(TrackingState.CONNECTING)
         gaze, eyes = self._new_stream_callbacks()
         generation = self._stream_generation
+        skip_research, self._skip_research_once = self._skip_research_once, False
 
         def research(data):
             with self._sample_lock:
@@ -143,6 +145,7 @@ class TobiiGazeProvider(QObject):
             ),
             backend_types=(TobiiStreamEngineBackend, TobiiStreamEngineBridgeBackend),
             generation=generation,
+            skip_research=skip_research,
         )
         self._launch_session(session)
 
@@ -189,8 +192,7 @@ class TobiiGazeProvider(QObject):
         self._research_callback = connection.callback
         self._backend_name = connection.name
         self._running = True
-        if connection.backend is not None:
-            self._stream_started_at = time.monotonic()
+        self._stream_started_at = time.monotonic()
         diagnostics.emit(
             "backend_metadata", priority=True, backend=connection.name, **connection.metadata
         )
@@ -385,6 +387,7 @@ class TobiiGazeProvider(QObject):
     def stop(self) -> None:
         self._start_requested = False
         self._retry_after_cleanup = False
+        self._skip_research_once = False
         self._retry_timer.stop()
         self._emit_timer.stop()
         self._invalidate_stream_callbacks()
@@ -433,6 +436,7 @@ class TobiiGazeProvider(QObject):
             self.tracking_status_changed.emit(status)
 
     def _on_gaze_data(self, gaze_data: dict[str, Any]) -> None:
+        self._last_stream_eye_sample_at = time.monotonic()
         self._metrics.count("research_callback")
         left = _valid_gaze_point(gaze_data, "left")
         right = _valid_gaze_point(gaze_data, "right")
@@ -732,32 +736,45 @@ class TobiiGazeProvider(QObject):
                 last_sample if last_sample is not None else self._stream_started_at
             )
             failure = getattr(self._stream_engine, "connection_error", None)
-            if failure or age >= STREAM_EYE_STALE_SECONDS:
-                self._mark_stream_stale(age, failure)
-            elif self._stream_stale:
-                self._mark_stream_resumed()
-            restart = self._bridge_needs_restart(age, failure)
+            self._update_stream_freshness(age, failure)
+            restart = self._start_requested and (bool(failure) or age >= STREAM_RESTART_SECONDS)
         if restart:
+            self._restart_stream(delivered=last_sample is not None)
+
+    def _update_stream_freshness(self, age: float, failure: object) -> None:
+        if failure or age >= STREAM_EYE_STALE_SECONDS:
+            self._mark_stream_stale(age, failure)
+        elif self._stream_stale:
+            self._mark_stream_resumed()
+
+    def _restart_stream(self, *, delivered: bool) -> None:
+        backend_name = self._backend_name
+        if backend_name == "stream-engine-x86-bridge":
             observation = getattr(self._stream_engine, "failure_observation", None)
             if observation is None:
                 observation = self._stream_engine.process_observation("missing_delivery")
             diagnostics.emit("bridge_connection", priority=True, decision="recovery", **observation)
-            # This runs on the Qt thread; reader threads never stop their own backend.
-            # Only the isolated bridge can be forcibly stopped. A stalled native DLL
-            # thread must not be replaced with another live device subscription.
-            self.stop()
-            self._start_requested = True
-            self._emit_timer.start()
-            self._retry_after_cleanup = True
-            self._set_tracking_status(TrackingState.RETRYING)
-            self.status_changed.emit("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
-            if self._connection_session is None:
-                self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+        # The session retains its slot until native pump shutdown/unsubscribe
+        # succeeds. A timeout never permits a second live subscription.
+        self.stop()
+        # A Pro SDK subscription that never delivered (for example an ET5 whose
+        # model name the filter does not recognize) must not hide Stream Engine
+        # on every retry. Only the next search skips Pro SDK.
+        if backend_name == "tobii-research" and not delivered:
+            logger.warning("Pro SDK delivered no samples; the next search skips it once.")
+            self._skip_research_once = True
+        self._start_requested = True
+        self._emit_timer.start()
+        self._retry_after_cleanup = True
+        self._set_tracking_status(TrackingState.RETRYING)
+        self.status_changed.emit("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
+        if self._connection_session is None:
+            self._schedule_retry("Veza s Tobii uređajem je prekinuta. Pokušavam ponovo.")
 
     def _stream_is_monitored(self) -> bool:
         return (
             self._running
-            and self._stream_engine is not None
+            and (self._stream_engine is not None or self._tracker is not None)
             and self._stream_started_at is not None
         )
 
@@ -784,11 +801,6 @@ class TobiiGazeProvider(QObject):
         # Publish recovery on Qt after rechecking the current connection,
         # so a queued worker status cannot overwrite a newer failure.
         self.status_changed.emit("Praćenje je aktivno. Podaci o očima ponovo stižu.")
-
-    def _bridge_needs_restart(self, age: float, failure: object) -> bool:
-        if not self._start_requested or self._backend_name != "stream-engine-x86-bridge":
-            return False
-        return bool(failure) or age >= STREAM_RESTART_SECONDS
 
     def _clear_pending_gaze_sample(self) -> None:
         with self._sample_lock:

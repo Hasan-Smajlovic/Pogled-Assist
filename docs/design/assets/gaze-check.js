@@ -566,7 +566,7 @@
   checkEl('check-reset').addEventListener('click', checkReset);
   checkEl('check-calibrate').addEventListener('click', () => {
     checkReset();
-    checkEl('check-notice').textContent = 'U Tobii Core odaberite profil korisnika > Test and recalibrate > Recalibrate. Vratite se ovdje i ponovite provjeru.';
+    checkEl('check-notice').textContent = 'U Tobii softveru odaberite profil korisnika i opciju za ponovnu kalibraciju. Vratite se ovdje i ponovite provjeru.';
   });
   checkEl('check-details').addEventListener('click', () => { checkDetails = !checkDetails; renderPrecision(); });
   for (const tab of tabs) {

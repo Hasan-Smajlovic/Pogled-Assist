@@ -34,7 +34,7 @@
   background: var(--canvas);
   color: #fff;
   font-size: 28px;
-  text-align: center;
+  text-align: left;
 }
 #message::placeholder { color: var(--muted); font-size: .8em; }
 .message-box[data-voice-notice="true"] { grid-template-rows: 38px minmax(0, 1fr); }
@@ -52,8 +52,8 @@
 .prediction-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); flex: 1; min-width: 0; }
 .prediction-row button { overflow-wrap: anywhere; }
 #undo-word { flex: 0 0 170px; min-height: var(--prediction-height, 83px); font-size: 20px; }
-.word { min-height: var(--prediction-height, 83px); padding: 2px 8px; font-size: 27px; border-color: var(--border); background: var(--surface); color: var(--text); }
-.word:hover { background: #334355; }
+.word { min-height: var(--prediction-height, 83px); padding: 2px 8px; font-size: 27px; border-color: var(--tone-word-border); background: var(--tone-word); color: var(--text); }
+.word:hover { background: var(--tone-word-hover); }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) var(--system-column, clamp(280px, 25%, 480px)); gap: var(--gap); min-height: 0; }
 .speech-screen > .workspace { grid-row: 3; position: relative; padding-top: 30px; }
 .main-panel { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
@@ -63,14 +63,36 @@
 .speech-controls-heading { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; }
 .view-header button { min-width: 160px; min-height: 72px; font-size: 18px; flex: 0 1 165px; }
 .key-grid, .item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); flex: 1; gap: var(--gap); min-height: 0; }
-.item-grid { grid-template-rows: repeat(2, minmax(72px, 1fr)); }
+/* Lists: nine cards as tall as letter keys; empty cells keep the rows aligned with the strip. */
+.item-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(72px, 1fr)); }
+.list-body { display: flex; flex: 1; gap: var(--gap); min-height: 0; }
+.list-body > #content { min-width: 0; }
+.list-heading { position: absolute; top: 3px; left: 0; right: calc(var(--system-column) + var(--gap)); height: 24px; display: flex; align-items: center; gap: 10px; }
+.list-heading::after { content: ''; flex: 1; border-top: 1px solid var(--divider); }
+.list-heading h1 { margin: 0; color: var(--text); font-size: 19px; font-weight: 600; white-space: nowrap; }
+.list-heading span { color: var(--muted); font-size: 15px; white-space: nowrap; }
+.list-heading span:empty { display: none; }
+.list-controls { position: relative; flex: 0 0 240px; display: grid; grid-template-rows: repeat(3, minmax(72px, 1fr)); gap: var(--gap); min-height: 0; }
+.list-controls::before { content: ''; position: absolute; top: 0; bottom: 0; left: calc(var(--gap) / -2); width: 1px; background: var(--divider); }
+.list-slot { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; min-height: 0; }
+.list-slot button[hidden], .list-controls[hidden], .list-heading[hidden] { display: none; }
+/* Lines in the 12 px gaps separate leaving the list, editing it and turning its pages. */
+.list-slot[data-slot="pages"]::before, .list-controls[data-back="true"] .list-slot[data-slot="edit"]::before { content: ''; position: absolute; left: 0; right: 0; top: calc(var(--gap) / -2); border-top: 1px solid var(--divider); }
+.list-controls button { min-width: 100px; min-height: 72px; padding: 4px; font-size: 18px; }
+.item.folder { background: var(--tone-view); border-color: var(--tone-view-border); font-weight: 600; }
+.item.folder:hover { background: var(--tone-view-hover); }
+.item.folder small { color: #c9d4df; font-size: 16px; }
+.add-key { background: var(--tone-add); border-color: var(--tone-add-border); color: #d7f0e0; }
+.add-key:hover { background: var(--tone-add-hover); }
 .key-grid.dense { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(72px, 1fr)); }
 .key-grid.dense button { min-height: 72px; }
 .group { font-size: clamp(22px, 2vw, 34px); letter-spacing: .05em; }
 .inline-letters button { font-size: 56px; min-height: 72px; }
 .inline-letters .back { font-size: 22px; }
+.key-grid.alphabet { grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(72px, 1fr)); }
+.alphabet-key { min-width: 0; min-height: 72px; padding: 0; font-size: 40px; }
 .symbols { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, 1fr)); }
-.item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: clamp(18px, 1.65vw, 26px); }
+.item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 22px; overflow-wrap: anywhere; }
 .item small { color: var(--muted); font-size: 14px; font-weight: 400; }
 .system-actions { display: grid; grid-template-rows: 54px repeat(3, minmax(80px, 1fr)); gap: 10px; min-height: 0; }
 .speech-screen .system-actions { grid-template-rows: repeat(3, minmax(80px, 1fr)); gap: var(--gap); }
@@ -81,7 +103,29 @@
 .system-actions button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: clamp(24px, 2.2vw, 36px); }
 .system-actions button[data-action="exit"] { font-size: 24px; }
 .system-actions small { font-size: 15px; font-weight: 400; }
-.sleep { background: var(--panel); border-color: var(--border); color: var(--text); }
+/* Blue-based role tones share the application palette. Bright cyan and stronger blue
+   remain the gaze, focus and active-state accents. */
+.speech-screen {
+  --tone-word: #293d49; --tone-word-border: #7897a5; --tone-word-hover: #324a59;
+  --tone-edit: #202c3a; --tone-edit-border: #6b8198; --tone-edit-hover: #2a394b;
+  --tone-view: #2b354b; --tone-view-border: #8091b1; --tone-view-hover: #35425b;
+  --tone-system: #1d242d; --tone-system-border: #66788b; --tone-system-hover: #262f3a;
+  --tone-add: #213529; --tone-add-border: #6f9f83; --tone-add-hover: #2a4233;
+}
+.edit-key { background: var(--tone-edit); border-color: var(--tone-edit-border); }
+.view-key { background: var(--tone-view); border-color: var(--tone-view-border); }
+.system-key { background: var(--tone-system); border-color: var(--tone-system-border); color: var(--text); }
+.edit-key:hover { background: var(--tone-edit-hover); }
+.view-key:hover { background: var(--tone-view-hover); }
+.system-key:hover { background: var(--tone-system-hover); }
+.speech-screen .warning:not(:disabled):hover { background: #463c2b; }
+/* All letters: half-width app controls with titles only; groups keep the wider column. */
+.speech-screen[data-layout="alphabet"] { --system-column: clamp(150px, 12.5%, 240px); }
+.speech-screen[data-layout="alphabet"] .system-actions small { display: none; }
+.speech-screen[data-layout="alphabet"] .system-actions button[data-action="exit"] { font-size: clamp(24px, 2.2vw, 36px); }
+/* A subtle line in the middle of the gap separates the keys from the app controls. */
+.speech-screen .system-actions { position: relative; }
+.speech-screen .system-actions::before { content: ''; position: absolute; top: 0; bottom: 0; left: calc(var(--gap) / -2); width: 1px; background: var(--divider); }
 .utility-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 1px repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 .utility-divider { background: var(--divider); align-self: stretch; }
 .speech-screen > .utility-row { grid-template-columns: minmax(0, 1fr) var(--system-column); }
@@ -132,13 +176,19 @@ dialog h2 { margin: 0 0 24px; font-size: 30px; font-weight: 500; }
   .speech-screen .view-header { flex-basis: auto; min-height: 80px; }
   .view-header h1 { flex-basis: 100%; }
   .view-header button { flex: 1; }
+  .key-grid.alphabet { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(5, minmax(72px, 1fr)); }
 }
 @media (max-width: 560px) {
   .topbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .prediction-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .prediction-row button { min-height: 71px; }
   .workspace { display: flex; flex-direction: column; }
+  .speech-screen .system-actions::before { display: none; }
   .key-grid, .item-grid { min-height: 310px; }
+  .list-body { flex-direction: column; }
+  .list-controls { flex-basis: auto; grid-template-rows: none; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .list-controls::before, .list-slot[data-slot]::before, .list-controls[data-back] .list-slot[data-slot]::before { display: none; }
+  .item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; }
   .system-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto 100px; }
   .speech-screen .system-actions { grid-template-rows: 100px; }
   .system-actions .section-label, .system-actions .speech-controls-heading { grid-column: 1 / -1; }

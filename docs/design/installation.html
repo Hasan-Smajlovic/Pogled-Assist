@@ -27,6 +27,9 @@
       <button type="button" onclick="document.getElementById('installation-note').textContent='Zatvara se provjera instalacije.'">Zatvori</button>
     </div>
     <p id="installation-note" role="status">Kalibracija je dostupna kada se pronađe Tobii softver. Greška provjere prikazuje se kao „Nije provjereno”, a ne kao odsutan uređaj.</p>
+    <!-- This check does not open a tracker stream, so the model is unknown: an
+         installed Experience opens first for its profile UI without the Guest
+         shortcut. Without Experience, the Core route retains that shortcut. -->
   </main>
 </body>
 </html>

@@ -3,7 +3,7 @@
 from PySide6.QtCore import QSignalBlocker, QSize
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
-from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS
+from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LETTER_LAYOUTS
 from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS
 from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, FALLBACK_NOTE, PLAYBACK_LABELS
 from .settings_controls import (
@@ -15,6 +15,10 @@ from .settings_controls import (
     styled_label,
 )
 
+LETTER_LAYOUT_HINT = (
+    "Sva slova se biraju jednim pogledom. Grupe slova imaju veće tipke i trebaju dva odabira. "
+    "Arapsko pismo uvijek koristi grupe."
+)
 BOSNIAN_VOICE_HINT = "Standardni radi bez interneta. Prirodni i Efendija trebaju internet."
 ARABIC_VOICE_HINT = "Arapski koristi prirodni muški glas Hamed. Potreban je internet. Izbor bosanskog glasa ostaje sačuvan."
 
@@ -58,9 +62,20 @@ class SpeechSettingsPage(QFrame):
         )
         layout.addWidget(row)
         self._speed_row = row
+        self._letter_layout_combo = self._controls.choice(
+            LETTER_LAYOUTS,
+            self._owner._letter_layout_combo_changed,
+            self._owner._cycle_letter_layout,
+            "Raspored slova u Govoru",
+        )
+        layout_row, layout_grid, _hint = setting_row(
+            self, "Raspored slova u Govoru", LETTER_LAYOUT_HINT
+        )
+        layout_grid.addWidget(self._letter_layout_combo, 0, 1, 2, 1)
+        layout.addWidget(layout_row)
         row, self._letters_group_value = self._controls.adjust_row(
             "Broj slova u grupi",
-            "Broj slova u svakoj grupi na ekranima za govor i tastaturu.",
+            "Grupe na Tastaturi i Upravljaču, te u Govoru s grupama slova ili arapskim pismom.",
             self._owner._adjust_letters_per_group,
             1,
         )
@@ -154,6 +169,10 @@ class SpeechSettingsPage(QFrame):
         with QSignalBlocker(self._script_combo):
             self._script_combo.setCurrentIndex(
                 max(0, self._script_combo.findData(settings.keyboard_script))
+            )
+        with QSignalBlocker(self._letter_layout_combo):
+            self._letter_layout_combo.setCurrentIndex(
+                max(0, self._letter_layout_combo.findData(settings.letter_layout))
             )
         arabic = settings.keyboard_script == ARABIC_SCRIPT
         self._voice_choices.setVisible(not arabic)

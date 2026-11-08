@@ -31,6 +31,19 @@ def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch
     assert bubble.pos() == QPoint(377, 327)
 
 
+def test_gaze_bubble_keeps_its_interior_clear_with_a_visible_ring_and_center(qtbot):
+    bubble = GazeBubbleWindow()
+    qtbot.addWidget(bubble)
+    bubble.handle_gaze(QPoint(300, 250))
+    image = bubble.grab().toImage()
+    scale = image.devicePixelRatio()
+
+    for x, y in ((10, 23), (15, 23), (23, 10), (23, 15)):
+        assert image.pixelColor(round(x * scale), round(y * scale)).alpha() == 0
+    for x, y in ((23, 3), (23, 23)):
+        assert image.pixelColor(round(x * scale), round(y * scale)).alpha() > 200
+
+
 def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.ui.interaction_overlay.force_window_topmost", lambda *_args, **_kwargs: True

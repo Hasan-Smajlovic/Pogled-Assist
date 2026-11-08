@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from _hotbar_fixtures import edge_surface as edge_surface
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
-from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeSpeechService
+from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeSpeechService, StaleWorkArea
+from PySide6.QtCore import QRect
 
 from pogled_assist.interaction.mouse_controller import (
     CONTROLLER,
@@ -15,6 +16,10 @@ from pogled_assist.interaction.mouse_controller import (
     GazeSettings,
 )
 from pogled_assist.speech.speech_service import SpeechSettings
+from pogled_assist.toolbar import HotbarWindow
+
+# Bound before the hotbar fixture replaces startup services with a no-op.
+REAL_START_SERVICES = HotbarWindow._start_services
 
 
 @pytest.mark.e2e
@@ -109,3 +114,64 @@ def test_hotbar_and_keyboard_discard_progress_after_interruption(edge_surface, r
     feed(center, 980)
     feed(center, 1200)
     assert actions == []
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(("first", "second"), [(KEYBOARD, CONTROLLER), (CONTROLLER, KEYBOARD)])
+def test_switching_sidebars_takes_the_same_place_instead_of_narrowing_twice(
+    hotbar_gaze, monkeypatch, first, second
+):
+    from pogled_assist.ui import sidebar_panel
+
+    hotbar = hotbar_gaze[0]
+    area = StaleWorkArea(QRect(0, 0, 1280, 720))
+    monkeypatch.setattr(sidebar_panel, "QGuiApplication", area)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", area.app_bar)
+    panels = {
+        KEYBOARD: lambda: hotbar._keyboard_window,
+        CONTROLLER: lambda: hotbar._controller_window,
+    }
+
+    hotbar._run_toolbar_action(first, source="gaze")
+    area.process_events()
+    place = panels[first]().geometry()
+    assert place.right() == 1279 and place.top() == hotbar.BAR_HEIGHT
+
+    # Hiding one panel and showing the other runs in one call, before Qt sees the
+    # released strip, so the new panel must not position itself from the stale work area.
+    hotbar._run_toolbar_action(second, source="gaze")
+    assert panels[first]().isHidden()
+    assert panels[second]().isVisible()
+    assert panels[second]().geometry() == place
+    assert list(area.right_reservations.values()) == [place.width()]
+
+    area.process_events()
+    hotbar._run_toolbar_action(first, source="gaze")
+    assert panels[first]().geometry() == place
+    assert list(area.right_reservations.values()) == [place.width()]
+
+
+@pytest.mark.e2e
+def test_startup_prepares_predictions_and_one_selection_sound_before_speech_opens(
+    hotbar_gaze, monkeypatch, qtbot
+):
+    from pogled_assist import toolbar
+
+    hotbar = hotbar_gaze[0]
+    preloads = []
+    monkeypatch.setattr(hotbar._suggestions, "preload", lambda: preloads.append(True), False)
+    monkeypatch.setattr(toolbar, "PREDICTION_PRELOAD_DELAY_MS", 0)
+    for service in (hotbar._mouse, hotbar._foreground, hotbar._gaze):
+        monkeypatch.setattr(service, "start", lambda: None)
+
+    # The fixture skips startup services; run the real ones.
+    REAL_START_SERVICES(hotbar)
+    qtbot.waitUntil(lambda: preloads == [True])
+
+    # Speech and Settings reuse the hotbar's player instead of loading Qt Multimedia
+    # again when they open.
+    hotbar._open_speech()
+    assert hotbar._speech_window._selection_sound is hotbar._selection_sound
+    hotbar._open_settings()
+    qtbot.waitUntil(lambda: hotbar._settings_window is not None)
+    assert hotbar._settings_window._selection_sound is hotbar._selection_sound

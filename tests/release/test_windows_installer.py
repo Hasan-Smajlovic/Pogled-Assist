@@ -460,6 +460,7 @@ def _seed_round_trip_data(install_root):
     )
     library = {
         "version": 2,
+        "starter_revision": 1,
         "categories": [{"name": "Synthetic category", "answers": ["Synthetic answer"]}],
         "phrases": [{"text": "Synthetic phrase", "uses": 7}],
     }

@@ -32,7 +32,7 @@ The package builder, installer smoke tests, packaged launcher, and installation 
 
 Direct launching does not grant trust to a binary. [SmartScreen](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/), [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control), and organization application-control policies can still warn or block it. Keep those protections enabled; a blocked launch must be reported as a failure. Explorer launches and UAC can still identify this unsigned release as an unknown publisher.
 
-The release pipeline currently has no Windows Authenticode signing step. Before relying on publisher trust for distribution to colleagues, the release owner must provision a trusted code-signing identity (a suitable CA certificate or Microsoft Artifact Signing account), protect its key/service credentials in the release environment, and add signing plus a trusted timestamp for project-built EXEs and DLLs before final smoke tests, ZIP creation and SHA-256 generation. Preserve and verify third-party signatures where supplied, and verify all distributed executable components with the intended Windows trust policy on a clean machine. The pipeline must fail on signing or signature-verification errors. Certificate/service provisioning, CI credentials, signing integration and clean-machine policy validation remain outstanding; no certificate or Windows policy is configured by the launch fix.
+The release pipeline currently has no Windows Authenticode signing step. Before relying on publisher trust for distribution to colleagues, the release owner must provision a trusted code-signing identity (a suitable CA certificate or Microsoft Artifact Signing account), protect its key/service credentials in the release environment, and add signing plus a trusted timestamp for project-built EXEs and DLLs before final smoke tests, ZIP creation and SHA-256 generation. Preserve and verify third-party signatures where supplied, and verify all distributed executable components with the intended Windows trust policy on a clean machine. The pipeline must fail on signing or signature-verification errors. Certificate/service provisioning, CI credentials, signing integration and clean-machine policy validation remain outstanding.
 
 ## Update an installed release
 
@@ -71,18 +71,22 @@ Do not manually delete hidden `.PogledAssist.install-*` or `.PogledAssist.backup
 
 ## Included speech tools
 
-The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.2.8. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. Standard speech works offline; natural speech uses Microsoft's online service and requires internet when used.
+The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.1. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. Standard speech works offline; natural speech uses Microsoft's online service and requires internet when used.
+
+The Edge dependency includes the [v2 service authentication](https://github.com/rany2/edge-tts/releases/tag/7.3.0) and [locale-independent server-date parsing](https://github.com/rany2/edge-tts/releases/tag/7.3.1). Tests require at least 7.3.1 and match the application dependency pin to the bundle's installed version, source archive and license path. The build verifies the source archive's SHA-256 before including it. These checks cannot detect future Microsoft service changes; online synthesis and audible playback still need separate release validation.
 
 The launcher and direct executable prefer these bundled tools over discovered system installations. Explicit `ESPEAK_NG_EXE` and `EDGE_PLAYBACK_EXE` overrides still take priority. Existing `.venv` and `tools` directories are preserved for compatibility; versioned files under `speech/` are replaced with each release.
 
 The installer verifies bundled speech during staging and after installation. It generates a short Bosnian WAV without playing sound and starts both Edge commands with `--help`, using no external speech installation or online service. A missing or broken bundled component fails verification and uses the existing installation rollback behavior. This does not prove online voice availability or audio-device playback; test those separately after installation.
 
-## Components installed separately
+## Included Tobii bridge runtime
 
 The package includes the official Python 3.10.11 32-bit embeddable distribution under `runtime/python-x86/`, verified against its pinned SHA-256 at build time. Its isolated path file exposes only the bundled standard library and bridge sources under `_internal/`. The bridge source set includes the bounded logging transport, ordinary output, context snapshots and in-process path reservations; it does not import Qt or the recording/report stack. No system Python, pip, PATH, or registry changes are needed. The bridge honors valid new and legacy explicit Python overrides, then tries the bundled runtime before system installations. Package verification runs its actual entry point with `--check` to verify architecture and imports without opening a tracker. `runtime/` is replaced transactionally with each release; existing user-owned `tools/` remains preserved.
 
+## Components installed separately
+
 - Tobii runtime and calibration: install the official software appropriate for the tracker, connect the device, and complete calibration. The package cannot safely install or calibrate hardware.
-- Tobii Stream Engine: Tobii Eye Tracker 4C setups commonly obtain `tobii_stream_engine.dll` from Tobii Core or Game Hub. The app searches common install locations. Set `TOBII_STREAM_ENGINE_DLL` when the DLL is elsewhere.
+- Tobii Stream Engine: 4C setups commonly obtain `tobii_stream_engine.dll` from Tobii Core or Game Hub; Eye Tracker 5 uses its Experience runtime. The app validates common runtime candidates, including preserved external DLLs. See the [native SDK contract](ARCHITECTURE.md#native-stream-engine-compatibility) for supported API versions and explicit overrides. Driver replacement remains separate from app updates; follow [tracker setup](USER_GUIDE.md#before-starting).
 
 The application launches without these external components. Missing Tobii software disables gaze input while the provider retries.
 
@@ -154,6 +158,7 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 
 - Play Efendija MP3 audio through packaged Qt Multimedia, including decoder failure and stop/restart.
 - Exercise Prirodni fallback through packaged in-process `edge_tts`, then Standardni offline.
+- Test directly selected Prirodni (`bs-BA-GoranNeural`) and Arabic Hamed (`ar-SA-HamedNeural`) through the packaged Edge tools with internet available.
 - Confirm the Credential Manager key and saved settings survive update and rollback.
 - Listen to the Fikret clone with Eleven v4, sentence-case text and all three stability choices.
 - Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](features/elevenlabs.md).

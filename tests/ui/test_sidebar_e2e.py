@@ -225,3 +225,27 @@ def test_controller_routes_shortcuts_keyboard_and_quick_settings(qtbot, monkeypa
     assert settings[-1].use_precision_zoom is False
     assert settings[-1].show_gaze_bubble is False
     assert speech_requests == [True]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("kind", ["keyboard", "controller"])
+@pytest.mark.parametrize("letter_layout", ["all", "groups"])
+def test_sidebar_letters_stay_in_groups_whatever_the_speech_layout(qtbot, kind, letter_layout):
+    # "Sva slova" belongs to Speech only: the narrow sidebar keeps five-letter groups
+    # on one page, so typing never needs Sljedeća.
+    settings = SpeechSettings(letter_layout=letter_layout)
+    sidebar = _Sidebar(qtbot, kind, settings)
+    if kind == "controller":
+        sidebar.window._show_keyboard_tab()
+        prefix, group, letter = CONTROLLER_WINDOW_ACTION_PREFIX, "keyboard_group", "keyboard_letter"
+    else:
+        prefix, group, letter = KEYBOARD_WINDOW_ACTION_PREFIX, "group", "letter"
+    actions = sidebar.window._action_buttons
+
+    groups = [actions[f"{prefix}{group}:{index}"].text() for index in range(6)]
+    assert [label.split() for label in groups] == [
+        BOSNIAN_LETTERS[start : start + 5] for start in range(0, 30, 5)
+    ]
+    assert f"{prefix}{group}:6" not in actions
+    assert not [action for action in actions if "page:" in action]
+    assert not [action for action in actions if action.startswith(f"{prefix}{letter}:")]

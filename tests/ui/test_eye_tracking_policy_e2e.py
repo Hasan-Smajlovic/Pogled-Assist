@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 from _clock import freeze_monotonic
-from _hotbar_fixtures import app_control
+from _hotbar_fixtures import app_control, use_letter_groups
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from PySide6.QtCore import QPoint, QRect
 
@@ -22,7 +22,8 @@ pytestmark = pytest.mark.e2e
 
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
 @pytest.mark.parametrize(
-    "surface", ["speech-group", "speech-letter", "hotbar", "keyboard", "controller"]
+    "surface",
+    ["speech-alphabet", "speech-group", "speech-letter", "hotbar", "keyboard", "controller"],
 )
 def test_completed_pause_retention_through_application_selection(
     hotbar_gaze, qtbot, monkeypatch, surface
@@ -39,6 +40,8 @@ def test_completed_pause_retention_through_application_selection(
         )
     )
     if surface.startswith("speech-"):
+        if surface != "speech-alphabet":
+            use_letter_groups(hotbar)
         hotbar._open_speech()
         window = hotbar._speech_window
         window.showNormal()
@@ -46,6 +49,8 @@ def test_completed_pause_retention_through_application_selection(
         if surface == "speech-letter":
             window._action_buttons[window._action("group:0")].click()
             action = window._action("letter:0:0")
+        elif surface == "speech-alphabet":
+            action = window._action("letter:0")
         else:
             action = window._action("group:0")
         button = window._action_buttons[action]
@@ -95,6 +100,7 @@ def test_retained_pause_cannot_cross_speech_context_change_or_input_suspension(
             controller.settings, eye_tracking_policy="hold", selection_pause_ms=100, dwell_ms=1000
         )
     )
+    use_letter_groups(hotbar)
     hotbar._open_speech()
     window = hotbar._speech_window
     window.showNormal()

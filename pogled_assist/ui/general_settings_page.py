@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtWidgets import QFrame, QGridLayout
 
+from ..speech.selection_sound import SELECTION_SOUND_LEVELS
 from .release_update_row import ReleaseUpdateRow
-from .settings_controls import action_grid, content_layout, styled_label
+from .settings_controls import action_grid, content_layout, setting_row, styled_label
+
+SELECTION_SOUND_HINT = (
+    "Kratak zvuk potvrđuje odabir pogledom u Govoru. Izgovori i alarm imaju svoj zvuk."
+)
 
 
 class GeneralSettingsPage(QFrame):
@@ -27,7 +32,7 @@ class GeneralSettingsPage(QFrame):
         header.setColumnStretch(0, 1)
         title = styled_label("Aplikacija", "sectionTitle", page)
         description = styled_label(
-            "Pokretanje i ažuriranje aplikacije.", "sectionDescription", page
+            "Pokretanje, zvuk i ažuriranje aplikacije.", "sectionDescription", page
         )
         header.addWidget(title, 0, 0, Qt.AlignVCenter | Qt.AlignLeft)
         header.addWidget(description, 1, 0, Qt.AlignVCenter | Qt.AlignLeft)
@@ -47,6 +52,17 @@ class GeneralSettingsPage(QFrame):
         )
         layout.addLayout(action_grid((self._startup_checkbox, self._launcher_window_checkbox)))
 
+        layout.addWidget(styled_label("Zvuk", "groupLabel", page))
+        self._selection_sound_combo = self._controls.choice(
+            SELECTION_SOUND_LEVELS,
+            self._owner._selection_sound_combo_changed,
+            self._owner._cycle_selection_sound,
+            "Zvuk pri odabiru",
+        )
+        sound_row, sound_grid, _hint = setting_row(page, "Zvuk pri odabiru", SELECTION_SOUND_HINT)
+        sound_grid.addWidget(self._selection_sound_combo, 0, 1, 2, 1)
+        layout.addWidget(sound_row)
+
         layout.addWidget(styled_label("VERZIJA APLIKACIJE", "groupLabel", page))
         self._update_row = ReleaseUpdateRow(self._controls, self._owner._update_manager, page)
         self._update_row.status_changed.connect(self._owner._set_status)
@@ -56,8 +72,12 @@ class GeneralSettingsPage(QFrame):
         layout.addWidget(self._update_row)
         layout.addStretch(1)
 
-    def refresh(self, settings, startup_desired):
+    def refresh(self, settings, startup_desired, speech_settings):
         self._startup_checkbox.setChecked(
             settings.start_with_windows if startup_desired is None else startup_desired
         )
         self._launcher_window_checkbox.setChecked(settings.show_launcher_window)
+        with QSignalBlocker(self._selection_sound_combo):
+            self._selection_sound_combo.setCurrentIndex(
+                max(0, self._selection_sound_combo.findData(speech_settings.selection_sound))
+            )

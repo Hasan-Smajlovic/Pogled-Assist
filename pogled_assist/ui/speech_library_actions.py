@@ -7,7 +7,7 @@ from ..speech.speech_library import CategoryRecord, PhraseRecord, clean_text, sa
 from ..suggestions.composition import Composition
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
 
-ITEMS_PER_PAGE = 4
+ITEMS_PER_PAGE = 9
 
 
 class SpeechLibraryActions:
@@ -40,7 +40,7 @@ class SpeechLibraryActions:
         self._show_group_level()
         self._view_title.setText(self._editor_title())
         self._update_view_controls()
-        self._set_status("Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.")
+        self._set_status("Unesite tekst, zatim odaberite Sačuvaj.")
 
     def _save_editor(self) -> None:
         if self._editor is None:

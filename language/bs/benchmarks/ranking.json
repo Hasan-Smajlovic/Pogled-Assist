@@ -3,10 +3,10 @@
   "dataset_sha256": "1aa3659e62e293dde6a3dfd4084aa3e313ed91fa6739a9c44775ee47f587f96f",
   "model_sha256": "0d37f1b2c1b0de7bc51cd169bdb80bed7d7dc6f8bdd00643c5c70fd91ac697b3",
   "islamic_model_sha256": "5c25ee0596db08d0673f61e2141c8e72938f0e32214fe7b65da76580db7e0aaa",
-  "implementation_sha256": "5fd672c3e50927920895f20264c6cf3e65cac570b94d98db263000efd4be908b",
+  "implementation_sha256": "eba88db97873bf2e7da5cca011175d6e55830698d464b5ab321b58aba995c31c",
   "environment": {
-    "platform": "Windows-10-10.0.26300-SP0",
-    "python": "3.10.11"
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "python": "3.10.21"
   },
   "selection_rule": "p95 at most 50 ms, no regression from fixed weights in activations or next-word top-five hits, and sparse context must back off while repeated context takes over; then fewest activations, most next-word top-five and top-one hits; ties prefer fixed weights, otherwise the larger discount for more fallback on sparse contexts",
   "recommended": {
@@ -17,7 +17,7 @@
     {
       "ranking": "fixed",
       "context_discount": null,
-      "activations": 1042,
+      "activations": 1034,
       "next_word_queries": 168,
       "next_word_top_one_hits": 47,
       "next_word_top_five_hits": 74,
@@ -28,14 +28,14 @@
         "passed": false
       },
       "latency": {
-        "mean_ms": 1.53,
-        "p95_ms": 6.36
+        "mean_ms": 0.84,
+        "p95_ms": 3.42
       }
     },
     {
       "ranking": "adaptive",
       "context_discount": 2,
-      "activations": 1042,
+      "activations": 1034,
       "next_word_queries": 168,
       "next_word_top_one_hits": 47,
       "next_word_top_five_hits": 74,
@@ -46,14 +46,14 @@
         "passed": false
       },
       "latency": {
-        "mean_ms": 1.48,
-        "p95_ms": 6.15
+        "mean_ms": 0.81,
+        "p95_ms": 3.39
       }
     },
     {
       "ranking": "adaptive",
       "context_discount": 10,
-      "activations": 1042,
+      "activations": 1034,
       "next_word_queries": 168,
       "next_word_top_one_hits": 47,
       "next_word_top_five_hits": 74,
@@ -64,14 +64,14 @@
         "passed": true
       },
       "latency": {
-        "mean_ms": 1.47,
-        "p95_ms": 6.16
+        "mean_ms": 0.8,
+        "p95_ms": 3.37
       }
     },
     {
       "ranking": "adaptive",
       "context_discount": 40,
-      "activations": 1050,
+      "activations": 1042,
       "next_word_queries": 168,
       "next_word_top_one_hits": 45,
       "next_word_top_five_hits": 70,
@@ -82,8 +82,8 @@
         "passed": true
       },
       "latency": {
-        "mean_ms": 1.56,
-        "p95_ms": 6.47
+        "mean_ms": 0.83,
+        "p95_ms": 3.54
       }
     }
   ]

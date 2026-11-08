@@ -32,6 +32,7 @@ class SuggestionService(QObject):
         self._personal_model: WordModel | None = None
         self._personal_revision = -1
         self._model_error = ""
+        self._preload_started = False
         self._pending: dict[object, tuple[int, str]] = {}
         self._predicting = False
         self._saving = False
@@ -55,6 +56,18 @@ class SuggestionService(QObject):
     @property
     def status(self) -> str:
         return self.store.error or self._model_error
+
+    def preload(self) -> None:
+        """Load the dictionary in the background before the first prediction needs it.
+
+        Loading is Python work that competes with gaze handling for the GIL, so the
+        application starts it once at startup instead of when Speech first opens.
+        """
+        if self._closing or self._preload_started:
+            return
+        self._preload_started = True
+        # A model passed to the constructor makes this a no-op on the worker.
+        self._worker.submit(self._ensure_model)
 
     def request(self, owner: object, revision: int, text: str) -> None:
         if self._closing:
@@ -95,14 +108,7 @@ class SuggestionService(QObject):
         self._predicting = True
 
         def predict() -> tuple:
-            if self._model is None:
-                try:
-                    self._model = load_model()
-                except (OSError, ValueError, KeyError, TypeError):
-                    self._model = WordModel({})
-                    self._model_error = (
-                        "Prijedlozi iz rječnika nisu dostupni. Možete nastaviti pisati."
-                    )
+            model = self._ensure_model()
             # Copy and index a changed profile in the worker, never on the Qt
             # event loop. Ordinary typing reuses the same immutable index.
             snapshot = self.store.snapshot_if_changed(self._personal_revision)
@@ -110,11 +116,21 @@ class SuggestionService(QObject):
                 personal_revision, counts = snapshot
                 self._personal_model = WordModel(counts)
                 self._personal_revision = personal_revision
-            return owner, revision, self._model.predict(text, self._personal_model)
+            return owner, revision, model.predict(text, self._personal_model)
 
         self._worker.submit(predict).add_done_callback(
             lambda future: self._deliver(self._prediction_done, future)
         )
+
+    def _ensure_model(self) -> WordModel:
+        # Runs only on the single prediction worker, so loads never overlap.
+        if self._model is None:
+            try:
+                self._model = load_model()
+            except (OSError, ValueError, KeyError, TypeError):
+                self._model = WordModel({})
+                self._model_error = "Prijedlozi iz rječnika nisu dostupni. Možete nastaviti pisati."
+        return self._model
 
     def _save(self) -> None:
         if self._saving or self._closing:

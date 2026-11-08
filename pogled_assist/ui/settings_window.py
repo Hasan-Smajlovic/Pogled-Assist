@@ -19,7 +19,13 @@ from ..interaction.gaze_selection import (
     GazeSelectionTimer,
 )
 from ..interaction.mouse_controller import GazeSettings
-from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LATIN_SCRIPT
+from ..keyboard_layouts import (
+    ALL_LETTERS_LAYOUT,
+    ARABIC_SCRIPT,
+    KEYBOARD_SCRIPTS,
+    LATIN_SCRIPT,
+    LETTER_LAYOUTS,
+)
 from ..logging_setup import set_application_logging_enabled
 from ..release_update import ReleaseUpdateManager
 from ..settings_limits import (
@@ -34,6 +40,7 @@ from ..settings_limits import (
     clamp,
 )
 from ..speech.eleven_account import ElevenAccount
+from ..speech.selection_sound import SELECTION_SOUND_LEVELS, SELECTION_SOUND_QUIET, SelectionSound
 from ..speech.speech_service import SpeechSettings
 from ..suggestions.service import SuggestionService
 from ..windows.startup_tasks import StartupRequest, StartupTasks
@@ -216,6 +223,7 @@ class SettingsServices:
     clear_audio: Callable[[], bool] | None = None
     update_manager: ReleaseUpdateManager | None = None
     suggestions: SuggestionService | None = None
+    selection_sound: SelectionSound | None = None
 
 
 class SettingsWindow(QWidget):
@@ -263,6 +271,7 @@ class SettingsWindow(QWidget):
         self._clear_audio = services.clear_audio or (lambda: False)
         self._update_manager = services.update_manager
         self._suggestions = services.suggestions or SuggestionService(self)
+        self._selection_sound = services.selection_sound or SelectionSound(self)
         self._controls = SettingsControls(
             self, lambda: self.cancel_gaze_interaction(require_leave=True)
         )
@@ -704,6 +713,36 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, keyboard_script=script)
         self._emit_speech_settings("Pismo tastature je ažurirano.")
 
+    def _letter_layout_combo_changed(self, index: int) -> None:
+        layout = self._speech_page._letter_layout_combo.itemData(index)
+        if layout not in dict(LETTER_LAYOUTS):
+            layout = ALL_LETTERS_LAYOUT
+        if layout == self._speech_settings.letter_layout:
+            return
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_settings = replace(self._speech_settings, letter_layout=layout)
+        self._emit_speech_settings("Raspored slova u Govoru je ažuriran.")
+
+    def _cycle_letter_layout(self) -> None:
+        combo = self._speech_page._letter_layout_combo
+        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
+
+    def _selection_sound_combo_changed(self, index: int) -> None:
+        level = self._general_page._selection_sound_combo.itemData(index)
+        if level not in dict(SELECTION_SOUND_LEVELS):
+            level = SELECTION_SOUND_QUIET
+        if level == self._speech_settings.selection_sound:
+            return
+        self.cancel_gaze_interaction(require_leave=True)
+        self._speech_settings = replace(self._speech_settings, selection_sound=level)
+        self._emit_speech_settings("Zvuk pri odabiru je ažuriran.")
+        # Let the user hear the chosen level; Isključen stays silent.
+        self._selection_sound.play(level)
+
+    def _cycle_selection_sound(self) -> None:
+        combo = self._general_page._selection_sound_combo
+        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
+
     def _cycle_keyboard_script(self) -> None:
         self._speech_page._script_combo.setCurrentIndex(
             (self._speech_page._script_combo.currentIndex() + 1)
@@ -738,7 +777,9 @@ class SettingsWindow(QWidget):
     def _refresh_values(self) -> None:
         self._gaze_page.refresh(self._gaze_settings)
         self._support_page.refresh(self._gaze_settings)
-        self._general_page.refresh(self._gaze_settings, self._startup_desired_enabled)
+        self._general_page.refresh(
+            self._gaze_settings, self._startup_desired_enabled, self._speech_settings
+        )
         self._speech_page.refresh(
             self._speech_settings, self._speech_playback_state, self._eleven_account
         )

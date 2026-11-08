@@ -1,6 +1,6 @@
 # Pogled Assist
 
-Windows desktop controls for a Tobii Eye Tracker 4C. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a compact controller panel.
+Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a compact controller panel. Connect one tracker at a time; [tracker setup and replacement](docs/USER_GUIDE.md#before-starting) describe the matching Tobii software and reconnection limits.
 
 [Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
 
@@ -121,8 +121,8 @@ The [application UI reference](docs/design/speech-keyboard-reference.html) is a 
 | Component | Why it is needed |
 | --- | --- |
 | Tobii runtime and calibration | Device discovery and calibrated gaze data |
-| `tobii-research` | Preferred tracker API, included in Python and release installs |
-| Tobii Stream Engine | Fallback for consumer trackers such as Eye Tracker 4C |
+| `tobii-research` | Legacy preferred tracker API, included in Python and release installs; Eye Tracker 5 uses Stream Engine |
+| Tobii Stream Engine | Eye Tracker 5 gaze and fallback for older consumer trackers such as Eye Tracker 4C |
 | Python 3.10 x86 | Bundled bridge runtime when only a 32-bit Stream Engine DLL is available |
 | eSpeak NG with `bs` voice | Default offline Bosnian speech, bundled in releases |
 | `edge-playback` and `edge-tts` | Online Bosnian neural voice, bundled in releases |
@@ -159,7 +159,7 @@ logs\latest.txt
 logs\diagnostics\*.jsonl
 logs\gaze-check\gaze-check-*.json
 logs\diagnostic-recordings\<recording-id>\recording.json
-logs\diagnostic-recordings\<recording-id>\snimak.jsonl
+logs\diagnostic-recordings\<recording-id>\snimak*.jsonl
 ```
 
 For credentials and saved audio outside `data/`, see [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs).

@@ -8,7 +8,7 @@ import sys
 import time
 from ctypes import wintypes
 
-from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -123,21 +123,18 @@ class GazeBubbleWindow(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
 
-        outer_rect = self.rect().adjusted(3, 3, -3, -3)
-        inner_rect = self.rect().adjusted(10, 10, -10, -10)
-        center = self.rect().center()
+        rect = QRectF(self.rect())
+        ring = rect.adjusted(3, 3, -3, -3)
 
-        painter.setPen(QPen(QColor(18, 185, 255, 115), 5))
-        painter.setBrush(QColor(18, 185, 255, 28))
-        painter.drawEllipse(outer_rect)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(11, 23, 35, 190), 4.5))
+        painter.drawEllipse(ring)
+        painter.setPen(QPen(QColor(132, 197, 217, 240), 2.5))
+        painter.drawEllipse(ring)
 
-        painter.setPen(QPen(QColor(235, 250, 255, 190), 2))
-        painter.setBrush(QColor(18, 185, 255, 72))
-        painter.drawEllipse(inner_rect)
-
-        painter.setPen(QPen(QColor(5, 25, 38, 130), 1))
-        painter.setBrush(QColor(255, 255, 255, 210))
-        painter.drawEllipse(center, 4, 4)
+        painter.setPen(QPen(QColor(11, 23, 35, 220), 1.5))
+        painter.setBrush(QColor(255, 255, 255, 235))
+        painter.drawEllipse(rect.center(), 3, 3)
 
     def _move_center_to(self, point: QPoint) -> None:
         self.move(point.x() - self.width() // 2, point.y() - self.height() // 2)
