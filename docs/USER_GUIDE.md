@@ -96,6 +96,8 @@ With precision zoom disabled, the radial menu opens directly at the stable gaze 
 
 ## Speech
 
+Latin text is left-aligned in the message field and while adding a category, answer or phrase, keeping the start of a short entry fixed while typing. Arabic text remains right-aligned.
+
 The first three bottom controls share the letter area; **Arapski / Latinica** aligns with the system controls on the right. Dividers separate typing, keyboard changes and system actions. The all-letters layout keeps all 30 Latin letters on one page. Letter-group lists and symbol layouts show at most twelve choices per page, with **Prethodna** and **Sljedeća** for the remaining choices. Categories, answers and phrases show four entries per page. Changing script or switching letters/symbols starts on page one. With **Grupe slova**, selecting a group replaces the groups with individual letters in the keyboard area. The message, suggestions and other controls stay available. Selecting a letter returns to the same page of groups; **Nazad na grupe** or Escape returns without entering a letter. Diagnostic recording stays above the system controls.
 
 For **Standardni**, **Prirodni**, and **Efendija**, **Izgovori** becomes **Zaustavi** in the same position while preparing or speaking. A thin activity bar appears inside its lower edge, keeping the button aligned with **Fraze** and its text centered. The bar shows activity rather than a percentage and lets clicks reach the button. Select it again, or press Enter, to stop without submitting a second request. The message remains available. The stop action stays available while adding a phrase or answer; it does not speak the unfinished saved entry. Completion, failure and stopping remove the bar and restore **Izgovori**. Playback status alone does not verify audible sound.
@@ -175,6 +177,8 @@ Gaze settings uses these values:
 | Pointer smoothing | 1.00 | 0.05 to 1.00 |
 
 **Pogled i odabir** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Existing saved timing values remain unchanged when installing a version with new defaults.
+
+The gaze bubble marks the current gaze position with a light-blue ring, a transparent interior and a small white center dot. Dark outlines keep it visible on light backgrounds. The separate selection ring shows dwell progress on the targeted control.
 
 The edge duration applies when gaze moves just beyond a button. The short eye-tracking interruption applies when one eye loses valid tracking in **Oba oka uz kratke prekide**. They are separate settings; neither fills progress or permits activation while paused. Neither corrects calibration or establishes which setting is best for a person.
 

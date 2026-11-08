@@ -78,6 +78,8 @@ Use this review matrix alongside those notes:
 
 Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` checks painted bounds across the application, including the Settings gaze path; it does not establish native overlay stacking or Tobii behavior.
 
+The gaze-position marker uses a 46-logical-pixel window with one light-blue ring, a transparent interior and a small white center dot. Dark outlines retain contrast on light backgrounds; the selection ring remains separate. Latin Speech entries align left and Arabic entries align right, including the shared library editor.
+
 For unobstructed screenshots, add `preview=clean`, for example `speech.html?preview=clean`. This hides reference menus and shared notes, while ordinary views retain preview tools. Repeatable Speech parameters are `state=keyboard`, `single`, `editor-single`, `phrases` or `answers`, `script=latin` or `arabic`, and `layout=groups` for the Settings group layout. Keyboard and Controller accept `group-size=1`, `2`, `5` or `12`. Speech letter-group lists and symbol layouts paginate at twelve choices; the all-letters layout keeps all 30 Latin letters on one page. Libraries paginate at four entries. Preview controls never change application settings.
 
 Shared assets under `docs/design/assets/` have these owners:
@@ -176,6 +178,7 @@ On a normal development machine, verify:
 - Start the app, wait a few seconds, then open Speech. The gaze pointer and progress ring continue without a pause, and suggestions appear for the first letters.
 - In Speech with all letters, Alarm, Odmor and Izlaz form a narrow column with titles only, separated from the letters by a thin line, and each stays easy to select by gaze. With letter groups or Arabic, the wider column with descriptions returns. After switching from Arabic to Latin by gaze, resting on the part of the script button that the narrow column releases activates nothing until gaze leaves it.
 - On the target display, the Speech role tones stay distinguishable but calm, labels stay readable, and the cyan gaze ring and border stay clearly visible on each tone.
+- At 150% scaling, check the gaze marker over letters, word suggestions and light desktop content, both alone and with selection progress. Confirm that the user can locate it and read the content beneath it. Type a short Latin message and a library entry: their starts remain fixed on the left; switching to Arabic retains right alignment.
 - Settings survive an application restart.
 - During delayed Tobii discovery, bridge readiness, recovery and cleanup, ordinary UI events remain responsive. Closing during pending startup must not restore input or leave a bridge process behind.
 - ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed credentials, masked input after a failed save, and refusal to use an unsaved key.

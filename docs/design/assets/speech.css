@@ -34,7 +34,7 @@
   background: var(--canvas);
   color: #fff;
   font-size: 28px;
-  text-align: center;
+  text-align: left;
 }
 #message::placeholder { color: var(--muted); font-size: .8em; }
 .message-box[data-voice-notice="true"] { grid-template-rows: 38px minmax(0, 1fr); }

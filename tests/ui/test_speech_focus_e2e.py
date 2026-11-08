@@ -14,6 +14,45 @@ from pogled_assist.keyboard_layouts import LETTER_GROUPS_LAYOUT
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
+@pytest.mark.e2e
+@pytest.mark.parametrize("edit_phrase", [False, True])
+def test_latin_message_keeps_its_start_fixed_while_typing_and_after_script_switch(
+    qtbot, qapp, make_speech_window, edit_phrase
+):
+    window = make_speech_window(FakeSpeech(), library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    if edit_phrase:
+        window._input.setText("PORUKA ZA RAZGOVOR")
+        window._phrases_button.click()
+        window._add_item_button.click()
+    window._input.setFocus()
+    qapp.processEvents()
+    starts = []
+    for text in ("MOLIM", " VAS"):
+        qtbot.keyClicks(window._input, text)
+        window._input.setCursorPosition(0)
+        qapp.processEvents()
+        starts.append(window._input.cursorRect().left())
+        window._input.end(False)
+    assert window._input.text() == "MOLIM VAS"
+    assert starts[0] == starts[1]
+    assert 0 <= starts[0] < 24
+
+    window._script_button.click()
+    window._input.setText("سَلَامٌ")
+    qapp.processEvents()
+    assert window._input.cursorRect().x() > window._input.width() // 2
+    window._script_button.click()
+    window._input.setText("MOLIM VAS")
+    window._input.setCursorPosition(0)
+    qapp.processEvents()
+    assert window._input.cursorRect().left() == starts[0]
+    if edit_phrase:
+        window._cancel_editor_button.click()
+        assert window._input.text() == "PORUKA ZA RAZGOVOR"
+
+
 @pytest.mark.parametrize("source", ["gaze", "button", "keyboard"])
 def test_speech_playback_logs_input_source_without_message(
     qtbot, caplog, source, make_speech_window

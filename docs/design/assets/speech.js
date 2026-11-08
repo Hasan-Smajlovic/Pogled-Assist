@@ -237,7 +237,7 @@
   function renderScript() {
     for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
     message.dir = arabic ? 'rtl' : 'ltr';
-    message.style.textAlign = arabic ? 'right' : 'center';
+    message.style.textAlign = arabic ? 'right' : 'left';
     document.querySelector('.predictions').hidden = arabic;
     // All letters need width, so the app controls narrow; groups keep the wider column.
     $('speech-screen').dataset.layout = showsAlphabet() ? 'alphabet' : 'groups';

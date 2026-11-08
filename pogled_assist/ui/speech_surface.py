@@ -189,7 +189,7 @@ class SpeechSurface(QWidget):
         )
         self._input = QLineEdit(message_box)
         self._input.setObjectName("speechInput")
-        self._input.setAlignment(Qt.AlignCenter)
+        self._input.setAlignment(Qt.AlignLeft | Qt.AlignAbsolute)
         self._input.setMinimumHeight(0)
         self._input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
         self._input.setPlaceholderText("Odaberite grupu slova…")
