@@ -538,10 +538,19 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         )
 
     def capture_speech(self) -> None:
+        # Eleven phrases show a full first page and the list paging controls.
         sample_phrases = [
             PhraseRecord("Trebam pomoć", 8),
             PhraseRecord("Molim vas sačekajte", 5),
             PhraseRecord("Hvala", 3),
+            PhraseRecord("Upali televizor", 2),
+            PhraseRecord("Otvori prozor", 2),
+            PhraseRecord("Ugasi svjetlo", 1),
+            PhraseRecord("Pojačaj zvuk", 1),
+            PhraseRecord("Koliko je sati?", 1),
+            PhraseRecord("Pozovi doktora", 1),
+            PhraseRecord("Donesi mi naočale", 0),
+            PhraseRecord("Želim se odmoriti", 0),
         ]
         suggestions = PreviewSuggestionService()
         suggestions.store = LearningStore()

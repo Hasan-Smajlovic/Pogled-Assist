@@ -3,7 +3,7 @@
   const { GROUPS, ARABIC_LETTERS, SYMBOLS, ARABIC_SPEECH_SYMBOLS, grouped, keyLabel, readScript, writeScript } = ReferenceKeyboard;
   const $ = id => document.getElementById(id);
   const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
-  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 4, KEY_PAGE_SIZE = 12;
+  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 9, KEY_PAGE_SIZE = 12;
   const gazeDemo = createReferenceGaze();
   let arabic = readScript();
   let letterGroups = new URLSearchParams(location.search).get('layout') === 'groups';
@@ -246,7 +246,10 @@
   function viewTitle() {
     if (editor) return editorTitle();
     if (view === 'phrases') return 'Moje fraze';
-    if (view !== 'keyboard') return library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs') || 'Kategorije';
+    if (view !== 'keyboard') {
+      const name = library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs');
+      return name ? `Kategorije › ${name}` : 'Kategorije';
+    }
     if (symbols) return 'Brojevi i znakovi';
     return showsAlphabet() ? 'Odaberite slovo' : 'Odaberite grupu slova';
   }
@@ -259,8 +262,13 @@
     }
     $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
     message.placeholder = editor ? 'Unesite tekst…' : '';
-    $('view-header').hidden = !editor && view === 'keyboard';
+    // Lists name themselves on the section line; only the editor keeps the header row.
+    const browsing = !editor && view !== 'keyboard';
+    $('view-header').hidden = !editor;
     $('view-title').textContent = viewTitle();
+    $('list-heading').hidden = !browsing;
+    $('list-title').textContent = viewTitle();
+    $('main-panel').dataset.list = String(browsing);
     $('cancel-edit').hidden = !editor;
     $('save').hidden = !editor;
   }
@@ -268,18 +276,14 @@
   function renderLibraryActions() {
     const browsing = view !== 'keyboard';
     const libraryBlocked = $('library-read-error').checked;
+    $('list-controls').hidden = !browsing;
+    $('list-controls').dataset.back = String(Boolean(category));
     $('back').hidden = !browsing || !category;
     $('add').hidden = $('manage').hidden = !browsing || libraryBlocked;
-    $('add').textContent = addEntryLabel();
     $('retry-library').hidden = !browsing || !libraryBlocked;
-    if (browsing && libraryBlocked) $('view-title').textContent = 'Biblioteka nije učitana';
+    if (browsing && libraryBlocked) $('list-title').textContent = 'Biblioteka nije učitana';
     $('manage').textContent = deleting ? 'Gotovo' : 'Obriši';
     $('manage').setAttribute('aria-pressed', String(deleting));
-  }
-
-  function addEntryLabel() {
-    if (view === 'phrases') return 'Dodaj frazu';
-    return category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
   }
 
   function renderKeyboardGrid() {
@@ -352,6 +356,8 @@
     'back': value => { category = null; page = 0; deleting = false; render(); },
     'previous': value => { page--; renderKeyboardGrid(); },
     'next': value => { page++; renderKeyboardGrid(); },
+    'list-previous': value => { page--; renderKeyboardGrid(); },
+    'list-next': value => { page++; renderKeyboardGrid(); },
     'manage': value => { deleting = !deleting; render(); say(deleting ? 'Odaberite stavku koju želite obrisati.' : ''); },
     'item': value => { selectItem(value); },
     'add': value => { startEditor(); },
@@ -410,10 +416,13 @@
     updatePaging(items.length, PAGE_SIZE);
     content.replaceChildren();
     for (const item of items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
-      const button = makeButton((item.name || item.text).toLocaleUpperCase('bs'), 'item', item.id, deleting ? 'item danger' : 'item');
+      const label = (item.name || item.text).toLocaleUpperCase('bs');
+      // A category opens its answers, so it looks like navigation rather than text to add.
+      const folder = item.items && !deleting;
+      const button = makeButton(folder ? `${label}\u00a0›` : label, 'item', item.id, deleting ? 'item danger' : folder ? 'item folder' : 'item');
       if (deleting || item.items) {
         const hint = document.createElement('small');
-        hint.textContent = deleting ? 'Obriši' : `Odgovori: ${item.items.length}`;
+        hint.textContent = deleting ? 'Obriši' : answerCount(item.items.length);
         button.append(hint);
       }
       content.append(button);
@@ -427,13 +436,23 @@
     $('manage').disabled = !items.length;
   }
 
+  function answerCount(count) {
+    if (!count) return 'Nema odgovora';
+    return count % 10 === 1 && count % 100 !== 11 ? `${count} odgovor` : `${count} odgovora`;
+  }
+
   function updatePaging(count, size) {
     const pages = Math.max(1, Math.ceil(count / size));
+    const list = !editor && view !== 'keyboard';
     page = Math.min(Math.max(page, 0), pages - 1);
-    $('paging').hidden = pages === 1;
+    // Lists page from the strip beside the cards; keyboards keep the row below the keys.
+    $('paging').hidden = list || pages === 1;
     $('page-number').textContent = `${page + 1} / ${pages}`;
-    document.querySelector('[data-action="previous"]').disabled = page === 0;
-    document.querySelector('[data-action="next"]').disabled = page === pages - 1;
+    $('list-page').textContent = list && pages > 1 ? `· stranica ${page + 1} od ${pages}` : '';
+    for (const [previous, next] of [['[data-action="previous"]', '[data-action="next"]'], ['#list-previous', '#list-next']]) {
+      document.querySelector(previous).disabled = page === 0;
+      document.querySelector(next).disabled = page === pages - 1;
+    }
   }
 
   function selectItem(id) {

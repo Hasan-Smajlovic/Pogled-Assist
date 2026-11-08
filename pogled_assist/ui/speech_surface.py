@@ -40,6 +40,13 @@ KEY_GRID_MAX_ROWS = 8
 GROUP_BUTTON_MIN_HEIGHT = 72
 LIST_ACTION_MIN_HEIGHT = 80
 LIST_ACTION_MIN_WIDTH = 160
+# Lists keep their controls in a strip beside the cards; its rows align with the card rows.
+LIST_STRIP_WIDTH = 240
+LIST_STRIP_ACTION_MIN_WIDTH = 100
+LIST_STRIP_ACTION_MIN_HEIGHT = 72
+# Single angle quotation marks point back and forward in list labels.
+BACK_MARK = "\u2039"
+FORWARD_MARK = "\u203a"
 SYSTEM_ACTIONS = (
     ("Alarm", "Pozovi pomoć", "alarm:start", "systemAlarm"),
     ("Odmor", "Odmori oči", "sleep:start", "systemSleep"),
@@ -238,6 +245,15 @@ class SpeechSurface(QWidget):
         workspace.setSpacing(6)
         status = QHBoxLayout()
         status.setSpacing(12)
+        # Lists name themselves on this line, so the cards keep the height of a header row.
+        self._list_heading = QLabel("", self)
+        self._list_heading.setObjectName("listHeading")
+        self._list_page_label = QLabel("", self)
+        self._list_page_label.setObjectName("listPageLabel")
+        for label in (self._list_heading, self._list_page_label):
+            label.setFixedHeight(24)
+            label.hide()
+            status.addWidget(label)
         status.addWidget(self._divider(), 1)
         self._recording_badge = RecordingBadge(self)
         self._recording_badge.setFixedHeight(24)
@@ -273,8 +289,13 @@ class SpeechSurface(QWidget):
         self._key_grid.setVerticalSpacing(10)
 
         paging = self._build_paging(main_panel)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(0)
+        content.addWidget(self._key_grid_host, 1)
+        content.addWidget(self._build_list_controls(main_panel))
         main_layout.addLayout(view_header)
-        main_layout.addWidget(self._key_grid_host, 1)
+        main_layout.addLayout(content, 1)
         main_layout.addLayout(paging)
 
         return main_panel
@@ -285,31 +306,6 @@ class SpeechSurface(QWidget):
         view_header.setSpacing(8)
         self._view_title = QLabel("Odaberite grupu slova", main_panel)
         self._view_title.setObjectName("sectionLabel")
-        self._back_button = self._make_button(
-            "Nazad",
-            "list:back",
-            "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
-        )
-        self._add_item_button = self._make_button(
-            "Dodaj",
-            "list:add",
-            "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
-        )
-        self._delete_mode_button = self._make_button(
-            "Obriši",
-            "list:delete-mode",
-            "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
-            checkable=True,
-        )
-        self._retry_library_button = self._make_button(
-            "Učitaj ponovo",
-            "list:retry",
-            "headerActionButton",
-            minimum_height=LIST_ACTION_MIN_HEIGHT,
-        )
         self._cancel_editor_button = self._make_button(
             "Odustani",
             "editor:cancel",
@@ -319,24 +315,89 @@ class SpeechSurface(QWidget):
         self._save_item_button = self._make_button(
             "Sačuvaj", "editor:save", "primaryButton", minimum_height=LIST_ACTION_MIN_HEIGHT
         )
-        for button in (
-            self._back_button,
-            self._add_item_button,
-            self._delete_mode_button,
-            self._retry_library_button,
-            self._cancel_editor_button,
-            self._save_item_button,
-        ):
+        for button in (self._cancel_editor_button, self._save_item_button):
             button.setMinimumWidth(LIST_ACTION_MIN_WIDTH)
         view_header.addWidget(self._view_title, 1)
-        view_header.addWidget(self._back_button)
-        view_header.addWidget(self._add_item_button)
-        view_header.addWidget(self._delete_mode_button)
-        view_header.addWidget(self._retry_library_button)
         view_header.addWidget(self._cancel_editor_button)
         view_header.addWidget(self._save_item_button)
 
         return view_header
+
+    def _build_list_controls(self, main_panel: QWidget) -> QWidget:
+        """Leave the list at the top, edit it in the middle and turn its pages at the bottom."""
+        self._list_controls = QWidget(main_panel)
+        # The 12 px gap to the cards carries the same centred line as the system column.
+        self._list_controls.setFixedWidth(12 + LIST_STRIP_WIDTH)
+        strip = QHBoxLayout(self._list_controls)
+        strip.setContentsMargins(6, 0, 0, 0)
+        strip.setSpacing(0)
+        strip.addWidget(self._list_divider(vertical=True))
+        strip.addSpacing(5)
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        strip.addLayout(column, 1)
+        self._back_button = self._make_list_button(
+            f"{BACK_MARK} Kategorije", "list:back", "listNavButton"
+        )
+        self._add_item_button = self._make_list_button("+ Dodaj", "list:add", "listAddButton")
+        self._delete_mode_button = self._make_list_button(
+            "Obriši", "list:delete-mode", "listDeleteButton", checkable=True
+        )
+        self._retry_library_button = self._make_list_button(
+            "Učitaj ponovo", "list:retry", "headerActionButton"
+        )
+        self._list_previous_button = self._make_list_button(
+            f"{BACK_MARK} Prethodna", "list:page:previous", "listNavButton"
+        )
+        self._list_next_button = self._make_list_button(
+            f"Sljedeća {FORWARD_MARK}", "list:page:next", "listNavButton"
+        )
+        self._list_back_line = self._list_divider()
+        # The line under an absent back control keeps its space so the rows stay aligned.
+        policy = self._list_back_line.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self._list_back_line.setSizePolicy(policy)
+        rows = (
+            (self._back_button,),
+            (self._add_item_button, self._delete_mode_button, self._retry_library_button),
+            (self._list_previous_button, self._list_next_button),
+        )
+        separators = (self._list_back_line, self._list_divider())
+        for index, buttons in enumerate(rows):
+            if index:
+                # Each separator sits in the middle of the 12 px gap between card rows.
+                column.addSpacing(6)
+                column.addWidget(separators[index - 1])
+                column.addSpacing(5)
+            row = QWidget(self._list_controls)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            for button in buttons:
+                row_layout.addWidget(button, 1)
+            column.addWidget(row, 1)
+        self._list_controls.hide()
+        return self._list_controls
+
+    def _list_divider(self, *, vertical: bool = False) -> QFrame:
+        divider = self._divider(vertical=vertical)
+        divider.setObjectName("listDivider")
+        return divider
+
+    def _make_list_button(
+        self, text: str, command: str, object_name: str, *, checkable: bool = False
+    ) -> QPushButton:
+        button = self._make_button(
+            text,
+            command,
+            object_name,
+            parent=self._list_controls,
+            minimum_height=LIST_STRIP_ACTION_MIN_HEIGHT,
+            checkable=checkable,
+        )
+        button.setMinimumWidth(LIST_STRIP_ACTION_MIN_WIDTH)
+        return button
 
     def _build_paging(self, main_panel: QWidget) -> QHBoxLayout:
         paging = QHBoxLayout()
@@ -344,7 +405,7 @@ class SpeechSurface(QWidget):
         paging.setSpacing(8)
         self._previous_page_button = self._make_button(
             "Prethodna",
-            "list:page:previous",
+            "page:previous",
             "headerActionButton",
             minimum_height=72,
         )
@@ -353,7 +414,7 @@ class SpeechSurface(QWidget):
         self._page_label.setAlignment(Qt.AlignCenter)
         self._next_page_button = self._make_button(
             "Sljedeća",
-            "list:page:next",
+            "page:next",
             "headerActionButton",
             minimum_height=72,
         )
@@ -595,7 +656,7 @@ class SpeechSurface(QWidget):
                 widget.hide()
                 widget.deleteLater()
 
-    def _set_grid_stretch(self, item_count: int, columns: int) -> None:
+    def _set_grid_stretch(self, item_count: int, columns: int) -> int:
         for column in range(KEY_GRID_MAX_COLUMNS):
             self._key_grid.setColumnStretch(column, 0)
         for row in range(KEY_GRID_MAX_ROWS):
@@ -607,6 +668,7 @@ class SpeechSurface(QWidget):
             self._key_grid.setColumnStretch(column, 1)
         for row in range(rows):
             self._key_grid.setRowStretch(row, 1)
+        return rows
 
     def _make_dynamic_button(self, text: str, action: str, object_name: str) -> QPushButton:
         button = self._make_button(
@@ -636,6 +698,7 @@ class SpeechSurface(QWidget):
                 "groupButton",
                 "lettersBackButton",
                 "phraseButton",
+                "categoryButton",
                 "deleteItemButton",
                 "predictionButton",
                 "systemAlarm",
@@ -880,13 +943,47 @@ SPEECH_STYLE = """
                 color: #8595a6;
             }
             QPushButton#phraseButton {
-                font-size: 19px;
+                font-size: 22px;
             }
             QPushButton#deleteItemButton {
                 background: #4b2224;
                 border-color: #7d383e;
                 color: #fecaca;
-                font-size: 19px;
+                font-size: 22px;
+            }
+            /* A category opens its answers, so it uses the navigation tone. */
+            QPushButton#categoryButton {
+                background: #2b354b;
+                border-color: #8091b1;
+                font-size: 22px;
+                font-weight: 600;
+            }
+            QPushButton#categoryButton:hover { background: #35425b; border-color: #84c5d9; }
+            QLabel#listHeading { color: #edf2f7; font-size: 19px; font-weight: 600; }
+            QLabel#listPageLabel { color: #b8c5d2; font-size: 15px; }
+            QPushButton#listNavButton, QPushButton#listAddButton,
+            QPushButton#listDeleteButton { font-size: 18px; padding: 4px; }
+            QPushButton#listNavButton { background: #2b354b; border-color: #8091b1; }
+            QPushButton#listAddButton { background: #213529; border-color: #6f9f83; color: #d7f0e0; }
+            QPushButton#listDeleteButton {
+                background: #3b3325;
+                border-color: #a38b5d;
+                color: #efd092;
+            }
+            QPushButton#listNavButton:hover { background: #35425b; border-color: #84c5d9; }
+            QPushButton#listAddButton:hover { background: #2a4233; border-color: #84c5d9; }
+            QPushButton#listDeleteButton:hover { background: #463c2b; border-color: #84c5d9; }
+            QPushButton#listNavButton:pressed, QPushButton#listAddButton:pressed,
+            QPushButton#listDeleteButton:pressed, QPushButton#listDeleteButton:checked {
+                background: #2e6478;
+                border-color: #84c5d9;
+                color: #ffffff;
+            }
+            QPushButton#listNavButton:disabled, QPushButton#listAddButton:disabled,
+            QPushButton#listDeleteButton:disabled, QPushButton#categoryButton:disabled {
+                background: #222b35;
+                border-color: #455363;
+                color: #8595a6;
             }
             QPushButton#headerActionButton { font-size: 18px; }
             QFrame#modalBackdrop { background: rgba(0, 0, 0, 190); }

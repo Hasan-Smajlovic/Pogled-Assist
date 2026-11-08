@@ -122,7 +122,7 @@ def test_speech_alarm_stops_speech_blocks_background_and_reports_failure(qtbot, 
 def test_speech_sleep_preserves_unfinished_entry_and_supports_mouse_and_gaze(
     qtbot, make_speech_window
 ):
-    phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
+    phrases = [PhraseRecord(f"Fraza {index}") for index in range(10)]
     speech = FakeSpeech()
     window = make_speech_window(
         speech,
@@ -135,7 +135,7 @@ def test_speech_sleep_preserves_unfinished_entry_and_supports_mouse_and_gaze(
     window.show()
     window._input.setText("Razgovor")
     window._phrases_button.click()
-    window._next_page_button.click()
+    window._list_next_button.click()
     window._add_item_button.click()
     window._input.setText("Nedovršena fraza")
     editor = window._editor

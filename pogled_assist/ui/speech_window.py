@@ -41,14 +41,16 @@ from .speech_editor import EditorContext
 from .speech_library_actions import ITEMS_PER_PAGE, SpeechLibraryActions
 from .speech_playback_controls import SpeechPlaybackControls
 from .speech_predictions import PredictionControls, SpeechPredictions
+from .speech_surface import FORWARD_MARK, SpeechSurface
 from .speech_surface import SPEECH_WINDOW_ACTION_PREFIX as SPEECH_WINDOW_ACTION_PREFIX
-from .speech_surface import SpeechSurface
 
 logger = logging.getLogger(__name__)
 
 MULTI_CHARACTER_LETTERS = ("DŽ", "LJ", "NJ")
 SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 PHRASE_BUTTON_MIN_HEIGHT = 64
+# Three columns of three rows keep each card as tall as an all-letters key at 1280 x 720.
+LIST_COLUMNS = 3
 GROUP_GRID_MAX_COLUMNS = 6
 KEYS_PER_PAGE = 12
 ALPHABET_COLUMNS = 10
@@ -396,10 +398,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._symbols_mode = False
         self._clamp_list_page()
         self._clear_main_grid()
-        self._view_title.setText(self._list_title())
 
         items = self._list_items()
-        self._set_grid_stretch(ITEMS_PER_PAGE, 2)
+        rows = self._set_grid_stretch(ITEMS_PER_PAGE, LIST_COLUMNS)
         if not items:
             empty = QPushButton(
                 "Biblioteka nije učitana. Odaberite Učitaj ponovo."
@@ -409,7 +410,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             )
             empty.setObjectName("phraseButton")
             empty.setEnabled(False)
-            self._key_grid.addWidget(empty, 0, 0, 2, 2)
+            self._key_grid.addWidget(empty, 0, 0, rows, LIST_COLUMNS)
             self._set_status("")
         else:
             page_start = self._list_page * ITEMS_PER_PAGE
@@ -419,10 +420,16 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 button = self._make_dynamic_button(
                     self._list_item_text(item),
                     self._action(f"list:select:{index}"),
-                    "deleteItemButton" if self._deletion_mode else "phraseButton",
+                    self._list_item_style(item),
                 )
                 button.setMinimumHeight(PHRASE_BUTTON_MIN_HEIGHT)
-                self._key_grid.addWidget(button, position // 2, position % 2)
+                self._key_grid.addWidget(button, position // LIST_COLUMNS, position % LIST_COLUMNS)
+            used_rows = math.ceil(len(visible_items) / LIST_COLUMNS)
+            for row in range(used_rows, rows):
+                # Qt drops the spacing of empty rows; a blank cell keeps cards level with the strip.
+                spacer = QWidget(self._key_grid_host)
+                spacer.setAttribute(Qt.WA_TransparentForMouseEvents)
+                self._key_grid.addWidget(spacer, row, 0)
             self._set_status("Odaberite stavku za brisanje." if self._deletion_mode else "")
 
         self._update_view_controls()
@@ -444,14 +451,23 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if self._view_mode == "phrases":
             return "Moje fraze"
         category = self._active_category()
-        return (
-            _uppercase(category.name) if self._view_mode == "answers" and category else "Kategorije"
-        )
+        if self._view_mode == "answers" and category is not None:
+            return f"Kategorije {FORWARD_MARK} {_uppercase(category.name)}"
+        return "Kategorije"
+
+    def _list_item_style(self, item: CategoryRecord | PhraseRecord | str) -> str:
+        if self._deletion_mode:
+            return "deleteItemButton"
+        # A category opens its answers; answers and phrases add text to the message.
+        return "categoryButton" if isinstance(item, CategoryRecord) else "phraseButton"
 
     def _list_item_text(self, item: CategoryRecord | PhraseRecord | str) -> str:
         if isinstance(item, CategoryRecord):
-            suffix = "Obriši" if self._deletion_mode else f"Odgovori: {len(item.answers)}"
-            return f"{_uppercase(item.name)}\n{suffix}"
+            if self._deletion_mode:
+                return f"{_uppercase(item.name)}\nObriši"
+            # The arrow stays with the last word when a long name wraps.
+            count = _answer_count(len(item.answers))
+            return f"{_uppercase(item.name)}\u00a0{FORWARD_MARK}\n{count}"
         text = item.text if isinstance(item, PhraseRecord) else item
         text = _uppercase(text)
         return f"{text}\nObriši" if self._deletion_mode else text
@@ -642,14 +658,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._categories_button.setEnabled(not editor_mode)
         self._phrases_button.setEnabled(not editor_mode)
         self._play_button.setEnabled(not editor_mode or self._speech.is_busy)
-        self._back_button.setVisible(self._view_mode == "answers" and not editor_mode)
+        self._list_controls.setVisible(list_mode)
+        self._list_heading.setVisible(list_mode)
+        self._list_heading.setText(self._list_title() if list_mode else "")
+        back = self._view_mode == "answers" and not editor_mode
+        self._back_button.setVisible(back)
+        self._list_back_line.setVisible(back)
         self._add_item_button.setVisible(list_mode and not self._library_store.read_error)
         self._retry_library_button.setVisible(list_mode and self._library_store.read_error)
-        self._add_item_button.setText(
-            {"phrases": "Dodaj frazu", "answers": "Dodaj odgovor"}.get(
-                self._view_mode, "Dodaj kategoriju"
-            )
-        )
         self._delete_mode_button.setVisible(list_mode and not self._library_store.read_error)
         self._delete_mode_button.setChecked(self._deletion_mode)
         self._delete_mode_button.setText("Gotovo" if self._deletion_mode else "Obriši")
@@ -657,7 +673,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._save_item_button.setVisible(editor_mode)
         self._cancel_editor_button.setVisible(editor_mode)
         self._refresh_paging(list_mode)
-        self._view_title.setVisible(list_mode or editor_mode)
+        self._view_title.setVisible(editor_mode)
         self._message_label.setText(self._editor_title() if editor_mode else "Vaša poruka")
         self._input.setPlaceholderText(
             "Unesite tekst…"
@@ -741,6 +757,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             "list:delete-mode": self._toggle_deletion_mode,
             "list:page:previous": lambda: self._change_page(-1),
             "list:page:next": lambda: self._change_page(1),
+            "page:previous": lambda: self._change_page(-1),
+            "page:next": lambda: self._change_page(1),
         }
         handler = handlers.get(command)
         if handler is not None:
@@ -875,9 +893,15 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         return list(enumerate(keys))[start : start + KEYS_PER_PAGE]
 
     def _refresh_paging(self, list_mode: bool) -> None:
-        count = self._list_page_count() if list_mode else self._keyboard_pages
-        page = self._list_page if list_mode else self._keyboard_page
-        visible = list_mode or (count > 1 and self._active_group_index is None)
+        # Lists page from the strip beside the cards; keyboards keep the row below the keys.
+        list_count = self._list_page_count()
+        self._list_previous_button.setEnabled(self._list_page > 0)
+        self._list_next_button.setEnabled(self._list_page < list_count - 1)
+        self._list_page_label.setText(f"· stranica {self._list_page + 1} od {list_count}")
+        self._list_page_label.setVisible(list_mode and list_count > 1)
+        count = self._keyboard_pages
+        page = self._keyboard_page
+        visible = not list_mode and count > 1 and self._active_group_index is None
         self._previous_page_button.setVisible(visible)
         self._next_page_button.setVisible(visible)
         self._page_label.setVisible(visible)
@@ -990,6 +1014,13 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if text:
             logger.info("Speech status: %s", text)
         self._status_label.setText(text)
+
+
+def _answer_count(count: int) -> str:
+    if count == 0:
+        return "Nema odgovora"
+    # Bosnian keeps the singular after 1, 21, 31 and so on, but not after 11.
+    return f"{count} odgovor" if count % 10 == 1 and count % 100 != 11 else f"{count} odgovora"
 
 
 def _uppercase(text: str) -> str:

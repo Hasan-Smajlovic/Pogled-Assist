@@ -7,7 +7,7 @@ from ..speech.speech_library import CategoryRecord, PhraseRecord, clean_text, sa
 from ..suggestions.composition import Composition
 from .speech_editor import EditorContext, EditorKind, EntryError, page_for_text
 
-ITEMS_PER_PAGE = 4
+ITEMS_PER_PAGE = 9
 
 
 class SpeechLibraryActions:
