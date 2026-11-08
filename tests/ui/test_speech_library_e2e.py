@@ -10,10 +10,37 @@ from pogled_assist.speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
     SpeechLibrary,
+    SpeechLibraryStore,
     default_categories,
 )
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
+
+
+@pytest.mark.e2e
+def test_starter_answers_and_phrases_can_be_selected_and_spoken(
+    qtbot, make_speech_window, tmp_path
+):
+    store = SpeechLibraryStore(tmp_path / "library.json")
+    speech = FakeSpeech()
+    window = make_speech_window(speech, library_store=store)
+    window.resize(1280, 720)
+    window.show()
+
+    window._categories_button.click()
+    click_speech_action(qtbot, window, "list:select:5")
+    assert window._list_heading.text() == "Kategorije \u203a NAMAZ I IBADET"
+    click_speech_action(qtbot, window, "list:select:2")
+    window._play_button.click()
+    assert speech.requests[-1][0] == "POMOZI MI DA UZMEM ABDEST."
+    speech.playback_changed.emit(speech.request_id, "finished")
+
+    window._input.clear()
+    window._phrases_button.click()
+    click_speech_action(qtbot, window, "list:select:2")
+    window._play_button.click()
+    assert speech.requests[-1][0] == "MOLIM VAS SAČEKAJTE DA NAPIŠEM."
+    assert store.load().phrases[0] == PhraseRecord("Molim vas sačekajte da napišem.", 1)
 
 
 @pytest.mark.e2e
@@ -221,7 +248,7 @@ def test_speech_deletion_confirmation_clear_and_save_failures(qtbot, make_speech
     assert "svi njeni odgovori" in window._dialogs.confirm_copy.text()
     window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:cancel"].click()
     qtbot.waitUntil(lambda: window._dialogs.active is None)
-    assert len(store.library.categories) == 4
+    assert len(store.library.categories) == 7
 
     click_speech_action(qtbot, window, "list:select:0")
     window._action_buttons[f"{SPEECH_WINDOW_ACTION_PREFIX}confirm:accept"].click()
@@ -230,6 +257,9 @@ def test_speech_deletion_confirmation_clear_and_save_failures(qtbot, make_speech
         "Brzi odgovor",
         "Kako se osjećam",
         "Ljudi",
+        "Selami i dove",
+        "Namaz i ibadet",
+        "Kur'an i čitanje",
     ]
     assert window._deletion_mode is True
 

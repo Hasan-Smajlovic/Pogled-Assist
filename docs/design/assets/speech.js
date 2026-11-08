@@ -755,9 +755,12 @@
         category('needs', 'Trebam', ['Trebam vode', 'Namjesti mi jastuk', 'Trebam lijek', 'Pomozi mi da se okrenem', 'Hladno mi je', 'Trebam u toalet']),
         category('answers', 'Brzi odgovor', ['Da', 'Ne', 'Možda', 'Hvala', 'Molim te', 'Nisam razumio']),
         category('feelings', 'Kako se osjećam', ['Dobro sam', 'Boli me', 'Umoran sam', 'Nervozan sam', 'Sretan sam', 'Neugodno mi je']),
-        category('people', 'Ljudi', ['Pozovi Hasana', 'Želim porodicu', 'Pozovi medicinsku sestru', 'Želim razgovarati', 'Ko je ovdje?', 'Ostani sa mnom'])
+        category('people', 'Ljudi', ['Pozovi Hasana', 'Želim porodicu', 'Pozovi medicinsku sestru', 'Želim razgovarati', 'Ko je ovdje?', 'Ostani sa mnom', 'Kako su naši?', 'Prenesi im selam.']),
+        category('greetings', 'Selami i dove', ['Selam alejkum.', 'Alejkumu selam.', 'Allah razi olsun.', 'Neka vam Allah podari svako dobro.']),
+        category('worship', 'Namaz i ibadet', ['Je li vrijeme za namaz?', 'Želim klanjati.', 'Pomozi mi da uzmem abdest.', 'Okreni me prema kibli.']),
+        category('reading', "Kur'an i čitanje", ["Želim slušati učenje Kur'ana.", 'Pročitaj mi prijevod ovog ajeta.', 'Otvori tefsir.', 'Pročitaj mi još jednom.'])
       ],
-      phrases: ['Trebam vode', 'Hvala ti', 'Pozovi Hasana', 'Namjesti mi jastuk'].map((text, index) => ({ id: `phrase-${index}`, text }))
+      phrases: ['Drago mi je što ste došli.', 'Molim vas ponovite.', 'Molim vas sačekajte da napišem.', 'Nisam to htio reći.', 'Razgovarat ćemo kasnije.'].map((text, index) => ({ id: `phrase-${index}`, text }))
     };
   }
 

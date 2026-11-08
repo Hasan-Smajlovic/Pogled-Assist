@@ -239,6 +239,8 @@ ElevenLabs credentials use the current user's Windows Credential Manager target 
 
 Unreadable speech-library files block all library writes, including rollback synchronization and phrase use counts. Only a successful reload clears this guard; fallback categories must never overwrite the original after a read error.
 
+The version 2 speech library also stores `starter_revision`, independently of its file-format version. Revision 1 adds the reviewed greetings, worship and reading categories, two answers to an existing **Ljudi** category, and five conversation phrases. A missing revision means this one-time addition has not been applied. After importing newer rollback phrases, loading merges missing starter entries by case-insensitive, whitespace-normalized text and saves both files with the existing transaction. Personal text, category order and usage counts remain intact; removed older categories are not recreated. The saved revision prevents later launches from restoring deleted additions. A failed save preserves the previous files and retries from their saved revision on the next load. Rollback phrase imports retain the primary library's revision and categories.
+
 The bundled suggestion model and writable learning profile have independent version 1 schemas. A base-model release can therefore be replaced without rewriting personal counts. An unreadable personal profile is reported and kept unchanged until an explicit retry can merge new in-memory learning with readable disk data.
 
 ### Diagnostic logging

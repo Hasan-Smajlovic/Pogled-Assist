@@ -124,6 +124,10 @@ The controls on the right remain available while browsing or adding entries. A t
 
 Saved categories, answers, and phrases use UTF-8 text. Selecting an answer or phrase appends it to the message, and saved phrases remain ordered by usage count. The full library is stored in `data\speech_library.json`. The app also maintains `data\speech_phrases.json` so older releases can read standalone phrases during rollback. Personal word and short-context counts are stored locally in `data\speech_learning.json`; message transcripts are not stored.
 
+The starter library contains **Trebam**, **Brzi odgovor**, **Kako se osjećam**, **Ljudi**, **Selami i dove**, **Namaz i ibadet**, and **Kur'an i čitanje**. The last three contain four messages each for greetings and duas, prayer and ablution, and Qur'an listening and reading. **Ljudi** also includes `Kako su naši?` and `Prenesi im selam.` The five starter phrases are `Drago mi je što ste došli.`, `Molim vas ponovite.`, `Molim vas sačekajte da napišem.`, `Nisam to htio reći.`, and `Razgovarat ćemo kasnije.`
+
+On the first successful load after this content update, existing libraries receive missing new categories, answers and phrases without replacing personal entries or phrase usage counts. The two new **Ljudi** answers are added only if that category still exists. Existing categories keep their order. After the update is saved, deleting an added entry keeps it deleted on later launches. The app does not speak these messages automatically.
+
 Standardni uses eSpeak NG with the Bosnian `bs` voice. Prirodni uses `edge-playback` with `bs-BA-GoranNeural` and requires internet access. Efendija uses the ElevenLabs voice selected in Settings.
 
 ### Efendija voice and ElevenLabs setup
