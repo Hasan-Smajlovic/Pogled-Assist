@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from _hotbar_fixtures import grouped_speech_gaze as grouped_speech_gaze
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
@@ -44,6 +46,35 @@ def test_inline_replacement_requires_leaving_before_selecting_a_letter(grouped_s
     assert actions == [window._action("group:0"), replacement]
     click_speech_action(qtbot, window, "group:1")
     assert window._active_group_index == 1
+
+
+@pytest.mark.e2e
+def test_narrowed_script_button_requires_leaving_before_a_neighbour_selects(hotbar_gaze, qtbot):
+    hotbar = hotbar_gaze[0]
+    hotbar._update_speech_settings(replace(hotbar._speech.settings, keyboard_script="arabic"))
+    window, _controller, _speech, feed, actions, _progress = open_gaze_speech(hotbar_gaze, qtbot)
+    script = window._script_button
+    # Rest on the part of the wide Arabic button that the narrow Latin column releases.
+    point = script.mapToGlobal(QPoint(script.width() // 4, script.height() // 2))
+    feed(point, 0)
+    feed(point, 1001)
+    assert actions == [window._action("script-toggle")]
+    assert window._speech_settings.keyboard_script == "latin"
+    qtbot.wait(1)
+    assert window.action_at_global_point(point) is None
+    toggle = window._keyboard_toggle_button
+    assert toggle.rect().contains(toggle.mapFromGlobal(point))
+
+    feed(point, 1400)
+    feed(point, 3000)
+    assert actions == [window._action("script-toggle")]
+    assert not window._symbols_mode
+
+    space = window._space_button.mapToGlobal(window._space_button.rect().center())
+    feed(space, 3100)
+    feed(point, 3200)
+    feed(point, 4201)
+    assert actions == [window._action("script-toggle"), window._action("keyboard-toggle")]
 
 
 @pytest.mark.e2e

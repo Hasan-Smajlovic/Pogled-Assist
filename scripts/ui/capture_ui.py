@@ -605,6 +605,14 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
         self.speech._show_list_level()
         self.speech._start_editor()
         self.capture(self.speech, "speech-editor", "Speech shared editor")
+        alphabet = self.speech._speech_settings
+        twelve = replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT, letters_per_group=12)
+        self.speech.update_settings(twelve)
+        self.speech._show_letter_group(0)
+        self.capture(
+            self.speech, "speech-editor-letters-twelve", "Speech editor: twelve inline letters"
+        )
+        self.speech.update_settings(alphabet)
         self.capture_speech_dialogs()
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:

@@ -112,7 +112,7 @@ The default `core` profile renders:
 | Gaze check and diagnostics (`gaze-check`) | 18 | Position and its information disclosure, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, word test before and after the first letter, held word test, wrong-letter feedback, free view, live per-eye panel with one tracked eye, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 10 | Connection-check information disclosure, Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
-The other 79 screenshots remain available through the `full` profile, including a persistence warning during an active diagnostic recording. Use extended groups when reviewing their layout or copy:
+The other 80 screenshots remain available through the `full` profile, including a persistence warning during an active diagnostic recording. Use extended groups when reviewing their layout or copy:
 
 ```powershell
 .\dev.ps1 ui -UiProfile full -Open
@@ -123,7 +123,7 @@ The other 79 screenshots remain available through the `full` profile, including 
 `-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
 
 <details>
-<summary>Full profile: all 155 states</summary>
+<summary>Full profile: all 156 states</summary>
 
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
@@ -132,7 +132,7 @@ The other 79 screenshots remain available through the `full` profile, including 
 - Speech selection progress: calm active ring, frozen ring with pause mark, and an empty paused ring retaining only the completed initial pause
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup (connected, replacing key, Nema glasova, missing key, invalid key, missing permission, credential save failure, quota, low/critical credits and preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device, live position, eye positions without valid gaze, too-close/too-far/outside-frame guidance without valid gaze, eye loss, fixation target with and without gaze, incomplete results, optional measurements, measured misses, passed targets, the word test before and after the first letter, cancelled selection and wrong-letter feedback, word results needing adjustment, a word test without gaze data, completed check with per-test eye tracking, free check with and without live gaze, experimental one-eye free view, held word test, the live per-eye panel beside positioning with one tracked eye and with left/right agreement, saved trial attempts, settings/device context, save pending/failure, logging off, export failure, interrupted precision, history, read-only archived result, empty history and history read error
-- Speech all-letter and letter-group keyboards, `speech-preparing`, `speech-speaking`, categories, answers, saved phrases, shared editor, and library read failure
+- Speech all-letter and letter-group keyboards, `speech-preparing`, `speech-speaking`, categories, answers, saved phrases, the shared editor with all letters and with a twelve-letter group, and library read failure
 - Speech tracking notifications: eye loss, missing gaze, disconnected device, repeated interruptions, recovery, letter selection and deletion confirmation during diagnostic recording
 - Speech voice states: Efendija, quota/offline/timeout/invalid-key fallback, Standardni fallback, cached audio, partial playback and recovery
 - Speech alarm, sleep, and exit confirmation dialogs
@@ -174,7 +174,7 @@ On a normal development machine, verify:
 - With `Zvuk pri odabiru` at each level, a gaze-selected letter, word suggestion, Space and Backspace tick once, audibly and without noticeable delay after the letter appears. `Isključen`, mouse clicks, `Izgovori` and the alarm buttons stay silent. A tick during speech leaves speech playing.
 - Opening Keyboard closes Controller and opening Controller closes Keyboard. In both directions, the new panel takes the same place at the right edge and maximized windows stay narrowed by one panel width, not two.
 - Start the app, wait a few seconds, then open Speech. The gaze pointer and progress ring continue without a pause, and suggestions appear for the first letters.
-- In Speech with all letters, Alarm, Odmor and Izlaz form a narrow column with titles only, separated from the letters by a thin line, and each stays easy to select by gaze. With letter groups or Arabic, the wider column with descriptions returns.
+- In Speech with all letters, Alarm, Odmor and Izlaz form a narrow column with titles only, separated from the letters by a thin line, and each stays easy to select by gaze. With letter groups or Arabic, the wider column with descriptions returns. After switching from Arabic to Latin by gaze, resting on the part of the script button that the narrow column releases activates nothing until gaze leaves it.
 - On the target display, the Speech role tones stay distinguishable but calm, labels stay readable, and the cyan gaze ring and border stay clearly visible on each tone.
 - Settings survive an application restart.
 - During delayed Tobii discovery, bridge readiness, recovery and cleanup, ordinary UI events remain responsive. Closing during pending startup must not restore input or leave a bridge process behind.

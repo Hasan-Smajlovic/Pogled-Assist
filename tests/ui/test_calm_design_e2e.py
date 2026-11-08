@@ -10,6 +10,7 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QFrame, QToolButton, QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
+from pogled_assist.keyboard_layouts import ALL_LETTERS_LAYOUT, LETTER_GROUPS_LAYOUT
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.keyboard_window import KEYBOARD_STYLESHEET
@@ -189,18 +190,27 @@ def test_voice_update_preserves_the_displayed_keyboard_page(qtbot, make_speech_w
     assert window._action("group:0") in window._action_buttons
 
 
-@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize(
+    "script,layout",
+    [
+        ("latin", ALL_LETTERS_LAYOUT),
+        ("latin", LETTER_GROUPS_LAYOUT),
+        ("arabic", ALL_LETTERS_LAYOUT),
+    ],
+)
 def test_every_dense_editor_page_fits_without_resizing_the_window(
-    qtbot, make_speech_window, script
+    qtbot, make_speech_window, script, layout
 ):
     speech = FakeSpeech()
-    speech._settings = SpeechSettings(keyboard_script=script)
+    speech._settings = SpeechSettings(keyboard_script=script, letter_layout=layout)
     window = make_speech_window(speech, letters_per_group=1, library_store=FakeLibraryStore())
     window.resize(1280, 720)
     window.show()
     window._phrases_button.click()
     window._add_item_button.click()
     pages = window._keyboard_pages
+    # One letter per group pages the grouped keyboards; the alphabet fits on one page.
+    assert (pages > 1) == (script == "arabic" or layout == LETTER_GROUPS_LAYOUT)
     for page in range(pages):
         qtbot.waitUntil(lambda expected=page: window._keyboard_page == expected)
         qtbot.wait(1)

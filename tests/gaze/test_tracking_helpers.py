@@ -6,8 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from pogled_assist.tracking import tobii_calibration
 from pogled_assist.tracking import tobii_stream_engine_bridge_backend as bridge_backend
-from pogled_assist.tracking.tobii_calibration import _looks_like_uri, _target_score, _unique_paths
+from pogled_assist.tracking.tobii_calibration import (
+    EXPERIENCE_TARGET,
+    _looks_like_uri,
+    _target_score,
+    _unique_paths,
+)
 from pogled_assist.tracking.tobii_stream_engine import (
     APP_ROOT_ENV,
     _decode_char_array,
@@ -25,7 +31,35 @@ def test_tobii_target_scoring_prefers_config_ui_and_rejects_services():
     assert _looks_like_uri("tobii://calibration") is True
     assert _looks_like_uri("ms-settings:display") is True
     assert _looks_like_uri("C:/Tobii/app.exe") is False
+    assert _looks_like_uri(EXPERIENCE_TARGET) is True
     assert _unique_paths([Path("A/Test.exe"), Path("a/test.exe")]) == [Path("A/Test.exe")]
+
+
+def test_ranked_targets_skip_headless_tobii_executables(monkeypatch):
+    headless = Path("Tobii/Experience/Tobii.Experience.Headless.exe")
+    experience = Path("Tobii/Experience/TobiiExperience.exe")
+    monkeypatch.setattr(tobii_calibration, "_start_menu_shortcuts", lambda: [])
+    monkeypatch.setattr(
+        tobii_calibration, "_installed_tobii_executables", lambda: [headless, experience]
+    )
+    assert tobii_calibration._ranked_tobii_launch_targets() == [experience]
+
+
+@pytest.mark.parametrize(
+    "target,working_dir",
+    [(EXPERIENCE_TARGET, None), ("C:/Tobii/TobiiExperience.exe", str(Path("C:/Tobii")))],
+)
+def test_shell_targets_open_without_a_working_directory(monkeypatch, target, working_dir):
+    calls = []
+
+    def shell_execute(*args):
+        calls.append(args)
+        return 42
+
+    shell32 = type("Shell32", (), {"ShellExecuteW": staticmethod(shell_execute)})
+    monkeypatch.setattr(ctypes, "windll", type("WinDll", (), {"shell32": shell32}), raising=False)
+    assert tobii_calibration._shell_execute(target, []) is True
+    assert calls[0][2:5] == (target, None, working_dir)
 
 
 def test_stream_engine_candidates_honor_configured_path(monkeypatch, tmp_path):

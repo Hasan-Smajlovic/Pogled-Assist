@@ -35,7 +35,9 @@ EyePosition = tuple[float, float, float]
 EyePositionCallback = Callable[[EyePosition | None, EyePosition | None, int], None]
 GazeInvalidCallback = Callable[[int], None]
 
-_DLL_DIRECTORY_HANDLES: list[object] = []
+# One handle per folder: retries while no tracker is attached must not grow the search path.
+_DLL_DIRECTORY_HANDLES: dict[str, object] = {}
+_IGNORED_DEVICE_CREATE_ARGS: set[str] = set()
 
 
 class TobiiStreamEngineError(RuntimeError):
@@ -137,6 +139,7 @@ class TobiiStreamEngineBackend:
         self._api_version: tuple[int, int, int, int] | None = None
         self._connection_error: str | None = None
         self._last_cleanup_failure: tuple[str, int] | None = None
+        self._pump_stuck_logged = False
 
     @property
     def connection_error(self) -> str | None:
@@ -198,9 +201,13 @@ class TobiiStreamEngineBackend:
             if self._thread.is_alive():
                 self._thread.join(timeout=1.5)
             if self._thread.is_alive():
-                logger.warning("Tobii Stream Engine pump thread did not stop cleanly.")
+                # Cleanup retries every few seconds while a native call is stuck.
+                if not self._pump_stuck_logged:
+                    logger.warning("Tobii Stream Engine pump thread did not stop cleanly.")
+                    self._pump_stuck_logged = True
                 return False
             self._thread = None
+            self._pump_stuck_logged = False
 
         if not self._destroy_resources():
             return False
@@ -758,9 +765,13 @@ def _device_create_arg_count(version: tuple[int, int, int, int] | None = None) -
 
 def _configured_device_create_arg_count() -> int | None:
     configured = os.environ.get(DEVICE_CREATE_ARG_ENV, "").strip()
-    if configured not in ("", "3", "4"):
-        raise TobiiStreamEngineError(f"{DEVICE_CREATE_ARG_ENV} must be 3 or 4.")
-    return int(configured) if configured else None
+    if configured in ("3", "4"):
+        return int(configured)
+    if configured and configured not in _IGNORED_DEVICE_CREATE_ARGS:
+        # A typo must not disable candidates whose version already names the ABI.
+        _IGNORED_DEVICE_CREATE_ARGS.add(configured)
+        logger.warning("Ignoring %s=%r; only 3 or 4 is valid.", DEVICE_CREATE_ARG_ENV, configured)
+    return None
 
 
 def _reported_device_create_arg_count(version: tuple[int, int, int, int] | None) -> int | None:
@@ -772,8 +783,10 @@ def _reported_device_create_arg_count(version: tuple[int, int, int, int] | None)
 
 def _load_candidate_dll(candidate: Path) -> ctypes.CDLL:
     add_dll_directory = getattr(os, "add_dll_directory", None)
-    if add_dll_directory is not None and candidate.parent.exists():
-        _DLL_DIRECTORY_HANDLES.append(add_dll_directory(str(candidate.parent)))
+    folder = candidate.parent
+    key = os.path.normcase(str(folder))
+    if add_dll_directory is not None and key not in _DLL_DIRECTORY_HANDLES and folder.exists():
+        _DLL_DIRECTORY_HANDLES[key] = add_dll_directory(str(folder))
 
     return ctypes.CDLL(str(candidate))
 

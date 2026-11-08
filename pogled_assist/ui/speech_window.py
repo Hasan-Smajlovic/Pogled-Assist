@@ -262,8 +262,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         logger.info("Speech window gaze action requested: %s", diagnostics.safe_action(action))
         keyboard_actions = set(self._main_dynamic_actions)
         was_inline = self._active_group_index is not None
+        was_compact = self._compact_system_column
+        bounds = self.action_bounds(action)
         self._trigger_action(action, source="gaze")
         self._keep_departure_bounds(was_inline, keyboard_actions)
+        if self._compact_system_column and not was_compact and bounds is not None:
+            # The narrowed script button no longer covers the old area, so a
+            # neighbouring key may now lie under gaze. It must leave first.
+            self._keyboard_departure_bounds = bounds
 
     def _gaze_action_allowed(self, action):
         if not action.startswith(SPEECH_WINDOW_ACTION_PREFIX):

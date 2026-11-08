@@ -309,25 +309,37 @@ def test_native_failed_start_releases_created_resources(native_backend, failure)
         assert "tobii_gaze_point_subscribe" not in library.calls
 
 
-def test_native_stop_keeps_resources_while_callback_thread_is_still_running(native_backend):
+def test_native_stop_keeps_resources_while_callback_thread_is_still_running(native_backend, caplog):
     backend, library, _gaze, _eyes = native_backend
     backend.start()
 
     class StuckThread:
+        alive = True
+
         def join(self, timeout):
             assert timeout == 1.5
 
         def is_alive(self):
-            return True
+            return self.alive
 
-    backend._thread = StuckThread()
+    stuck = StuckThread()
+    backend._thread = stuck
     calls = list(library.calls)
-    backend.stop()
+    # Connection cleanup retries stop() until the native call returns.
+    for _retry in range(3):
+        assert backend.stop() is False
 
     assert backend._stop_event.is_set()
     assert backend._api.value == 10
     assert backend._device.value == 20
     assert library.calls == calls
+    assert caplog.text.count("pump thread did not stop cleanly") == 1
+
+    stuck.alive = False
+    assert backend.stop() is True
+    backend._thread = StuckThread()
+    assert backend.stop() is False
+    assert caplog.text.count("pump thread did not stop cleanly") == 2
 
 
 @pytest.mark.parametrize(
@@ -387,6 +399,25 @@ def test_matching_abi_override_accepts_a_known_sdk_major(
     monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, str(arity))
     backend.start()
     assert library.calls.count("tobii_device_create") == 1
+
+
+@pytest.mark.parametrize("version", [(4, 25, 0, 3), None])
+def test_invalid_abi_override_is_ignored(native_backend, monkeypatch, caplog, version):
+    backend, library, _gaze, _eyes = native_backend
+    monkeypatch.setattr(engine, "_IGNORED_DEVICE_CREATE_ARGS", set())
+    monkeypatch.setenv(engine.DEVICE_CREATE_ARG_ENV, "auto")
+    if version is None:
+        library.missing.add("tobii_get_api_version")
+        with pytest.raises(engine.TobiiStreamEngineError, match="Unknown Stream Engine"):
+            backend.start()
+        assert "tobii_device_create" not in library.calls
+    else:
+        library.version = version
+        backend.start()
+        assert len(library.tobii_device_create.argtypes) == 4
+    # Retries read the override for every candidate; the warning appears once.
+    assert engine._configured_device_create_arg_count() is None
+    assert caplog.text.count("Ignoring TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS='auto'") == 1
 
 
 @pytest.mark.parametrize("override", [None, "3"])
@@ -544,3 +575,18 @@ def test_loader_skips_wrong_bitness_before_yielding_a_usable_dll(monkeypatch, tm
     candidates = engine._stream_engine_libraries()
     assert next(candidates) == (library, str(current))
     candidates.close()
+
+
+def test_each_dll_folder_joins_the_search_path_once(monkeypatch, tmp_path):
+    first, second = tmp_path / "a", tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    added = []
+    monkeypatch.setattr(engine, "_DLL_DIRECTORY_HANDLES", {})
+    monkeypatch.setattr(engine.os, "add_dll_directory", added.append, raising=False)
+    monkeypatch.setattr(engine.ctypes, "CDLL", lambda path: path)
+    # Retries while no tracker is attached load the same candidates again.
+    for _retry in range(3):
+        for candidate in (first / engine.DLL_NAMES[0], second / engine.DLL_NAMES[0]):
+            assert engine._load_candidate_dll(candidate) == str(candidate)
+    assert added == [str(first), str(second)]

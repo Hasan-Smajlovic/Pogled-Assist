@@ -342,3 +342,34 @@ def test_queued_stream_resumption_cannot_override_retry_status(active_stream, qa
     assert label.text() == "Veza s Tobii uređajem je prekinuta. Pokušavam ponovo."
     assert tracking[-1].state == TrackingState.RETRYING
     label.deleteLater()
+
+
+def test_pro_sdk_delivery_gap_waits_for_fresh_eyes_like_stream_engine(active_stream):
+    provider, now, stopped = active_stream
+    bridge = provider._stream_engine
+    provider._stream_engine = None
+    provider._tracker = SimpleNamespace(model="Eye Tracker 4C")
+    provider._backend_name = "tobii-research"
+    eyes = []
+    tracking = []
+    provider.eye_status_changed.connect(lambda left, right: eyes.append((left, right)))
+    provider.tracking_status_changed.connect(tracking.append)
+    sample = {
+        f"{eye}_{field}": value
+        for eye in ("left", "right")
+        for field, value in (("gaze_point_validity", 1), ("gaze_point_on_display_area", (0.5, 0.5)))
+    }
+    try:
+        provider._on_gaze_data(sample)
+        now[0] += 0.6
+        provider._check_stream_health()
+        assert eyes[-1] == (False, False)
+        assert tracking[-1] == TrackingStatus(TrackingState.WAITING, "Fake tracker")
+        assert stopped == []
+        provider._on_gaze_data(sample)
+        provider._check_stream_health()
+        assert eyes[-1] == (True, True)
+        assert tracking[-1] == TrackingStatus(TrackingState.CONNECTED, "Fake tracker")
+    finally:
+        provider._tracker = None
+        provider._stream_engine = bridge
