@@ -13,7 +13,7 @@ import zipfile
 from importlib.metadata import version
 from pathlib import Path
 
-EDGE_TTS_VERSION = "7.2.8"
+EDGE_TTS_VERSION = "7.3.1"
 BRIDGE_PYTHON_URL = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-win32.zip"
 BRIDGE_PYTHON_SHA256 = "0987a9d85ccf1ba17c3dbdcadc39835f183843604da18c9af4bd677dc84adf7d"
 ESPEAK_MSI_URL = "https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-ng.msi"
@@ -27,11 +27,11 @@ SOURCE_ASSETS = (
         "espeak-ng-LICENSE.txt",
     ),
     (
-        "edge_tts-7.2.8.tar.gz",
-        "https://files.pythonhosted.org/packages/3f/60/"
-        "afbf548b43c78355e03926c6b1fff7500303a2da4d84db9e1324119e21ae/edge_tts-7.2.8.tar.gz",
-        "fcf185a0d527a0d2d003f9d5841facc1d5e0e7b3b88d5df9c32990402c6b8cd0",
-        "edge_tts-7.2.8/LICENSE",
+        f"edge_tts-{EDGE_TTS_VERSION}.tar.gz",
+        "https://files.pythonhosted.org/packages/a3/ce/"
+        f"14e713ba774063e00444a091eb790539fe0d848a9d8df35fd81a7639a28e/edge_tts-{EDGE_TTS_VERSION}.tar.gz",
+        "ee1fabf911b9ea83b38ae93aee5619ee41eaf0b109fef6e65d797dc4ebf1f20f",
+        f"edge_tts-{EDGE_TTS_VERSION}/LICENSE",
         "edge-tts-LICENSE.txt",
     ),
 )
@@ -92,7 +92,7 @@ def prepare_speech_bundle(destination: Path, cache: Path) -> None:
             with member:
                 (licenses / license_name).write_bytes(member.read())
     (licenses / "README.txt").write_text(
-        "Unmodified eSpeak NG 1.52.0 and edge-tts 7.2.8 are distributed as separate tools.\n"
+        f"Unmodified eSpeak NG 1.52.0 and edge-tts {EDGE_TTS_VERSION} are distributed as separate tools.\n"
         "Their matching source archives and licenses are included in this directory.\n"
         "Edge dependency metadata and licenses are in edge/_internal/*.dist-info.\n"
         "Python's license is in edge/_internal/licenses/python/LICENSE.txt.\n"

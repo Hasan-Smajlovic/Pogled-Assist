@@ -71,7 +71,9 @@ Do not manually delete hidden `.PogledAssist.install-*` or `.PogledAssist.backup
 
 ## Included speech tools
 
-The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.2.8. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. Standard speech works offline; natural speech uses Microsoft's online service and requires internet when used.
+The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.1. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. Standard speech works offline; natural speech uses Microsoft's online service and requires internet when used.
+
+The Edge dependency includes the [v2 service authentication](https://github.com/rany2/edge-tts/releases/tag/7.3.0) and [locale-independent server-date parsing](https://github.com/rany2/edge-tts/releases/tag/7.3.1). Tests require at least 7.3.1 and match the application dependency pin to the bundle's installed version, source archive and license path. The build verifies the source archive's SHA-256 before including it. These checks cannot detect future Microsoft service changes; online synthesis and audible playback still need separate release validation.
 
 The launcher and direct executable prefer these bundled tools over discovered system installations. Explicit `ESPEAK_NG_EXE` and `EDGE_PLAYBACK_EXE` overrides still take priority. Existing `.venv` and `tools` directories are preserved for compatibility; versioned files under `speech/` are replaced with each release.
 
@@ -156,6 +158,7 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 
 - Play Efendija MP3 audio through packaged Qt Multimedia, including decoder failure and stop/restart.
 - Exercise Prirodni fallback through packaged in-process `edge_tts`, then Standardni offline.
+- Test directly selected Prirodni (`bs-BA-GoranNeural`) and Arabic Hamed (`ar-SA-HamedNeural`) through the packaged Edge tools with internet available.
 - Confirm the Credential Manager key and saved settings survive update and rollback.
 - Listen to the Fikret clone with Eleven v4, sentence-case text and all three stability choices.
 - Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](features/elevenlabs.md).
