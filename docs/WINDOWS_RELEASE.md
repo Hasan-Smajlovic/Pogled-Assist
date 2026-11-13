@@ -1,6 +1,6 @@
 # Windows release installation and validation
 
-The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder application, an installer, a launcher, a release updater, this guide, and the release `VERSION`. The package includes Python, PySide6, QtAwesome resources, the app icon, the Settings checkbox asset, the Tobii Pro SDK Python package, speech tools, and the isolated Python runtime and source for the 32-bit Stream Engine bridge.
+The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder application, an installer, a launcher, a release updater, this guide, and the release `VERSION`. The package includes Python, PySide6, QtAwesome resources, the app icon, the Settings checkbox asset, the alarm and selection sounds, the bundled Bosnian suggestion models, the Tobii Pro SDK Python package, speech tools, and the isolated Python runtime and source for the 32-bit Stream Engine bridge.
 
 ## Install a release
 
@@ -71,7 +71,7 @@ Do not manually delete hidden `.PogledAssist.install-*` or `.PogledAssist.backup
 
 ## Included speech tools
 
-The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.1. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. Standard speech works offline; natural speech uses Microsoft's online service and requires internet when used.
+The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.1. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. **Standardni** works offline; **Prirodni** uses Microsoft's online service and requires internet when used.
 
 The Edge dependency includes the [v2 service authentication](https://github.com/rany2/edge-tts/releases/tag/7.3.0) and [locale-independent server-date parsing](https://github.com/rany2/edge-tts/releases/tag/7.3.1). Tests require at least 7.3.1 and match the application dependency pin to the bundle's installed version, source archive and license path. The build verifies the source archive's SHA-256 before including it. These checks cannot detect future Microsoft service changes; online synthesis and audible playback still need separate release validation.
 
@@ -131,14 +131,7 @@ No physical tracker, Tobii runtime, system speech installation, or network speec
 
 After normal changes have reached `development`, use the manual **Prepare release** workflow on `master` and select `patch`, `minor`, or `major`. It calculates the next version from `master`'s `VERSION` and prepares `release/v<version>` from the latest `master`, merges `development`, updates `VERSION`, and opens a draft release PR. Complete its verification and review before merging with a merge commit. The full branch procedure is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-process).
 
-Pull requests targeting `development` or `master` run:
-
-- `dependency-review` (pull request events only)
-- `code-quality`
-- `tests`
-- `windows-package`
-
-Repository policy requires `code-quality`, `tests`, and `windows-package`. Verify live rulesets before a release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules, hardware-independent UI rendering, and the enforced Python coverage floor. `dependency-review` additionally checks changed dependencies for known vulnerabilities. Its threshold and GitHub setup are documented in [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); the documented required checks do not include it.
+[CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks) owns the pull request checks, the required subset and dependency-review setup. Verify the live rulesets before a release.
 
 The separate **UI gallery** workflow publishes screenshots after CI completes and keeps the existing PR comment current while CI runs or publication fails. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` jobs are not required PR checks. Pages setup and permissions are documented in [the UI gallery guide](UI_GALLERY.md#activation-and-recovery), and visual review is documented in [the UI development guide](UI_DEVELOPMENT.md#ui-review). Screenshots do not replace the software checks or manual Windows and Tobii validation.
 
@@ -174,7 +167,7 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 - Hold the installation folder open in File Explorer during an update. Confirm the updater reports which folder to close, leaves the older version and user files intact, and succeeds after the Explorer window is closed and retried.
 - Confirm `data`, including `speech_learning.json`, `logs`, `install_info.json`, and existing root logs other than the appended `update_windows.log` are byte-for-byte unchanged after update and rollback tests.
 - Confirm any local `.venv` speech tools and `tools` bridge components remain available after source-install migration and release updates.
-- On a clean Windows machine without Python or external speech tools, install the ZIP and verify Standard speech offline and Natural speech online. Also repeat both voice tests when starting `PogledAssist.exe` directly.
+- On a clean Windows machine without Python or external speech tools, install the ZIP and verify **Standardni** offline and **Prirodni** online. Also repeat both voice tests when starting `PogledAssist.exe` directly.
 - Confirm the bundled x86 bridge imports after installation into a path with spaces, without a system Python or configured Python environment variables.
 - Confirm the setup summary distinguishes missing software, absent devices, detection failures, and unverified calibration. Check its download and calibration buttons and repeat check. Verify unattended installs show no UI.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
@@ -193,7 +186,7 @@ Hardware checks on the target Tobii machine:
 - Confirm the runtime log reports Tobii Pro SDK, Stream Engine, or the x86 bridge.
 - Confirm both-eye tracking moves the pointer and dwell actions fire.
 - Confirm left, right, double-click, keyboard, controller, and calibration actions.
-- Confirm default eSpeak NG speech and optional human-like speech separately.
+- Confirm **Standardni** (eSpeak NG), **Prirodni** and optional **Efendija** speech separately.
 
 ## Known limits
 

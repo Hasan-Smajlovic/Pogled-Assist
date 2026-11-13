@@ -85,9 +85,7 @@ The repository uses one PowerShell entry point for setup and verification:
 .\dev.ps1 check -Parallel
 ```
 
-Development uses Python 3.10 for the application, Tobii Pro SDK, automated checks, and Windows packaging. See the [development guide](docs/DEVELOPMENT.md) for repair of a stale `.venv` and interpreter selection.
-
-`check` runs code-quality checks, the hardware-independent test suite with coverage, and a clean Windows package build with frozen executable and isolated installer smoke tests. To inspect the UI without a tracker or speech engine, run:
+To inspect the UI without a tracker or speech engine, run:
 
 ```powershell
 .\dev.ps1 ui -Open
@@ -133,7 +131,8 @@ The app searches common install locations. These environment variables override 
 | Variable | Value |
 | --- | --- |
 | `TOBII_STREAM_ENGINE_DLL` | Full path to `tobii_stream_engine.dll` |
-| `POGLED_ASSIST_X86_PYTHON` | Full path to 32-bit Python 3.10 |
+| `TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS` | `3` or `4` for a Stream Engine DLL whose version cannot be recognized; see the [native SDK contract](docs/ARCHITECTURE.md#native-stream-engine-compatibility) |
+| `POGLED_ASSIST_X86_PYTHON` | Full path to 32-bit Python 3.10; the older app's `TOBII_GAZE_MOUSE_X86_PYTHON` is checked as a fallback when it points to a valid 32-bit Python 3.10 |
 | `TOBII_CALIBRATION_COMMAND` | Custom Tobii calibration command |
 | `ESPEAK_NG_EXE` | Full path to `espeak-ng.exe` |
 | `EDGE_PLAYBACK_EXE` | Full path to `edge-playback.exe` |
@@ -143,28 +142,9 @@ The app searches common install locations. These environment variables override 
 
 See [ElevenLabs setup](docs/features/elevenlabs.md) for local settings and permissions.
 
-An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the older app is also checked as a fallback when it points to a valid 32-bit Python 3.10. The new `POGLED_ASSIST_X86_PYTHON` setting takes priority.
-
 ## Data and logs
 
-User data is kept outside the packaged binaries so upgrades and rollbacks can preserve it:
-
-```text
-data\app_settings.json
-data\speech_library.json
-data\speech_phrases.json
-data\speech_learning.json
-data\version-history\*\
-logs\latest.txt
-logs\diagnostics\*.jsonl
-logs\gaze-check\gaze-check-*.json
-logs\diagnostic-recordings\<recording-id>\recording.json
-logs\diagnostic-recordings\<recording-id>\snimak*.jsonl
-```
-
-For credentials and saved audio outside `data/`, see [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs).
-
-The launcher also writes `start_gaze_mouse.log`. Source setup and release updates write their own logs in the installation directory.
+Settings, the speech library, personal learning, logs, gaze-check results and diagnostic recordings stay in the installation's `data` and `logs` folders, outside the packaged binaries, so upgrades and rollbacks preserve them. [Persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) lists every file, including credentials and saved audio outside `data/`.
 
 ## Current limitations
 
@@ -172,6 +152,6 @@ Windows x64 is the supported application platform. The executable is not code-si
 
 ## CI and releases
 
-Pull requests run dependency-review, code-quality, hardware-independent test, and Windows packaging checks. Merges to `master` publish an immutable versioned release from the exact merged commit. After CI, the UI gallery workflow publishes screenshot galleries and updates a PR bot comment with previews and links. The repository owner must complete the [Pages setup](docs/UI_GALLERY.md#activation-and-recovery) before the first publication.
+[Contributing](CONTRIBUTING.md#ci-and-required-checks) lists the pull request checks and which of them are required. Merges to `master` publish an immutable versioned release from the exact merged commit. After CI, the UI gallery workflow publishes screenshot galleries and updates a PR bot comment with previews and links. The repository owner must complete the [Pages setup](docs/UI_GALLERY.md#activation-and-recovery) before the first publication.
 
 Release construction, manual hardware validation, and rollback are documented in the [Windows release guide](docs/WINDOWS_RELEASE.md).

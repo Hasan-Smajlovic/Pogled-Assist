@@ -27,7 +27,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
 | Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
-| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` , `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
+| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py`, `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
 | Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
 | Parallel checks, coverage merging and pinned tool installation | `tests/tooling/test_dev_environment.py` and `tests/tooling/test_dev_coverage.py` |
 | Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |

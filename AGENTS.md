@@ -68,9 +68,9 @@ To prevent a recurring mistake, identify the violated requirement and choose the
 | Gaze-check report schema, context or persistence | Validation and export in `pogled_assist/tracking/gaze_check_report.py` and `pogled_assist/tracking/gaze_check_store.py`, report/history UI, the [report contract](docs/ARCHITECTURE.md#gaze-check-reports), and report storage/UI tests in the [test boundary map](docs/TESTING.md#test-boundary-map) |
 | Diagnostic recording context, lifecycle or support ZIP contents | The explicit allowlists and store in `pogled_assist/diagnostic_recording.py`, writer/reader handling where affected, the [recording contract](docs/DIAGNOSTICS.md#short-diagnostic-recordings-and-support-packages), [collection instructions](docs/USER_GUIDE.md#diagnostic-log-collection), and recording/reader/UI tests in the [test boundary map](docs/TESTING.md#test-boundary-map) |
 | Model inputs under `language/bs/model/`, `pogled_assist/suggestions/text.py`, or `scripts/speech_suggestions/prepare_*_model.py` | The prepared `pogled_assist/assets/bosnian-*-model.*` files and the reports under `language/bs/`, regenerated with the commands in `language/bs/README.md` |
-| A file under `data/` | The data lists in `README.md` and `docs/ARCHITECTURE.md`, and the preserved files in `tests/release/test_windows_installer.py` |
+| A file under `data/` | The data list in [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |
-| A job name in `.github/workflows/ci.yml` | The full CI job list and the separately identified required checks in `CONTRIBUTING.md` and `docs/WINDOWS_RELEASE.md`; Hasan decides whether branch rulesets should change |
+| A job name in `.github/workflows/ci.yml` | The full CI job list and the separately identified required checks in [CONTRIBUTING](CONTRIBUTING.md#ci-and-required-checks); Hasan decides whether branch rulesets should change |
 | A skill under `.agents/skills/` | Its pointer under `.claude/skills/` with the same `name` and `description` |
 | A required guide or template | `REQUIRED_FILES` or `REQUIRED_TEMPLATE_SECTIONS` in `tests/tooling/test_repository_docs.py` |
 

@@ -96,34 +96,6 @@ Installer integration tests run after these stages because they share process de
 
 Each parallel run keeps stdout/stderr and coverage under a unique `dist/check-<id>/`. Status lines every five seconds show active stages; all verification commands report stage/total durations, including failures. Elapsed time alone does not prove progress. See [parallel diagnosis](DEVELOPMENT_TROUBLESHOOTING.md#debugging-parallel-test-failures) for reading active logs and isolating contention.
 
-## Test strategy
-
-[Writing and selecting tests](TESTING.md) owns the boundary map, shared fixtures, Qt lifecycle, clocks and process probes.
-
-### Conditional tests
-
-[Conditional tests](TESTING.md#conditional-tests) lists the native audio probe and opt-in gaze benchmark, their commands and evidence limits.
-
-## Mouse gaze simulation
-
-See [mouse gaze simulation](UI_DEVELOPMENT.md#mouse-gaze-simulation) for synthetic input and real-click limits.
-
-## UI review
-
-See [UI development](UI_DEVELOPMENT.md#ui-review) for galleries and manual checks.
-
-### Application design reference workflow
-
-Use the [design surface map](UI_DEVELOPMENT.md#application-design-reference-workflow) before changing visible UI.
-
-## UI gallery publication
-
-[Gallery publication](UI_GALLERY.md) owns Pages setup, permissions and recovery.
-
-## Diagnostic log analysis
-
-[Diagnostic analysis](DIAGNOSTICS.md#diagnostic-log-analysis) owns the offline reader command, loss accounting and interpretation of a reported selection failure.
-
 ## Lint and formatting
 
 Ruff checks Python correctness, imports and formatting. actionlint checks Actions syntax and expressions. PSScriptAnalyzer uses the focused repository settings rather than broad naming/style rules.
