@@ -82,6 +82,33 @@
       <span id="marker-preview-dot" class="gaze-marker-dot" aria-hidden="true"></span>
     </section>
   </section>
+  <section id="quick-actions-screen">
+    <h2>Brze radnje</h2>
+    <p>Brze radnje je prekidač na traci. Kada je uključen, zadržan pogled na meti otvara kružni meni oko te tačke. Meni ima samo ikone: gore lijevi klik, desno desni klik, dolje dvostruki klik i lijevo Odustani. Prečnik menija je 248 logičkih piksela, a tamna sredina od 108 piksela nije cilj. Ostatak ekrana je blago zatamnjen.</p>
+    <p>Pogled na jedan dio menija označava taj dio jačom bojom i bijelim rubom. Nakon početne pauze bijeli luk oko njegove ikone puni se od vrha u smjeru kazaljke na satu. Pomak veći od radijusa odabira počinje pokušaj ispočetka, a pogled u sredinu ga poništava. Klik mišem bira dio odmah, a Escape bira Odustani. Pravi pokazivač se ne pomjera dok je meni otvoren.</p>
+    <figure class="quick-actions-preview" aria-label="Primjer kružnog menija: odabire se lijevi klik">
+      <div class="quick-actions-dial" role="img" aria-label="Lijevi klik gore, desni klik desno, dvostruki klik dolje, Odustani lijevo">
+        <span class="quick-actions-icon quick-actions-top" aria-hidden="true">↖</span>
+        <span class="quick-actions-icon quick-actions-right" aria-hidden="true">◧</span>
+        <span class="quick-actions-icon quick-actions-bottom" aria-hidden="true">☝</span>
+        <span class="quick-actions-icon quick-actions-left" aria-hidden="true">✕</span>
+      </div>
+      <figcaption>Gore lijevi klik (odabire se), desno desni klik, dolje dvostruki klik, lijevo Odustani.</figcaption>
+    </figure>
+  </section>
+  <section id="zoom-screen">
+    <h2>Precizno uvećanje</h2>
+    <p>Kada je precizno uvećanje uključeno, Brze radnje prvo prikazuju kvadrat od 540 logičkih piksela na sredini ekrana. On tri puta uvećava područje od 180 piksela oko mete, a ostatak ekrana je zatamnjen. Bijeli okvir i plava unutrašnja linija odvajaju uvećanje od pozadine.</p>
+    <p>Križić sa zelenim krugom prati pogled unutar kvadrata. Nakon početne pauze žuti luk se puni oko kruga; završetak bira odgovarajuću tačku na stvarnom ekranu i otvara kružni meni. Pogled izvan kvadrata poništava pokušaj. Klik mišem unutar kvadrata bira tačku odmah, a klik izvan njega ili Escape zatvara uvećanje. Desni klik pogledom pokreće jedan sljedeći lijevi klik bez uvećanja, da kontekstni meni ostane otvoren.</p>
+    <figure class="zoom-preview" aria-label="Primjer preciznog uvećanja">
+      <div class="zoom-square" role="img" aria-label="Uvećano dugme Spremi s križićem i djelimično popunjenim lukom">
+        <span class="zoom-sample-button">Spremi</span>
+        <span class="zoom-crosshair" aria-hidden="true"></span>
+      </div>
+      <figcaption>Uvećano dugme Spremi; žuti luk pokazuje napredak odabira tačke.</figcaption>
+    </figure>
+    <p>Brze radnje i precizno uvećanje uvijek traže oba oka. Gubitak bilo kojeg oka zatvara oba prikaza i ostavlja pokazivač na posljednjem mjestu.</p>
+  </section>
   <details class="reference-tools"><summary>Opcije pregleda</summary><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
   <div id="gaze-ring" aria-hidden="true" hidden></div>
 <details class="design-notes"><summary>Qt prikaz</summary><p>Qt koristi mirni okvir cilja i zajednički krug odabira; dugmad zadržavaju istu geometriju tokom odabira.</p></details>
