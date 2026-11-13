@@ -285,3 +285,23 @@ def test_late_export_status_does_not_attach_to_a_new_report(check, qtbot, monkey
     complete_precision(window, qtbot)
     reports.exported.emit("previous-report-export", True)
     assert not window._export_status.isVisible()
+
+
+def _fill(button):
+    image = button.grab().toImage()
+    return image.pixelColor(8, image.height() // 2).name()
+
+
+def test_disabled_check_actions_use_the_shared_disabled_look(check, qtbot):
+    window, reports, _now = check
+    assert window._primary_button.isEnabled()
+    assert _fill(window._primary_button) == "#2e6478"
+    window._open_history()
+    qtbot.waitUntil(lambda: not reports.loading)
+    assert window._history_list.count() == 0
+    assert not window._primary_button.isEnabled()
+    assert _fill(window._primary_button) == "#222b35"
+    window._start_precision()
+    qtbot.waitUntil(lambda: window._check is not None)
+    assert not window._diagnostics_button.isEnabled()
+    assert _fill(window._diagnostics_button) == "#222b35"

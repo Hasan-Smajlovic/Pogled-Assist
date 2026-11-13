@@ -7,7 +7,7 @@ from _clock import freeze_monotonic
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import FakeLibraryStore, FakeSpeech, grouped_fake_speech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QFrame, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QToolButton, QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ALL_LETTERS_LAYOUT, LETTER_GROUPS_LAYOUT
@@ -397,3 +397,43 @@ def test_speech_role_tones_separate_words_editing_views_and_app_controls(qtbot, 
     }
     window._categories_button.setChecked(True)
     assert fill(window._categories_button) == "#2e6478"
+
+
+def _assert_information_fits(button, qtbot):
+    button.show_help()
+    popup = button.popup
+    qtbot.waitUntil(popup.isVisible)
+    layout = popup.layout()
+    assert popup.height() >= layout.totalHeightForWidth(popup.width())
+    for label in popup.findChildren(QLabel):
+        assert label.height() >= label.heightForWidth(label.width()), label.text()
+        assert popup.rect().contains(label.geometry()), label.text()
+    popup.close()
+    qtbot.waitUntil(popup.isHidden)
+
+
+@pytest.mark.parametrize("width", [1280, 800])
+def test_settings_information_popup_shows_all_of_its_text(qtbot, monkeypatch, width):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(width, 720)
+    window.show()
+    window._open_eleven()
+    qtbot.waitUntil(window._eleven_page.connection_help.isVisible)
+    _assert_information_fits(window._eleven_page.connection_help, qtbot)
+
+
+@pytest.mark.parametrize("width", [1280, 420])
+def test_gaze_check_information_popup_shows_all_of_its_text(qtbot, width):
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+    window = GazeCheckWindow(GazeSettings(), simulated=True)
+    qtbot.addWidget(window)
+    window.resize(width, 720)
+    window.show()
+    window._timer.stop()
+    qtbot.waitUntil(window._position_help.isVisible)
+    _assert_information_fits(window._position_help, qtbot)
