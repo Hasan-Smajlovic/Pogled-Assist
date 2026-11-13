@@ -11,7 +11,6 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QStyle, QToolButton, QWi
 
 from ..interaction.mouse_controller import (
     CLICK_ACTIONS,
-    CONTROLLER,
     DOUBLE_LEFT_CLICK,
     HIDE_HOTBAR,
     KEYBOARD,
@@ -47,7 +46,6 @@ CLICK_BUTTONS = (
 SECONDARY_BUTTONS = (
     _Button(SPEECH, "Govor", "fa5s.microphone"),
     _Button(KEYBOARD, "Tastatura", "fa5s.keyboard", checkable=True),
-    _Button(CONTROLLER, "Upravljač", "fa5s.gamepad", checkable=True),
 )
 
 
@@ -219,7 +217,6 @@ class HotbarControls:
                 QUICK_ACTIONS: QStyle.StandardPixmap.SP_ComputerIcon,
                 SPEECH: QStyle.StandardPixmap.SP_MediaVolume,
                 KEYBOARD: QStyle.StandardPixmap.SP_FileDialogDetailedView,
-                CONTROLLER: QStyle.StandardPixmap.SP_DesktopIcon,
                 SETTINGS: QStyle.StandardPixmap.SP_FileDialogInfoView,
                 HIDE_HOTBAR: QStyle.StandardPixmap.SP_TitleBarMinButton,
                 SHOW_HOTBAR: QStyle.StandardPixmap.SP_TitleBarNormalButton,

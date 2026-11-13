@@ -41,7 +41,7 @@ Read applicable skill sections:
 
 - Before creating or renaming a branch, resolve the matching issue and follow [Topic branches](CONTRIBUTING.md#topic-branches), including its issue number. Tool-generated branch prefixes do not override the convention.
 - Preserve all `data/` and `logs/` across installation, update and rollback; [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) includes files older releases still read.
-- Direct desktop pointer movement, clicks, Quick actions and precision zoom require both eyes. Application controls, including Controller click buttons, follow the saved eye policy. Missing settings retain the both-eye default. Never advance or activate a selection during a hold or without fresh valid gaze.
+- Direct desktop pointer movement, clicks, Quick actions and precision zoom require both eyes. Application controls follow the saved eye policy. Missing settings retain the both-eye default. Never advance or activate a selection during a hold or without fresh valid gaze.
 - Keep Qt logical coordinates separate from Windows physical coordinates.
 - Before visible UI layout, copy, size, state or interaction changes, follow the [design workflow](docs/UI_DEVELOPMENT.md#application-design-reference-workflow): update the matching HTML/assets first, review them, then implement Qt in the same PR.
 - Reuse pytest and [existing fakes](docs/TESTING.md#test-boundary-map); do not add a test framework. Check fake input, provider stubs and `Preview*` services before treating a boundary as hardware-only.

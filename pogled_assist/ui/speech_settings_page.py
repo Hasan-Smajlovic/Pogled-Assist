@@ -75,7 +75,7 @@ class SpeechSettingsPage(QFrame):
         layout.addWidget(layout_row)
         row, self._letters_group_value = self._controls.adjust_row(
             "Broj slova u grupi",
-            "Grupe na Tastaturi i Upravljaču, te u Govoru s grupama slova ili arapskim pismom.",
+            "Grupe na Tastaturi, te u Govoru s grupama slova ili arapskim pismom.",
             self._owner._adjust_letters_per_group,
             1,
         )

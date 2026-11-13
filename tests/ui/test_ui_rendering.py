@@ -39,27 +39,6 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
             assert first_group.text() == "A B"
             assert next_page.isVisible()
             assert next_page.isEnabled()
-        if name in (
-            "controller-keyboard",
-            "controller-latin-paged",
-            "controller-arabic",
-            "controller-arabic-symbols",
-        ):
-            assert widget._script_button.isVisible(), (
-                name,
-                widget._active_tab,
-                widget._script_button.isHidden(),
-                widget._script_button.geometry(),
-            )
-            assert widget._script_button.height() >= 52
-            assert widget._script_button.geometry().bottom() < widget._content_host.geometry().top()
-            image = QImage(str(snapshot))
-            expected = widget._script_button.grab().toImage()
-            actual = image.copy(widget._script_button.geometry().adjusted(8, 8, -8, -8))
-            expected = expected.copy(expected.rect().adjusted(8, 8, -8, -8))
-            assert actual.convertToFormat(QImage.Format.Format_ARGB32) == expected.convertToFormat(
-                QImage.Format.Format_ARGB32
-            ), name
         return snapshot
 
     monkeypatch.setattr(preview, "_capture_widget", capture_with_script_control_check)
@@ -75,9 +54,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     unrelated.write_bytes(b"leave caller files alone")
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 76
+    assert len(snapshots) == 71
     assert {path.stem for path in snapshots} == CORE_NAMES
-    assert len(encountered) == 156  # Extended states remain available without PNG encoding.
+    assert len(encountered) == 151  # Extended states remain available without PNG encoding.
     assert not omitted.exists()
     assert unrelated.read_bytes() == b"leave caller files alone"
     unrelated.unlink()  # Keep the CI artifact limited to actual previews.
@@ -91,7 +70,7 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
         assert image.height() >= 70, snapshot.name
         if snapshot.name.startswith(("settings-", "gaze-check-")):
             assert (image.width(), image.height()) == (1280, 720), snapshot.name
-        if snapshot.name in ("keyboard-latin-paged.png", "controller-latin-paged.png"):
+        if snapshot.name == "keyboard-latin-paged.png":
             assert (image.width(), image.height()) == (380, 640), snapshot.name
 
 

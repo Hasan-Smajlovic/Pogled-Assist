@@ -23,7 +23,7 @@ pytestmark = pytest.mark.e2e
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
 @pytest.mark.parametrize(
     "surface",
-    ["speech-alphabet", "speech-group", "speech-letter", "hotbar", "keyboard", "controller"],
+    ["speech-alphabet", "speech-group", "speech-letter", "hotbar", "keyboard"],
 )
 def test_completed_pause_retention_through_application_selection(
     hotbar_gaze, qtbot, monkeypatch, surface
@@ -170,12 +170,10 @@ def test_policy_tabs_and_controls_fit_target_display_and_preserve_duration(qtbot
     assert updates[-1].eye_tracking_policy == "any"
 
 
-@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
+@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech"])
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
 @pytest.mark.parametrize("eyes", [(True, False), (False, True)], ids=["left", "right"])
-def test_one_eye_selects_app_controls_including_controller_clicks(
-    hotbar_gaze, qtbot, monkeypatch, surface, eyes
-):
+def test_one_eye_selects_app_controls(hotbar_gaze, qtbot, monkeypatch, surface, eyes):
     hotbar, controller, _feed, actions, _progress = hotbar_gaze
     now = freeze_monotonic(monkeypatch, 10.0)
     hotbar._update_gaze_settings(
@@ -201,8 +199,6 @@ def test_one_eye_selects_app_controls_including_controller_clicks(
     for index in range(24):
         sample(10.0 + index * 0.05)
     assert actions == [action]
-    if surface == "controller":
-        assert len(hotbar._controller_window._input.clicks) == 1
     sample(12.5)
     assert actions == [action]
 

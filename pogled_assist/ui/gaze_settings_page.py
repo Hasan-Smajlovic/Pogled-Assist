@@ -131,7 +131,7 @@ class GazeSettingsPage(QFrame):
         selection.addWidget(
             guidance_note(
                 self,
-                "<b>Primjena režima.</b> Režim važi za kontrole aplikacije, uključujući Upravljač. "
+                "<b>Primjena režima.</b> Režim važi za kontrole aplikacije. "
                 "Pomjeranje pokazivača i direktni klikovi na desktopu zahtijevaju oba oka.",
             )
         )

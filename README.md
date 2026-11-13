@@ -1,6 +1,6 @@
 # Pogled Assist
 
-Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a compact controller panel. Connect one tracker at a time; [tracker setup and replacement](docs/USER_GUIDE.md#before-starting) describe the matching Tobii software and reconnection limits.
+Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a Quick actions grid for clicks, scrolling and Enter. Connect one tracker at a time; [tracker setup and replacement](docs/USER_GUIDE.md#before-starting) describe the matching Tobii software and reconnection limits.
 
 [Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
 
@@ -9,10 +9,10 @@ Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app tur
 - A top hotbar that reserves desktop space through the Windows AppBar API.
 - Direct desktop pointer movement and clicks require both eyes; application controls follow the selected [eye-tracking policy](docs/USER_GUIDE.md#eye-tracking-policy).
 - Left, right, and double-click modes with an optional precision zoom step.
-- A radial Quick actions menu for choosing a click at the current gaze target.
+- A Quick actions grid of eight large targets for clicking, scrolling, Enter, or typing at the current gaze target.
 - A visible gaze bubble and action progress overlay.
 - A full-screen Bosnian speech keyboard with offline word completion and next-word suggestions, reusable phrases, and local personal learning.
-- Right-side Keyboard and Controller panels for typing and common shortcuts.
+- A right-side Keyboard panel for typing into other applications.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
 - Adjustable [edge selection stability](docs/USER_GUIDE.md#selection-stability-near-edges) for Speech, Keyboard and the hotbar.
 - An optional caregiver gaze check with live positioning, per-eye tracking with interruption counts, timed targets, a word written by gaze, and [saved results and ZIP export](docs/features/gaze-check.md#saved-gaze-check-results).

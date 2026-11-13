@@ -17,17 +17,15 @@ from .hotbar_speech import HotbarSpeech
 from .interaction.eye_tracking_policy import EyeState, eyes_usable
 from .interaction.mouse_controller import (
     CLICK_ACTIONS,
-    CONTROLLER,
-    DOUBLE_LEFT_CLICK,
     HIDE_HOTBAR,
     KEYBOARD,
-    LEFT_CLICK,
     QUICK_ACTIONS,
-    RIGHT_CLICK,
     SETTINGS,
     SHOW_HOTBAR,
     SPEECH,
+    TYPE_HERE,
     GazeMouseController,
+    action_label,
 )
 from .logging_setup import get_project_root
 from .release_update import ReleaseUpdateError, ReleaseUpdateManager, StableVersion
@@ -41,7 +39,6 @@ from .tracking.gaze_provider import TobiiGazeProvider
 from .tracking.mouse_gaze_provider import MouseGazeProvider
 from .tracking.status import TrackingState, TrackingStatus
 from .tracking.tobii_calibration import launch_tobii_guest_calibration, launch_tobii_settings
-from .ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from .ui.diagnostic_recordings import DiagnosticRecordings
 from .ui.diagnostics_window import DiagnosticsWindow
 from .ui.gaze_bubble import GazeBubbleWindow
@@ -51,7 +48,7 @@ from .ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .ui.hotbar_controls import HotbarControls, no_focus_tool_window_flags
 from .ui.interaction_overlay import InteractionOverlayWindow
 from .ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX, KeyboardWindow
-from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
+from .ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionMenu
 from .ui.quick_action_zoom import QuickActionZoomWindow
 from .ui.recording_badge import RecordingBadge
 from .ui.settings_window import SettingsServices, SettingsWindow
@@ -99,7 +96,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._restarting_for_update = False
         self._speech_window: SpeechWindow | None = None
         self._keyboard_window: KeyboardWindow | None = None
-        self._controller_window: ControllerWindow | None = None
         self._settings_window: SettingsWindow | None = None
         self._gaze_check_window: GazeCheckWindow | None = None
         self._diagnostics_window: DiagnosticsWindow | None = None
@@ -115,7 +111,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._restore_button: QToolButton | None = None
         self._zoom_context: str | None = None
         self._foreground = ForegroundTracker(self, self, WindowsInputController)
-        self._quick_menu = QuickActionRadialMenu()
+        self._quick_menu = QuickActionMenu()
         self._quick_zoom = QuickActionZoomWindow()
         self._mouse = GazeMouseController(
             self,
@@ -165,7 +161,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
             "_gaze_check_window",
             "_speech_window",
             "_keyboard_window",
-            "_controller_window",
             "_settings_window",
         ):
             window = getattr(self, name)
@@ -245,11 +240,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         return self._hotbar_action_bounds(action)
 
     def selection_bounds(self, action: str) -> QRect | None:
-        controller_action = isinstance(action, str) and action.startswith(
-            CONTROLLER_WINDOW_ACTION_PREFIX
-        )
-        if controller_action and _is_visible(self._controller_window):
-            return self._controller_window.action_bounds(action)
         return self.action_bounds(action)
 
     def _hotbar_action_bounds(self, action: str) -> QRect | None:
@@ -284,10 +274,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
     def _quick_overlay_visible(self) -> bool:
         return self._quick_zoom.isVisible() or self._quick_menu.isVisible()
 
-    def _window_at_global_point(
-        self, point: QPoint
-    ) -> SpeechWindow | KeyboardWindow | ControllerWindow | None:
-        for window in (self._speech_window, self._keyboard_window, self._controller_window):
+    def _window_at_global_point(self, point: QPoint) -> SpeechWindow | KeyboardWindow | None:
+        for window in (self._speech_window, self._keyboard_window):
             if window is not None and window.contains_global_point(point):
                 return window
         return None
@@ -304,7 +292,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         surfaces = (
             (SPEECH_WINDOW_ACTION_PREFIX, self._speech_window),
             (KEYBOARD_WINDOW_ACTION_PREFIX, self._keyboard_window),
-            (CONTROLLER_WINDOW_ACTION_PREFIX, self._controller_window),
         )
         for prefix, window in surfaces:
             if window is not None and action.startswith(prefix):
@@ -448,7 +435,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
     def _route_window_action(self, action: str) -> bool:
         for prefix, window in (
             (KEYBOARD_WINDOW_ACTION_PREFIX, self._keyboard_window),
-            (CONTROLLER_WINDOW_ACTION_PREFIX, self._controller_window),
             (SPEECH_WINDOW_ACTION_PREFIX, self._speech_window),
         ):
             if not action.startswith(prefix):
@@ -466,9 +452,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if action == KEYBOARD:
             self._mouse.set_mode(None)
             self._toggle_keyboard(checked, source)
-        elif action == CONTROLLER:
-            self._mouse.set_mode(None)
-            self._toggle_controller(checked, source)
         elif action == SPEECH:
             self._mouse.set_mode(None)
             self._open_speech()
@@ -518,21 +501,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
                 else None
             )
             self._keyboard_window.set_gaze_target_action(keyboard_action)
-        if self._controller_window is not None:
-            controller_action = (
-                action
-                if isinstance(action, str) and action.startswith(CONTROLLER_WINDOW_ACTION_PREFIX)
-                else None
-            )
-            self._controller_window.set_gaze_target_action(controller_action)
 
     def _show_action_fired(self, action: str, point: QPoint) -> None:
-        names = {
-            LEFT_CLICK: "Lijevi klik",
-            RIGHT_CLICK: "Desni klik",
-            DOUBLE_LEFT_CLICK: "Dvostruki klik",
-        }
-        self._set_status(f"{names.get(action, action)} na {point.x()}, {point.y()}.")
+        self._set_status(f"{action_label(action)} na {point.x()}, {point.y()}.")
 
     def _toggle_quick_actions(self, checked: bool | None, source: str) -> None:
         if source == "mouse" and checked is not None:
@@ -624,7 +595,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._set_status("Brza radnja je otkazana.")
             return
 
-        self._mouse.execute_quick_action(action)
+        if self._mouse.execute_quick_action(action) and action == TYPE_HERE:
+            # The click focused the chosen field; the Keyboard types into that window.
+            self._show_keyboard_sidebar()
 
     def _hide_hotbar(self) -> None:
         logger.info("Hiding hotbar.")
@@ -658,10 +631,9 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.cancel_quick_action_menu()
 
     def _resize_visible_sidebars(self, top_height: int, *, full_height: bool) -> None:
-        for window in (self._keyboard_window, self._controller_window):
-            if _is_visible(window):
-                window.set_reserved_top_height(top_height)
-                window.set_full_height(full_height)
+        if _is_visible(self._keyboard_window):
+            self._keyboard_window.set_reserved_top_height(top_height)
+            self._keyboard_window.set_full_height(full_height)
 
     def _show_restore_button(self) -> None:
         if self._restore_button is None:
@@ -672,13 +644,8 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._restore_button.raise_()
 
     def set_external_window(self, hwnd: int) -> None:
-        for window in (self._keyboard_window, self._controller_window):
-            if window is not None:
-                window.set_target_window(hwnd)
-
-    def set_external_cursor(self, position: tuple[int, int]) -> None:
-        if self._controller_window is not None:
-            self._controller_window.set_target_cursor_position(position)
+        if self._keyboard_window is not None:
+            self._keyboard_window.set_target_window(hwnd)
 
     def _position_restore_button(self) -> None:
         if self._restore_button is None:
@@ -699,8 +666,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._hide_keyboard_sidebar()
 
     def _show_keyboard_sidebar(self) -> None:
-        replaced = self._controller_window if _is_visible(self._controller_window) else None
-        self._hide_controller_sidebar()
         if self._keyboard_window is None:
             self._keyboard_window = KeyboardWindow(self._speech.settings, self)
             self._keyboard_window.closed.connect(self._keyboard_window_closed)
@@ -717,7 +682,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._keyboard_window.set_target_window(self._foreground.window)
         self._keyboard_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
         self._keyboard_window.update_settings(self._speech.settings)
-        self._keyboard_window.show_sidebar(full_height=not self.isVisible(), replacing=replaced)
+        self._keyboard_window.show_sidebar(full_height=not self.isVisible())
         self._recording_changed()
         self._set_keyboard_button_checked(True)
         self._set_status("Tastatura je otvorena.")
@@ -737,68 +702,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
         if button is not None:
             button.setChecked(checked)
 
-    def _toggle_controller(self, checked: bool | None, source: str) -> None:
-        enabled = self._sidebar_should_open(self._controller_window, checked, source)
-        if enabled:
-            self._show_controller_sidebar()
-        else:
-            self._hide_controller_sidebar()
-
     def _sidebar_should_open(self, window, checked: bool | None, source: str) -> bool:
         if source == "mouse" and checked is not None:
             return checked
         return not _is_visible(window)
-
-    def _show_controller_sidebar(self) -> None:
-        replaced = self._keyboard_window if _is_visible(self._keyboard_window) else None
-        self._hide_keyboard_sidebar()
-        if self._controller_window is None:
-            self._controller_window = ControllerWindow(
-                self._mouse.settings,
-                self._speech.settings,
-                self,
-            )
-            self._controller_window.closed.connect(self._controller_window_closed)
-            self._controller_window.keyboard_script_changed.connect(self._change_keyboard_script)
-            self._controller_window.status_changed.connect(self._set_status)
-            self._controller_window.speech_requested.connect(self._open_speech_from_controller)
-            self._controller_window.gaze_settings_changed.connect(self._update_gaze_settings)
-            self._controller_window.interaction_context_changed.connect(
-                lambda: self._mouse.cancel_toolbar_interaction(require_leave=True)
-            )
-            self._controller_window.mouse_action_started.connect(
-                self._mouse.cancel_gaze_interactions_for_mouse
-            )
-
-        self._foreground.update()
-        self._controller_window.set_target_window(self._foreground.window)
-        self._controller_window.set_target_cursor_position(self._foreground.cursor)
-        self._controller_window.set_reserved_top_height(self.BAR_HEIGHT if self.isVisible() else 0)
-        self._controller_window.update_gaze_settings(self._mouse.settings)
-        self._controller_window.update_speech_settings(self._speech.settings)
-        self._controller_window.show_sidebar(full_height=not self.isVisible(), replacing=replaced)
-        self._recording_changed()
-        self._set_controller_button_checked(True)
-        self._set_status("Upravljač je otvoren.")
-
-    def _hide_controller_sidebar(self) -> None:
-        if self._controller_window is not None and self._controller_window.isVisible():
-            self._controller_window.hide_sidebar()
-            self._set_status("Upravljač je zatvoren.")
-        self._set_controller_button_checked(False)
-
-    def _controller_window_closed(self) -> None:
-        self._set_controller_button_checked(False)
-        self._set_status("Upravljač je zatvoren.")
-
-    def _set_controller_button_checked(self, checked: bool) -> None:
-        button = self._buttons.get(CONTROLLER)
-        if button is not None:
-            button.setChecked(checked)
-
-    def _open_speech_from_controller(self) -> None:
-        self._hide_controller_sidebar()
-        self._open_speech()
 
     def _open_speech(self) -> None:
         logger.info("Opening speech window.")
@@ -880,7 +787,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.cancel_zoomed_click(reset_mode=False)
         self._mouse.cancel_quick_action_menu()
         self._hide_keyboard_sidebar()
-        self._hide_controller_sidebar()
         if self._settings_window is not None and self._settings_window.isVisible():
             self._settings_window.raise_()
             self._settings_window.activateWindow()
@@ -1033,7 +939,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         for window in (
             self._settings_window,
             self._keyboard_window,
-            self._controller_window,
             self._gaze_check_window,
         ):
             if window is not None:
@@ -1122,7 +1027,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._mouse.cancel_zoomed_click(reset_mode=False)
         self._mouse.cancel_quick_action_menu()
         self._hide_keyboard_sidebar()
-        self._hide_controller_sidebar()
         self._interaction_overlay.clear()
         self.close()
         app = QApplication.instance()
@@ -1185,8 +1089,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._interaction_overlay.set_enabled(
             bool(getattr(settings, "show_interaction_overlay", True))
         )
-        if self._controller_window is not None:
-            self._controller_window.update_gaze_settings(self._mouse.settings)
         self._save_settings()
 
     def _configure_eye_tracking(self) -> None:
@@ -1256,8 +1158,6 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._speech_window.update_settings(self._speech.settings)
         if self._keyboard_window is not None:
             self._keyboard_window.update_settings(self._speech.settings)
-        if self._controller_window is not None:
-            self._controller_window.update_speech_settings(self._speech.settings)
         if self._settings_window is not None:
             self._settings_window.update_speech_settings(self._speech.settings)
         self._save_settings()

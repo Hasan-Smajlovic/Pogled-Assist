@@ -9,11 +9,13 @@ from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFrame,
     QGridLayout,
     QLabel,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..installation_check import TOBII_DOWNLOAD_URL, check_installation
@@ -47,26 +49,41 @@ class InstallationWindow(QDialog):
         self.setWindowTitle("Provjera instalacije — Pogled Assist")
         self.resize(900, 650)
         self.setStyleSheet(
-            "QDialog, QWidget { background: #283442; color: #edf2f7; font-size: 18px; }"
-            "QPushButton { padding: 14px; border: 1px solid #394959; border-radius: 8px; }"
+            "QDialog { background: #1d242d; }"
+            "QDialog, QLabel { color: #edf2f7; font-size: 18px; }"
+            "QScrollArea, QWidget#installationResults { background: transparent; border: 0; }"
+            "QLabel#installationHeading { font-size: 28px; font-weight: bold; }"
+            "QLabel#installationResultTitle { font-weight: bold; }"
+            "QPushButton { padding: 14px; color: #edf2f7; font-size: 18px; background: #283442;"
+            " border: 1px solid #71869b;"
+            " border-radius: 8px; }"
+            "QPushButton:hover { background: #334355; border-color: #84c5d9; }"
             "QPushButton:focus { border: 2px solid #84c5d9; }"
-            "QPushButton:disabled { color: #7c8491; }"
+            "QPushButton:disabled { background: #222b35; border-color: #455363; color: #8595a6; }"
         )
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
         heading = QLabel("Provjera instalacije")
-        heading.setStyleSheet("font-size: 28px; font-weight: bold;")
+        heading.setObjectName("installationHeading")
         layout.addWidget(heading)
         intro = QLabel("Provjerite spremnost programa i dovršite podešavanje Tobii uređaja.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
-        self.results = QLabel("Provjeravam…")
-        self.results.setTextFormat(Qt.TextFormat.PlainText)
-        self.results.setWordWrap(True)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.results)
-        layout.addWidget(scroll)
+        self.results = QWidget()
+        self.results.setObjectName("installationResults")
+        self._results_layout = QVBoxLayout(self.results)
+        self._results_layout.setContentsMargins(0, 0, 0, 0)
+        self._results_layout.setSpacing(12)
+        self._results_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._set_result_rows([("Provjeravam…", "")])
+        self.results_scroll = QScrollArea()
+        self.results_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.results_scroll.setWidgetResizable(True)
+        self.results_scroll.setWidget(self.results)
+        layout.addWidget(self.results_scroll, 1)
         actions = QGridLayout()
+        actions.setSpacing(12)
         self.download_button = QPushButton("Preuzmi Tobii softver")
         self.calibrate_button = QPushButton("Pokreni kalibraciju")
         self.refresh_button = QPushButton("Ponovi provjeru")
@@ -118,13 +135,38 @@ class InstallationWindow(QDialog):
         self._start(lambda: check_installation(self.root), self._show_results)
 
     def _show_results(self, results):
-        self.results.setText(
-            "\n\n".join(f"{item.title} — {item.state}\n{item.detail}" for item in results)
-        )
+        self._set_result_rows([(f"{item.title} — {item.state}", item.detail) for item in results])
         self._can_calibrate = any(
             item.key == "software" and item.state == "Pronađen" for item in results
         )
         self.status.setText("Provjera je završena. Kalibraciju potvrdite u Tobii softveru.")
+
+    def _set_result_rows(self, rows: list[tuple[str, str]]) -> None:
+        while self._results_layout.count():
+            widget = self._results_layout.takeAt(0).widget()
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
+        for title, detail in rows:
+            row = QWidget(self.results)
+            row_layout = QVBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(2)
+            for text, name in ((title, "installationResultTitle"), (detail, "")):
+                if not text:
+                    continue
+                label = QLabel(text, row)
+                label.setObjectName(name)
+                label.setTextFormat(Qt.TextFormat.PlainText)
+                label.setWordWrap(True)
+                row_layout.addWidget(label)
+            self._results_layout.addWidget(row)
+
+    def result_rows(self) -> list[QWidget]:
+        return [
+            self._results_layout.itemAt(index).widget()
+            for index in range(self._results_layout.count())
+        ]
 
     def _open_download(self):
         if not QDesktopServices.openUrl(QUrl(TOBII_DOWNLOAD_URL)):

@@ -3,8 +3,21 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
+from pogled_assist.interaction.mouse_controller import (
+    DOUBLE_LEFT_CLICK,
+    LEFT_CLICK,
+    PRESS_ENTER,
+    RIGHT_CLICK,
+    SCROLL_DOWN,
+    SCROLL_UP,
+    TYPE_HERE,
+)
 from pogled_assist.ui.interaction_overlay import _compact_label
-from pogled_assist.ui.quick_action_menu import CANCEL_QUICK_ACTION, QuickActionRadialMenu
+from pogled_assist.ui.quick_action_menu import (
+    CANCEL_QUICK_ACTION,
+    QuickActionMenu,
+    grid_rect_around,
+)
 from pogled_assist.ui.quick_action_zoom import _centered_square, _square_around
 
 
@@ -16,16 +29,59 @@ def test_zoom_squares_stay_inside_screen_bounds():
     assert _centered_square(bounds, 540) == QRect(130, 30, 540, 540)
 
 
-def test_radial_menu_maps_each_direction_to_an_action(qapp):
-    menu = QuickActionRadialMenu()
-    menu._center_global = QPoint(500, 500)
+def test_quick_menu_grid_maps_each_tile_and_leaves_the_centre_empty(qapp):
+    menu = QuickActionMenu()
+    menu._center_global = QPoint(640, 360)
+    menu._grid_global = grid_rect_around(QPoint(640, 360), QRect(0, 0, 1280, 720))
+    # Three columns of 150 px and three rows of 190 px with 12 px gaps, centred on the point.
+    assert menu._grid_global == QRect(403, 63, 474, 594)
+    layout = {
+        (0, 0): TYPE_HERE,
+        (0, 1): LEFT_CLICK,
+        (0, 2): SCROLL_UP,
+        (1, 0): CANCEL_QUICK_ACTION,
+        (1, 2): RIGHT_CLICK,
+        (2, 0): PRESS_ENTER,
+        (2, 1): DOUBLE_LEFT_CLICK,
+        (2, 2): SCROLL_DOWN,
+    }
+    for (row, column), action in layout.items():
+        rect = menu.tile_rect(action)
+        assert (rect.width(), rect.height()) == (150, 190)
+        assert rect.topLeft() == QPoint(403 + column * 162, 63 + row * 202)
+        assert menu._action_for_global_point(rect.center()) == action
+    assert menu._action_for_global_point(QPoint(640, 360)) is None
+    # Each half of a gap belongs to the tile beside it; the half next to the centre stays empty.
+    assert menu._action_for_global_point(QPoint(558, 100)) == TYPE_HERE
+    assert menu._action_for_global_point(QPoint(559, 100)) == LEFT_CLICK
+    assert menu._action_for_global_point(QPoint(640, 258)) == LEFT_CLICK
+    assert menu._action_for_global_point(QPoint(640, 260)) is None
+    assert menu._action_for_global_point(QPoint(10, 10)) is None
 
-    assert menu._action_for_global_point(QPoint(500, 300)) == "left_click"
-    assert menu._action_for_global_point(QPoint(700, 500)) == "right_click"
-    assert menu._action_for_global_point(QPoint(500, 700)) == "double_left_click"
-    assert menu._action_for_global_point(QPoint(300, 500)) == CANCEL_QUICK_ACTION
-    assert menu._action_for_global_point(QPoint(500, 500)) is None
-    assert menu._action_for_global_point(QPoint(500, 500), allow_center=True) == CANCEL_QUICK_ACTION
+
+def test_quick_menu_grid_shifts_inside_the_screen_near_edges():
+    bounds = QRect(0, 0, 1280, 720)
+
+    assert grid_rect_around(QPoint(0, 0), bounds) == QRect(8, 8, 474, 594)
+    assert grid_rect_around(QPoint(1279, 719), bounds) == QRect(798, 118, 474, 594)
+
+
+def test_quick_menu_requires_leaving_the_tile_under_the_point_at_an_edge(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+    )
+    menu = QuickActionMenu()
+    qtbot.addWidget(menu)
+    menu.set_selection_settings(pause_ms=150, dwell_ms=150, radius_px=48)
+    corner = menu.screen().geometry().topLeft() + QPoint(20, 20)
+    menu.show_at(corner)
+    assert menu._action_for_global_point(corner) == TYPE_HERE
+
+    menu.handle_gaze(corner)
+    assert menu._candidate_action is None
+    menu.handle_gaze(menu.tile_rect(LEFT_CLICK).center())
+    menu.handle_gaze(corner)
+    assert menu._candidate_action == TYPE_HERE
 
 
 @pytest.mark.parametrize(

@@ -10,9 +10,4 @@
 .sidebar-reference > [data-script-toggle] { min-height: 52px; font-size: 18px; padding: 6px; }
 .sidebar-reference-grid button { white-space: pre-line; font-size: 19px; padding: 6px; }
 .sidebar-reference .sidebar-pages button { min-height: 52px; font-size: 16px; }
-#controller-screen .sidebar-reference nav, #controller-screen .sidebar-reference footer, #controller-screen .sidebar-reference-grid { width: 100%; min-width: 0; }
-#controller-screen .sidebar-reference nav button, #controller-screen .sidebar-reference footer button { flex: 1 1 0; }
 .system-actions button { white-space: normal; }
-@media (max-width: 360px) {
-  #controller-screen .sidebar-reference > nav:first-of-type { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}

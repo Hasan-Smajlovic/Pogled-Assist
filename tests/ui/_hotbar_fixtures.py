@@ -74,17 +74,12 @@ def app_control(hotbar, surface):
         window.setGeometry(900, hotbar.BAR_HEIGHT, 380, 720 - hotbar.BAR_HEIGHT)
         action = next(key for key in window._action_buttons if key.endswith("space"))
         button = window._action_buttons[action]
-    elif surface == "speech":
+    else:
         hotbar._open_speech()
         window = hotbar._speech_window
         window.showNormal()
         window.setGeometry(0, 0, 1280, 720)
         action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    else:
-        hotbar._show_controller_sidebar()
-        window = hotbar._controller_window
-        action = next(key for key in window._action_buttons if key.endswith("left_click"))
         button = window._action_buttons[action]
     return action, button
 

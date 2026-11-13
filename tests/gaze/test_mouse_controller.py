@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from _clock import freeze_monotonic
 from PySide6.QtCore import QPoint
 
@@ -7,7 +8,11 @@ from pogled_assist.interaction.gaze_targets import GazeTargets
 from pogled_assist.interaction.mouse_controller import (
     DOUBLE_LEFT_CLICK,
     LEFT_CLICK,
+    PRESS_ENTER,
     RIGHT_CLICK,
+    SCROLL_DOWN,
+    SCROLL_UP,
+    TYPE_HERE,
     GazeMouseController,
     GazeScreenPoint,
     GazeSettings,
@@ -18,12 +23,20 @@ class FakeInput:
     def __init__(self):
         self.moves = []
         self.clicks = []
+        self.scrolls = []
+        self.keys = []
 
     def move_to(self, x, y):
         self.moves.append((x, y))
 
     def click(self, x, y, **options):
         self.clicks.append((x, y, options))
+
+    def scroll(self, units):
+        self.scrolls.append(units)
+
+    def press_key(self, key):
+        self.keys.append(key)
 
 
 def make_controller():
@@ -311,3 +324,40 @@ def test_quick_actions_and_click_modes_are_mutually_exclusive():
     controller.set_mode(RIGHT_CLICK)
     assert controller.quick_actions_enabled is False
     assert controller.active_mode == RIGHT_CLICK
+
+
+@pytest.mark.parametrize(
+    ("action", "moves", "scrolls", "keys", "clicks"),
+    [
+        (SCROLL_UP, [(130, 240)], [3], [], []),
+        (SCROLL_DOWN, [(130, 240)], [-3], [], []),
+        (PRESS_ENTER, [], [], ["enter"], []),
+        (TYPE_HERE, [], [], [], [(130, 240, {"button": "left"})]),
+    ],
+)
+def test_quick_grid_actions_send_input_at_the_chosen_point(action, moves, scrolls, keys, clicks):
+    controller = make_controller()
+    controller.handle_eye_status(True, True)
+    controller.set_quick_actions_enabled(True)
+    fired = []
+    controller.action_fired.connect(lambda name, point: fired.append((name, QPoint(point))))
+    controller._quick_menu_open = True
+    controller._quick_target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+
+    assert controller.execute_quick_action(action) is True
+
+    fake = controller._input
+    assert (fake.moves, fake.scrolls, fake.keys, fake.clicks) == (moves, scrolls, keys, clicks)
+    assert fired == [(LEFT_CLICK if action == TYPE_HERE else action, QPoint(130, 240))]
+    assert controller._quick_target is None
+
+
+def test_quick_grid_actions_need_both_eyes():
+    controller = make_controller()
+    controller.handle_eye_status(True, False)
+    controller._quick_menu_open = True
+    controller._quick_target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+
+    assert controller.execute_quick_action(SCROLL_DOWN) is False
+    assert controller._input.scrolls == []
+    assert controller._input.moves == []

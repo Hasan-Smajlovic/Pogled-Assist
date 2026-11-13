@@ -26,13 +26,18 @@ RIGHT_CLICK = "right_click"
 DOUBLE_LEFT_CLICK = "double_left_click"
 SPEECH = "speech"
 KEYBOARD = "keyboard"
-CONTROLLER = "controller"
 SETTINGS = "settings"
 HIDE_HOTBAR = "hide_hotbar"
 SHOW_HOTBAR = "show_hotbar"
 QUICK_ACTIONS = "quick_actions"
+SCROLL_UP = "scroll_up"
+SCROLL_DOWN = "scroll_down"
+PRESS_ENTER = "press_enter"
+TYPE_HERE = "type_here"
+QUICK_SCROLL_UNITS = 3
 
 CLICK_ACTIONS = {LEFT_CLICK, RIGHT_CLICK, DOUBLE_LEFT_CLICK}
+QUICK_MENU_ACTIONS = CLICK_ACTIONS | {SCROLL_UP, SCROLL_DOWN, PRESS_ENTER, TYPE_HERE}
 MODE_STATUS = {
     LEFT_CLICK: "Lijevi klik je spreman. Pogledajte željeni cilj.",
     RIGHT_CLICK: "Desni klik je spreman. Pogledajte željeni cilj.",
@@ -227,14 +232,15 @@ class GazeMouseController(QObject):
         self.quick_actions_mode_changed.emit(enabled)
         logger.info("Quick actions mode changed to: %s", enabled)
 
-    def execute_quick_action(self, action: str) -> None:
+    def execute_quick_action(self, action: str) -> bool:
+        """Run a quick action at the stored target; return whether it ran."""
         if self._input_suspended or not self._both_eyes_open:
             self.cancel_quick_action_menu()
-            return
-        if action not in CLICK_ACTIONS:
+            return False
+        if action not in QUICK_MENU_ACTIONS:
             self.cancel_quick_action_menu()
             self.status_changed.emit("Brza radnja je otkazana.")
-            return
+            return False
 
         target = self._quick_target
         self._quick_menu_open = False
@@ -243,13 +249,13 @@ class GazeMouseController(QObject):
         if target is None:
             logger.warning("Quick action %s ignored because no target is stored.", action)
             self.status_changed.emit("Brza radnja je preskočena jer cilj nije odabran.")
-            return
+            return False
 
         now_ms = time.monotonic() * 1000
         if now_ms - self._last_click_ms < self.settings.click_cooldown_ms:
             logger.info("Quick action skipped during click cooldown.")
             self.status_changed.emit("Brza radnja je preskočena tokom pauze između radnji.")
-            return
+            return False
 
         self._last_click_ms = now_ms
         self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
@@ -261,7 +267,35 @@ class GazeMouseController(QObject):
             target.physical.x(),
             target.physical.y(),
         )
-        self._fire_click(action, target, reset_mode=False, interaction_source="quick")
+        if action in CLICK_ACTIONS or action == TYPE_HERE:
+            mode = LEFT_CLICK if action == TYPE_HERE else action
+            return self._fire_click(mode, target, reset_mode=False, interaction_source="quick")
+        return self._send_quick_input(action, target)
+
+    def _send_quick_input(self, action: str, target: GazeScreenPoint) -> bool:
+        if self._input is None:
+            logger.warning("Quick action skipped because Windows input backend is unavailable.")
+            self.status_changed.emit(
+                "Brza radnja je preskočena jer upravljanje pokazivačem nije dostupno."
+            )
+            self._cancel_interaction("quick")
+            return False
+        try:
+            if action == PRESS_ENTER:
+                self._input.press_key("enter")
+            else:
+                # The wheel reaches the window under the pointer, so scroll where the user looked.
+                self._input.move_to(target.physical.x(), target.physical.y())
+                units = QUICK_SCROLL_UNITS if action == SCROLL_UP else -QUICK_SCROLL_UNITS
+                self._input.scroll(units)
+        except Exception:
+            logger.exception("Quick action %s failed.", action)
+            self.status_changed.emit("Brza radnja nije uspjela.")
+            self._cancel_interaction("quick")
+            return False
+        self._finish_interaction("quick", target.logical, action_label(action))
+        self.action_fired.emit(action, target.physical)
+        return True
 
     def set_quick_target_from_logical(self, logical: QPoint) -> None:
         target = self._screen_point_from_logical(logical)
@@ -670,14 +704,14 @@ class GazeMouseController(QObject):
             center = held_center
         action = target
         self._set_toolbar_gaze_target(action)
-        self._emit_interaction_progress("toolbar", center, update.progress, _action_label(action))
+        self._emit_interaction_progress("toolbar", center, update.progress, action_label(action))
 
         cooled = now_ms - self._last_toolbar_ms >= self.settings.click_cooldown_ms
         if update.ready and cooled:
             self._last_toolbar_ms = now_ms
             self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
             self._toolbar_selection.complete()
-            self._finish_interaction("toolbar", center, _action_label(action))
+            self._finish_interaction("toolbar", center, action_label(action))
             self._set_toolbar_gaze_target(None)
             logger.info("Toolbar dwell action fired: %s", diagnostics.safe_action(action))
             diagnostics.invoke_action(
@@ -714,7 +748,7 @@ class GazeMouseController(QObject):
             return
 
         self._emit_interaction_progress(
-            "target", self._target_anchor, update.progress, _action_label(self.active_mode)
+            "target", self._target_anchor, update.progress, action_label(self.active_mode)
         )
 
         cooled = now_ms - self._last_click_ms >= self.settings.click_cooldown_ms
@@ -740,7 +774,7 @@ class GazeMouseController(QObject):
         self._pending_zoom_click_mode = self.active_mode
         self._click_zoom_open = True
         self._pause_until_ms = now_ms + self.settings.click_cooldown_ms
-        self._finish_interaction("target", self._target_anchor, _action_label(self.active_mode))
+        self._finish_interaction("target", self._target_anchor, action_label(self.active_mode))
         self.click_zoom_requested.emit(QPoint(self._target_anchor))
         self._reset_target_dwell()
         self.status_changed.emit("Otvoreno je precizno uvećanje za klik.")
@@ -813,15 +847,15 @@ class GazeMouseController(QObject):
         *,
         reset_mode: bool = True,
         interaction_source: str = "target",
-    ) -> None:
+    ) -> bool:
         if self._input_suspended or not self._both_eyes_open:
             self._cancel_interaction(interaction_source)
-            return
+            return False
         if self._input is None:
             logger.warning("Click skipped because Windows input backend is unavailable.")
             self.status_changed.emit("Klik je preskočen jer upravljanje pokazivačem nije dostupno.")
             self._cancel_interaction(interaction_source)
-            return
+            return False
 
         try:
             logger.info(
@@ -837,9 +871,9 @@ class GazeMouseController(QObject):
             logger.exception("Click action failed.")
             self.status_changed.emit("Klik nije uspio.")
             self._cancel_interaction(interaction_source)
-            return
+            return False
 
-        self._finish_interaction(interaction_source, point.logical, _action_label(mode))
+        self._finish_interaction(interaction_source, point.logical, action_label(mode))
         self.action_fired.emit(mode, point.physical)
         if mode == RIGHT_CLICK:
             self._native_menu_click_pending = True
@@ -847,11 +881,12 @@ class GazeMouseController(QObject):
             self.status_changed.emit(
                 "Desni klik je otvorio meni. Lijevi klik je spreman za odabir."
             )
-            return
+            return True
 
         self._native_menu_click_pending = False
         if reset_mode:
             self.set_mode(None)
+        return True
 
     def _click_input(self, mode: str, point: QPoint) -> None:
         if mode == LEFT_CLICK:
@@ -981,14 +1016,17 @@ def _read_primary_screen_geometry() -> tuple[int, int, int, int]:
     return geometry.left(), geometry.top(), geometry.width(), geometry.height()
 
 
-def _action_label(action: str | None) -> str:
+def action_label(action: str | None) -> str:
     labels = {
         LEFT_CLICK: "Lijevi klik",
         RIGHT_CLICK: "Desni klik",
         DOUBLE_LEFT_CLICK: "Dvostruki klik",
         SPEECH: "Govor",
         KEYBOARD: "Tastatura",
-        CONTROLLER: "Upravljač",
+        SCROLL_UP: "Pomjeri gore",
+        SCROLL_DOWN: "Pomjeri dolje",
+        PRESS_ENTER: "Potvrdi",
+        TYPE_HERE: "Piši ovdje",
         SETTINGS: "Postavke",
         HIDE_HOTBAR: "Sakrij",
         SHOW_HOTBAR: "Prikaži",

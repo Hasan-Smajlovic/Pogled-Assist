@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pogled Assist · Brze radnje</title>
+  <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/quick-actions.css">
+  <script src="assets/reference.js" defer></script>
+  <script src="assets/quick-actions.js" defer></script>
+</head>
+<body data-reference-page="quick-actions">
+  <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
+  <main id="quick-actions-screen" aria-label="Brze radnje">
+    <div class="quick-desktop" aria-hidden="true"><div class="quick-sample-window"><strong>Dokument.docx</strong><p>Primjer prozora ispod menija. Brze radnje djeluju na tačku koju je korisnik odabrao pogledom.</p></div></div>
+    <div class="quick-grid" role="group" aria-label="Brze radnje oko odabrane tačke">
+      <button type="button" data-quick-action="Piši ovdje"><span class="quick-icon" aria-hidden="true">⌨</span><span>Piši ovdje</span></button>
+      <button type="button" data-quick-action="Lijevi klik"><span class="quick-icon" aria-hidden="true">↖</span><span>Lijevi klik</span></button>
+      <button type="button" data-quick-action="Pomjeri gore"><span class="quick-icon" aria-hidden="true">⇡</span><span>Pomjeri gore</span></button>
+      <button type="button" class="quick-cancel" data-quick-action="Odustani"><span class="quick-icon" aria-hidden="true">✕</span><span>Odustani</span></button>
+      <div class="quick-center" aria-label="Odabrana tačka"><span class="quick-point"></span></div>
+      <button type="button" data-quick-action="Desni klik"><span class="quick-icon" aria-hidden="true">◧</span><span>Desni klik</span></button>
+      <button type="button" data-quick-action="Potvrdi"><span class="quick-icon" aria-hidden="true">↵</span><span>Potvrdi</span></button>
+      <button type="button" data-quick-action="Dvostruki klik"><span class="quick-icon" aria-hidden="true">☝&#xFE0E;</span><span>Dvostruki klik</span></button>
+      <button type="button" data-quick-action="Pomjeri dolje"><span class="quick-icon" aria-hidden="true">⇣</span><span>Pomjeri dolje</span></button>
+    </div>
+    <p id="quick-status" class="quick-status" role="status">Pogledajte polje i zadržite pogled. Sredina nije meta.</p>
+  </main>
+  <section class="design-notes" aria-label="Napomene o izgledu">
+    <p>Brze radnje su prekidač na traci. Kada je uključen, zadržan pogled na meti izvan aplikacije bira tačku. Uz precizno uvećanje tačka se prvo bira u uvećanom kvadratu. Zatim se oko tačke otvara mreža 3 × 3. Svako polje je uspravni pravougaonik od 150 × 190 logičkih piksela s ikonom i nazivom, a razmak je 12 px. Pogled u razmaku računa se kao najbliže polje, pa mali pomak ne poništava odabir. Napredak počinje ispočetka tek kada pogled pređe na drugo polje.</p>
+    <p>Sredina je odabrana tačka (bijela tačka) i nije meta, pa meni ne pokreće ništa dok korisnik ne pogleda neko polje. Mreža je centrirana na tačku; uz rub ekrana pomjeri se da stane cijela, a tačka ostaje označena na stvarnom mjestu. Ostatak ekrana je zatamnjen. Odabrano polje ima plavu podlogu i svijetloplavi rub; Odustani ima tamnocrvenu podlogu.</p>
+    <p>Raspored: gore Lijevi klik, desno Desni klik, dolje Dvostruki klik i lijevo Odustani, kao u ranijem kružnom meniju. Desna kolona gore i dolje pomjera sadržaj ispod tačke za tri koraka, bez klika. Dolje lijevo Potvrdi šalje Enter aktivnom prozoru. Gore lijevo Piši ovdje klikne na tačku i otvori Tastaturu. Escape i klik mišem izvan polja zatvaraju meni bez radnje.</p>
+    <p>Ove radnje zamjenjuju raniji Upravljač. Precizno uvećanje i oznaka pogleda uključuju se u Postavke → Pogled i odabir. Brze radnje i precizno uvećanje uvijek traže oba oka; gubitak oka zatvara meni bez radnje.</p>
+  </section>
+</body>
+</html>
