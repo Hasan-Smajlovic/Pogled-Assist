@@ -4,6 +4,30 @@ Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app tur
 
 [Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
 
+## Screenshots
+
+The screenshots use synthetic preview data from the [rendered UI gallery](docs/UI_DEVELOPMENT.md#rendered-ui-gallery).
+
+**Hotbar**
+
+![Hotbar with Settings, Quick actions, click modes, Speech, Keyboard and Controller buttons, and eye tracking ready for both eyes](docs/images/readme-hotbar.png)
+
+**Speech keyboard**
+
+![Full-screen Bosnian speech keyboard with an empty message field, five word suggestions, the alphabet, and Alarm, Rest and Exit buttons](docs/images/readme-speech.png)
+
+**Controller panel**
+
+![Controller panel with left, right and double click, confirm, and scroll up and down buttons](docs/images/readme-controller.png)
+
+**Settings**
+
+![Gaze and selection settings with the eye-tracking mode and selection timings in milliseconds](docs/images/readme-settings.png)
+
+**Gaze check result**
+
+![Finished caregiver gaze check showing five targets on a screen map with samples, valid data, offset and spread for each target](docs/images/readme-gaze-check.png)
+
 ## Features
 
 - A top hotbar that reserves desktop space through the Windows AppBar API.
