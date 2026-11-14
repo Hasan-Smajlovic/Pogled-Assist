@@ -129,11 +129,7 @@ No physical tracker, Tobii runtime, system speech installation, or network speec
 
 ## Automated release
 
-After normal changes have reached `development`, use the manual **Prepare release** workflow on `master` and select `patch`, `minor`, or `major`. It calculates the next version from `master`'s `VERSION` and prepares `release/v<version>` from the latest `master`, merges `development`, updates `VERSION`, and opens a draft release PR. Complete its verification and review before merging with a merge commit. The full branch procedure is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-process).
-
-[CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks) owns the pull request checks, the required subset and dependency-review setup. Verify the live rulesets before a release.
-
-The separate **UI gallery** workflow publishes screenshots after CI completes and keeps the existing PR comment current while CI runs or publication fails. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` jobs are not required PR checks. Pages setup and permissions are documented in [the UI gallery guide](UI_GALLERY.md#activation-and-recovery), and visual review is documented in [the UI development guide](UI_DEVELOPMENT.md#ui-review). Screenshots do not replace the software checks or manual Windows and Tobii validation.
+The **Prepare release** workflow, the release PR review and its merge follow the [release process](../CONTRIBUTING.md#release-process). [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks) owns the pull request checks, the required subset and dependency-review setup. Verify the live rulesets before a release.
 
 After an approved merge to `master`, **Publish release** checks out exactly `github.sha`, repeats all software checks, builds the package, and creates the `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft, then publishes the draft only after both assets exist.
 
