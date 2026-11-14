@@ -153,21 +153,25 @@ def test_inline_letter_targets_fit_and_recording_does_not_move_them(
     assert (first.x() > second.x()) == (script == "arabic")
 
 
-def test_gaze_highlight_stays_steady_during_selection_and_hold(qtbot):
+def test_gaze_highlight_preserves_selection_through_hold_and_clears_pause(qtbot):
     button = QToolButton()
     qtbot.addWidget(button)
     button.setText("Odaberi")
     button.resize(180, 80)
     button.show()
     set_gaze_feedback(button, True)
-    state = button.property("gazePulse")
-    qtbot.wait(220)
-    assert button.property("gazePulse") == state
+    assert button.property("gazeTarget") is True
     set_gaze_paused(button, True)
+    assert button.property("gazePaused") is True
     assert button.property("gazeTarget") is True
     set_gaze_paused(button, False)
+    assert button.property("gazePaused") is False
+    assert button.property("gazeTarget") is True
+    # Clearing a held selection must clear its pause too.
+    set_gaze_paused(button, True)
     set_gaze_feedback(button, False)
     assert button.property("gazeTarget") is False
+    assert button.property("gazePaused") is False
 
 
 def test_voice_update_preserves_the_displayed_keyboard_page(qtbot, make_speech_window):

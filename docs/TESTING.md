@@ -17,6 +17,8 @@ Keep inexpensive branch tables parametrized. Layout coverage retains both script
 
 Coverage is a regression floor, not a quality score. The configured floor is 60 percent and should rise only with meaningful coverage. Native fakes verify arguments, filtering, cleanup and ownership; they do not load a real Tobii DLL, reserve a Windows work area or prove cross-application focus. Leave those boundaries to manual checks. Pixel baselines are not enforced because fonts, scaling and GPU backends vary; the rendered gallery still requires visual review.
 
+Coverage merge tests collect each distinct input once and copy shards when only separate paths are needed. Seed the actual merge destination and an unrelated sibling shard to check that stale data cannot lift the floor. Package declaration tests inspect the Python `datas` and PowerShell `$requiredFiles` assignments through their native parsers; filenames in comments do not count as bundled files.
+
 ## Test boundary map
 
 | Boundary or flow | Tests and reusable inputs |
@@ -63,6 +65,7 @@ Repository documentation tests check required guides/templates, local links and 
 ## Clocks, processes and blocked work
 
 - For a clock shared across modules, use `freeze_monotonic` from `tests/_clock.py`. Gaze timestamps cross component boundaries, and unrelated Qt teardown timers may read that same clock. For one module only, replace its `time` attribute with `SimpleNamespace(monotonic=...)`. `tests/tooling/test_clock_patches.py` rejects other `time.monotonic` replacements.
+- Log retry tests advance the shared clock through retry and flush deadlines, observing the real worker before asserting recovery. Keep file contents and reservation cleanup checks after the successful flush.
 - Keep deliberately blocked log sinks blocked until the producer finishes. The timeout detects a hang; it is not a throughput target. Compare logging off/basic/trace and manual recording through the same input sequence. [Diagnostic verification](DIAGNOSTICS.md#diagnostic-log-analysis) covers the remaining lifecycle and loss cases.
 - Independent PowerShell probes may share the module-scoped driver in `tests/_powershell.py`. Each case keeps its own working directory, child scope and environment. Batch only bodies that return or throw: `exit` terminates the driver. The harness restores streams, environment and location and kills the process tree on its 120-second deadline. Assert production environment recovery before harness cleanup.
 - Full installer/updater transactions, concurrent updaters, real parallel-stage cleanup and `dev.ps1` initialization/environment-recovery tests retain separate processes and their own cleanup assertions. Updater decisions use deterministic process records; installer tests retain real running-executable checks.
