@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -97,6 +98,12 @@ def test_formatting_removed_exceptions_and_added_rules_are_allowed(policy_repo, 
         "pyrightconfig.json",
         ".importlinter",
         "setup.cfg",
+        "RUFF.TOML",
+        ".RuFf.ToMl",
+        "pogled_assist/PYPROJECT.TOML",
+        "PYRIGHTCONFIG.JSON",
+        ".IMPORTLINTER",
+        "Setup.Cfg",
     ],
 )
 def test_alternate_configuration_is_rejected(policy_repo, path):
@@ -114,6 +121,80 @@ def test_configuration_in_ignored_directories_is_not_read(policy_repo):
     (package / "module.py").write_text("import os  # noqa\n", encoding="utf-8")
 
     assert check_policy.check(policy_repo) == []
+
+
+@pytest.mark.parametrize("filename", ["RUFF.TOML", "PYRIGHTCONFIG.JSON"])
+def test_policy_rejects_uppercase_configuration_that_the_tool_loads(policy_repo, filename):
+    source = policy_repo / "pogled_assist" / "probe.py"
+    if filename == "RUFF.TOML":
+        source.write_text("import math\n", encoding="utf-8")
+        contents = '[lint]\nignore = ["ALL"]\n'
+        command = [sys.executable, "-m", "ruff", "check", str(source)]
+    else:
+        source.write_text(
+            "def identity(value: int) -> int:\n    return str(value)\n", encoding="utf-8"
+        )
+        (policy_repo / "scripts").mkdir()
+        (policy_repo / "run_gaze_mouse.py").write_text("", encoding="utf-8")
+        (policy_repo / ".basedpyright").mkdir()
+        (policy_repo / ".basedpyright" / "baseline.json").write_text(
+            '{"files": {}}', encoding="utf-8"
+        )
+        contents = json.dumps({"include": ["pogled_assist"], "typeCheckingMode": "off"})
+        command = [sys.executable, "-m", "basedpyright", "--pythonpath", sys.executable]
+
+    def run():
+        return subprocess.run(
+            command,
+            cwd=policy_repo,
+            env=dict(os.environ, CI="true"),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+
+    invalid = run()
+    assert invalid.returncode == 1, invalid.stdout + invalid.stderr
+    (policy_repo / filename).write_text(contents, encoding="utf-8")
+    overridden = run()
+    expected = 0 if (policy_repo / filename.lower()).exists() else 1
+    assert overridden.returncode == expected, overridden.stdout + overridden.stderr
+    assert f"{filename}: alternate or nested check configuration" in check_policy.check(policy_repo)
+
+
+@pytest.mark.parametrize("ignore_file", [".ignore", ".gitignore", "pogled_assist/.ignore"])
+@pytest.mark.parametrize("suffix", [".py", ".pyi"])
+def test_policy_rejects_ignored_sources_that_ruff_would_skip(policy_repo, ignore_file, suffix):
+    source = policy_repo / "pogled_assist" / f"probe{suffix}"
+    source.write_text("import math\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=policy_repo, check=True, timeout=30)
+    assert check_policy.check(policy_repo) == []
+    command = [sys.executable, "-m", "ruff", "check", "."]
+    invalid = subprocess.run(
+        command, cwd=policy_repo, capture_output=True, text=True, check=False, timeout=30
+    )
+    assert invalid.returncode == 1, invalid.stdout + invalid.stderr
+    assert "F401" in invalid.stdout
+    (policy_repo / ignore_file).write_text("probe*\n", encoding="utf-8")
+    ignored = subprocess.run(
+        command, cwd=policy_repo, capture_output=True, text=True, check=False, timeout=30
+    )
+    assert ignored.returncode == 0, ignored.stdout + ignored.stderr
+    assert (
+        f"pogled_assist/probe{suffix}: Python source omitted by Ruff file discovery"
+        in check_policy.check(policy_repo)
+    )
+
+
+def test_policy_checks_untracked_sources_ignored_only_by_ruff(policy_repo):
+    (policy_repo / "pogled_assist" / "probe.py").write_text("import math\n", encoding="utf-8")
+    (policy_repo / ".ignore").write_text("pogled_assist/\n", encoding="utf-8")
+
+    assert (
+        "pogled_assist/probe.py: Python source omitted by Ruff file discovery"
+        in check_policy.check(policy_repo)
+    )
 
 
 @pytest.mark.parametrize(

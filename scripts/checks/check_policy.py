@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 import tokenize
 from pathlib import Path
 
@@ -59,7 +60,7 @@ WORKFLOW_SUPPRESSION = re.compile(r"#.*\bzizmor\s*:\s*ignore", re.IGNORECASE)
 
 
 def repository_files(root: Path) -> list[Path]:
-    """List the files Git does not ignore, untracked ones included, as Ruff finds them."""
+    """List tracked files and untracked files Git does not ignore."""
     listing = subprocess.run(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         cwd=root,
@@ -101,9 +102,28 @@ def configuration_errors(root: Path, files: list[Path]) -> list[str]:
     errors.extend(
         f"{path.relative_to(root).as_posix()}: alternate or nested check configuration"
         for path in files
-        if path.name in CONFIG_NAMES and path != root / "pyproject.toml"
+        if path.name.casefold() in CONFIG_NAMES and path != root / "pyproject.toml"
     )
     return errors
+
+
+def ruff_discovery_errors(root: Path, files: list[Path]) -> list[str]:
+    discovered = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--show-files", "."],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    ).stdout.splitlines()
+    selected = {Path(path).resolve() for path in discovered}
+    # Ruff also reads .ignore and Git ignore rules, even for tracked source files.
+    return [
+        f"{path.relative_to(root).as_posix()}: Python source omitted by Ruff file discovery"
+        for path in files
+        if path.suffix in {".py", ".pyi"} and path.resolve() not in selected
+    ]
 
 
 def _unexplained(comment: str, directive: re.Pattern[str], explained: re.Pattern[str]) -> bool:
@@ -154,6 +174,8 @@ def check(root: Path) -> list[str]:
             errors.extend(suppression_errors(path, root))
         elif path.suffix in {".yml", ".yaml"} and path.relative_to(root).parts[0] == ".github":
             errors.extend(workflow_errors(path, root))
+    if not errors:
+        errors.extend(ruff_discovery_errors(root, files))
     return errors
 
 
