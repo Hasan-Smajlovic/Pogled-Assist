@@ -1,26 +1,15 @@
 from __future__ import annotations
 
-import re
-import tokenize
 from pathlib import Path
 
 import pytest
 
-from scripts.checks import static_checks
+from scripts.checks import check_policy, static_checks
 
 FAILING = ("first", static_checks.PYTHON, ("-c", "raise SystemExit(3)"))
 PASSING = ("second", static_checks.PYTHON, ("-c", "print('second ran')"))
 MISSING = ("third", "tool-that-is-not-installed", ())
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Ruff rules may be switched off for a whole path only here. The model script is listed because
-# the bundled speech model records its SHA-256, so a comment on the line would change that hash.
-RUFF_PATH_EXCEPTIONS = {
-    "tests/**",
-    "scripts/**",
-    "scripts/speech_suggestions/prepare_speech_model.py",
-}
-SUPPRESSION = re.compile(r"#\s*noqa", re.IGNORECASE)
-EXPLAINED_SUPPRESSION = re.compile(r"# noqa: [A-Z]+[0-9]+(?:, [A-Z]+[0-9]+)* - \S")
 
 
 def test_every_stage_runs_after_a_failure_and_failures_are_named(
@@ -42,30 +31,35 @@ def test_main_fails_when_any_stage_fails(
 ) -> None:
     monkeypatch.setattr(static_checks, "STAGES", stages)
 
-    assert static_checks.main() == exit_code
+    assert static_checks.main([]) == exit_code
 
 
-def test_ruff_rules_are_switched_off_for_listed_paths_only() -> None:
-    settings = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    section = settings.split("[tool.ruff.lint.per-file-ignores]\n")[1].split("\n[")[0]
-
-    assert set(re.findall(r'^"([^"]+)" = ', section, flags=re.MULTILINE)) == RUFF_PATH_EXCEPTIONS
+def test_repository_ruff_exceptions_follow_the_policy() -> None:
+    assert check_policy.check(REPO_ROOT) == []
 
 
-def test_every_suppressed_finding_names_its_rule_and_reason() -> None:
-    sources = [REPO_ROOT / "run_gaze_mouse.py"]
-    for folder in ("pogled_assist", "scripts", "tests"):
-        sources.extend(sorted((REPO_ROOT / folder).rglob("*.py")))
+@pytest.mark.parametrize("base", ["base", "a" * 40])
+def test_shared_runner_invokes_policy_and_passes_comparison_ref(monkeypatch, base):
+    seen = []
+    monkeypatch.setattr(
+        static_checks, "run_stages", lambda stages, _root: seen.extend(stages) or []
+    )
+    assert static_checks.main(["--base-ref", base]) == 0
+    commands = {name: arguments for name, _launcher, arguments in seen}
+    assert commands["Ruff exception policy"] == ("-m", "scripts.checks.check_policy")
+    assert commands["Type baseline"] == (
+        "-m",
+        "scripts.checks.check_type_baseline",
+        "--base-ref",
+        base,
+    )
 
-    unexplained = []
-    for source in sources:
-        with tokenize.open(source) as stream:
-            unexplained.extend(
-                f"{source.relative_to(REPO_ROOT).as_posix()}:{token.start[0]}"
-                for token in tokenize.generate_tokens(stream.readline)
-                if token.type == tokenize.COMMENT
-                and SUPPRESSION.search(token.string)
-                and not EXPLAINED_SUPPRESSION.search(token.string)
-            )
 
-    assert unexplained == []
+def test_shared_runner_uses_ci_comparison_ref(monkeypatch):
+    seen = []
+    monkeypatch.setenv("STATIC_CHECK_BASE_REF", "ci-base")
+    monkeypatch.setattr(
+        static_checks, "run_stages", lambda stages, _root: seen.extend(stages) or []
+    )
+    assert static_checks.main([]) == 0
+    assert next(args for name, _, args in seen if name == "Type baseline")[-1] == "ci-base"

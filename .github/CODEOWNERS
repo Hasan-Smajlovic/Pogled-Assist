@@ -28,3 +28,6 @@
 /.basedpyright/baseline.json @Hasan-Smajlovic @TajibSmajlovic
 /.github/zizmor.yml @Hasan-Smajlovic @TajibSmajlovic
 /.github/CODEOWNERS @Hasan-Smajlovic @TajibSmajlovic
+/scripts/checks/ @Hasan-Smajlovic @TajibSmajlovic
+/.github/dependabot.yml @Hasan-Smajlovic @TajibSmajlovic
+/requirements-dev.txt @Hasan-Smajlovic @TajibSmajlovic

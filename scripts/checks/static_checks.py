@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON = "python"
 # Each stage names its launcher: this interpreter, or a console script installed beside it.
 STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("Ruff exception policy", PYTHON, ("-m", "scripts.checks.check_policy")),
     ("Ruff lint", PYTHON, ("-m", "ruff", "check", ".")),
     ("Ruff format", PYTHON, ("-m", "ruff", "format", "--check", ".")),
     (
@@ -21,6 +24,7 @@ STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         PYTHON,
         ("-B", "-m", "compileall", "-q", "pogled_assist", "scripts", "tests", "run_gaze_mouse.py"),
     ),
+    ("Type baseline", PYTHON, ("-m", "scripts.checks.check_type_baseline")),
     ("Types", PYTHON, ("-m", "basedpyright", "--pythonpath", sys.executable)),
     ("Import contracts", "lint-imports", ("--no-cache",)),
     (
@@ -60,8 +64,19 @@ def run_stages(stages: Sequence[tuple[str, str, Sequence[str]]], root: Path) -> 
     return failed
 
 
-def main() -> int:
-    failed = run_stages(STAGES, REPO_ROOT)
+def main(arguments: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--base-ref", default=os.environ.get("STATIC_CHECK_BASE_REF", "origin/development")
+    )
+    args = parser.parse_args(arguments)
+    stages = [
+        (name, launcher, (*options, "--base-ref", args.base_ref))
+        if name == "Type baseline"
+        else (name, launcher, options)
+        for name, launcher, options in STAGES
+    ]
+    failed = run_stages(stages, REPO_ROOT)
     if failed:
         print("Failed static checks: " + ", ".join(failed))
         return 1

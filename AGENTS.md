@@ -99,3 +99,4 @@ For the paths below, a human must read the final diff before merge. A general in
 - Any change to `pogled_assist/tracking/gaze_provider.py`, `pogled_assist/interaction/mouse_controller.py`, `pogled_assist/interaction/gaze_selection.py`, `pogled_assist/windows/windows_input.py`, or `pogled_assist/tracking/tobii_stream_engine*.py`.
 - Any added or changed text under `language/` or `tests/fixtures/speech_suggestions/`.
 - Any change to `pyproject.toml`, `.basedpyright/baseline.json`, `.github/zizmor.yml`, or `.github/CODEOWNERS`, which hold the check rules, their recorded exceptions and this review list.
+- Any change under `scripts/checks/` or to `.github/dependabot.yml` or `requirements-dev.txt`, which select and enforce the checks.

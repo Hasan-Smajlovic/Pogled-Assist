@@ -17,6 +17,15 @@ updates:
 
   - package-ecosystem: pip
     directory: /
+    # Runtime/build package updates need a separate compatibility decision.
+    allow:
+      - dependency-name: basedpyright
+      - dependency-name: import-linter
+      - dependency-name: pytest*
+      - dependency-name: PyYAML
+      - dependency-name: ruff
+      - dependency-name: tomli
+      - dependency-name: zizmor
     schedule:
       interval: weekly
     cooldown:
@@ -27,8 +36,4 @@ updates:
     groups:
       check-tools:
         patterns:
-          - basedpyright
-          - import-linter
-          - pytest*
-          - ruff
-          - zizmor
+          - "*"

@@ -102,8 +102,10 @@ Each parallel run keeps stdout/stderr and coverage under a unique `dist/check-<i
 
 | Stage | Tool | Rejects |
 | --- | --- | --- |
+| Ruff exception policy | `scripts/checks/check_policy.py` | Unapproved global/path exceptions, alternate configuration files, file/block suppressions, or line suppressions without rule codes and reasons |
 | Ruff lint and format | Ruff | The rule families selected in `pyproject.toml`, unsorted imports and unformatted source |
 | Python compilation | `compileall` | Syntax errors in `pogled_assist`, `scripts`, `tests` and `run_gaze_mouse.py` |
+| Type baseline | `scripts/checks/check_type_baseline.py` | Additional baseline entries relative to the Git comparison base, including replacements hidden by an unchanged total |
 | Types | basedpyright | New type errors and unannotated parameters in `pogled_assist`, `scripts` and `run_gaze_mouse.py`; tests are not type-checked |
 | Import contracts | import-linter | A runtime package importing a layer above it, the UI or an entry point, and an external SDK used outside its owning package |
 | Workflow security | zizmor | Unpinned actions, persisted checkout credentials and risky triggers under `.github`; informational findings are not reported |
@@ -120,12 +122,22 @@ Installer tests cover Internet-marked unsigned executables, failure cleanup and 
 
 The static checks were adopted on existing code. These records hold what each check accepts:
 
-- **Ruff:** Fix a finding. When the code is deliberate, mark that line with `# noqa: <code> - <reason>`, for example a broad `except` at a thread entry, a Qt slot, a Tobii or Windows call, or in logging. `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` switches rules off for a whole path only for `tests/**`, `scripts/**` and `scripts/speech_suggestions/prepare_speech_model.py`; the bundled speech model records that script's SHA-256, so its MD5 line cannot be marked until the model is rebuilt. `tests/tooling/test_static_checks.py` rejects any other path entry and any suppression without a rule code and a reason.
-- **Types:** `.basedpyright/baseline.json` holds the errors present at adoption, mostly PySide enum short names, attributes the checker cannot see on Qt mixins, and unannotated parameters. A local run removes the entries for errors you fixed; commit that change with the fix. With `CI=true` the file is never rewritten and an outdated baseline fails. Only `basedpyright --writebaseline` adds entries. `# type: ignore` is not honoured; silence one line with `# pyright: ignore[<rule>]`.
+- **Ruff:** Fix a finding. When the code is deliberate, mark that line with `# noqa: <code> - <reason>`, for example a broad `except` at a thread entry, a Qt slot, a Tobii or Windows call, or in logging. The exception-policy stage parses TOML and checks actual Python comment tokens. Only the path/rule pairs and global exceptions in `scripts/checks/check_policy.py` are allowed; reducing them is permitted. The model generator's sole `S324` exception stays until a model rebuild can incorporate the script's changed hash. Alternate/nested Ruff configuration, `extend-per-file-ignores`, file/block suppression directives and unexplained line suppressions fail locally and in CI.
+- **Types:** `.basedpyright/baseline.json` holds the errors present at adoption, mostly PySide enum short names, attributes the checker cannot see on Qt mixins, and unannotated parameters. A local basedpyright run removes entries for errors you fixed; commit that change with the fix. With `CI=true` the file is never rewritten and an outdated baseline fails. The separate baseline stage rejects added entries even if `basedpyright --writebaseline` makes the type checker pass. `# type: ignore` is not honoured; an intentional line exception uses `# pyright: ignore[<rule>]`.
 - **Imports:** `ignore_imports` in the layer contract names the diagnostic recording modules that read gaze-check reports.
 - **Workflows:** `.github/zizmor.yml` lists each accepted finding with its reason.
 
 These files decide what the checks accept, so changes to them need [human review](../AGENTS.md#never-merges-without-a-human).
+
+### Type baseline comparison
+
+Use a full Git checkout with the comparison ref available. Local commands default to `origin/development`; `.\dev.ps1 lint -BaseRef <ref>` and `python -B -m scripts.checks.static_checks --base-ref <ref>` select another base. The comparison uses its merge base with `HEAD` and checks the current baseline, including uncommitted edits. Missing refs, unavailable baseline objects, malformed inventories and shallow history fail; the check never fetches automatically.
+
+PR CI supplies the event's base SHA through `STATIC_CHECK_BASE_REF`. Release verification supplies the pre-push commit. Both checking jobs fetch full history. When that comparison base predates adoption, the checker reads the pinned Git blob for the initial inventory recorded in `scripts/checks/check_type_baseline.py`. Review that initial inventory and pin together; the current PR's own baseline is never accepted automatically as its comparison.
+
+Entries are compared by path, rule, diagnostic range shape and multiplicity. Deletions pass; moving or replacing entries, or adding duplicates, fails. Basedpyright does not store source text or absolute line numbers, so matching diagnostic shapes cannot prove that the underlying error is unchanged. Human review still covers the source and configuration.
+
+For a tool upgrade or refactor that changes diagnostic shapes, fix the reported errors first. If a new inventory is necessary, propose a separate, explicitly reviewed policy migration with the old/new diagnostics and regression evidence. There is no automatic rebaseline exemption. Keep such changes out of routine feature work.
 
 ### Static checks on another operating system
 
