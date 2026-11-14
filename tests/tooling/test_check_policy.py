@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -15,9 +16,14 @@ CONFIG = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
 @pytest.fixture
 def policy_repo(tmp_path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, timeout=30)
     (tmp_path / "pyproject.toml").write_text(CONFIG, encoding="utf-8")
     (tmp_path / "pogled_assist").mkdir()
     return tmp_path
+
+
+def _add_to_table(table, setting):
+    return lambda config: config.replace(f"[{table}]\n", f"[{table}]\n{setting}\n")
 
 
 @pytest.mark.parametrize(
@@ -37,10 +43,23 @@ def policy_repo(tmp_path):
         ),
         lambda config: config.replace('"scripts/**" = ["T20"]', '"scripts/**" = ["T20", "S"]'),
         lambda config: config.replace('    "S101",', '    "ALL",'),
-        lambda config: config.replace("[tool.ruff]\n", '[tool.ruff]\nextend = "other.toml"\n'),
-        lambda config: config.replace(
-            "[tool.ruff.lint]\n", '[tool.ruff.lint]\nextend-ignore = ["S"]\n'
-        ),
+        _add_to_table("tool.ruff", 'extend = "other.toml"'),
+        _add_to_table("tool.ruff.lint", 'extend-ignore = ["S"]'),
+        # Rules and files can also leave the check without any exception entry.
+        lambda config: config.replace('    "S",\n', "").replace('    "BLE",\n', ""),
+        _add_to_table("tool.ruff", 'exclude = ["pogled_assist"]'),
+        _add_to_table("tool.ruff", 'extend-exclude = ["pogled_assist/probe.py"]'),
+        _add_to_table("tool.ruff", 'include = ["scripts/**/*.py"]'),
+        _add_to_table("tool.ruff.lint", 'exclude = ["pogled_assist/probe.py"]'),
+        _add_to_table("tool.ruff.lint", 'dummy-variable-rgx = ".*"'),
+        lambda config: config + "\n[tool.ruff.lint.mccabe]\nmax-complexity = 99\n",
+        lambda config: config + "\n[tool.ruff.lint.pylint]\nmax-statements = 999\n",
+        lambda config: config + '\n[tool.ruff.format]\nexclude = ["pogled_assist"]\n',
+        lambda config: config.replace('typeCheckingMode = "standard"', 'typeCheckingMode = "off"'),
+        lambda config: config.replace('reportMissingParameterType = "error"', ""),
+        _add_to_table("tool.basedpyright", 'ignore = ["pogled_assist/probe.py"]'),
+        _add_to_table("tool.basedpyright", 'reportReturnType = "none"'),
+        _add_to_table("tool.basedpyright", 'baselineFile = ".basedpyright/other.json"'),
     ],
 )
 def test_configuration_rejects_unapproved_exceptions(policy_repo, change):
@@ -49,21 +68,52 @@ def test_configuration_rejects_unapproved_exceptions(policy_repo, change):
     assert check_policy.check(policy_repo)
 
 
-def test_toml_formatting_and_removing_exceptions_are_allowed(policy_repo):
-    config = CONFIG.replace('"scripts/**" = ["T20"]', "'scripts/**'=['T20']")
-    config = config.replace('"S324"', "").replace('"S101",', "")
-    (policy_repo / "pyproject.toml").write_text(config, encoding="utf-8")
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda config: (
+            config.replace('"scripts/**" = ["T20"]', "'scripts/**'=['T20']")
+            .replace('"S324"', "")
+            .replace('"S101",', "")
+        ),
+        _add_to_table("tool.ruff.lint", 'extend-select = ["N"]'),
+        lambda config: config.replace('    "PLR0911",\n    "PLR0912",\n', '    "PLR",\n'),
+    ],
+)
+def test_formatting_removed_exceptions_and_added_rules_are_allowed(policy_repo, change):
+    (policy_repo / "pyproject.toml").write_text(change(CONFIG), encoding="utf-8")
 
     assert check_policy.check(policy_repo) == []
 
 
 @pytest.mark.parametrize(
-    "path", ["ruff.toml", ".ruff.toml", "pogled_assist/ruff.toml", "pogled_assist/pyproject.toml"]
+    "path",
+    [
+        "ruff.toml",
+        ".ruff.toml",
+        "pogled_assist/ruff.toml",
+        "pogled_assist/pyproject.toml",
+        "packaging/windows/ruff.toml",
+        "pyrightconfig.json",
+        ".importlinter",
+        "setup.cfg",
+    ],
 )
 def test_alternate_configuration_is_rejected(policy_repo, path):
+    (policy_repo / path).parent.mkdir(parents=True, exist_ok=True)
     (policy_repo / path).write_text('[lint]\nignore = ["ALL"]\n', encoding="utf-8")
 
     assert any(path in error for error in check_policy.check(policy_repo))
+
+
+def test_configuration_in_ignored_directories_is_not_read(policy_repo):
+    (policy_repo / ".gitignore").write_text(".venv/\n", encoding="utf-8")
+    package = policy_repo / ".venv" / "lib" / "package"
+    package.mkdir(parents=True)
+    (package / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+    (package / "module.py").write_text("import os  # noqa\n", encoding="utf-8")
+
+    assert check_policy.check(policy_repo) == []
 
 
 @pytest.mark.parametrize(
@@ -80,8 +130,20 @@ def test_alternate_configuration_is_rejected(policy_repo, path):
         ("# ruff: file-ignore[F401]", False),
         ("# ruff: disable[F401]", False),
         ("# ruff: enable[F401]", False),
+        ("# ruff: isort: skip_file", False),
         ("# isort: skip_file", False),
+        ("# isort: skip", False),
+        ("# isort: split", False),
         ("# isort: off", False),
+        ("# fmt: off", False),
+        ("# fmt: on", False),
+        ("# fmt: skip", False),
+        ("# yapf: disable", False),
+        ("# pyright: basic", False),
+        ("# pyright: reportReturnType=false", False),
+        ("# basedpyright: ignore[reportReturnType] - reason", False),
+        ("# pyright: ignore[reportReturnType]", False),
+        ("# pyright: ignore[reportReturnType] - Qt returns a wider type here", True),
         ("# normal comment", True),
     ],
 )
@@ -92,12 +154,54 @@ def test_suppression_policy_checks_actual_comment_tokens(policy_repo, comment, a
     assert (check_policy.check(policy_repo) == []) is allowed
 
 
+@pytest.mark.parametrize(
+    "path", ["packaging/windows/probe.py", "tools/probe.py", "probe.py", "pogled_assist/a.pyi"]
+)
+def test_every_python_file_ruff_reads_is_checked(policy_repo, path):
+    (policy_repo / path).parent.mkdir(parents=True, exist_ok=True)
+    (policy_repo / path).write_text("# ruff: noqa: F401\nimport math\n", encoding="utf-8")
+
+    assert any(path in error for error in check_policy.check(policy_repo))
+
+
 def test_suppression_examples_in_strings_are_not_directives(policy_repo):
     (policy_repo / "pogled_assist" / "probe.py").write_text(
         'EXAMPLE = "# ruff: noqa: F401"\n', encoding="utf-8"
     )
 
     assert check_policy.check(policy_repo) == []
+
+
+def test_unreadable_source_is_reported_instead_of_skipped(policy_repo):
+    (policy_repo / "pogled_assist" / "probe.py").write_text('TEXT = """open\n', encoding="utf-8")
+
+    assert any("probe.py" in error for error in check_policy.check(policy_repo))
+
+
+@pytest.mark.parametrize(
+    ("line", "allowed"),
+    [
+        ("      - uses: actions/checkout@v5 # zizmor: ignore[unpinned-uses]", False),
+        ("      # zizmor: ignore[artipacked]", False),
+        ("      - run: echo zizmor", True),
+    ],
+)
+def test_workflow_findings_are_accepted_only_in_the_zizmor_configuration(
+    policy_repo, line, allowed
+):
+    workflow = policy_repo / ".github" / "workflows" / "probe.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(f"jobs:\n  probe:\n    steps:\n{line}\n", encoding="utf-8")
+
+    assert (check_policy.check(policy_repo) == []) is allowed
+
+
+def test_outside_a_git_checkout_the_policy_fails_closed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(check_policy, "ROOT", tmp_path)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+
+    assert check_policy.main() == 1
+    assert "Cannot check the exception policy" in capsys.readouterr().out
 
 
 def test_cli_rejects_a_file_suppression_that_ruff_accepts(policy_repo):
@@ -126,3 +230,27 @@ def test_cli_rejects_a_file_suppression_that_ruff_accepts(policy_repo):
     assert ruff.returncode == 0, ruff.stdout + ruff.stderr
     assert policy.returncode == 1, policy.stdout + policy.stderr
     assert "pogled_assist/probe.py:1" in policy.stdout
+
+
+def test_policy_rejects_a_file_level_type_relaxation_that_basedpyright_accepts(policy_repo):
+    source = policy_repo / "pogled_assist" / "probe.py"
+    source.write_text(
+        '# pyright: reportReturnType=false\ndef identity(value: int) -> int:\n    return "bad"\n',
+        encoding="utf-8",
+    )
+    (policy_repo / "scripts").mkdir()
+    (policy_repo / "run_gaze_mouse.py").write_text("", encoding="utf-8")
+    (policy_repo / ".basedpyright").mkdir()
+    (policy_repo / ".basedpyright" / "baseline.json").write_text('{"files": {}}', encoding="utf-8")
+    types = subprocess.run(
+        [sys.executable, "-m", "basedpyright", "--pythonpath", sys.executable],
+        cwd=policy_repo,
+        env=dict(os.environ, CI="true"),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+    assert types.returncode == 0, types.stdout + types.stderr
+    assert any("pogled_assist/probe.py:1" in error for error in check_policy.check(policy_repo))

@@ -75,7 +75,9 @@ def test_invalid_base_fails_closed(baseline_repo, monkeypatch, capsys):
     monkeypatch.setattr(baseline, "ROOT", baseline_repo)
 
     assert baseline.main(["--base-ref", "missing-base"]) == 1
-    assert "Cannot verify type baseline" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Cannot verify type baseline" in output
+    assert "Fetch missing-base with full history" in output
 
 
 def test_shallow_history_is_rejected(baseline_repo, monkeypatch, capsys):
@@ -97,29 +99,80 @@ def test_invalid_inventory_fails_closed(baseline_repo, monkeypatch, content):
     assert baseline.main(["--base-ref", "base"]) == 1
 
 
-def test_adoption_uses_pinned_inventory_not_the_topic_branch_version(baseline_repo, monkeypatch):
-    pinned = _git(baseline_repo, "rev-parse", f"HEAD:{baseline.BASELINE}")
-    monkeypatch.setattr(baseline, "ADOPTION_BASELINE_BLOB", pinned)
-    _git(baseline_repo, "rm", baseline.BASELINE)
+MOVED = dict(FINDING, range=dict(FINDING["range"], startColumn=12, endColumn=17))
+
+
+def _declare(root, name):
+    script = root / baseline.SCRIPT
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(f'"""Checker."""\n\nREVIEWED_INVENTORY = "{name}"\n', encoding="utf-8")
+
+
+@pytest.fixture
+def unadopted_repo(baseline_repo):
+    _git(baseline_repo, "rm", "-q", baseline.BASELINE)
     _commit(baseline_repo)
     _git(baseline_repo, "branch", "-f", "base", "HEAD")
-    _write(baseline_repo, [FINDING])
+    return baseline_repo
+
+
+def test_base_without_inventory_needs_a_declaration(unadopted_repo, monkeypatch, capsys):
+    _write(unadopted_repo, [FINDING])
+    _commit(unadopted_repo)
+    monkeypatch.setattr(baseline, "ROOT", unadopted_repo)
+
+    assert baseline.main(["--base-ref", "base"]) == 1
+    assert "declares a reviewed inventory" in capsys.readouterr().out
+
+
+def test_adoption_inventory_survives_a_squash_and_later_reductions(unadopted_repo):
+    # One commit with the declaration and the baseline is what a squash merge leaves behind.
+    _declare(unadopted_repo, "adoption")
+    _write(unadopted_repo, [FINDING, MOVED])
+    _commit(unadopted_repo)
+    _write(unadopted_repo, [FINDING])
+    _commit(unadopted_repo)
+    assert baseline.check(unadopted_repo, "base") == []
+
+    _write(unadopted_repo, [FINDING, FINDING])
+    _commit(unadopted_repo)
+
+    assert baseline.check(unadopted_repo, "base")
+
+
+def test_tool_migration_replaces_the_inventory_only_in_its_own_commit(baseline_repo):
+    _declare(baseline_repo, "migration")
+    _commit(baseline_repo)
+    _write(baseline_repo, [MOVED])
+    _commit(baseline_repo)
+    assert baseline.check(baseline_repo, "base")
+
+    _declare(baseline_repo, "migration with the regenerated baseline")
+    _commit(baseline_repo)
     assert baseline.check(baseline_repo, "base") == []
-    _write(baseline_repo, [FINDING, FINDING])
+
+    _git(baseline_repo, "branch", "-f", "base", "HEAD")
+    _write(baseline_repo, [MOVED, MOVED])
     _commit(baseline_repo)
 
     assert baseline.check(baseline_repo, "base")
 
 
-def test_missing_adoption_object_fails_closed(baseline_repo, monkeypatch):
-    _git(baseline_repo, "rm", baseline.BASELINE)
-    _commit(baseline_repo)
-    _git(baseline_repo, "branch", "-f", "base", "HEAD")
-    _write(baseline_repo, [FINDING])
-    monkeypatch.setattr(baseline, "ROOT", baseline_repo)
-    monkeypatch.setattr(baseline, "ADOPTION_BASELINE_BLOB", "0" * 40)
+def test_uncommitted_declaration_covers_the_working_tree(baseline_repo):
+    _write(baseline_repo, [MOVED])
+    assert baseline.check(baseline_repo, "base")
 
-    assert baseline.main(["--base-ref", "base"]) == 1
+    _declare(baseline_repo, "migration")
+    assert baseline.check(baseline_repo, "base") == []
+    _commit(baseline_repo)
+
+    assert baseline.check(baseline_repo, "base") == []
+
+
+def test_repository_declares_its_reviewed_inventory_once():
+    source = (baseline.ROOT / baseline.SCRIPT).read_text(encoding="utf-8")
+
+    assert len(baseline.DECLARATION.findall(source)) == 1
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
@@ -114,15 +115,22 @@ def test_required_job_names_stay_stable_and_workflow_job_names_are_unique():
     assert len(names) == len(set(names))
 
 
-def test_dependabot_version_updates_cover_only_approved_python_tools():
+def _pinned(requirements):
+    return {
+        line.split("==")[0].strip().lower().replace("_", "-")
+        for line in (ROOT / requirements).read_text().splitlines()
+        if "==" in line
+    }
+
+
+def test_dependabot_version_updates_cover_exactly_the_pinned_check_tools():
     config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text())
     pip = next(update for update in config["updates"] if update["package-ecosystem"] == "pip")
-    assert {item["dependency-name"] for item in pip["allow"]} == {
-        "basedpyright",
-        "import-linter",
-        "pytest*",
-        "PyYAML",
-        "ruff",
-        "tomli",
-        "zizmor",
-    }
+    patterns = [item["dependency-name"].lower() for item in pip["allow"]]
+    tools = _pinned("requirements-dev.txt")
+    runtime = _pinned("requirements.txt") | _pinned("requirements-build.txt")
+
+    assert {name for name in tools if not any(fnmatch(name, p) for p in patterns)} == set()
+    assert [p for p in patterns if not any(fnmatch(name, p) for name in tools)] == []
+    # Runtime and packaging updates need a separate compatibility decision.
+    assert {name for name in runtime if any(fnmatch(name, p) for p in patterns)} == set()

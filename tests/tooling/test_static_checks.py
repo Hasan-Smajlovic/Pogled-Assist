@@ -34,7 +34,7 @@ def test_main_fails_when_any_stage_fails(
     assert static_checks.main([]) == exit_code
 
 
-def test_repository_ruff_exceptions_follow_the_policy() -> None:
+def test_repository_check_exceptions_follow_the_policy() -> None:
     assert check_policy.check(REPO_ROOT) == []
 
 
@@ -46,7 +46,7 @@ def test_shared_runner_invokes_policy_and_passes_comparison_ref(monkeypatch, bas
     )
     assert static_checks.main(["--base-ref", base]) == 0
     commands = {name: arguments for name, _launcher, arguments in seen}
-    assert commands["Ruff exception policy"] == ("-m", "scripts.checks.check_policy")
+    assert commands["Exception policy"] == ("-m", "scripts.checks.check_policy")
     assert commands["Type baseline"] == (
         "-m",
         "scripts.checks.check_type_baseline",
@@ -55,11 +55,14 @@ def test_shared_runner_invokes_policy_and_passes_comparison_ref(monkeypatch, bas
     )
 
 
-def test_shared_runner_uses_ci_comparison_ref(monkeypatch):
+@pytest.mark.parametrize(
+    ("environment", "expected"), [("ci-base", "ci-base"), ("", "origin/development")]
+)
+def test_shared_runner_uses_ci_comparison_ref(monkeypatch, environment, expected):
     seen = []
-    monkeypatch.setenv("STATIC_CHECK_BASE_REF", "ci-base")
+    monkeypatch.setenv("STATIC_CHECK_BASE_REF", environment)
     monkeypatch.setattr(
         static_checks, "run_stages", lambda stages, _root: seen.extend(stages) or []
     )
     assert static_checks.main([]) == 0
-    assert next(args for name, _, args in seen if name == "Type baseline")[-1] == "ci-base"
+    assert next(args for name, _, args in seen if name == "Type baseline")[-1] == expected

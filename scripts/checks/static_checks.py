@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON = "python"
 # Each stage names its launcher: this interpreter, or a console script installed beside it.
 STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("Ruff exception policy", PYTHON, ("-m", "scripts.checks.check_policy")),
+    ("Exception policy", PYTHON, ("-m", "scripts.checks.check_policy")),
     ("Ruff lint", PYTHON, ("-m", "ruff", "check", ".")),
     ("Ruff format", PYTHON, ("-m", "ruff", "format", "--check", ".")),
     (
@@ -66,8 +66,9 @@ def run_stages(stages: Sequence[tuple[str, str, Sequence[str]]], root: Path) -> 
 
 def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    # An empty value, such as an unset workflow expression, means the default comparison ref.
     parser.add_argument(
-        "--base-ref", default=os.environ.get("STATIC_CHECK_BASE_REF", "origin/development")
+        "--base-ref", default=os.environ.get("STATIC_CHECK_BASE_REF") or "origin/development"
     )
     args = parser.parse_args(arguments)
     stages = [
