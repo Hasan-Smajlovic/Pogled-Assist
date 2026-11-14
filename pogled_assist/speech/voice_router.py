@@ -111,7 +111,7 @@ class VoiceRouter:
             if cached:
                 return cached
             config.validate()
-            self._check_quota_gate(config, test)
+            self._check_quota_gate(test)
             return self._synthesize_and_play(text, config, ticket, playback)
         except VoiceError as error:
             if playback.cancel.is_set():
@@ -137,7 +137,7 @@ class VoiceRouter:
             raise VoiceError("audio")
         return outcome
 
-    def _check_quota_gate(self, config, test):
+    def _check_quota_gate(self, test):
         reason, retry_at, _balance = self.gate.snapshot()
         if test:
             return

@@ -112,7 +112,9 @@ class WindowsSpeechProcess:
     this job. No unrelated process is ever found or terminated by executable name.
     """
 
-    def __init__(self, command: list[str], environment: dict[str, str] | None) -> None:
+    def __init__(  # noqa: C901 - each Windows call is checked in order inside one cleanup block
+        self, command: list[str], environment: dict[str, str] | None
+    ) -> None:
         if any("\0" in argument for argument in command):
             raise ValueError("Speech arguments cannot contain NUL characters.")
         self._api = _kernel_api()

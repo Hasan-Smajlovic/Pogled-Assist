@@ -98,16 +98,7 @@ class DiagnosticsWindow(QWidget):
         root.addWidget(self._tabs, 1)
         self._build_new()
         self._build_history()
-        footer = QHBoxLayout()
-        footer.setSpacing(16)
-        self._status = text_label("Izaberite trajanje, zatim pokrenite snimanje.")
-        footer.addWidget(self._status, 1)
-        self._return = self._button(f"Vrati se u {origin}", self.close)
-        self._primary = self._button("Pokreni snimanje", self._activate)
-        self._primary.setObjectName("checkPrimary")
-        footer.addWidget(self._return)
-        footer.addWidget(self._primary)
-        root.addLayout(footer)
+        root.addLayout(self._build_footer(origin))
         self._tabs.currentChanged.connect(self._tab_changed)
         recordings.changed.connect(self._refresh)
         recordings.exported.connect(self._export_finished)
@@ -118,6 +109,18 @@ class DiagnosticsWindow(QWidget):
         self._refresh()
         recordings.load()
         reports.load()
+
+    def _build_footer(self, origin: str) -> QHBoxLayout:
+        footer = QHBoxLayout()
+        footer.setSpacing(16)
+        self._status = text_label("Izaberite trajanje, zatim pokrenite snimanje.")
+        footer.addWidget(self._status, 1)
+        self._return = self._button(f"Vrati se u {origin}", self.close)
+        self._primary = self._button("Pokreni snimanje", self._activate)
+        self._primary.setObjectName("checkPrimary")
+        footer.addWidget(self._return)
+        footer.addWidget(self._primary)
+        return footer
 
     def _button(self, title, callback):
         button = QPushButton(title, self)

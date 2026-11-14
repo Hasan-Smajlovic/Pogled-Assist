@@ -56,18 +56,19 @@ class SelectionSound(QObject):
             effect.setVolume(volume)
             effect.play()
         except Exception:
-            self._disable("Selection sound playback failed.")
+            logger.exception("Selection sound playback failed.")
+            self._disable()
 
     def _load(self) -> Any:
         if self._effect is None and self._available:
             try:
                 self._effect = self._create_effect(self)
             except Exception:
-                self._disable("Selection sound could not be loaded.")
+                logger.exception("Selection sound could not be loaded.")
+                self._disable()
         return self._effect
 
-    def _disable(self, message: str) -> None:
-        logger.exception(message)
+    def _disable(self) -> None:
         # One report is enough; repeating it for every selection would flood the log.
         self._available = False
         self._effect = None

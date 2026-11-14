@@ -118,9 +118,9 @@ Installer tests cover Internet-marked unsigned executables, failure cleanup and 
 
 ### Recorded exceptions
 
-The static checks were adopted on existing code. Each one records what it found then, so only new findings fail:
+The static checks were adopted on existing code. These records hold what each check accepts:
 
-- **Ruff:** `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` lists the rule codes each file violated at adoption. A listed file is not checked for its listed codes. Remove a code when its file is clean; fix a new finding instead of adding an entry.
+- **Ruff:** Fix a finding. When the code is deliberate, mark that line with `# noqa: <code> - <reason>`, for example a broad `except` at a thread entry, a Qt slot, a Tobii or Windows call, or in logging. `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` switches rules off for a whole path only for `tests/**`, `scripts/**` and `scripts/speech_suggestions/prepare_speech_model.py`; the bundled speech model records that script's SHA-256, so its MD5 line cannot be marked until the model is rebuilt. `tests/tooling/test_static_checks.py` rejects any other path entry and any suppression without a rule code and a reason.
 - **Types:** `.basedpyright/baseline.json` holds the errors present at adoption, mostly PySide enum short names, attributes the checker cannot see on Qt mixins, and unannotated parameters. A local run removes the entries for errors you fixed; commit that change with the fix. With `CI=true` the file is never rewritten and an outdated baseline fails. Only `basedpyright --writebaseline` adds entries. `# type: ignore` is not honoured; silence one line with `# pyright: ignore[<rule>]`.
 - **Imports:** `ignore_imports` in the layer contract names the diagnostic recording modules that read gaze-check reports.
 - **Workflows:** `.github/zizmor.yml` lists each accepted finding with its reason.

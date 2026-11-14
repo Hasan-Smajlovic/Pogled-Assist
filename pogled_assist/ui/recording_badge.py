@@ -172,7 +172,7 @@ class RecordingBadge(QLabel):
         self.move(4, 8)
         self.raise_()
 
-    def eventFilter(self, watched, event):
+    def eventFilter(self, watched, event):  # noqa: ARG002 - Qt override signature
         if event.type() == QEvent.Resize:
             self._position()
         return False

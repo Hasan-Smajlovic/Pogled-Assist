@@ -70,13 +70,13 @@ class OrdinaryOutput:
             mode = "a" if recovering else self._archive_mode(latest)
             self._file = latest.open(mode, encoding="utf-8")
             self._text_bytes = latest.stat().st_size
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             self._writer._failure("ordinary", "text_open")
 
     def _archive_mode(self, latest: Path) -> str:
         if not latest.exists():
             return "w"
-        archive = latest.with_name(datetime.now().strftime("%Y%m%d_%H%M%S_%f.txt"))
+        archive = latest.with_name(datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f.txt"))
         try:
             os.replace(latest, archive)
             self._writer._recovered("ordinary", "text_rotation")
@@ -103,7 +103,7 @@ class OrdinaryOutput:
                 "a" if recovering else "x", encoding="utf-8", newline="\n"
             )
             self._bytes = self._json_path.stat().st_size
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             self._writer._failure("ordinary", "json_open")
 
     def _write_session_header(self, session: str) -> None:
@@ -112,7 +112,7 @@ class OrdinaryOutput:
                 self._file.write(
                     f"Diagnostic session: {session}; logs/diagnostics/{session}.jsonl\n"
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - a log failure is counted, never raised
                 self._writer._failure("ordinary", "text_write")
 
     def _write_runtime(self) -> None:
@@ -133,7 +133,7 @@ class OrdinaryOutput:
                 },
                 (time.monotonic(), time.time()),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             self._writer._failure()
 
     def _write(self, item: tuple) -> None:
@@ -144,7 +144,7 @@ class OrdinaryOutput:
                 self._write_record(data)
             else:
                 self._write_event(sequence, data)
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             self._writer._failure("ordinary", "json_write" if kind == "event" else "text_write")
 
     def _write_record(self, data: dict) -> None:
@@ -159,7 +159,7 @@ class OrdinaryOutput:
                     if stream is self._file:
                         self._text_bytes += size
                         self._writer._successful_writes.add(("ordinary", "text"))
-                except Exception:
+                except Exception:  # noqa: BLE001 - a log failure is counted, never raised
                     self._writer._failure(
                         "ordinary" if stream is self._file else None, "text_write"
                     )
@@ -292,7 +292,7 @@ class OrdinaryOutput:
                     {"reason": reason},
                     changed_at or self._writer._change_at,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - a log failure is counted, never raised
                 self._writer._failure("ordinary", "json_write")
 
     def _retry_outputs(self):
@@ -340,7 +340,7 @@ class OrdinaryOutput:
             return
         try:
             stream.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             self._writer._failure()
 
 

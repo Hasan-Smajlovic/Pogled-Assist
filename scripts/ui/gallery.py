@@ -118,7 +118,7 @@ OVERVIEW = (
 CORE_NAMES = frozenset(name for _, names in GROUPS.values() for name in names)
 
 
-def group_for(name: str) -> str:
+def group_for(name: str) -> str:  # noqa: PLR0911 - one return per gallery group, in match order
     if name == "information-position":
         return "gaze-check"
     if name == "information-connection":

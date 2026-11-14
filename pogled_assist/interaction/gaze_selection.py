@@ -78,7 +78,7 @@ class GazeSelectionTimer:
                     pause_ms=self._pause_ms,
                     dwell_ms=self._dwell_ms,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - an observation must not fail a selection
                 # A failed observation must not prevent completion or cancellation.
                 diagnostics.observation_failed()
 
@@ -299,7 +299,7 @@ class GazeSelectionTimer:
         if self._observer is not None:
             try:
                 self._observer.finish(self.diagnostic_snapshot(), reason=reason)
-            except Exception:
+            except Exception:  # noqa: BLE001 - an observation must not fail a selection
                 diagnostics.observation_failed()
 
     def _clear_target(self, *, reason: str = "target_departure") -> None:

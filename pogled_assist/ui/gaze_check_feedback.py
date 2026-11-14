@@ -8,7 +8,7 @@ from ..interaction.eye_tracking_policy import ANY_EYE, BOTH_EYES
 from ..tracking.gaze_check import FixationResult
 
 
-def result_advice(
+def result_advice(  # noqa: PLR0911 - one return per advice, checked in priority order
     results: Sequence[FixationResult],
     *,
     trial_results: Sequence[bool],

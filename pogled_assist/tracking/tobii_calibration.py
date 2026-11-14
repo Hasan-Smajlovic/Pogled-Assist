@@ -184,7 +184,7 @@ def _is_experience_target(target: str) -> bool:
 
 def _launch_configured_command(command: str, errors: list[str]) -> bool:
     try:
-        subprocess.Popen(command, shell=True)
+        subprocess.Popen(command, shell=True)  # noqa: S602 - a command line the user configured
     except OSError as exc:
         message = f"{CALIBRATION_COMMAND_ENV} failed: {exc}"
         logger.warning(message)
@@ -345,7 +345,7 @@ def _send_calibration_shortcut(errors: list[str]) -> bool:
             controller.hotkey("ctrl", "shift", "f10")
         logger.info("Sent Tobii calibration shortcut Ctrl+Shift+F10 through user32.")
         return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a failed Windows shortcut becomes an error message
         message = f"Ctrl+Shift+F10 failed: {exc}"
         logger.warning(message)
         errors.append(message)

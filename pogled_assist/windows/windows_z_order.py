@@ -104,7 +104,7 @@ def _window_long_functions(user32):
 def _window_handle(window: object) -> int | None:
     try:
         win_id = window.winId()
-    except Exception:
+    except Exception:  # noqa: BLE001 - a window without a native handle returns None
         return None
 
     try:

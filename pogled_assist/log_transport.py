@@ -412,7 +412,7 @@ class LogWriter:
         end_reason = "shutdown"
         try:
             self._drain()
-        except Exception:
+        except Exception:  # noqa: BLE001 - the writer thread ends the session as failed
             end_reason = "writer_failure"
             self._abort()
         finally:
@@ -554,7 +554,7 @@ class LogWriter:
         try:
             stream.flush()
             self._flushed(stream, recording)
-        except Exception:
+        except Exception:  # noqa: BLE001 - a log failure is counted, never raised
             if recording:
                 self._recording_failure()
             else:
@@ -580,8 +580,8 @@ class LogWriter:
         item = self._recording
         if item is not None and queued[4] == item.id:
             try:
-                self._consume_recording(queued, item)
-            except Exception:
+                self._consume_recording(queued)
+            except Exception:  # noqa: BLE001 - a recording failure is counted, logging continues
                 self._recording_failure()
             finally:
                 with self._condition:
@@ -589,7 +589,7 @@ class LogWriter:
         if self._belongs_to_active(queued):
             self._output._write(queued)
 
-    def _consume_recording(self, queued, item) -> None:
+    def _consume_recording(self, queued) -> None:
         if queued[2] != "event" or self._recording_sink is None:
             return
         from .diagnostic_recording import RecordingEvent
@@ -622,7 +622,7 @@ class LogWriter:
                 self._recording_sink = RecordingSink(
                     item, PROCESS_INSTANCE, snapshots=self._recording_snapshots(item)
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - a recording that cannot open is counted as failed
                 self._recording_failure()
         if time.monotonic() >= item.deadline:
             self.stop_recording("time")
@@ -662,7 +662,7 @@ class LogWriter:
                 sink.close()
                 if not item.writer_errors:
                     self._recovered("manual", "json")
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed final write marks the recording as an error
             item.writer_errors += 1
             item.reason = "writer_error"
             self._failure("manual", "write")
@@ -685,7 +685,7 @@ class LogWriter:
             atomic_bytes(item.directory / item.id / "recording.json", json_bytes(item.snapshot()))
             self._recovered("manual", "metadata")
             set_recording_active(item.directory, item.id, False)
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed metadata write marks the recording as an error
             item.writer_errors += 1
             item.complete, item.state = False, "error"
             self._failure("manual", "metadata")

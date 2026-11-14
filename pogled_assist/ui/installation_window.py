@@ -35,7 +35,7 @@ class _SetupWorker(QThread):
     def run(self):
         try:
             self.completed.emit(self.action())
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - the worker reports any failure to the dialog
             self.failed.emit(str(error))
 
 

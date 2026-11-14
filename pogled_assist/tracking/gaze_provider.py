@@ -96,6 +96,9 @@ class TobiiGazeProvider(QObject):
         self._last_stream_eye_sample_at: float | None = None
         self._stream_started_at: float | None = None
         self._stream_stale = False
+        self._create_timers()
+
+    def _create_timers(self) -> None:
         self._emit_timer = QTimer(self)
         self._emit_timer.setInterval(GAZE_EMIT_INTERVAL_MS)
         self._emit_timer.timeout.connect(self._emit_latest_gaze_sample)

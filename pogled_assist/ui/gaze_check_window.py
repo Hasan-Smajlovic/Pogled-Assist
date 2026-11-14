@@ -180,7 +180,11 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._trial_interruptions = 0
         self._trial_feedback_loss = False
         self._tracking_state: TrackingState | None = None
+        self._policy_sample_at: float | None = None
         self._build_ui()
+        self._connect_signals(settings)
+
+    def _connect_signals(self, settings: GazeSettings) -> None:
         self._reports.changed.connect(self._reports_changed)
         self._reports.exported.connect(self._export_finished)
         self._eye_gate = EyeTrackingGate(self)
@@ -189,7 +193,6 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._eye_gate.hold_started.connect(self._hold_tracking)
         self._eye_gate.pause_retained.connect(self._retain_tracking_pause)
         self._eye_gate.hold_finished.connect(self._resume_tracking)
-        self._policy_sample_at: float | None = None
         self._escape = QShortcut(QKeySequence("Esc"), self)
         self._escape.activated.connect(self.close)
         self._timer = QTimer(self)

@@ -313,6 +313,7 @@ def test_explicit_selection_allows_downgrade_and_uses_current_installer(tmp_path
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert (install_root / "VERSION").read_text().strip() == LATEST_VERSION
@@ -331,6 +332,7 @@ def test_selected_metadata_must_match_requested_version(tmp_path):
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
     assert completed.returncode != 0
     assert "does not match the selected version" in completed.stdout + completed.stderr

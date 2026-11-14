@@ -672,7 +672,7 @@ class GazeMouseController(QObject):
             self._input.move_to(point.x(), point.y())
             self._last_cursor_point = QPoint(point)
             self._last_mouse_error_ms = 0.0
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - reported by _report_mouse_move_failure
             self._report_mouse_move_failure(exc)
 
     def _pointer_follows_gaze(self) -> bool:
@@ -682,7 +682,7 @@ class GazeMouseController(QObject):
         now_ms = time.monotonic() * 1000
         if now_ms - self._last_mouse_error_ms >= MOUSE_ERROR_LOG_INTERVAL_MS:
             self._last_mouse_error_ms = now_ms
-            logger.exception("Mouse move failed.")
+            logger.error("Mouse move failed.", exc_info=error)
             self.status_changed.emit("Pomjeranje pokazivača nije uspjelo.")
         else:
             logger.debug("Mouse move failed during rate-limit window: %s", error)

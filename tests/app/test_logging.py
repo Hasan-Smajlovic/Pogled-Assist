@@ -73,7 +73,7 @@ def test_setup_application_logging_handles_missing_standard_streams(monkeypatch,
         ]
         assert not stream_handlers
 
-        print("hello from stdout")
+        print("hello from stdout")  # noqa: T201 - the redirected stdout under test
         sys.stderr.write("hello from stderr\n")
         logging.shutdown()
 

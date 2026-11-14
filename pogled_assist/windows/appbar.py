@@ -206,5 +206,5 @@ def _dpi_for_window(hwnd: int) -> int:
 
     try:
         return int(ctypes.windll.user32.GetDpiForWindow(hwnd))
-    except Exception:
+    except Exception:  # noqa: BLE001 - any failed Windows call falls back to 96 DPI
         return 96

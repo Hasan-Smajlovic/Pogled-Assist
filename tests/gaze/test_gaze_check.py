@@ -473,7 +473,7 @@ def test_eye_run_counts_a_blink_shorter_than_a_snapshot_from_the_provider_counte
 def test_eye_run_counts_continuous_invalid_gaze_with_valid_eyes_once():
     # CheckTelemetry adds one interruption per invalid sample while gaze stays invalid.
     run = EyeTrackingRun((1280, 720), 36, 0)
-    lost = lambda now: 4 <= now < 4.5  # noqa: E731
+    lost = lambda now: 4 <= now < 4.5  # noqa: E731 - a one-line predicate for the calls below
     _feed_eyes(
         run,
         0,

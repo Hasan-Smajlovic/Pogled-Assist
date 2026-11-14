@@ -62,6 +62,12 @@ class GazeSettingsPage(QFrame):
         layout.addLayout(tabs)
         self._stack = SettingsContent(self)
         layout.addWidget(self._stack, 1)
+        self._build_selection_page()
+        self._build_pointer_page()
+        self._build_stability_page()
+        self.show_tab(0)
+
+    def _build_selection_page(self) -> None:
         selection_page = QFrame(self)
         selection = QVBoxLayout(selection_page)
         selection.setContentsMargins(0, 0, 0, 0)
@@ -137,6 +143,7 @@ class GazeSettingsPage(QFrame):
         )
         selection.addStretch(1)
 
+    def _build_pointer_page(self) -> None:
         pointer_page = QFrame(self)
         pointer = QVBoxLayout(pointer_page)
         pointer.setContentsMargins(0, 0, 0, 0)
@@ -157,7 +164,7 @@ class GazeSettingsPage(QFrame):
         )
         pointer.addWidget(row)
 
-        pointer.addWidget(styled_label("POKAZIVAČ I PROVJERA", "groupLabel", page))
+        pointer.addWidget(styled_label("POKAZIVAČ I PROVJERA", "groupLabel", self))
         pointer.addLayout(self._build_gaze_actions())
         pointer.addWidget(
             guidance_note(
@@ -169,6 +176,7 @@ class GazeSettingsPage(QFrame):
         )
         pointer.addStretch(1)
 
+    def _build_stability_page(self) -> None:
         stability_page = QFrame(self)
         stability = QVBoxLayout(stability_page)
         stability.setContentsMargins(0, 0, 0, 0)
@@ -196,7 +204,6 @@ class GazeSettingsPage(QFrame):
             )
         )
         stability.addStretch(1)
-        self.show_tab(0)
 
     def show_tab(self, index: int) -> None:
         self._owner.cancel_gaze_interaction(require_leave=True)

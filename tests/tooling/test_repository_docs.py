@@ -614,9 +614,9 @@ def _anchors(document: Path) -> set[str]:
     anchors = set(HTML_ID.findall(content))
     counts: dict[str, int] = {}
     for heading in MARKDOWN_HEADING.findall(content):
-        heading = re.sub(r"<[^>]+>", "", heading)
-        heading = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", heading)
-        slug = re.sub(r"[^\w\s-]", "", heading.lower()).replace("_", "")
+        text = re.sub(r"<[^>]+>", "", heading)
+        text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+        slug = re.sub(r"[^\w\s-]", "", text.lower()).replace("_", "")
         slug = re.sub(r"\s+", "-", slug.strip())
         count = counts.get(slug, 0)
         anchors.add(f"{slug}-{count}" if count else slug)

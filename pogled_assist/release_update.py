@@ -94,12 +94,12 @@ def check_available_releases(
 
 
 def _fetch_release_json(url: str, timeout: float) -> Any:
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - the release API address is a fixed https URL
         url,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "PogledAssist"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - same fixed URL
             return json.load(response)
     except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         raise ReleaseUpdateError(

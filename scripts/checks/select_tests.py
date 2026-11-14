@@ -130,6 +130,49 @@ def _matches(path: str, pattern: str) -> bool:
     return path.startswith(pattern) if pattern.endswith("/") else path == pattern
 
 
+def _classify(path: str, all_tests: list[str]) -> tuple[tuple[str, ...], str, bool]:
+    """Return the test patterns for a changed path, the reason and whether it needs every test."""
+    patterns: tuple[str, ...] = ()
+    full_suite = False
+    if path in GLOBAL_FILES or path.startswith(
+        (
+            "requirements",
+            "scripts/checks/",
+            ".github/workflows/",
+            "tests/fixtures/",
+            "pogled_assist/assets/",
+            "assets/",
+            "language/",
+        )
+    ):
+        reason = "shared configuration, dependency, check or bundled data: full suite"
+        full_suite = True
+    elif path == TYPE_BASELINE:
+        reason = "type baseline: verified by the static checks, not by tests"
+    elif path.startswith("tests/"):
+        if path in all_tests:
+            patterns = (path,)
+            reason = "changed or new test module"
+        else:
+            reason = "shared test helper or deleted test: full suite"
+            full_suite = True
+    elif path.endswith((".md", ".html")) and (
+        "/" not in path or path.startswith(("docs/", ".agents/", ".github/"))
+    ):
+        patterns = (DOC_TEST,)
+        reason = "repository documentation and link contracts"
+    else:
+        reason = "unmapped path: full suite"
+        for prefixes, targets, description in RULES:
+            if any(_matches(path, prefix) for prefix in prefixes):
+                patterns = targets
+                reason = description
+                break
+        if not patterns:
+            full_suite = True
+    return patterns, reason, full_suite
+
+
 def select_tests(root: Path, paths: list[str], git_error: str | None = None) -> dict:
     all_tests = sorted(
         path.relative_to(root).as_posix() for path in root.glob("tests/**/test_*.py")
@@ -138,43 +181,8 @@ def select_tests(root: Path, paths: list[str], git_error: str | None = None) -> 
     reasons = []
     full_suite = git_error is not None
     for path in paths:
-        patterns: tuple[str, ...] = ()
-        if path in GLOBAL_FILES or path.startswith(
-            (
-                "requirements",
-                "scripts/checks/",
-                ".github/workflows/",
-                "tests/fixtures/",
-                "pogled_assist/assets/",
-                "assets/",
-                "language/",
-            )
-        ):
-            reason = "shared configuration, dependency, check or bundled data: full suite"
-            full_suite = True
-        elif path == TYPE_BASELINE:
-            reason = "type baseline: verified by the static checks, not by tests"
-        elif path.startswith("tests/"):
-            if path in all_tests:
-                patterns = (path,)
-                reason = "changed or new test module"
-            else:
-                reason = "shared test helper or deleted test: full suite"
-                full_suite = True
-        elif path.endswith((".md", ".html")) and (
-            "/" not in path or path.startswith(("docs/", ".agents/", ".github/"))
-        ):
-            patterns = (DOC_TEST,)
-            reason = "repository documentation and link contracts"
-        else:
-            reason = "unmapped path: full suite"
-            for prefixes, targets, description in RULES:
-                if any(_matches(path, prefix) for prefix in prefixes):
-                    patterns = targets
-                    reason = description
-                    break
-            if not patterns:
-                full_suite = True
+        patterns, reason, needs_full_suite = _classify(path, all_tests)
+        full_suite = full_suite or needs_full_suite
         matches = [test for test in all_tests if any(_matches(test, p) for p in patterns)]
         if patterns and (not matches or any(not (root / pattern).exists() for pattern in patterns)):
             full_suite = True

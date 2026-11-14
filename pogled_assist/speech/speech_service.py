@@ -17,7 +17,11 @@ from PySide6.QtCore import QObject, Qt, Signal, Slot
 from ..keyboard_layouts import ALL_LETTERS_LAYOUT, ARABIC_SCRIPT, LATIN_SCRIPT
 from ..settings_limits import ELEVENLABS_SIMILARITY_DEFAULT, ELEVENLABS_STABILITY_DEFAULT
 from ..tracking.tobii_stream_engine import APP_ROOT_ENV
-from ..windows.speech_process import start_speech_process
+from ..windows.speech_process import (
+    PosixSpeechProcess,
+    WindowsSpeechProcess,
+    start_speech_process,
+)
 from .audio_cache import AudioCache, cache_root
 from .audio_playback import AudioPlayback, PlaybackResult
 from .eleven_account import ElevenAccount
@@ -108,6 +112,20 @@ def _test_message(state, reason="") -> str:
         if state == "finished"
         else "Izgovor Efendije nije završen. Pokušajte ponovo."
     )
+
+
+def _wait_for_exit(
+    process: WindowsSpeechProcess | PosixSpeechProcess, cancel: Event, engine_name: str
+) -> str:
+    """Poll the engine until it exits or the request is cancelled."""
+    while not cancel.is_set():
+        exit_code = process.poll()
+        if exit_code is not None:
+            if exit_code:
+                logger.error("%s exited with code %s.", engine_name, exit_code)
+            return "finished" if exit_code == 0 else "failed"
+        cancel.wait(0.05)
+    return "failed"
 
 
 class SpeechService(QObject):
@@ -283,7 +301,7 @@ class SpeechService(QObject):
             return "stopped"
         except VoiceError as error:
             state, reason = "failed", error.reason
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - logged by type only, the text is private
             logger.error("Speech preparation failed: %s.", type(error).__name__)
             state, reason = "failed", "offline"
         if request.test:
@@ -421,22 +439,15 @@ class SpeechService(QObject):
                 process = start_speech_process(command, environment)
                 if not cancel.is_set():
                     self._worker_state.emit(request_id, "speaking")
-                while not cancel.is_set():
-                    exit_code = process.poll()
-                    if exit_code is not None:
-                        state = "finished" if exit_code == 0 else "failed"
-                        if exit_code:
-                            logger.error("%s exited with code %s.", engine_name, exit_code)
-                        break
-                    cancel.wait(0.05)
-            except Exception as error:
+                state = _wait_for_exit(process, cancel, engine_name)
+            except Exception as error:  # noqa: BLE001 - logged by type only, the command is private
                 # Exceptions and engine stderr may echo the private command.
                 logger.error("Speech process failed (%s): %s.", engine_name, type(error).__name__)
             finally:
                 if process is not None:
                     try:
                         process.close()
-                    except Exception as error:
+                    except Exception as error:  # noqa: BLE001 - a failed cleanup ends as failed
                         logger.error("Speech cleanup failed: %s.", type(error).__name__)
                         state = "failed"
             if not cancel.is_set():

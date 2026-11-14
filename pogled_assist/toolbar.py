@@ -120,15 +120,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             pointer_movement_enabled=not simulate_gaze,
         )
         self._mouse.update_settings(self._initial_gaze_settings)
-        self._gaze_bubble = GazeBubbleWindow()
-        self._gaze_bubble.set_enabled(self._mouse.settings.show_gaze_bubble)
-        self._interaction_overlay = InteractionOverlayWindow()
-        self._interaction_overlay.set_enabled(self._mouse.settings.show_interaction_overlay)
-        self._tracking_feedback = TrackingFeedback(
-            self,
-            self._tracking_feedback_active,
-            enabled=self._mouse.settings.show_tracking_notifications,
-        )
+        self._create_gaze_feedback()
 
         self._build_ui()
         self._recording_badge = RecordingBadge(self._buttons[SETTINGS], compact=True)
@@ -140,6 +132,17 @@ class HotbarWindow(HotbarSpeech, QWidget):
         self._install_shortcuts()
         self._foreground.prime()
         logger.info("Hotbar window initialized.")
+
+    def _create_gaze_feedback(self) -> None:
+        self._gaze_bubble = GazeBubbleWindow()
+        self._gaze_bubble.set_enabled(self._mouse.settings.show_gaze_bubble)
+        self._interaction_overlay = InteractionOverlayWindow()
+        self._interaction_overlay.set_enabled(self._mouse.settings.show_interaction_overlay)
+        self._tracking_feedback = TrackingFeedback(
+            self,
+            self._tracking_feedback_active,
+            enabled=self._mouse.settings.show_tracking_notifications,
+        )
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -869,7 +872,7 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self,
             simulated=self._simulate_gaze,
             reports=self._gaze_check_reports,
-            environment=lambda: self._gaze.check_environment(),
+            environment=lambda: self._gaze.check_environment(),  # noqa: PLW0108 - looked up on each call
         )
         self._gaze_check_window = window
         self._recording_changed()

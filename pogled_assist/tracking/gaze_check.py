@@ -497,8 +497,8 @@ class EyeTrackingRun:
         if not ongoing and end - self._last_at >= FRESH_SECONDS:
             losses.append([self._last_at + FRESH_SECONDS if self._usable else self._last_at, None])
         count, longest = 0, 0.0
-        for loss_start, loss_end in losses:
-            loss_end = end if loss_end is None else loss_end
+        for loss_start, recorded_end in losses:
+            loss_end = end if recorded_end is None else recorded_end
             if loss_end < start or loss_start > end:
                 continue
             count += 1
