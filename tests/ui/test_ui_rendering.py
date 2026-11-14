@@ -117,6 +117,25 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     assert fill(0, 1) == "#2e6478"
     assert fill(1, 0) == "#2b1f27"
     assert {fill(0, 0), fill(0, 2), fill(1, 2), fill(2, 0), fill(2, 1), fill(2, 2)} == {"#283442"}
+
+    def border(row, column, inset):
+        return menu.pixelColor(
+            QPoint(tile(row, column).left() + inset, tile(row, column).center().y())
+        )
+
+    # A white selected border and a lighter Odustani border keep at least 3:1 contrast.
+    assert _is_white(border(0, 1, 2))
+    assert border(1, 0, 1).name() == "#af7a86"
+    assert border(0, 0, 1).name() == "#71869b"
+    # An opaque panel fills the gaps and an 8-pixel frame, even over the light document,
+    # while the open centre still shows the dimmed document around the point.
+    gap = QPoint(tile(0, 0).right() + 6, tile(0, 0).center().y())
+    frame = QPoint(grid.left() - 4, tile(1, 0).center().y())
+    assert document.contains(gap) and document.contains(frame)
+    assert menu.pixelColor(gap).name() == menu.pixelColor(frame).name() == "#15191f"
+    opening = tile(1, 1).topLeft() + QPoint(20, 40)
+    assert document.contains(opening)
+    assert menu.pixelColor(opening).lightness() > 90
     # The shared selection ring surrounds the same icon as the tile's own arc and leaves
     # the label below it clear.
     icon = menu_module._icon_rect(tile(0, 1)).center()
@@ -134,6 +153,9 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     assert _is_white(edge.pixelColor(QPoint(60, 40)))
     bottom_right = menu_module._cell_rect(corner_grid, 2, 2)
     assert edge.pixelColor(bottom_right.topLeft() + QPoint(16, 16)).name() == "#283442"
+    # The panel frame reaches the screen edge without leaving it.
+    frame_at_edge = QPoint(2, menu_module._cell_rect(corner_grid, 1, 0).center().y())
+    assert edge.pixelColor(frame_at_edge).name() == "#15191f"
 
     # Precision zoom magnifies the area around the target three times over a dimmed desktop.
     zoom = snapshots["precision-zoom"]

@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QStyle, QWidget
 
 from .. import diagnostics
@@ -39,6 +39,12 @@ TILE_HEIGHT = 190
 TILE_GAP = 12
 SCREEN_MARGIN = 8
 ICON_SIZE = 40
+LABEL_PIXEL_SIZE = 20
+TILE_RADIUS = 12
+# The opaque panel keeps every tile edge visible over any application. Its frame equals
+# the screen margin, so the panel never leaves the screen.
+PANEL_FRAME = SCREEN_MARGIN
+PANEL_COLOR = "#15191f"
 
 
 @dataclass(frozen=True)
@@ -252,18 +258,25 @@ class QuickActionMenu(QWidget):
         painter.fillRect(self.rect(), QColor(10, 13, 18, 140))
         offset = self.mapToGlobal(QPoint(0, 0))
         grid = self._grid_global.translated(-offset)
+        centre = _cell_rect(grid, 1, 1)
+        # The centre cell stays open so the dimmed content around the chosen point shows.
+        panel = QPainterPath()
+        panel.addRoundedRect(
+            QRectF(grid).adjusted(-PANEL_FRAME, -PANEL_FRAME, PANEL_FRAME, PANEL_FRAME),
+            TILE_RADIUS + PANEL_FRAME,
+            TILE_RADIUS + PANEL_FRAME,
+        )
+        opening = QPainterPath()
+        opening.addRoundedRect(QRectF(centre), TILE_RADIUS, TILE_RADIUS)
+        painter.fillPath(panel.subtracted(opening), QColor(PANEL_COLOR))
 
-        label_font = QFont(self.font())
-        label_font.setPixelSize(18)
-        label_font.setBold(True)
-        painter.setFont(label_font)
+        painter.setFont(_label_font())
         for tile in TILES:
             self._paint_tile(painter, tile, _cell_rect(grid, tile.row, tile.column))
 
-        centre = _cell_rect(grid, 1, 1)
         painter.setPen(QPen(QColor(184, 197, 210, 115), 2, Qt.DashLine))
         painter.setBrush(Qt.NoBrush)
-        painter.drawRoundedRect(QRectF(centre).adjusted(1, 1, -1, -1), 12, 12)
+        painter.drawRoundedRect(QRectF(centre).adjusted(1, 1, -1, -1), TILE_RADIUS, TILE_RADIUS)
         point = self._center_global - offset
         painter.setPen(QPen(QColor("#15191f"), 3))
         painter.setBrush(QColor("#ffffff"))
@@ -272,16 +285,20 @@ class QuickActionMenu(QWidget):
     def _paint_tile(self, painter: QPainter, tile: QuickActionTile, rect: QRect) -> None:
         selected = tile.action == self._selected_action
         cancel = tile.action == CANCEL_QUICK_ACTION
+        # The white selected border changes each edge pixel by at least 3:1, and every
+        # border stays at least 3:1 against its own fill.
         if selected:
-            fill, border, width = "#2e6478", "#84c5d9", 4
+            fill, border, width = "#2e6478", "#ffffff", 4
         elif cancel:
-            fill, border, width = "#2b1f27", "#684354", 2
+            fill, border, width = "#2b1f27", "#af7a86", 2
         else:
             fill, border, width = "#283442", "#71869b", 2
         inset = width / 2
         painter.setPen(QPen(QColor(border), width))
         painter.setBrush(QColor(fill))
-        painter.drawRoundedRect(QRectF(rect).adjusted(inset, inset, -inset, -inset), 12, 12)
+        painter.drawRoundedRect(
+            QRectF(rect).adjusted(inset, inset, -inset, -inset), TILE_RADIUS, TILE_RADIUS
+        )
 
         icon_rect = _icon_rect(rect)
         self._icons[tile.action].paint(painter, icon_rect)
@@ -292,9 +309,10 @@ class QuickActionMenu(QWidget):
             painter.drawArc(ring, 90 * 16, int(-360 * 16 * self._candidate_progress))
 
         painter.setPen(QColor("#edf2f7"))
-        label_rect = QRect(rect.left() + 8, rect.center().y() + 12, rect.width() - 16, 48)
         painter.drawText(
-            label_rect, Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap, _menu_label(tile.action)
+            _label_rect(rect),
+            Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap,
+            _menu_label(tile.action),
         )
 
     def _refresh_windows_topmost_due(self) -> None:
@@ -371,6 +389,18 @@ def _icon_rect(tile: QRect) -> QRect:
     return QRect(
         tile.center().x() - ICON_SIZE // 2, tile.center().y() - ICON_SIZE, ICON_SIZE, ICON_SIZE
     )
+
+
+def _label_rect(tile: QRect) -> QRect:
+    """Every label must fit on one line in this rectangle below the icon."""
+    return QRect(tile.left() + 8, tile.center().y() + 12, tile.width() - 16, 48)
+
+
+def _label_font() -> QFont:
+    font = QFont("Segoe UI")
+    font.setPixelSize(LABEL_PIXEL_SIZE)
+    font.setBold(True)
+    return font
 
 
 def _cell_rect(grid: QRect, row: int, column: int) -> QRect:

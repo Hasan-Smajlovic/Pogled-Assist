@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
@@ -65,6 +67,23 @@ def test_quick_menu_grid_shifts_inside_the_screen_near_edges():
 
     assert grid_rect_around(QPoint(0, 0), bounds) == QRect(8, 8, 474, 594)
     assert grid_rect_around(QPoint(1279, 719), bounds) == QRect(798, 118, 474, 594)
+
+
+def test_quick_menu_labels_are_20_px_bold_and_fit_on_one_line(qapp):
+    from PySide6.QtGui import QFontInfo, QFontMetrics
+
+    font = menu_module._label_font()
+    # Windows CI measures the shipped Segoe UI; other platforms measure a fallback font.
+    if sys.platform == "win32":
+        assert QFontInfo(font).family() == "Segoe UI"
+    assert font.bold()
+    assert font.pixelSize() >= 20
+    metrics = QFontMetrics(font)
+    grid = grid_rect_around(QPoint(640, 360), QRect(0, 0, 1280, 720))
+    for tile in menu_module.TILES:
+        label = menu_module._menu_label(tile.action)
+        cell = menu_module._cell_rect(grid, tile.row, tile.column)
+        assert metrics.horizontalAdvance(label) <= menu_module._label_rect(cell).width(), label
 
 
 def test_quick_menu_requires_leaving_the_tile_under_the_point_at_an_edge(qtbot, monkeypatch):
