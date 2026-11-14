@@ -24,3 +24,10 @@
 .gaze-marker-dot { position: absolute; top: 170px; left: 60%; width: 46px; height: 46px; pointer-events: none; }
 .gaze-marker-dot::before { content: ''; position: absolute; inset: 1.75px; border: 2.5px solid #84c5d9f0; border-radius: 50%; box-shadow: 0 0 0 1px #0b1723be, inset 0 0 0 1px #0b1723be; }
 .gaze-marker-dot::after { content: ''; position: absolute; top: 50%; left: 50%; width: 7.5px; height: 7.5px; transform: translate(-50%, -50%); border: 1.5px solid #0b1723dc; border-radius: 50%; background: #ffffffeb; }
+.zoom-preview { margin: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 12px; border: 1px solid var(--border); border-radius: 8px; background: #1f2a37; }
+.zoom-preview figcaption { color: #bec9d9; text-align: center; }
+.zoom-square { position: relative; width: min(100%, 360px); aspect-ratio: 1; border: 4px solid #ffffffeb; outline: 10px solid #00000082; background: #f4f6f8; display: grid; place-items: center; }
+.zoom-square::before { content: ''; position: absolute; inset: 8px; border: 2px solid #60a5fad2; }
+.zoom-sample-button { padding: 10px 28px; border: 2px solid #8a96a3; border-radius: 8px; background: #e4e8ed; color: #1f2933; font-size: 34px; }
+.zoom-crosshair { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); border: 3px solid #22c55eeb; border-radius: 50%; background: linear-gradient(#ffffffeb, #ffffffeb) center / 2px 100% no-repeat, linear-gradient(#ffffffeb, #ffffffeb) center / 100% 2px no-repeat; }
+.zoom-crosshair::after { content: ''; position: absolute; inset: -11px; border-radius: 50%; border: 5px solid transparent; border-top-color: #facc15f5; border-right-color: #facc15f5; }

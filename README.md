@@ -2,6 +2,10 @@
 
 Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a Quick actions grid for clicks, scrolling and Enter. Connect one tracker at a time; [tracker setup and replacement](docs/USER_GUIDE.md#before-starting) describe the matching Tobii software and reconnection limits.
 
+![Pogled Assist screens: the full-screen Speech keyboard speaking a typed greeting, the saved answers of a Speech category, the caregiver gaze check, and a key with its dwell-selection ring](docs/images/readme-hero.png)
+
+The image uses synthetic preview data from the [rendered UI gallery](docs/UI_DEVELOPMENT.md#rendered-ui-gallery).
+
 [Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
 
 ## Features
@@ -21,6 +25,8 @@ Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app tur
 
 ## Install
 
+Both installation methods use `C:\PogledAssist`; later versions are installed from verified stable GitHub Releases by the packaged `update_windows.ps1`. The previous application under `C:\TobiiExec` remains a separate installation: Pogled Assist setup, installer and updater never change its files, desktop shortcut, startup task, settings, or logs.
+
 ### Windows release
 
 Download the versioned ZIP and matching `.sha256` file from [GitHub Releases](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases). Verify the checksum, extract the ZIP, then run:
@@ -30,13 +36,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\install_windows.ps1 -Launch
 ```
 
-The installer copies the app to `C:\PogledAssist`, verifies that the packaged executable starts, and creates a desktop shortcut. Future updates are installed from verified stable GitHub Release artifacts by the packaged `update_windows.ps1`. The release includes Python and the application dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools. Standardni and Prirodni are installed with the app; no separate Python or speech-tool installation is needed. Prirodni needs internet access when speaking.
+The installer verifies that the packaged executable starts and creates a desktop shortcut. The release includes Python and the application dependencies, eSpeak NG with the Bosnian voice, and standalone Edge speech tools. Standardni and Prirodni are installed with the app; no separate Python or speech-tool installation is needed. Prirodni needs internet access when speaking.
 
 The optional Efendija voice uses an ElevenLabs account, API key and accessible voice; see [ElevenLabs setup](docs/features/elevenlabs.md).
 
 The optional 32-bit Tobii bridge runtime is also bundled. A setup summary checks local components and device presence, with actions for official Tobii downloads and calibration. Tobii device software and personal calibration remain separate.
-
-The previous application under `C:\TobiiExec` is a separate installation. The Pogled Assist installer and updater refuse that legacy path, so its files, desktop shortcut, startup task, settings, and logs remain unchanged.
 
 See the [Windows release guide](docs/WINDOWS_RELEASE.md) for checksum verification, external components, rollback, and clean-machine checks.
 
@@ -49,7 +53,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 .\setup_windows.ps1
 ```
 
-Source installations live under `C:\PogledAssist`. Add `-Launch` to start the app after setup or `-NoPause` when running from an existing terminal. Existing installations under `C:\TobiiExec` are intentionally left in place and can be used alongside Pogled Assist. Later Pogled Assist releases update through the packaged `update_windows.ps1`.
+Add `-Launch` to start the app after setup or `-NoPause` when running from an existing terminal.
 
 ## Run
 
@@ -59,41 +63,17 @@ Installed release or source setup:
 .\start_gaze_mouse.ps1
 ```
 
-Development checkout:
+## Local development
+
+The repository uses one PowerShell entry point for setup, running and verification:
 
 ```powershell
 .\dev.ps1 setup
 .\dev.ps1 run
-```
-
-The real application starts Tobii discovery and enables Windows input. Use the UI preview command when you only want to inspect layout and styling.
-
-To exercise gaze feedback and dwell interactions without Tobii hardware, use the development-only mouse simulator:
-
-```powershell
-.\dev.ps1 simulate
-```
-
-Moving the mouse supplies gaze coordinates, initially with both eyes valid. Development shortcuts simulate eye loss, paused samples and a disconnected tracker; see [mouse gaze simulation](docs/UI_DEVELOPMENT.md#mouse-gaze-simulation). The simulator does not move the pointer automatically because the pointer is its gaze source, but armed dwell actions still use the normal Windows input path.
-
-## Local development
-
-The repository uses one PowerShell entry point for setup and verification:
-
-```powershell
-.\dev.ps1 setup
 .\dev.ps1 check -Parallel
 ```
 
-Development uses Python 3.10 for the application, Tobii Pro SDK, automated checks, and Windows packaging. See the [development guide](docs/DEVELOPMENT.md) for repair of a stale `.venv` and interpreter selection.
-
-`check` runs code-quality checks, the hardware-independent test suite with coverage, and a clean Windows package build with frozen executable and isolated installer smoke tests. To inspect the UI without a tracker or speech engine, run:
-
-```powershell
-.\dev.ps1 ui -Open
-```
-
-Use [Development](docs/DEVELOPMENT.md) for commands, [Testing](docs/TESTING.md) for boundary fakes, and [UI development](docs/UI_DEVELOPMENT.md) for visual and manual checks.
+`run` starts the real application with Tobii discovery and Windows input. Without a tracker, `.\dev.ps1 simulate` uses the mouse as gaze and can still click in Windows ([controls and limits](docs/UI_DEVELOPMENT.md#mouse-gaze-simulation)), and `.\dev.ps1 ui -Open` renders the screens without a tracker or speech engine. [Development](docs/DEVELOPMENT.md) lists every command.
 
 ## Documentation
 
@@ -109,12 +89,11 @@ Use [Development](docs/DEVELOPMENT.md) for commands, [Testing](docs/TESTING.md) 
 | Write tests and find reusable fakes | [Testing](docs/TESTING.md) |
 | Understand recordings or analyze a support ZIP | [Diagnostics](docs/DIAGNOSTICS.md) |
 | Change UI, review screenshots, or run manual Windows/Tobii checks | [UI development and review](docs/UI_DEVELOPMENT.md) |
+| See the HTML design of each screen (development only; the app does not load or package it) | [Application UI reference](docs/design/speech-keyboard-reference.html) |
 | Configure or recover gallery publication | [UI gallery publication](docs/UI_GALLERY.md) |
 | Troubleshoot local development checks | [Development troubleshooting](docs/DEVELOPMENT_TROUBLESHOOTING.md) |
-| Prepare issues, pull requests, reviews, and merges | [Contributing](CONTRIBUTING.md) |
+| Prepare issues and pull requests, or check CI, review, merge and release rules | [Contributing](CONTRIBUTING.md) |
 | Build, install, validate, or roll back a release | [Windows release guide](docs/WINDOWS_RELEASE.md) |
-
-The [application UI reference](docs/design/speech-keyboard-reference.html) is a development-only collection of HTML prototypes for the visible PySide6 interface. Its historical filename remains the entry point, linking to a separate document for each screen or feature. The application does not load or package these files. The [UI development guide](docs/UI_DEVELOPMENT.md#application-design-reference-workflow) maps the pages and shared assets.
 
 ## Runtime requirements
 
@@ -133,7 +112,8 @@ The app searches common install locations. These environment variables override 
 | Variable | Value |
 | --- | --- |
 | `TOBII_STREAM_ENGINE_DLL` | Full path to `tobii_stream_engine.dll` |
-| `POGLED_ASSIST_X86_PYTHON` | Full path to 32-bit Python 3.10 |
+| `TOBII_STREAM_ENGINE_DEVICE_CREATE_ARGS` | `3` or `4` for a Stream Engine DLL whose version cannot be recognized; see the [native SDK contract](docs/ARCHITECTURE.md#native-stream-engine-compatibility) |
+| `POGLED_ASSIST_X86_PYTHON` | Full path to 32-bit Python 3.10; the older app's `TOBII_GAZE_MOUSE_X86_PYTHON` is checked as a fallback when it points to a valid 32-bit Python 3.10 |
 | `TOBII_CALIBRATION_COMMAND` | Custom Tobii calibration command |
 | `ESPEAK_NG_EXE` | Full path to `espeak-ng.exe` |
 | `EDGE_PLAYBACK_EXE` | Full path to `edge-playback.exe` |
@@ -143,35 +123,10 @@ The app searches common install locations. These environment variables override 
 
 See [ElevenLabs setup](docs/features/elevenlabs.md) for local settings and permissions.
 
-An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the older app is also checked as a fallback when it points to a valid 32-bit Python 3.10. The new `POGLED_ASSIST_X86_PYTHON` setting takes priority.
-
 ## Data and logs
 
-User data is kept outside the packaged binaries so upgrades and rollbacks can preserve it:
-
-```text
-data\app_settings.json
-data\speech_library.json
-data\speech_phrases.json
-data\speech_learning.json
-data\version-history\*\
-logs\latest.txt
-logs\diagnostics\*.jsonl
-logs\gaze-check\gaze-check-*.json
-logs\diagnostic-recordings\<recording-id>\recording.json
-logs\diagnostic-recordings\<recording-id>\snimak*.jsonl
-```
-
-For credentials and saved audio outside `data/`, see [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs).
-
-The launcher also writes `start_gaze_mouse.log`. Source setup and release updates write their own logs in the installation directory.
+Settings, the speech library, personal learning, logs, gaze-check results and diagnostic recordings stay in the installation's `data` and `logs` folders, outside the packaged binaries, so upgrades and rollbacks preserve them. [Persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) lists every file, including credentials and saved audio outside `data/`.
 
 ## Current limitations
 
 Windows x64 is the supported application platform. The executable is not code-signed, multi-monitor mapping assumes the calibrated display is primary, and Tobii hardware still requires manual validation. The complete list is in the [Windows release guide](docs/WINDOWS_RELEASE.md#known-limits).
-
-## CI and releases
-
-Pull requests run dependency-review, code-quality, hardware-independent test, and Windows packaging checks. Merges to `master` publish an immutable versioned release from the exact merged commit. After CI, the UI gallery workflow publishes screenshot galleries and updates a PR bot comment with previews and links. The repository owner must complete the [Pages setup](docs/UI_GALLERY.md#activation-and-recovery) before the first publication.
-
-Release construction, manual hardware validation, and rollback are documented in the [Windows release guide](docs/WINDOWS_RELEASE.md).

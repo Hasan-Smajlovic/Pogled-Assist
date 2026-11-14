@@ -14,11 +14,11 @@ if os.name == "nt":
     if font_directory.is_dir():
         os.environ.setdefault("QT_QPA_FONTDIR", str(font_directory))
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QRect, Qt, Signal
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, Signal
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from pogled_assist import toolbar as toolbar_module
-from pogled_assist.interaction.mouse_controller import SCROLL_UP, GazeSettings
+from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.keyboard_layouts import ARABIC_MARKS, ARABIC_SCRIPT, LETTER_GROUPS_LAYOUT
 from pogled_assist.release_update import ReleaseCheckResult, StableVersion
 from pogled_assist.speech.audio_cache import AudioCache
@@ -38,13 +38,13 @@ from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.keyboard_window import KeyboardWindow
-from pogled_assist.ui.quick_action_menu import QuickActionMenu, grid_rect_around
 from pogled_assist.ui.recording_badge import RecordingIndicator
 from pogled_assist.ui.settings_window import SettingsServices, SettingsWindow
 from pogled_assist.ui.speech_surface import SPEECH_STYLE
 from pogled_assist.ui.speech_window import SpeechWindow
 from scripts.ui.capture_diagnostics import CaptureDiagnostics
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
+from scripts.ui.capture_pointer_overlays import CapturePointerOverlays
 from scripts.ui.capture_speech_voices import CaptureSpeechVoices
 from scripts.ui.gallery import GROUPS, gallery_content, group_for, page_html, select_names
 
@@ -299,7 +299,7 @@ def capture_ui(
             session.capture_hotbar()
             session.capture_settings()
             session.capture_selection_progress()
-            session.capture_quick_actions()
+            session.capture_pointer_overlays()
             session.capture_gaze_check()
             session.capture_diagnostics()
             session.capture_speech()
@@ -316,7 +316,9 @@ def capture_ui(
     return [path for _, path in session.snapshots]
 
 
-class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics):
+class _CaptureSession(
+    CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics, CapturePointerOverlays
+):
     """Keep preview windows alive until all states have been captured."""
 
     def __init__(
@@ -453,28 +455,6 @@ class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics)
             "Speech selection: completed pause, zero fill",
             size=(640, 360),
         )
-
-    def capture_quick_actions(self) -> None:
-        scene = QLabel("Primjer prozora: dokument, preglednik ili poruka")
-        scene.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        scene.setStyleSheet("background: #f4f6f8; color: #1d242d; font-size: 22px; padding: 32px;")
-        self.widgets.append(scene)
-        menu = QuickActionMenu()
-        menu.setParent(scene, Qt.Widget)
-        menu._timer.stop()
-        size = 1280, 720
-        bounds = QRect(0, 0, *size)
-        for name, title, point, selected, progress in (
-            ("quick-actions-menu", "Quick actions: 3x3 grid", QPoint(640, 360), SCROLL_UP, 0.6),
-            ("quick-actions-menu-edge", "Quick actions: near the edge", QPoint(60, 40), None, 0.0),
-        ):
-            menu._center_global = point
-            menu._grid_global = grid_rect_around(point, bounds)
-            menu._selected_action = selected
-            menu._candidate_progress = progress
-            menu.setGeometry(bounds)
-            menu.show()
-            self.capture(scene, name, title, size=size)
 
     def capture_settings(self) -> None:
         suggestions = PreviewSuggestionService()

@@ -27,7 +27,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
 | Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
 | Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
-| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` , `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
+| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py`, `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
 | Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
 | Parallel checks, coverage merging and pinned tool installation | `tests/tooling/test_dev_environment.py` and `tests/tooling/test_dev_coverage.py` |
 | Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |
@@ -39,6 +39,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | ElevenLabs account, requests and cancellation | `tests/speech/test_eleven_account.py`, `tests/speech/test_elevenlabs.py` and `tests/speech/test_elevenlabs_cancellation.py` |
 | Efendija routing, cache and playback | `tests/speech/test_voice_router.py`, `tests/speech/test_audio_cache.py`, `tests/speech/test_audio_playback.py`, `tests/speech/test_efendija_service.py` and `tests/ui/test_elevenlabs_e2e.py` |
 | Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |
+| Selection rings and pointer overlays | `tests/ui/test_selection_feedback_e2e.py` (`hotbar_gaze`), `tests/ui/test_overlay_widgets.py` and the full-gallery overlay check in `tests/ui/test_ui_rendering.py` |
 | Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py`, `tests/ui/test_speech_alphabet_e2e.py` and `tests/ui/test_speech_predictions.py` |
 | Learning checkpoints and ranking selection rules | `tests/suggestions/test_speech_evaluation.py` |
 
@@ -51,7 +52,7 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Windows and UI fakes | `tests/ui/_ui_fakes.py` |
 | Hotbar fixtures | `tests/ui/_hotbar_fixtures.py` |
 | Speech fixtures | `tests/ui/_speech_fixtures.py` |
-| Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) |
+| Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) and `scripts/ui/capture_pointer_overlays.py` (`PreviewDesktop`) |
 
 Import fixtures from helper modules, not other test modules, so changed-path selection can identify consumers. Qt cleanup closes top-level widgets and delivers deferred deletion before the next test. Wait for actual geometry, visibility, state or signals through the event loop; sleeps or layout requests alone can miss pending child visibility and polish.
 
