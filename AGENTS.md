@@ -85,7 +85,7 @@ Inspect final artifacts and the diff; compilation, timestamps, stale screenshots
 
 Use `check-fast` while iterating. The complete final check must exit 0; use sequential `check` when diagnosing contention/failure and report its reason and timings. Fast checks do not establish readiness. If execution is deferred or unavailable, finish authorized work and report **Implemented; verification not run**, with outstanding checks and limits. A draft PR may precede verification.
 
-Done also requires a failing-without-the-fix pytest test for every behavior change, all applicable maintenance rows above to be satisfied, and each applicable [manual Windows/Tobii check](docs/UI_DEVELOPMENT.md#manual-windows-checks) recorded as passed, failed or Not run. Required `code-quality`, `tests` and `windows-package` checks must pass before merge. Name checks actually run and their results in the final report and PR.
+Done also requires a failing-without-the-fix pytest test for every behavior change, all applicable maintenance rows above to be satisfied, and each applicable [manual Windows/Tobii check](docs/UI_DEVELOPMENT.md#manual-windows-checks) recorded as passed, failed or Not run. The [required CI checks](CONTRIBUTING.md#ci-and-required-checks) must pass before merge. Name checks actually run and their results in the final report and PR.
 
 ## Never merges without a human
 

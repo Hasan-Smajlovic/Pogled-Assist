@@ -146,7 +146,7 @@ Both Latin and Arabic side-panel keyboards show at most eight groups per page, i
 
 Arabic has no word suggestions or new personal learning in this release. Returning to Latin restores the existing Bosnian suggestions and learned data.
 
-Arabic Speech uses the natural male **Hamed** voice (`ar-SA-HamedNeural`) through the already included `edge-playback` tool. It requires internet and sends the spoken text to Microsoft's speech service, like the existing natural Bosnian voice. No Windows Arabic keyboard layout, new model download, or additional speech installation is required. The standard/natural Bosnian choice is retained for returning to Latin. Arabic does not silently use a Bosnian or offline voice if the natural voice is unavailable: Speech reports that the selected voice is unavailable and preserves the message for retry.
+Arabic Speech uses the natural male **Hamed** voice (`ar-SA-HamedNeural`) through the already included `edge-playback` tool. It requires internet and sends the spoken text to Microsoft's speech service, like **Prirodni**. No Windows Arabic keyboard layout, new model download, or additional speech installation is required. The selected Bosnian voice is retained for returning to Latin. Arabic does not silently use a Bosnian or offline voice if **Hamed** is unavailable: Speech reports that the selected voice is unavailable and preserves the message for retry.
 
 Automated checks verify Unicode entry, switching, layout, and voice commands. They do not establish audible playback, pronunciation, online service availability, external application text direction, or physical Tobii accuracy. Review those on the target Windows machine at 1920 × 1080 and 150% scaling using the [UI development checklist](UI_DEVELOPMENT.md#ui-review).
 

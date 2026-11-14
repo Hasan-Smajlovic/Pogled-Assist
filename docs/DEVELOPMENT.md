@@ -59,7 +59,7 @@ Supporting scripts live in `scripts/checks/`, `scripts/release/`, `scripts/ui/` 
 | `check-fast` | Python quality checks, affected PowerShell/Actions checks and changed-path test selection | Iteration; no coverage or packaging, even when all tests are selected |
 | `check` | Lint, complete suite with coverage, then package/installer checks | Complete sequential verification |
 | `check -Parallel` | Lint, overlapping test groups and packaging, then installer tests and combined coverage | Same complete verification with overlapping stages |
-| PR CI | `code-quality`, `tests`, `windows-package`, plus PR-only `dependency-review` | Required checks are identified in [CONTRIBUTING](../CONTRIBUTING.md#ci-and-required-checks) |
+| PR CI | The [pull request jobs](../CONTRIBUTING.md#ci-and-required-checks) | The same section identifies the checks required before merge |
 | Release verification | Quality checks, full suite and packaging before publication | Software/package evidence; no physical Tobii or audible playback check |
 
 `-Parallel` overlaps local stages; `-Workers` controls pytest processes within a test invocation. They are independent. A [conditional test](TESTING.md#conditional-tests) can still skip in a complete run; report its reason.

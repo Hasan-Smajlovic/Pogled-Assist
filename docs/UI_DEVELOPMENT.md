@@ -76,7 +76,7 @@ Use this review matrix alongside those notes:
 | Diagnostics | Underlined navigation tabs remain distinct from start/stop/export actions and support keyboard navigation. Recording states preserve action geometry. Privacy and incomplete-recording warnings remain visible. Check narrow HTML overflow as well. |
 | Keyboard and Controller | At a 380-pixel sidebar width, tab words stay intact. Recording uses a fixed bottom status slot without moving keys. |
 
-Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. Review these bounds in the gallery and on the target display; native overlay stacking and Tobii behavior need the manual checks below.
+Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` checks painted bounds across the application, including the Settings gaze path; it does not establish native overlay stacking or Tobii behavior.
 
 The gaze-position marker uses a 46-logical-pixel window with one light-blue ring, a transparent interior and a small white center dot. Dark outlines retain contrast on light backgrounds; the selection ring remains separate. Latin Speech entries align left and Arabic entries align right, including the shared library editor.
 
