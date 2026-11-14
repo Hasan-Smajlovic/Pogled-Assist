@@ -124,6 +124,13 @@ def test_uncertain_or_shared_changes_fall_back_to_every_test(path):
     assert plan["actions_check"]
 
 
+def test_type_baseline_change_selects_no_tests():
+    plan = select_tests(ROOT, [".basedpyright/baseline.json"])
+
+    assert plan["test_paths"] == []
+    assert not plan["full_suite"]
+
+
 def test_documentation_change_selects_only_repository_contracts():
     plan = select_tests(ROOT, ["docs/USER_GUIDE.md"])
 

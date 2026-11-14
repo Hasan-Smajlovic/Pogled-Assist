@@ -3,7 +3,99 @@ target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF"]
+select = [
+    "A",
+    "ARG",
+    "ASYNC",
+    "B",
+    "BLE",
+    "C90",
+    "DTZ",
+    "E4",
+    "E7",
+    "E9",
+    "ERA",
+    "F",
+    "FURB",
+    "G",
+    "I",
+    "LOG",
+    "PGH",
+    "PLE",
+    "PLR0911",
+    "PLR0912",
+    "PLR0915",
+    "PLW",
+    "RUF",
+    "S",
+    "SIM",
+    "T20",
+    "UP",
+]
+ignore = [
+    "PLW0603", # module-level singletons are replaced through `global` on purpose
+    "S101",    # asserts are the pytest idiom and state internal invariants
+    "S603",    # reported for every subprocess call; S602, S604 and S605 cover shell use
+    "S607",    # reported for every executable found through PATH
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG", "C901", "PLR0911", "PLR0912", "PLR0915", "S"]
+"scripts/**" = ["T20"]
+# Findings that existed when these rules were adopted. Remove a code once its file is clean;
+# new findings are fixed, not added here.
+"pogled_assist/build_info.py" = ["PLW1510"]
+"pogled_assist/diagnostic_recording.py" = ["ARG002"]
+"pogled_assist/diagnostic_report.py" = ["C901"]
+"pogled_assist/diagnostics.py" = ["BLE001"]
+"pogled_assist/installation_check.py" = ["BLE001"]
+"pogled_assist/interaction/gaze_selection.py" = ["BLE001"]
+"pogled_assist/interaction/mouse_controller.py" = ["BLE001", "LOG004"]
+"pogled_assist/log_output.py" = ["BLE001", "DTZ005"]
+"pogled_assist/log_reader.py" = ["T201"]
+"pogled_assist/log_transport.py" = ["ARG002", "BLE001"]
+"pogled_assist/logging_setup.py" = ["BLE001", "DTZ005", "S110"]
+"pogled_assist/main.py" = ["BLE001", "T201"]
+"pogled_assist/release_update.py" = ["S310"]
+"pogled_assist/speech/audio_playback.py" = ["BLE001"]
+"pogled_assist/speech/eleven_transport.py" = ["BLE001"]
+"pogled_assist/speech/selection_sound.py" = ["BLE001", "LOG004"]
+"pogled_assist/speech/speech_service.py" = ["BLE001", "C901"]
+"pogled_assist/speech/voice_router.py" = ["ARG002"]
+"pogled_assist/suggestions/service.py" = ["BLE001"]
+"pogled_assist/toolbar.py" = ["PLR0915", "PLW0108"]
+"pogled_assist/tracking/gaze_check.py" = ["PLW2901"]
+"pogled_assist/tracking/gaze_provider.py" = ["PLR0915"]
+"pogled_assist/tracking/tobii_calibration.py" = ["BLE001", "S602"]
+"pogled_assist/ui/diagnostic_recordings.py" = ["BLE001"]
+"pogled_assist/ui/diagnostics_window.py" = ["PLR0915"]
+"pogled_assist/ui/gaze_check_feedback.py" = ["PLR0911"]
+"pogled_assist/ui/gaze_check_reports.py" = ["BLE001"]
+"pogled_assist/ui/gaze_check_window.py" = ["PLR0915"]
+"pogled_assist/ui/gaze_settings_page.py" = ["PLR0915"]
+"pogled_assist/ui/installation_window.py" = ["BLE001"]
+"pogled_assist/ui/recording_badge.py" = ["ARG002"]
+"pogled_assist/ui/speech_buttons.py" = ["ARG002"]
+"pogled_assist/ui/tracking_feedback.py" = ["PLR0915"]
+"pogled_assist/ui/tracking_status.py" = ["BLE001"]
+"pogled_assist/windows/appbar.py" = ["BLE001"]
+"pogled_assist/windows/dpi.py" = ["BLE001", "S110"]
+"pogled_assist/windows/speech_process.py" = ["C901"]
+"pogled_assist/windows/windows_z_order.py" = ["BLE001"]
+"scripts/checks/select_tests.py" = ["C901", "PLR0912"]
+"scripts/release/prepare_speech_bundle.py" = ["S202", "S310"]
+"scripts/speech_suggestions/prepare_speech_model.py" = ["S324"]
+"scripts/ui/capture_gaze_check.py" = ["ARG005", "PLR0915", "S105"]
+"scripts/ui/capture_ui.py" = ["PLR0915"]
+"scripts/ui/gallery.py" = ["PLR0911"]
+"tests/app/test_logging.py" = ["T201"]
+"tests/app/test_logging_async.py" = ["BLE001"]
+"tests/gaze/test_mouse_gaze_provider.py" = ["PLW0108"]
+"tests/release/test_package_smoke.py" = ["PLW1510"]
+"tests/release/test_release_updater.py" = ["PLW1510"]
+"tests/speech/test_audio_playback.py" = ["T201"]
+"tests/tooling/test_repository_docs.py" = ["PLW2901"]
+"tests/ui/test_gaze_performance.py" = ["BLE001", "T201"]
 
 [tool.coverage.run]
 source = ["pogled_assist"]
@@ -13,3 +105,57 @@ fail_under = 60
 precision = 1
 show_missing = true
 skip_covered = true
+
+[tool.basedpyright]
+include = ["pogled_assist", "scripts", "run_gaze_mouse.py"]
+pythonVersion = "3.10"
+pythonPlatform = "Windows"
+typeCheckingMode = "standard"
+reportMissingParameterType = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+enableTypeIgnoreComments = false
+reportIgnoreCommentWithoutRule = "error"
+
+[tool.importlinter]
+root_package = "pogled_assist"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Runtime packages import only the layers below them"
+type = "layers"
+layers = [
+    "pogled_assist.ui",
+    "pogled_assist.speech | pogled_assist.suggestions",
+    "pogled_assist.tracking",
+    "pogled_assist.interaction",
+    "pogled_assist.windows",
+]
+# Logging reaches saved gaze-check reports through the diagnostic recording modules.
+ignore_imports = [
+    "pogled_assist.diagnostic_recording -> pogled_assist.tracking.gaze_check_report",
+    "pogled_assist.recording_export -> pogled_assist.tracking.gaze_check_report",
+    "pogled_assist.recording_metadata -> pogled_assist.tracking.gaze_check_report",
+]
+
+[[tool.importlinter.contracts]]
+name = "Runtime packages never import the UI or the entry points"
+type = "forbidden"
+source_modules = [
+    "pogled_assist.interaction",
+    "pogled_assist.speech",
+    "pogled_assist.suggestions",
+    "pogled_assist.tracking",
+    "pogled_assist.windows",
+]
+forbidden_modules = ["pogled_assist.main", "pogled_assist.toolbar", "pogled_assist.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Each external SDK stays behind its owning package"
+type = "forbidden"
+source_modules = ["pogled_assist"]
+forbidden_modules = ["edge_tts", "qtawesome", "tobii_research"]
+ignore_imports = [
+    "pogled_assist.speech.** -> edge_tts",
+    "pogled_assist.tracking.** -> tobii_research",
+    "pogled_assist.ui.** -> qtawesome",
+]

@@ -376,6 +376,56 @@ def test_agent_guidance_names_existing_paths() -> None:
     assert not missing, "Agent guidance names missing paths:\n" + "\n".join(missing)
 
 
+def _code_owner_errors(guidance: str, code_owners: str) -> list[str]:
+    section = guidance.split("## Never merges without a human\n", 1)[1].split("\n## ", 1)[0]
+    required = set(INLINE_CODE.findall(section))
+    owned: dict[str, list[str]] = {}
+    for line in code_owners.splitlines():
+        fields = line.split("#", 1)[0].split()
+        if fields:
+            owned[fields[0].removeprefix("/")] = fields[1:]
+
+    errors = [
+        f"{path}: listed in AGENTS.md but not in CODEOWNERS" for path in required - set(owned)
+    ]
+    errors += [f"{path}: in CODEOWNERS but not in AGENTS.md" for path in set(owned) - required]
+    errors += [f"{path}: has no owner" for path, owners in owned.items() if not owners]
+    return sorted(errors)
+
+
+def test_code_owners_match_the_paths_that_need_human_review() -> None:
+    errors = _code_owner_errors(
+        (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8"),
+        (REPO_ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8"),
+    )
+
+    assert not errors, "CODEOWNERS and AGENTS.md disagree:\n" + "\n".join(errors)
+
+
+@pytest.mark.parametrize(
+    ("code_owners", "expected"),
+    [
+        ("/VERSION @reviewer\n", ["language/: listed in AGENTS.md but not in CODEOWNERS"]),
+        (
+            "/VERSION @reviewer\n/language/ @reviewer\n/docs/ @reviewer\n",
+            ["docs/: in CODEOWNERS but not in AGENTS.md"],
+        ),
+        ("/VERSION\n/language/ @reviewer\n", ["VERSION: has no owner"]),
+        ("# Reviewed paths\n/VERSION @first @second\n\n/language/ @first\n", []),
+    ],
+)
+def test_code_owner_check_reports_missing_extra_and_unowned_paths(
+    code_owners: str, expected: list[str]
+) -> None:
+    guidance = (
+        "## Never merges without a human\n\n"
+        "- Any change to `VERSION` or under `language/`.\n\n"
+        "## Later section\n\n`docs/`\n"
+    )
+
+    assert _code_owner_errors(guidance, code_owners) == expected
+
+
 def test_local_markdown_links_resolve() -> None:
     broken_links: list[str] = []
 

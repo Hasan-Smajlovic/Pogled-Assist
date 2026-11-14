@@ -70,9 +70,11 @@ To prevent a recurring mistake, identify the violated requirement and choose the
 | Model inputs under `language/bs/model/`, `pogled_assist/suggestions/text.py`, or `scripts/speech_suggestions/prepare_*_model.py` | The prepared `pogled_assist/assets/bosnian-*-model.*` files and the reports under `language/bs/`, regenerated with the commands in `language/bs/README.md` |
 | A file under `data/` | The data list in [persistent storage](docs/ARCHITECTURE.md#persistent-data-and-logs) and the preserved files in `tests/release/test_windows_installer.py` |
 | An action in `dev.ps1` | `Write-Help` in `dev.ps1` and the command reference in `docs/DEVELOPMENT.md` |
+| A stage in `scripts/checks/static_checks.py` or one of its recorded exceptions | The stage table and [recorded exceptions](docs/DEVELOPMENT.md#recorded-exceptions) in `docs/DEVELOPMENT.md` |
 | A job name in `.github/workflows/ci.yml` | The full CI job list and the separately identified required checks in [CONTRIBUTING](CONTRIBUTING.md#ci-and-required-checks); Hasan decides whether branch rulesets should change |
 | A skill under `.agents/skills/` | Its pointer under `.claude/skills/` with the same `name` and `description` |
 | A required guide or template | `REQUIRED_FILES` or `REQUIRED_TEMPLATE_SECTIONS` in `tests/tooling/test_repository_docs.py` |
+| A path under [Never merges without a human](#never-merges-without-a-human) | The same path in `.github/CODEOWNERS` |
 
 ## Verification
 
@@ -83,7 +85,7 @@ Inspect final artifacts and the diff; compilation, timestamps, stale screenshots
 .\dev.ps1 check -Parallel
 ```
 
-Use `check-fast` while iterating. The complete final check must exit 0; use sequential `check` when diagnosing contention/failure and report its reason and timings. Fast checks do not establish readiness. If execution is deferred or unavailable, finish authorized work and report **Implemented; verification not run**, with outstanding checks and limits. A draft PR may precede verification.
+Use `check-fast` while iterating. On another operating system, run the [static checks](docs/DEVELOPMENT.md#static-checks-on-another-operating-system) and report the Windows checks as not run. The complete final check must exit 0; use sequential `check` when diagnosing contention/failure and report its reason and timings. Fast checks do not establish readiness. If execution is deferred or unavailable, finish authorized work and report **Implemented; verification not run**, with outstanding checks and limits. A draft PR may precede verification.
 
 Done also requires a failing-without-the-fix pytest test for every behavior change, all applicable maintenance rows above to be satisfied, and each applicable [manual Windows/Tobii check](docs/UI_DEVELOPMENT.md#manual-windows-checks) recorded as passed, failed or Not run. The [required CI checks](CONTRIBUTING.md#ci-and-required-checks) must pass before merge. Name checks actually run and their results in the final report and PR.
 
@@ -96,3 +98,4 @@ For the paths below, a human must read the final diff before merge. A general in
 - Any change to `pogled_assist/settings_store.py`, `pogled_assist/speech/speech_library.py`, or `pogled_assist/suggestions/learning.py`.
 - Any change to `pogled_assist/tracking/gaze_provider.py`, `pogled_assist/interaction/mouse_controller.py`, `pogled_assist/interaction/gaze_selection.py`, `pogled_assist/windows/windows_input.py`, or `pogled_assist/tracking/tobii_stream_engine*.py`.
 - Any added or changed text under `language/` or `tests/fixtures/speech_suggestions/`.
+- Any change to `pyproject.toml`, `.basedpyright/baseline.json`, `.github/zizmor.yml`, or `.github/CODEOWNERS`, which hold the check rules, their recorded exceptions and this review list.
