@@ -12,6 +12,7 @@ from pogled_assist.interaction.mouse_controller import (
     SCROLL_UP,
     TYPE_HERE,
 )
+from pogled_assist.ui import quick_action_menu as menu_module
 from pogled_assist.ui.interaction_overlay import _compact_label
 from pogled_assist.ui.quick_action_menu import (
     CANCEL_QUICK_ACTION,
@@ -82,6 +83,47 @@ def test_quick_menu_requires_leaving_the_tile_under_the_point_at_an_edge(qtbot, 
     menu.handle_gaze(menu.tile_rect(LEFT_CLICK).center())
     menu.handle_gaze(corner)
     assert menu._candidate_action == TYPE_HERE
+
+
+@pytest.mark.parametrize("release", ["centre", "tile"])
+def test_quick_menu_edge_gaze_outside_the_grid_keeps_the_point_tile_blocked(
+    qtbot, monkeypatch, release
+):
+    from _clock import freeze_monotonic
+
+    monkeypatch.setattr(
+        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+    )
+    menu = QuickActionMenu()
+    qtbot.addWidget(menu)
+    menu.set_selection_settings(pause_ms=150, dwell_ms=150, radius_px=48)
+    selected = []
+    menu.action_selected.connect(selected.append)
+    screen = menu.screen().geometry()
+    # Bottom-left corner, where the Start button is: the point lies on Potvrdi (Enter).
+    point = QPoint(screen.left() + 20, screen.bottom() - 20)
+    menu.show_at(point)
+    assert menu._action_for_global_point(point) == PRESS_ENTER
+    now = freeze_monotonic(monkeypatch, 1.0)
+
+    def hold(target, seconds):
+        for _ in range(round(seconds / 0.05)):
+            now[0] += 0.05
+            menu.handle_gaze(target)
+
+    # Gaze clamped to the screen edge lands in the margin outside the grid.
+    hold(QPoint(screen.left(), point.y()), 0.05)
+    hold(point, 1.0)
+    assert selected == []
+
+    elsewhere = (
+        menu.tile_rect(LEFT_CLICK).center()
+        if release == "tile"
+        else menu_module._cell_rect(menu._grid_global, 1, 1).center()
+    )
+    hold(elsewhere, 0.05)
+    hold(point, 1.0)
+    assert selected == [PRESS_ENTER]
 
 
 @pytest.mark.parametrize(

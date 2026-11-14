@@ -99,7 +99,7 @@ The grid has three rows of three tall rectangles, 150 × 190 pixels each, with t
 - **Potvrdi** presses Enter in the active window.
 - **Odustani**, Escape, or a mouse click on the middle cell or outside the grid closes the grid without an action.
 
-The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look away from that tile before it can be selected. Quick actions need both eyes, like direct desktop clicks.
+The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look at another tile or the empty middle cell before that tile can be selected; gaze at the screen edge outside the grid does not count. Quick actions need both eyes, like direct desktop clicks.
 
 ## Speech
 

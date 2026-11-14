@@ -117,6 +117,16 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     assert fill(0, 1) == "#2e6478"
     assert fill(1, 0) == "#2b1f27"
     assert {fill(0, 0), fill(0, 2), fill(1, 2), fill(2, 0), fill(2, 1), fill(2, 2)} == {"#283442"}
+    # The shared selection ring surrounds the same icon as the tile's own arc and leaves
+    # the label below it clear.
+    icon = menu_module._icon_rect(tile(0, 1)).center()
+    assert any(_is_shared_ring(menu.pixelColor(icon + QPoint(r, 0))) for r in range(24, 37))
+    label_top = tile(0, 1).center().y() + 12
+    assert not any(
+        _is_shared_ring(menu.pixelColor(QPoint(x, label_top + 6)))
+        for x in range(icon.x() - 40, icon.x() + 41)
+    )
+
     # Near a corner the whole grid shifts inside the screen and the point stays marked.
     edge = snapshots["quick-actions-menu-edge"]
     corner_grid = menu_module.grid_rect_around(QPoint(60, 40), QRect(0, 0, 1280, 720))

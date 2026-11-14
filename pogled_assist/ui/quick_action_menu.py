@@ -167,7 +167,11 @@ class QuickActionMenu(QWidget):
 
         now_ms = time.monotonic() * 1000
         action = self._action_for_global_point(point)
-        if action != self._blocked_action:
+        # Only a look at another tile or the empty centre releases the tile under the point.
+        # Gaze clamped to the screen edge lands outside the grid and must not release it.
+        if action != self._blocked_action and (
+            action is not None or _cell_rect(self._grid_global, 1, 1).contains(point)
+        ):
             self._blocked_action = None
         if action is None or action == self._blocked_action:
             self._reset_gaze_candidate(notify=True)
@@ -279,9 +283,7 @@ class QuickActionMenu(QWidget):
         painter.setBrush(QColor(fill))
         painter.drawRoundedRect(QRectF(rect).adjusted(inset, inset, -inset, -inset), 12, 12)
 
-        icon_rect = QRect(
-            rect.center().x() - ICON_SIZE // 2, rect.center().y() - ICON_SIZE, ICON_SIZE, ICON_SIZE
-        )
+        icon_rect = _icon_rect(rect)
         self._icons[tile.action].paint(painter, icon_rect)
         if selected and self._candidate_progress > 0:
             ring = QRectF(icon_rect).adjusted(-10, -10, 10, 10)
@@ -337,8 +339,9 @@ class QuickActionMenu(QWidget):
             self.selection_cancelled.emit()
 
     def _selection_center_global(self, action: str) -> QPoint:
+        # The shared selection ring surrounds the same icon as the tile's own arc.
         rect = self.tile_rect(action)
-        return QPoint(self._center_global) if rect is None else rect.center()
+        return QPoint(self._center_global) if rect is None else _icon_rect(rect).center()
 
     def _icon(self, tile: QuickActionTile) -> QIcon:
         try:
@@ -361,6 +364,13 @@ def grid_rect_around(center: QPoint, bounds: QRect) -> QRect:
     left = max(area.left(), min(left, area.right() + 1 - width))
     top = max(area.top(), min(top, area.bottom() + 1 - height))
     return QRect(left, top, width, height)
+
+
+def _icon_rect(tile: QRect) -> QRect:
+    """The icon sits just above the tile centre, with the label below it."""
+    return QRect(
+        tile.center().x() - ICON_SIZE // 2, tile.center().y() - ICON_SIZE, ICON_SIZE, ICON_SIZE
+    )
 
 
 def _cell_rect(grid: QRect, row: int, column: int) -> QRect:

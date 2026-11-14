@@ -181,7 +181,7 @@ Hardware checks on the target Tobii machine:
 - Confirm Tobii software detects and calibrates the tracker.
 - Confirm the runtime log reports Tobii Pro SDK, Stream Engine, or the x86 bridge.
 - Confirm both-eye tracking moves the pointer and dwell actions fire.
-- Confirm left, right, double-click, keyboard, controller, and calibration actions.
+- Confirm left, right, double-click, keyboard, Quick actions, and calibration actions.
 - Confirm **Standardni** (eSpeak NG), **Prirodni** and optional **Efendija** speech separately.
 
 ## Known limits
