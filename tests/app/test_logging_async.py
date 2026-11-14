@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import pytest
+from _clock import freeze_monotonic
 
 from pogled_assist import logging_setup
 from pogled_assist.log_snapshot import NumericSnapshot
@@ -111,22 +112,44 @@ def test_initial_directory_failure_recovers_outputs_and_retention_reservations(
         return mkdir(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", fail_directory)
+    now = freeze_monotonic(monkeypatch, 100.0)
     writer = LogWriter()
+    retry_checks = []
+    retry_outputs = writer._output._retry_outputs
+
+    def observe_retry():
+        retry_outputs()
+        if writer._output._active is not None:
+            retry_checks.append(now[0])
+
+    monkeypatch.setattr(writer._output, "_retry_outputs", observe_retry)
     try:
         writer.start_segment(latest, None, trace=False)
         expected = {"text", "json"} if failed_channel == "both" else {failed_channel}
         qtbot.waitUntil(
-            lambda: expected.issubset(
-                gap["channel"] for gap in writer.persistence_status()["failures"]
+            lambda: (
+                100.0 in retry_checks
+                and expected.issubset(
+                    gap["channel"] for gap in writer.persistence_status()["failures"]
+                )
             )
         )
         denied.clear()
+        now[0] = 101.999
+        assert writer.event("retry_probe", {}, priority=True)
+        qtbot.waitUntil(lambda: 101.999 in retry_checks)
+        assert expected.issubset(gap["channel"] for gap in writer.persistence_status()["failures"])
+        now[0] = 102.0
+        assert writer.event("retry_due", {}, priority=True)
         qtbot.waitUntil(
             lambda: writer._output._file is not None and writer._output._json is not None,
             timeout=5000,
         )
         assert writer.event("after_storage_recovery", {}, priority=True)
         writer.record(logging.makeLogRecord({"msg": "after storage recovery", "levelno": 20}))
+        qtbot.waitUntil(lambda: ("ordinary", "text") in writer._successful_writes)
+        now[0] = 102.25  # Recovery is reported only after the worker flushes successful writes.
+        assert writer.event("flush_probe", {}, priority=True)
         qtbot.waitUntil(lambda: not writer.persistence_status()["failures"])
         paths = (writer._output._text_path, writer._output._json_path)
         assert all(path is not None for path in paths)
