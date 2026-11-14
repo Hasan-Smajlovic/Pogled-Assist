@@ -130,6 +130,11 @@ class TrackingNoticeWidget(QWidget):
         self._animation.finished.connect(self._finished)
         self.hide()
 
+    @property
+    def mark(self) -> str:
+        """Successful notices use a check mark; warnings and errors keep "!"."""
+        return "✓" if self.notice is not None and self.notice.tone == "ready" else "!"
+
     def set_notice(self, notice: TrackingNotice | None, *, immediate: bool = False) -> None:
         immediate = immediate or not self.style().styleHint(QStyle.SH_Widget_Animate, None, self)
         shown = notice is not None
@@ -205,7 +210,7 @@ class TrackingNoticeWidget(QWidget):
         else:
             painter.setPen(QColor(text))
             painter.setFont(QFont("Segoe UI", 12, QFont.Bold))
-            painter.drawText(QRectF(x, 0, 22, self.height()), Qt.AlignVCenter, "!")
+            painter.drawText(QRectF(x, 0, 22, self.height()), Qt.AlignVCenter, self.mark)
             x += 24
         painter.setPen(QColor(text))
         font = QFont("Segoe UI")
