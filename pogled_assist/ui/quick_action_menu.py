@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
@@ -109,6 +110,12 @@ class QuickActionMenu(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
         self._timer.timeout.connect(self._refresh_windows_topmost_due)
+        self._return_timer = QTimer(self)
+        self._return_timer.setSingleShot(True)
+        # A coarse timer may fire early; the grid must not return inside the cooldown.
+        self._return_timer.setTimerType(Qt.PreciseTimer)
+        self._return_timer.timeout.connect(self._return_after_scroll)
+        self._target_ready: Callable[[], bool] = lambda: True
 
     def set_selection_dwell_ms(self, dwell_ms: int) -> None:
         self._selection_dwell_ms = max(150, min(5000, int(dwell_ms)))
@@ -130,6 +137,7 @@ class QuickActionMenu(QWidget):
             screen = QGuiApplication.primaryScreen()
 
         geometry = screen.geometry()
+        self._return_timer.stop()
         self.setGeometry(geometry)
         self._center_global = QPoint(center)
         self._grid_global = grid_rect_around(center, geometry)
@@ -140,14 +148,27 @@ class QuickActionMenu(QWidget):
         self._candidate_progress = 0.0
         self._selection_timer.cancel(reason="context_changed")
         self._selection_emitted = False
-        self._timer.start()
-        self.show()
-        self.raise_()
-        self._refresh_windows_topmost(force=True)
+        self._show_grid()
         logger.info("Quick action menu opened at %s,%s.", center.x(), center.y())
 
+    def hide_for_repeat(self, delay_ms: int, target_ready: Callable[[], bool]) -> None:
+        """Hide while a scroll reaches the window below, then show the same grid again.
+
+        The grid returns after ``delay_ms`` only while ``target_ready()`` is true and nothing
+        closed it. The selection timer still blocks the tile that fired, so gaze must leave
+        that tile before it can repeat.
+        """
+        self._timer.stop()
+        self.hide()
+        self._selected_action = None
+        self._candidate_progress = 0.0
+        self._selection_emitted = False
+        self._target_ready = target_ready
+        self._return_timer.start(max(1, int(delay_ms)))
+
     def close_menu(self, *, reason: str = "window_closed") -> None:
-        was_visible = self.isVisible()
+        was_visible = self.isVisible() or self._return_timer.isActive()
+        self._return_timer.stop()
         self._candidate_action = None
         self._selected_action = None
         self._candidate_progress = 0.0
@@ -159,6 +180,19 @@ class QuickActionMenu(QWidget):
         self.hide()
         if was_visible:
             logger.info("Quick action menu closed.")
+
+    def _return_after_scroll(self) -> None:
+        if not self._target_ready():
+            self.close_menu(reason="target_cleared")
+            return
+        self._show_grid()
+        logger.info("Quick action menu returned for another scroll.")
+
+    def _show_grid(self) -> None:
+        self._timer.start()
+        self.show()
+        self.raise_()
+        self._refresh_windows_topmost(force=True)
 
     def tile_rect(self, action: str) -> QRect | None:
         """Global rectangle of an action's tile, or None for an unknown action."""

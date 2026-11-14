@@ -38,6 +38,8 @@ QUICK_SCROLL_UNITS = 3
 
 CLICK_ACTIONS = {LEFT_CLICK, RIGHT_CLICK, DOUBLE_LEFT_CLICK}
 QUICK_MENU_ACTIONS = CLICK_ACTIONS | {SCROLL_UP, SCROLL_DOWN, PRESS_ENTER, TYPE_HERE}
+# The grid returns at the same point after these, so the next scroll needs one dwell.
+REPEATABLE_QUICK_ACTIONS = {SCROLL_UP, SCROLL_DOWN}
 MODE_STATUS = {
     LEFT_CLICK: "Lijevi klik je spreman. Pogledajte željeni cilj.",
     RIGHT_CLICK: "Desni klik je spreman. Pogledajte željeni cilj.",
@@ -270,7 +272,12 @@ class GazeMouseController(QObject):
         if action in CLICK_ACTIONS or action == TYPE_HERE:
             mode = LEFT_CLICK if action == TYPE_HERE else action
             return self._fire_click(mode, target, reset_mode=False, interaction_source="quick")
-        return self._send_quick_input(action, target)
+        sent = self._send_quick_input(action, target)
+        if sent and action in REPEATABLE_QUICK_ACTIONS:
+            # Keep the point for the returning grid; every repeat passes the checks above again.
+            self._quick_target = target
+            self._quick_menu_open = True
+        return sent
 
     def _send_quick_input(self, action: str, target: GazeScreenPoint) -> bool:
         if self._input is None:
@@ -296,6 +303,11 @@ class GazeMouseController(QObject):
         self._finish_interaction("quick", target.logical, action_label(action))
         self.action_fired.emit(action, target.physical)
         return True
+
+    @property
+    def quick_target_ready(self) -> bool:
+        """Whether the Quick actions grid still has a chosen point to act on."""
+        return self._quick_menu_open and self._quick_target is not None
 
     def set_quick_target_from_logical(self, logical: QPoint) -> None:
         target = self._screen_point_from_logical(logical)

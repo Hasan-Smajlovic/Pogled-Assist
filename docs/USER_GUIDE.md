@@ -95,11 +95,11 @@ The grid has three rows of three tall rectangles, 150 × 190 pixels each, with t
 | Bottom | **Potvrdi** | **Dvostruki klik** | **Pomjeri dolje** |
 
 - **Piši ovdje** left-clicks the point to place the cursor there, then opens [Keyboard](#keyboard) to type into that window.
-- **Pomjeri gore** and **Pomjeri dolje** move the pointer to the point and scroll three wheel steps, so the window under the point scrolls.
+- **Pomjeri gore** and **Pomjeri dolje** move the pointer to the point and scroll three wheel steps, so the window under the point scrolls. The grid then hides for **Pauza između radnji** and returns at the same point, so the next scroll needs only one dwell. Look away from the tile you used, at another tile, the middle cell or the page, then back to scroll again; a steady look does not repeat it. Every other tile closes the grid.
 - **Potvrdi** presses Enter in the active window.
 - **Odustani**, Escape, or a mouse click on the middle cell or outside the grid closes the grid without an action.
 
-The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look at another tile or the empty middle cell before that tile can be selected; gaze at the screen edge outside the grid does not count. Quick actions need both eyes, like direct desktop clicks.
+The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look at another tile or the empty middle cell before that tile can be selected; gaze at the screen edge outside the grid does not count. Quick actions need both eyes, like direct desktop clicks. Losing an eye, stale gaze, the gaze check, hiding the hotbar or opening Settings closes the grid, also while it is hidden between two scrolls, and it does not return.
 
 ## Speech
 

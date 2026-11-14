@@ -349,7 +349,55 @@ def test_quick_grid_actions_send_input_at_the_chosen_point(action, moves, scroll
     fake = controller._input
     assert (fake.moves, fake.scrolls, fake.keys, fake.clicks) == (moves, scrolls, keys, clicks)
     assert fired == [(LEFT_CLICK if action == TYPE_HERE else action, QPoint(130, 240))]
-    assert controller._quick_target is None
+    # Only a scroll keeps the point, for the grid that returns at the same place.
+    assert controller.quick_target_ready is (action in (SCROLL_UP, SCROLL_DOWN))
+
+
+def test_quick_grid_repeated_scroll_keeps_the_cooldown(monkeypatch):
+    now = freeze_monotonic(monkeypatch, 10.0)
+    controller = make_controller()
+    controller.update_settings(GazeSettings(click_cooldown_ms=400))
+    controller.handle_eye_status(True, True)
+    controller.set_quick_actions_enabled(True)
+    controller._quick_menu_open = True
+    controller._quick_target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+
+    assert controller.execute_quick_action(SCROLL_DOWN) is True
+    now[0] += 0.4
+    assert controller.execute_quick_action(SCROLL_DOWN) is True
+    assert controller._input.scrolls == [-3, -3]
+    assert controller._input.moves == [(130, 240), (130, 240)]
+
+    now[0] += 0.399
+    assert controller.execute_quick_action(SCROLL_DOWN) is False
+    assert controller._input.scrolls == [-3, -3]
+    assert controller.quick_target_ready is False
+
+
+@pytest.mark.parametrize("interruption", ["eye", "suspended", "cancel"])
+def test_quick_grid_repeated_scroll_stops_after_an_interruption(monkeypatch, interruption):
+    now = freeze_monotonic(monkeypatch, 10.0)
+    controller = make_controller()
+    controller.handle_eye_status(True, True)
+    controller.set_quick_actions_enabled(True)
+    controller._quick_menu_open = True
+    controller._quick_target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+    assert controller.execute_quick_action(SCROLL_UP) is True
+    assert controller.quick_target_ready is True
+
+    if interruption == "eye":
+        controller.handle_eye_status(True, False)
+        controller.handle_eye_status(True, True)
+    elif interruption == "suspended":
+        controller.set_input_suspended(True)
+        controller.set_input_suspended(False)
+    else:
+        controller.cancel_quick_action_menu()
+    now[0] += 5.0
+
+    assert controller.quick_target_ready is False
+    assert controller.execute_quick_action(SCROLL_UP) is False
+    assert controller._input.scrolls == [3]
 
 
 def test_quick_grid_actions_need_both_eyes():

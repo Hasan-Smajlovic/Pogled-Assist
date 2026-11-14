@@ -145,6 +145,74 @@ def test_quick_menu_edge_gaze_outside_the_grid_keeps_the_point_tile_blocked(
     assert selected == [PRESS_ENTER]
 
 
+def _visible_menu(qtbot, monkeypatch):
+    from _clock import freeze_monotonic
+
+    monkeypatch.setattr(
+        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+    )
+    menu = QuickActionMenu()
+    qtbot.addWidget(menu)
+    menu.set_selection_settings(pause_ms=150, dwell_ms=150, radius_px=48)
+    menu.show_at(menu.screen().geometry().center())
+    now = freeze_monotonic(monkeypatch, 1.0)
+
+    def hold(target, seconds):
+        for _ in range(round(seconds / 0.05)):
+            now[0] += 0.05
+            menu.handle_gaze(target)
+
+    return menu, hold
+
+
+@pytest.mark.parametrize("release", ["centre", "tile", "outside"])
+def test_quick_menu_returns_after_a_scroll_and_needs_gaze_to_leave_the_tile(
+    qtbot, monkeypatch, release
+):
+    menu, hold = _visible_menu(qtbot, monkeypatch)
+    selected = []
+
+    def scroll(action):
+        selected.append(action)
+        menu.hide_for_repeat(20, lambda: True)
+
+    menu.action_selected.connect(scroll)
+    tile = menu.tile_rect(SCROLL_DOWN).center()
+    hold(tile, 0.5)
+    assert selected == [SCROLL_DOWN]
+    assert not menu.isVisible()
+
+    # Gaze is ignored while the grid is hidden, then the same grid returns.
+    hold(tile, 0.5)
+    qtbot.waitUntil(menu.isVisible, timeout=1000)
+    assert menu.tile_rect(SCROLL_DOWN).center() == tile
+    hold(tile, 1.0)
+    assert selected == [SCROLL_DOWN]
+
+    elsewhere = {
+        "centre": menu_module._cell_rect(menu._grid_global, 1, 1).center(),
+        "tile": menu.tile_rect(SCROLL_UP).center(),
+        # The page beside the grid, where the user checks how far it scrolled.
+        "outside": QPoint(menu._grid_global.left() - 40, tile.y()),
+    }[release]
+    hold(elsewhere, 0.05)
+    hold(tile, 0.5)
+    assert selected == [SCROLL_DOWN, SCROLL_DOWN]
+
+
+@pytest.mark.parametrize("stop", ["closed", "target_cleared"])
+def test_quick_menu_stays_closed_when_the_repeat_is_stopped(qtbot, monkeypatch, stop):
+    menu, _hold = _visible_menu(qtbot, monkeypatch)
+
+    menu.hide_for_repeat(20, lambda: stop != "target_cleared")
+    if stop == "closed":
+        menu.close_menu(reason="eye_gate_closed")
+    qtbot.wait(100)
+
+    assert not menu.isVisible()
+    assert not menu._return_timer.isActive()
+
+
 @pytest.mark.parametrize(
     ("label", "expected"),
     [

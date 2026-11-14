@@ -11,6 +11,7 @@ from pogled_assist.interaction.mouse_controller import (
     LEFT_CLICK,
     QUICK_ACTIONS,
     SCROLL_DOWN,
+    SCROLL_UP,
     SETTINGS,
     SPEECH,
     TYPE_HERE,
@@ -19,6 +20,7 @@ from pogled_assist.interaction.mouse_controller import (
 )
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.toolbar import HotbarWindow
+from pogled_assist.ui.quick_action_menu import CANCEL_QUICK_ACTION
 
 # Bound before the hotbar fixture replaces startup services with a no-op.
 REAL_START_SERVICES = HotbarWindow._start_services
@@ -101,6 +103,102 @@ def test_quick_grid_type_here_clicks_then_opens_the_keyboard(
         assert mouse._input.clicks == [(130, 240, {"button": "left"})]
     else:
         assert mouse._input.scrolls == [-3]
+
+
+def _quick_grid_hotbar(qtbot, monkeypatch):
+    from _clock import freeze_monotonic
+
+    from pogled_assist import toolbar
+    from pogled_assist.ui import quick_action_menu, sidebar_panel
+
+    settings = GazeSettings(selection_pause_ms=100, dwell_ms=200, click_cooldown_ms=100)
+    monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
+    monkeypatch.setattr(toolbar, "load_app_settings", lambda: (settings, SpeechSettings()))
+    monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(quick_action_menu, "force_window_topmost", lambda *_a, **_k: True)
+    window = toolbar.HotbarWindow()
+    qtbot.addWidget(window)
+    mouse = window._mouse
+    mouse._input = FakeHotbarInput()
+    mouse.handle_eye_status(True, True)
+    menu = window._quick_menu
+    point = menu.screen().geometry().center()
+    mouse._quick_menu_open = True
+    mouse._quick_target = GazeScreenPoint(point, QPoint(130, 240))
+    window._open_quick_action_menu(point)
+    now = freeze_monotonic(monkeypatch, 10.0)
+
+    def hold(target, seconds):
+        for _ in range(round(seconds / 0.05)):
+            now[0] += 0.05
+            menu.handle_gaze(target)
+
+    return window, mouse, menu, hold
+
+
+@pytest.mark.e2e
+def test_quick_grid_returns_after_a_scroll_so_the_next_scroll_is_one_dwell(qtbot, monkeypatch):
+    _window, mouse, menu, hold = _quick_grid_hotbar(qtbot, monkeypatch)
+    tile = menu.tile_rect(SCROLL_DOWN).center()
+
+    hold(tile, 0.5)
+    assert mouse._input.scrolls == [-3]
+    assert not menu.isVisible()
+    qtbot.waitUntil(menu.isVisible, timeout=1000)
+
+    # A steady look at the used tile does not repeat it; one look away and back does.
+    hold(tile, 1.0)
+    assert mouse._input.scrolls == [-3]
+    hold(menu.tile_rect(SCROLL_UP).center(), 0.05)
+    hold(tile, 0.5)
+    assert mouse._input.scrolls == [-3, -3]
+    assert mouse._input.moves == [(130, 240), (130, 240)]
+    qtbot.waitUntil(menu.isVisible, timeout=1000)
+
+    hold(menu.tile_rect(CANCEL_QUICK_ACTION).center(), 0.5)
+    assert not menu.isVisible()
+    assert mouse.quick_target_ready is False
+    qtbot.wait(200)
+    assert not menu.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("interruption", ["eye_loss", "stale_gaze", "suspended", "hidden_hotbar"])
+def test_quick_grid_does_not_return_after_an_interruption(qtbot, monkeypatch, interruption):
+    window, mouse, menu, hold = _quick_grid_hotbar(qtbot, monkeypatch)
+
+    hold(menu.tile_rect(SCROLL_UP).center(), 0.5)
+    assert mouse._input.scrolls == [3]
+    assert not menu.isVisible()
+    if interruption == "eye_loss":
+        window._handle_eye_status_changed(True, False)
+    elif interruption == "stale_gaze":
+        # Only the controller drops the point; the grid must not return without it.
+        mouse._eye_gate.cancel(reason="gaze_freshness_expired")
+    elif interruption == "suspended":
+        mouse.set_input_suspended(True)
+    else:
+        window._hide_hotbar()
+    qtbot.wait(300)
+
+    assert not menu.isVisible()
+    assert mouse.quick_target_ready is False
+
+
+@pytest.mark.e2e
+def test_quick_grid_closes_when_a_scroll_is_skipped(qtbot, monkeypatch):
+    window, mouse, menu, _hold = _quick_grid_hotbar(qtbot, monkeypatch)
+    mouse.handle_eye_status(True, False)
+
+    window._quick_action_selected_handler(SCROLL_DOWN)
+
+    assert mouse._input.scrolls == []
+    assert not menu.isVisible()
+    assert not menu._return_timer.isActive()
 
 
 @pytest.mark.e2e

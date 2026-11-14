@@ -20,6 +20,7 @@ from .interaction.mouse_controller import (
     HIDE_HOTBAR,
     KEYBOARD,
     QUICK_ACTIONS,
+    REPEATABLE_QUICK_ACTIONS,
     SETTINGS,
     SHOW_HOTBAR,
     SPEECH,
@@ -588,14 +589,26 @@ class HotbarWindow(HotbarSpeech, QWidget):
         diagnostics.invoke_action(lambda: self._quick_action_selected_handler(action))
 
     def _quick_action_selected_handler(self, action):
-        self._quick_menu.close_menu()
+        # Hide the grid before any input so the click, key or wheel reaches the window below.
+        repeat = action in REPEATABLE_QUICK_ACTIONS
+        if repeat:
+            # After the pause between actions the same grid returns for the next scroll.
+            self._quick_menu.hide_for_repeat(
+                self._mouse.settings.click_cooldown_ms,
+                lambda: self._mouse.quick_target_ready,
+            )
+        else:
+            self._quick_menu.close_menu()
         self._interaction_overlay.clear()
         if action == CANCEL_QUICK_ACTION:
             self._mouse.cancel_quick_action_menu()
             self._set_status("Brza radnja je otkazana.")
             return
 
-        if self._mouse.execute_quick_action(action) and action == TYPE_HERE:
+        ran = self._mouse.execute_quick_action(action)
+        if repeat and not ran:
+            self._quick_menu.close_menu()
+        elif ran and action == TYPE_HERE:
             # The click focused the chosen field; the Keyboard types into that window.
             self._show_keyboard_sidebar()
 
