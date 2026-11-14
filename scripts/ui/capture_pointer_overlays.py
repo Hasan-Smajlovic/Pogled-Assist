@@ -10,6 +10,7 @@ from pogled_assist.interaction.mouse_controller import LEFT_CLICK
 from pogled_assist.ui import quick_action_menu as menu_module
 from pogled_assist.ui import quick_action_zoom as zoom_module
 from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
+from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
 from pogled_assist.ui.quick_action_menu import QuickActionRadialMenu
 from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
 
@@ -26,6 +27,8 @@ SELECTION_PAUSE_MS = 250
 SELECTION_DWELL_MS = 1000
 SAMPLE_MS = 50
 SHOWN_PROGRESS = 0.6
+# Wide enough that the 46-pixel marker on the document's left edge stays inside the image.
+MARKER_SCENE_SIZE = (720, 360)
 
 
 class PreviewDesktop(QWidget):
@@ -90,11 +93,18 @@ class CapturePointerOverlays:
         self.app.processEvents()
         return scene
 
+    def _shared_ring(self, scene: QWidget, source: QWidget) -> None:
+        """Draw the shared selection ring the hotbar shows over every gaze selection."""
+
+        ring = InteractionOverlayWindow()
+        ring.setParent(scene, Qt.Widget)
+        ring._timer.timeout.disconnect(ring._tick)
+        source.selection_progress_changed.connect(ring.show_progress)
+
     def _capture_quick_actions_menu(self) -> None:
         scene = self._pointer_scene()
         center = scene.target()
         menu = QuickActionRadialMenu()
-        menu._timer.timeout.disconnect(menu._tick)  # Keep the selected sector's outline still.
         menu.setParent(scene, Qt.Widget)
         menu.setGeometry(scene.rect())
         menu._center_global = QPoint(center)
@@ -103,6 +113,7 @@ class CapturePointerOverlays:
             pause_ms=SELECTION_PAUSE_MS, dwell_ms=SELECTION_DWELL_MS, radius_px=48
         )
         menu.show()
+        self._shared_ring(scene, menu)
         # Look at the top (left click) sector until the selection is partly complete.
         _hold_gaze(menu_module, menu.handle_gaze, menu._selection_center_global(LEFT_CLICK))
         self.capture(scene, "quick-actions-menu", "Quick actions: left click selecting")
@@ -111,7 +122,6 @@ class CapturePointerOverlays:
         scene = self._pointer_scene()
         target = scene.target()
         zoom = QuickActionZoomWindow()
-        zoom._timer.timeout.disconnect(zoom._tick)
         bounds = scene.rect()
         # Use the preview desktop instead of grabbing the real screen.
         zoom._screen_geometry = QRect(bounds)
@@ -124,11 +134,12 @@ class CapturePointerOverlays:
             pause_ms=SELECTION_PAUSE_MS, dwell_ms=SELECTION_DWELL_MS, radius_px=48
         )
         zoom.show()
+        self._shared_ring(scene, zoom)
         _hold_gaze(zoom_module, zoom.handle_gaze, zoom._display_rect.center())
         self.capture(scene, "precision-zoom", "Precision zoom: choosing the exact point")
 
     def _capture_gaze_marker(self) -> None:
-        size = (640, 360)
+        size = MARKER_SCENE_SIZE
         scene = PreviewDesktop(size)
         self.widgets.append(scene)
         scene.show()

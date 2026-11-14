@@ -101,8 +101,10 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     from PySide6.QtCore import QPoint, QRect
 
     from pogled_assist.ui import quick_action_zoom as zoom_module
+    from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
     from pogled_assist.ui.quick_action_menu import QuickActionRadialMenu
-    from scripts.ui.capture_pointer_overlays import PreviewDesktop
+    from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
+    from scripts.ui.capture_pointer_overlays import MARKER_SCENE_SIZE, PreviewDesktop
 
     snapshots = {
         path.stem: QImage(str(path))
@@ -135,13 +137,18 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     progress_radius = 38 // 2 + 8
     assert _is_white(menu.pixelColor(target + QPoint(0, -icon_offset - progress_radius)))
     assert not _is_white(menu.pixelColor(target + QPoint(icon_offset, -progress_radius)))
+    # The hotbar's shared selection ring also fills around the looked-at icon.
+    icon = target + QPoint(0, -icon_offset)
+    assert any(_is_shared_ring(menu.pixelColor(icon + QPoint(r, 0))) for r in range(24, 37))
 
     # Precision zoom magnifies the area around the target three times over a dimmed desktop.
     zoom = snapshots["precision-zoom"]
     screen = QRect(0, 0, 1280, 720)
-    source = zoom_module._square_around(target, 180, screen)
-    display = zoom_module._centered_square(screen, 540)
+    source = zoom_module._square_around(target, QuickActionZoomWindow.SOURCE_SIZE, screen)
+    display = zoom_module._centered_square(screen, QuickActionZoomWindow.DISPLAY_SIZE)
     scale = display.width() / source.width()
+    crosshair = display.center()
+    assert any(_is_shared_ring(zoom.pixelColor(crosshair + QPoint(r, 0))) for r in range(24, 37))
 
     def magnified(point):
         return display.topLeft() + (point - source.topLeft()) * scale
@@ -159,7 +166,7 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     assert 90 < zoom.pixelColor(beside_square).lightness() < 180  # Dimmed document
 
     # The 46-pixel marker keeps a clear centre over light text and the dark desktop.
-    small = PreviewDesktop((640, 360))
+    small = PreviewDesktop(MARKER_SCENE_SIZE)
     marker = snapshots["gaze-marker"]
     center = small.document_edge()
     small.close()
@@ -168,10 +175,17 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     assert marker.pixelColor(center - QPoint(12, 0)).lightness() < 60
     ring = marker.pixelColor(center - QPoint(0, 20))
     assert ring.blue() > ring.red() + 40  # Light-blue ring
+    assert center.x() >= GazeBubbleWindow.BUBBLE_SIZE // 2  # The whole marker is in the image.
 
 
 def _is_white(color) -> bool:
     return min(color.red(), color.green(), color.blue()) > 215
+
+
+def _is_shared_ring(color) -> bool:
+    """Match the filled arc of the shared selection ring (#84c5d9)."""
+
+    return abs(color.red() - 0x84) + abs(color.green() - 0xC5) + abs(color.blue() - 0xD9) < 24
 
 
 def test_gallery_profiles_filter_before_grabbing_widgets(qapp, tmp_path, monkeypatch):
