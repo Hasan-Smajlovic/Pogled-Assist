@@ -45,6 +45,7 @@ from pogled_assist.ui.speech_surface import SPEECH_STYLE
 from pogled_assist.ui.speech_window import SpeechWindow
 from scripts.ui.capture_diagnostics import CaptureDiagnostics
 from scripts.ui.capture_gaze_check import CaptureGazeCheck
+from scripts.ui.capture_pointer_overlays import CapturePointerOverlays
 from scripts.ui.capture_speech_voices import CaptureSpeechVoices
 from scripts.ui.gallery import GROUPS, gallery_content, group_for, page_html, select_names
 
@@ -299,6 +300,7 @@ def capture_ui(
             session.capture_hotbar()
             session.capture_settings()
             session.capture_selection_progress()
+            session.capture_pointer_overlays()
             session.capture_gaze_check()
             session.capture_diagnostics()
             session.capture_speech()
@@ -315,7 +317,9 @@ def capture_ui(
     return [path for _, path in session.snapshots]
 
 
-class _CaptureSession(CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics):
+class _CaptureSession(
+    CaptureGazeCheck, CaptureSpeechVoices, CaptureDiagnostics, CapturePointerOverlays
+):
     """Keep preview windows alive until all states have been captured."""
 
     def __init__(

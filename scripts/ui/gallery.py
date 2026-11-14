@@ -130,7 +130,11 @@ def group_for(name: str) -> str:
         return "voice"
     if name.startswith(("keyboard-", "controller-")):
         return "keyboards"
-    if name.startswith(("hotbar", "selection-", "speech-tracking-")):
+    if name.startswith(("hotbar", "selection-", "speech-tracking-")) or name in (
+        "quick-actions-menu",
+        "precision-zoom",
+        "gaze-marker",
+    ):
         return "tracking"
     if name.startswith(("gaze-check-", "diagnostics-")):
         return "gaze-check"

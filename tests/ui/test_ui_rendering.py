@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtGui import QImage
+from PySide6.QtWidgets import QWidget
 
 from scripts.ui.capture_ui import capture_ui
 from scripts.ui.gallery import CORE_NAMES
@@ -77,7 +78,7 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 
     assert len(snapshots) == 76
     assert {path.stem for path in snapshots} == CORE_NAMES
-    assert len(encountered) == 156  # Extended states remain available without PNG encoding.
+    assert len(encountered) == 159  # Extended states remain available without PNG encoding.
     assert not omitted.exists()
     assert unrelated.read_bytes() == b"leave caller files alone"
     unrelated.unlink()  # Keep the CI artifact limited to actual previews.
@@ -93,6 +94,98 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
             assert (image.width(), image.height()) == (1280, 720), snapshot.name
         if snapshot.name in ("keyboard-latin-paged.png", "controller-latin-paged.png"):
             assert (image.width(), image.height()) == (380, 640), snapshot.name
+
+
+@pytest.mark.e2e
+def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, tmp_path):
+    from PySide6.QtCore import QPoint, QRect
+
+    from pogled_assist.ui import quick_action_zoom as zoom_module
+    from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
+    from pogled_assist.ui.quick_action_menu import QuickActionRadialMenu
+    from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
+    from scripts.ui.capture_pointer_overlays import MARKER_SCENE_SIZE, PreviewDesktop
+
+    snapshots = {
+        path.stem: QImage(str(path))
+        for path in capture_ui(tmp_path, profile="full", groups=("tracking",))
+    }
+    overlays = {"quick-actions-menu", "precision-zoom", "gaze-marker"}
+    assert overlays <= snapshots.keys()
+    assert not overlays & CORE_NAMES  # Review states only; CI keeps rendering the core set.
+    desktop = PreviewDesktop((1280, 720))
+    desktop.show()
+    qapp.processEvents()
+    target = desktop.target()
+    document = desktop.findChild(QWidget, "previewDocument").geometry()
+    desktop.close()
+
+    # Quick actions opens around the gaze target: left click on top, right click on the
+    # right, double click below and cancel on the left, as the user guide lists them.
+    menu = snapshots["quick-actions-menu"]
+    reach = QuickActionRadialMenu.MENU_RADIUS - 12
+    top, right, bottom, left = (
+        menu.pixelColor(target + offset)
+        for offset in (QPoint(0, -reach), QPoint(reach, 0), QPoint(0, reach), QPoint(-reach, 0))
+    )
+    assert top.green() > max(top.red(), top.blue())  # Teal
+    assert right.blue() > max(right.red(), right.green())  # Blue
+    assert bottom.red() > bottom.green() and bottom.blue() > bottom.green()  # Purple
+    assert left.red() > max(left.green(), left.blue())  # Red
+    # Only the looked-at left-click sector shows progress, starting at twelve o'clock.
+    icon_offset = round(QuickActionRadialMenu.MENU_RADIUS * 0.58)
+    progress_radius = 38 // 2 + 8
+    assert _is_white(menu.pixelColor(target + QPoint(0, -icon_offset - progress_radius)))
+    assert not _is_white(menu.pixelColor(target + QPoint(icon_offset, -progress_radius)))
+    # The hotbar's shared selection ring also fills around the looked-at icon.
+    icon = target + QPoint(0, -icon_offset)
+    assert any(_is_shared_ring(menu.pixelColor(icon + QPoint(r, 0))) for r in range(24, 37))
+
+    # Precision zoom magnifies the area around the target three times over a dimmed desktop.
+    zoom = snapshots["precision-zoom"]
+    screen = QRect(0, 0, 1280, 720)
+    source = zoom_module._square_around(target, QuickActionZoomWindow.SOURCE_SIZE, screen)
+    display = zoom_module._centered_square(screen, QuickActionZoomWindow.DISPLAY_SIZE)
+    scale = display.width() / source.width()
+    crosshair = display.center()
+    assert any(_is_shared_ring(zoom.pixelColor(crosshair + QPoint(r, 0))) for r in range(24, 37))
+
+    def magnified(point):
+        return display.topLeft() + (point - source.topLeft()) * scale
+
+    inside = QPoint(document.right() - 40, document.bottom() - 60)
+    outside = QPoint(document.right() + 30, document.bottom() + 30)
+    assert source.contains(inside) and source.contains(outside)
+    assert zoom.pixelColor(magnified(inside)).lightness() > 220  # Undimmed document
+    assert zoom.pixelColor(magnified(outside)).lightness() < 60  # Desktop beside it
+    edge = magnified(QPoint(document.right(), target.y() - 50))
+    assert zoom.pixelColor(edge - QPoint(6, 0)).lightness() > 220  # Edge drawn 3x larger
+    assert zoom.pixelColor(edge + QPoint(6, 0)).lightness() < 60
+    beside_square = QPoint(display.left() - 20, document.top() + 120)
+    assert document.contains(beside_square)
+    assert 90 < zoom.pixelColor(beside_square).lightness() < 180  # Dimmed document
+
+    # The 46-pixel marker keeps a clear centre over light text and the dark desktop.
+    small = PreviewDesktop(MARKER_SCENE_SIZE)
+    marker = snapshots["gaze-marker"]
+    center = small.document_edge()
+    small.close()
+    assert _is_white(marker.pixelColor(center))
+    assert marker.pixelColor(center + QPoint(12, 0)).lightness() > 220
+    assert marker.pixelColor(center - QPoint(12, 0)).lightness() < 60
+    ring = marker.pixelColor(center - QPoint(0, 20))
+    assert ring.blue() > ring.red() + 40  # Light-blue ring
+    assert center.x() >= GazeBubbleWindow.BUBBLE_SIZE // 2  # The whole marker is in the image.
+
+
+def _is_white(color) -> bool:
+    return min(color.red(), color.green(), color.blue()) > 215
+
+
+def _is_shared_ring(color) -> bool:
+    """Match the filled arc of the shared selection ring (#84c5d9)."""
+
+    return abs(color.red() - 0x84) + abs(color.green() - 0xC5) + abs(color.blue() - 0xD9) < 24
 
 
 def test_gallery_profiles_filter_before_grabbing_widgets(qapp, tmp_path, monkeypatch):

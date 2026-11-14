@@ -55,7 +55,7 @@ On macOS, use `python3 -m http.server 8000 --bind 127.0.0.1 --directory docs/des
 | Gaze check | [gaze-check.html](design/gaze-check.html) | `docs/design/assets/gaze-check.css`, `docs/design/assets/gaze-check.js` |
 | Diagnostic recording and support export | [diagnostics.html](design/diagnostics.html) | `docs/design/assets/diagnostics.css`, `docs/design/assets/diagnostics.js` |
 | Tracking notifications | [tracking.html](design/tracking.html) | `docs/design/assets/tracking.css`, `docs/design/assets/tracking.js` |
-| Hotbar and gaze bubble | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
+| Hotbar, gaze bubble, Quick actions and precision zoom | [hotbar.html](design/hotbar.html) | `docs/design/assets/hotbar.css`, `docs/design/assets/hotbar.js` |
 | Selection progress overlay | [selection-progress.html](design/selection-progress.html) | `docs/design/assets/selection-progress.css`, `docs/design/assets/selection-progress.js` |
 | Standalone keyboard | [keyboard.html](design/keyboard.html) | `docs/design/assets/keyboard.css`, `docs/design/assets/keyboard.js` |
 | Controller keyboard | [controller-keyboard.html](design/controller-keyboard.html) | The same keyboard assets |
@@ -76,7 +76,7 @@ Use this review matrix alongside those notes:
 | Diagnostics | Underlined navigation tabs remain distinct from start/stop/export actions and support keyboard navigation. Recording states preserve action geometry. Privacy and incomplete-recording warnings remain visible. Check narrow HTML overflow as well. |
 | Keyboard and Controller | At a 380-pixel sidebar width, tab words stay intact. Recording uses a fixed bottom status slot without moving keys. |
 
-Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` checks painted bounds across the application, including the Settings gaze path; it does not establish native overlay stacking or Tobii behavior.
+Selection rings use at most 64 logical pixels and shrink to the smaller control dimension minus 16 pixels. Keep at least 8 pixels clear of each control edge, including short Settings tabs and narrow sidebar controls. The pause mark stays inside the ring. `tests/ui/test_selection_feedback_e2e.py` sends synthetic gaze through the hotbar to every selectable control in Speech, Settings, Keyboard, Controller and the hotbar, then checks the painted active and paused ring bounds; it does not establish native overlay stacking or Tobii behavior.
 
 The gaze-position marker uses a 46-logical-pixel window with one light-blue ring, a transparent interior and a small white center dot. Dark outlines retain contrast on light backgrounds; the selection ring remains separate. Latin Speech entries align left and Arabic entries align right, including the shared library editor.
 
@@ -116,7 +116,7 @@ The default `core` profile renders:
 | Gaze check and diagnostics (`gaze-check`) | 18 | Position and its information disclosure, fixation, detailed precision, saved trial attempts, context, interrupted result, history, save failure, word test before and after the first letter, held word test, wrong-letter feedback, free view, live per-eye panel with one tracked eye, and diagnostic recording ready/active/history |
 | Voice and account (`voice`) | 10 | Connection-check information disclosure, Preparing speech, Standardni fallback, cached/partial playback, connected account, key replacement, long permission error, critical credits and saved audio |
 
-The other 80 screenshots remain available through the `full` profile, including a persistence warning during an active diagnostic recording. Use extended groups when reviewing their layout or copy:
+The other 83 screenshots remain available through the `full` profile, including a persistence warning during an active diagnostic recording. Use extended groups when reviewing their layout or copy:
 
 ```powershell
 .\dev.ps1 ui -UiProfile full -Open
@@ -127,13 +127,14 @@ The other 80 screenshots remain available through the `full` profile, including 
 `-UiGroup` accepts one or more keys from the table and filters the chosen profile. The equivalent diagnostic CLI is `.\.venv\Scripts\python.exe -m scripts.ui.capture_ui --profile full --group voice`; repeat `--group` for multiple groups. Each successful capture replaces the local gallery and removes only known PNGs omitted by that selection, so a previous full run does not leave extra screenshots in a later core gallery. Unrelated files are preserved. CI renders only the core profile; it does not render the full set and then hide images. The existing functional tests still exercise the alternative states. Before release or after changes to an extended state, generate and review the affected full group.
 
 <details>
-<summary>Full profile: all 156 states</summary>
+<summary>Full profile: all 159 states</summary>
 
 
 - Hotbar, including one-eye pause, waiting for fresh data, disconnected-device, mouse-simulation (normal, eye loss, paused gaze and disconnected), unsaved-settings states, experimental one-eye readiness and missing gaze, and a held selection
 - Application, Support, gaze, speech, and learned-word Settings surfaces, including all three eye policies, the pointer/check tab, edge-stability settings with retention enabled and disabled, save failure and four version states: older selection, package preparation, unsaved-input warning, and failed release check
 - Diagnostic recording: ready, recording, finishing, saved history with optional report, incomplete with omitted events, write failure, active persistence warning and export failure; passive badges in the hotbar, Settings, Speech during group and inline letter selection, Keyboard, Controller, gaze-check header and free view. Speech also previews finishing, saved, incomplete and error indicator states.
 - Speech selection progress: calm active ring, frozen ring with pause mark, and an empty paused ring retaining only the completed initial pause
+- Pointer overlays on a sample application window: Quick actions with left click partly selected, precision zoom choosing the exact point, and the gaze marker over light text and the dark desktop
 - Speech Settings during preparation/playback, Efendija Settings, ElevenLabs setup (connected, replacing key, Nema glasova, missing key, invalid key, missing permission, credential save failure, quota, low/critical credits and preparation/playback), and saved-audio controls
 - Gaze check: unavailable data, unsupported positions, disconnected device, live position, eye positions without valid gaze, too-close/too-far/outside-frame guidance without valid gaze, eye loss, fixation target with and without gaze, incomplete results, optional measurements, measured misses, passed targets, the word test before and after the first letter, cancelled selection and wrong-letter feedback, word results needing adjustment, a word test without gaze data, completed check with per-test eye tracking, free check with and without live gaze, experimental one-eye free view, held word test, the live per-eye panel beside positioning with one tracked eye and with left/right agreement, saved trial attempts, settings/device context, save pending/failure, logging off, export failure, interrupted precision, history, read-only archived result, empty history and history read error
 - Speech all-letter and letter-group keyboards, `speech-preparing`, `speech-speaking`, categories, answers, saved phrases, the shared editor with all letters and with a twelve-letter group, and library read failure
