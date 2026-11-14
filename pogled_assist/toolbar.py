@@ -44,7 +44,7 @@ from .ui.diagnostic_recordings import DiagnosticRecordings
 from .ui.diagnostics_window import DiagnosticsWindow
 from .ui.gaze_bubble import GazeBubbleWindow
 from .ui.gaze_check_reports import GazeCheckReports
-from .ui.gaze_check_window import GazeCheckWindow
+from .ui.gaze_check_window import GazeCheckServices, GazeCheckWindow
 from .ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from .ui.hotbar_controls import HotbarControls, no_focus_tool_window_flags
 from .ui.interaction_overlay import InteractionOverlayWindow
@@ -868,8 +868,10 @@ class HotbarWindow(HotbarSpeech, QWidget):
             self._mouse.settings,
             self,
             simulated=self._simulate_gaze,
-            reports=self._gaze_check_reports,
-            environment=lambda: self._gaze.check_environment(),
+            services=GazeCheckServices(
+                reports=self._gaze_check_reports,
+                environment=lambda: self._gaze.check_environment(),
+            ),
         )
         self._gaze_check_window = window
         self._recording_changed()

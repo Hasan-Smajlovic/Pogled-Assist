@@ -294,7 +294,7 @@ class SettingsWindow(QWidget):
         self._install_shortcuts()
         self._refresh_values()
         self._eleven_account.changed.connect(self._account_changed)
-        self._general_page._update_row.start()
+        self._general_page.start_updates()
         self._sync_startup_setting_from_windows()
         logger.info("Settings window initialized.")
 
@@ -352,11 +352,11 @@ class SettingsWindow(QWidget):
         self._refresh_values()
 
     def show_update_error(self, message: str) -> None:
-        self._general_page._update_row.show_error(message)
+        self._general_page.show_update_error(message)
 
     def confirm_update_restart(self) -> None:
         self._select_tab(0)
-        self._general_page._update_row.confirm_restart()
+        self._general_page.confirm_update_restart()
 
     def _build_ui(self) -> None:
         apply_theme(self, SETTINGS_STYLESHEET)
@@ -372,13 +372,14 @@ class SettingsWindow(QWidget):
         body.addWidget(self._build_nav_panel(), 0)
 
         self._stack = SettingsContent(self)
-        self._general_page = GeneralSettingsPage(self)
+        self._general_page = GeneralSettingsPage(self._controls, self._update_manager, self)
         self._stack.addWidget(self._general_page)
-        self._gaze_page = GazeSettingsPage(self)
+        self._gaze_page = GazeSettingsPage(self._controls, self)
         self._stack.addWidget(self._gaze_page)
-        self._speech_page = SpeechSettingsPage(self)
+        self._speech_page = SpeechSettingsPage(self._controls, self)
         self._stack.addWidget(self._speech_page)
-        self._support_page = SupportSettingsPage(self)
+        self._support_page = SupportSettingsPage(self._controls, self)
+        self._connect_pages()
         self._stack.addWidget(self._support_page)
         self._learning_page = LearnedWordsPage(self._controls, self._suggestions, self)
         self._learning_page.back_requested.connect(lambda: self._select_tab(2))
@@ -409,6 +410,47 @@ class SettingsWindow(QWidget):
         body.addWidget(self._scroll, 1)
 
         self._select_tab(0)
+
+    def _connect_pages(self) -> None:
+        self._gaze_page.select_eye_tracking_policy.connect(self._select_eye_tracking_policy)
+        self._gaze_page.adjust_eye_tracking_hold.connect(self._adjust_eye_tracking_hold)
+        self._gaze_page.adjust_selection_pause.connect(self._adjust_selection_pause)
+        self._gaze_page.adjust_dwell_ms.connect(self._adjust_dwell_ms)
+        self._gaze_page.adjust_click_cooldown.connect(self._adjust_click_cooldown)
+        self._gaze_page.toggle_tracking_notifications.connect(self._toggle_tracking_notifications)
+        self._gaze_page.toggle_interaction_overlay.connect(self._toggle_interaction_overlay)
+        self._gaze_page.adjust_dwell_radius.connect(self._adjust_dwell_radius)
+        self._gaze_page.adjust_smoothing.connect(self._adjust_smoothing)
+        self._gaze_page.adjust_edge_hold.connect(self._adjust_edge_hold)
+        self._gaze_page.toggle_move_pointer.connect(self._toggle_move_pointer)
+        self._gaze_page.toggle_gaze_bubble.connect(self._toggle_gaze_bubble)
+        self._gaze_page.toggle_precision_zoom.connect(self._toggle_precision_zoom)
+        self._gaze_page.request_calibration.connect(self._request_calibration)
+        self._gaze_page.request_gaze_check.connect(self._request_gaze_check)
+        self._speech_page.script_combo_changed.connect(self._script_combo_changed)
+        self._speech_page.adjust_speech_speed.connect(self._adjust_speech_speed)
+        self._speech_page.letter_layout_combo_changed.connect(self._letter_layout_combo_changed)
+        self._speech_page.adjust_letters_per_group.connect(self._adjust_letters_per_group)
+        self._speech_page.set_voice_preset.connect(self._set_voice_preset)
+        self._speech_page.open_eleven.connect(self._open_eleven)
+        self._speech_page.request_speech_test.connect(self._request_speech_test)
+        self._speech_page.open_learning.connect(self._open_learning)
+        self._speech_page.open_audio.connect(self._open_audio)
+        self._speech_page.speech_stop_requested.connect(self.speech_stop_requested.emit)
+        self._general_page.request_quit.connect(self._request_quit)
+        self._general_page.toggle_start_with_windows.connect(self._toggle_start_with_windows)
+        self._general_page.toggle_show_launcher_window.connect(self._toggle_show_launcher_window)
+        self._general_page.selection_sound_combo_changed.connect(
+            self._selection_sound_combo_changed
+        )
+        self._general_page.status_changed.connect(self._set_status)
+        self._general_page.update_requested.connect(self.update_requested.emit)
+        self._general_page.restart_confirmed.connect(self.restart_confirmed.emit)
+        self._general_page.install_cancelled.connect(self.install_cancelled.emit)
+        self._support_page.toggle_logging_enabled.connect(self._toggle_logging_enabled)
+        self._support_page.adjust_log_storage.connect(self._adjust_log_storage)
+        self._support_page.diagnostics_requested.connect(self.diagnostics_requested.emit)
+        self._support_page.request_gaze_check.connect(self._request_gaze_check)
 
     def _build_top_bar(self) -> QFrame:
         header = QFrame(self)
@@ -629,14 +671,9 @@ class SettingsWindow(QWidget):
         self._gaze_settings = replace(self._gaze_settings, log_storage_gb=value)
         self._emit_gaze_settings("Prostor za logove je ažuriran.")
 
-    def _select_eye_tracking_policy(self, index: int) -> None:
-        policy = self._gaze_page._policy_combo.itemData(index)
+    def _select_eye_tracking_policy(self, policy: str) -> None:
         self._gaze_settings = replace(self._gaze_settings, eye_tracking_policy=policy)
         self._emit_gaze_settings("Režim praćenja očiju je ažuriran.")
-
-    def _cycle_eye_tracking_policy(self) -> None:
-        combo = self._gaze_page._policy_combo
-        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
 
     def _adjust_eye_tracking_hold(self, delta: int) -> None:
         value = clamp(self._gaze_settings.eye_tracking_hold_ms + delta, EYE_TRACKING_HOLD_MS_RANGE)
@@ -697,14 +734,13 @@ class SettingsWindow(QWidget):
         if self._speech_settings.keyboard_script == ARABIC_SCRIPT:
             return
         if value == self._speech_settings.voice_preset:
-            self._speech_page._voice_buttons[value].setChecked(True)
+            self._speech_page.check_voice(value)
             return
         self.cancel_gaze_interaction(require_leave=True)
         self._speech_settings = replace(self._speech_settings, voice_preset=value)
         self._emit_speech_settings("Glas je ažuriran.")
 
-    def _script_combo_changed(self, index: int) -> None:
-        script = self._speech_page._script_combo.itemData(index)
+    def _script_combo_changed(self, script: str) -> None:
         if script not in dict(KEYBOARD_SCRIPTS):
             script = LATIN_SCRIPT
         if script == self._speech_settings.keyboard_script:
@@ -713,8 +749,7 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, keyboard_script=script)
         self._emit_speech_settings("Pismo tastature je ažurirano.")
 
-    def _letter_layout_combo_changed(self, index: int) -> None:
-        layout = self._speech_page._letter_layout_combo.itemData(index)
+    def _letter_layout_combo_changed(self, layout: str) -> None:
         if layout not in dict(LETTER_LAYOUTS):
             layout = ALL_LETTERS_LAYOUT
         if layout == self._speech_settings.letter_layout:
@@ -723,12 +758,7 @@ class SettingsWindow(QWidget):
         self._speech_settings = replace(self._speech_settings, letter_layout=layout)
         self._emit_speech_settings("Raspored slova u Govoru je ažuriran.")
 
-    def _cycle_letter_layout(self) -> None:
-        combo = self._speech_page._letter_layout_combo
-        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
-
-    def _selection_sound_combo_changed(self, index: int) -> None:
-        level = self._general_page._selection_sound_combo.itemData(index)
+    def _selection_sound_combo_changed(self, level: str) -> None:
         if level not in dict(SELECTION_SOUND_LEVELS):
             level = SELECTION_SOUND_QUIET
         if level == self._speech_settings.selection_sound:
@@ -738,16 +768,6 @@ class SettingsWindow(QWidget):
         self._emit_speech_settings("Zvuk pri odabiru je ažuriran.")
         # Let the user hear the chosen level; Isključen stays silent.
         self._selection_sound.play(level)
-
-    def _cycle_selection_sound(self) -> None:
-        combo = self._general_page._selection_sound_combo
-        combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
-
-    def _cycle_keyboard_script(self) -> None:
-        self._speech_page._script_combo.setCurrentIndex(
-            (self._speech_page._script_combo.currentIndex() + 1)
-            % self._speech_page._script_combo.count()
-        )
 
     def _emit_gaze_settings(self, status: str) -> None:
         self._eye_gate.configure(
@@ -951,8 +971,7 @@ class SettingsWindow(QWidget):
 
     def _dynamic_control_state(self):
         controls = (
-            self._speech_page._test_speech_button,
-            self._speech_page._stop_speech_button,
+            *self._speech_page.playback_controls(),
             self._eleven_page.test_button,
             self._eleven_page.stop_button,
             self._eleven_page.check_button,

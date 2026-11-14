@@ -25,9 +25,8 @@ from PySide6.QtWidgets import (
 
 from ..diagnostic_recording import DURATIONS
 from ..interaction.eye_tracking_policy import EYE_TRACKING_POLICY_CHOICES
+from .check_surface import CHECK_SURFACE_STYLE, scroll_content
 from .diagnostic_status import storage_text
-from .gaze_check_history import scroll_content
-from .gaze_check_window import STYLESHEET
 from .recording_badge import RecordingBadge
 
 REASONS = {
@@ -64,10 +63,11 @@ class DiagnosticsWindow(QWidget):
         self._selected = None
         self._export_id = None
         self.setWindowTitle("Dijagnostičko snimanje")
-        self.setObjectName("gazeCheck")
+        self.setObjectName("diagnostics")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
         self.setStyleSheet(
-            STYLESHEET + "QListWidget { background: #283442; color: #edf2f7; font-size: 16px; }"
+            CHECK_SURFACE_STYLE
+            + "QListWidget { background: #283442; color: #edf2f7; font-size: 16px; }"
             "QListWidget::item { padding: 12px; min-height: 68px; }"
             "QListWidget::item:selected { background: #2e6478; }"
             "QTabBar::tab { min-height: 50px; min-width: 260px; padding: 0 20px; font-size: 18px; }"

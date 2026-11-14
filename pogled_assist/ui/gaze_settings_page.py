@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -17,14 +17,36 @@ from ..interaction.eye_tracking_policy import (
 )
 from ..settings_limits import EDGE_HOLD_MS_STEP
 from .settings_content import SettingsContent
-from .settings_controls import action_grid, content_layout, guidance_note, setting_row, styled_label
+from .settings_controls import (
+    action_grid,
+    content_layout,
+    cycle_choice,
+    guidance_note,
+    setting_row,
+    styled_label,
+)
 
 
 class GazeSettingsPage(QFrame):
-    def __init__(self, owner):
-        super().__init__(owner)
-        self._owner = owner
-        self._controls = owner._controls
+    select_eye_tracking_policy = Signal(str)
+    adjust_eye_tracking_hold = Signal(int)
+    adjust_selection_pause = Signal(int)
+    adjust_dwell_ms = Signal(int)
+    adjust_click_cooldown = Signal(int)
+    toggle_tracking_notifications = Signal()
+    toggle_interaction_overlay = Signal()
+    adjust_dwell_radius = Signal(int)
+    adjust_smoothing = Signal(float)
+    adjust_edge_hold = Signal(int)
+    toggle_move_pointer = Signal()
+    toggle_gaze_bubble = Signal()
+    toggle_precision_zoom = Signal()
+    request_calibration = Signal()
+    request_gaze_check = Signal()
+
+    def __init__(self, controls, parent=None):
+        super().__init__(parent)
+        self._controls = controls
         self._build()
 
     def _build(self):
@@ -70,8 +92,8 @@ class GazeSettingsPage(QFrame):
         row, grid, self._policy_hint = setting_row(self, "Režim praćenja očiju", " ")
         self._policy_combo = self._controls.choice(
             EYE_TRACKING_POLICY_CHOICES,
-            self._owner._select_eye_tracking_policy,
-            self._owner._cycle_eye_tracking_policy,
+            lambda index: self.select_eye_tracking_policy.emit(self._policy_combo.itemData(index)),
+            lambda: cycle_choice(self._policy_combo),
             "Režim praćenja očiju",
         )
         self._policy_combo.setFixedWidth(380)
@@ -80,7 +102,7 @@ class GazeSettingsPage(QFrame):
         self._hold_row, self._hold_value = self._controls.adjust_row(
             "Trajanje kratkog prekida",
             "Čuvanje cijelog napretka pri gubitku jednog oka: 50 do 500 ms.",
-            self._owner._adjust_eye_tracking_hold,
+            self.adjust_eye_tracking_hold.emit,
             50,
         )
         selection.addWidget(self._hold_row)
@@ -88,21 +110,21 @@ class GazeSettingsPage(QFrame):
         row, self._selection_pause_value = self._controls.adjust_row(
             "Pauza prije odabira",
             "Vrijeme čekanja prije nego što se krug napretka počne puniti.",
-            self._owner._adjust_selection_pause,
+            self.adjust_selection_pause.emit,
             50,
         )
         selection.addWidget(row)
         row, self._dwell_value = self._controls.adjust_row(
             "Vrijeme zadržavanja pogleda",
             "Vrijeme punjenja kruga napretka nakon početne pauze.",
-            self._owner._adjust_dwell_ms,
+            self.adjust_dwell_ms.emit,
             50,
         )
         selection.addWidget(row)
         row, self._cooldown_value = self._controls.adjust_row(
             "Pauza između radnji",
             "Vrijeme čekanja nakon jedne radnje prije pokretanja sljedeće.",
-            self._owner._adjust_click_cooldown,
+            self.adjust_click_cooldown.emit,
             50,
         )
         selection.addWidget(row)
@@ -117,12 +139,12 @@ class GazeSettingsPage(QFrame):
         feedback.setSpacing(12)
         self._tracking_notifications_checkbox = self._controls.checkbox(
             "Obavijesti o praćenju pogleda",
-            self._owner._toggle_tracking_notifications,
+            self.toggle_tracking_notifications.emit,
             QSize(300, 58),
         )
         self._interaction_overlay_button = self._controls.checkbox(
             "Prikaži napredak radnje",
-            self._owner._toggle_interaction_overlay,
+            self.toggle_interaction_overlay.emit,
             QSize(210, 58),
         )
         feedback.addWidget(self._tracking_notifications_checkbox)
@@ -145,14 +167,14 @@ class GazeSettingsPage(QFrame):
         row, self._radius_value = self._controls.adjust_row(
             "Radijus stabilnog pogleda",
             "Koliko mirno pogled mora ostati prije pokretanja odabrane radnje.",
-            self._owner._adjust_dwell_radius,
+            self.adjust_dwell_radius.emit,
             2,
         )
         pointer.addWidget(row)
         row, self._smoothing_value = self._controls.adjust_row(
             "Uglađivanje pokazivača",
             "Niže vrijednosti su mirnije, a više brže prate pogled.",
-            self._owner._adjust_smoothing,
+            self.adjust_smoothing.emit,
             0.05,
         )
         pointer.addWidget(row)
@@ -177,7 +199,7 @@ class GazeSettingsPage(QFrame):
         row, self._edge_hold_value = self._controls.adjust_row(
             "Čuvanje odabira uz rub",
             "Govor, Tastatura i gornja traka. 0 isključuje čuvanje.",
-            self._owner._adjust_edge_hold,
+            self.adjust_edge_hold.emit,
             EDGE_HOLD_MS_STEP,
         )
         stability.addWidget(row)
@@ -199,7 +221,7 @@ class GazeSettingsPage(QFrame):
         self.show_tab(0)
 
     def show_tab(self, index: int) -> None:
-        self._owner.cancel_gaze_interaction(require_leave=True)
+        self._controls.interrupt_gaze()
         self._stack.setCurrentIndex(index)
         for tab_index, button in enumerate(self._tabs):
             button.setChecked(tab_index == index)
@@ -207,27 +229,27 @@ class GazeSettingsPage(QFrame):
     def _build_gaze_actions(self) -> QGridLayout:
         self._move_pointer_button = self._controls.toggle_button(
             "Pomjeraj pokazivač pogledom",
-            self._owner._toggle_move_pointer,
+            self.toggle_move_pointer.emit,
             QSize(220, 58),
             "fa5s.mouse-pointer",
         )
         self._gaze_bubble_button = self._controls.toggle_button(
             "Prikaži oznaku pogleda",
-            self._owner._toggle_gaze_bubble,
+            self.toggle_gaze_bubble.emit,
             QSize(210, 58),
             "fa5s.bullseye",
         )
         self._precision_zoom_checkbox = self._controls.checkbox(
-            "Koristi precizno uvećanje", self._owner._toggle_precision_zoom, QSize(220, 58)
+            "Koristi precizno uvećanje", self.toggle_precision_zoom.emit, QSize(220, 58)
         )
         self._calibration_button = self._controls.button(
             "Pokreni Tobii kalibraciju",
-            self._owner._request_calibration,
+            self.request_calibration.emit,
             QSize(220, 58),
             "fa5s.crosshairs",
         )
         self._gaze_check_button = self._controls.button(
-            "Provjera pogleda", self._owner._request_gaze_check, QSize(220, 58), "fa5s.eye"
+            "Provjera pogleda", self.request_gaze_check.emit, QSize(220, 58), "fa5s.eye"
         )
         return action_grid(
             (

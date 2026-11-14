@@ -27,7 +27,7 @@ Coverage merge tests collect each distinct input once and copy shards when only 
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py`, `tests/gaze/test_gaze_provider_recovery.py` and `tests/gaze/test_gaze_connection_lifecycle.py` (Qt responsiveness, pending startup/cleanup and child-process disposal) |
 | Eye policy, interruption deadlines and the independent desktop gate | `tests/gaze/test_eye_tracking_policy.py` and `tests/ui/test_eye_tracking_policy_e2e.py` |
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
-| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
+| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py`, `tests/gaze/test_gaze_check_session.py` (attempt identity, context and report construction), and `tests/ui/test_gaze_check_e2e.py` |
 | Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
 | Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py`, `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
 | Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
@@ -41,7 +41,7 @@ Coverage merge tests collect each distinct input once and copy shards when only 
 | ElevenLabs account, requests and cancellation | `tests/speech/test_eleven_account.py`, `tests/speech/test_elevenlabs.py` and `tests/speech/test_elevenlabs_cancellation.py` |
 | Efendija routing, cache and playback | `tests/speech/test_voice_router.py`, `tests/speech/test_audio_cache.py`, `tests/speech/test_audio_playback.py`, `tests/speech/test_efendija_service.py` and `tests/ui/test_elevenlabs_e2e.py` |
 | Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |
-| Selection rings and pointer overlays | `tests/ui/test_selection_feedback_e2e.py` (`hotbar_gaze`), `tests/ui/test_overlay_widgets.py` and the full-gallery overlay check in `tests/ui/test_ui_rendering.py` |
+| Selection rings and pointer overlays | `tests/ui/test_selection_feedback_e2e.py` (`hotbar_gaze`), `tests/ui/test_overlay_widgets.py`, `tests/ui/test_overlay_window.py` (shared stacking and fake native click-through styles), and the full-gallery overlay check in `tests/ui/test_ui_rendering.py` |
 | Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py`, `tests/ui/test_speech_alphabet_e2e.py` and `tests/ui/test_speech_predictions.py` |
 | Learning checkpoints and ranking selection rules | `tests/suggestions/test_speech_evaluation.py` |
 
@@ -55,6 +55,8 @@ Coverage merge tests collect each distinct input once and copy shards when only 
 | Hotbar fixtures | `tests/ui/_hotbar_fixtures.py` |
 | Speech fixtures | `tests/ui/_speech_fixtures.py` |
 | Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) and `scripts/ui/capture_pointer_overlays.py` (`PreviewDesktop`) |
+
+`tests/ui/test_settings_pages.py` exercises standalone Settings pages against a plain parent and shared controls, including mouse and gaze signals carrying choice values. Window workflow tests retain validation, interruption and persistence checks.
 
 Import fixtures from helper modules, not other test modules, so changed-path selection can identify consumers. Qt cleanup closes top-level widgets and delivers deferred deletion before the next test. Wait for actual geometry, visibility, state or signals through the event loop; sleeps or layout requests alone can miss pending child visibility and polish.
 

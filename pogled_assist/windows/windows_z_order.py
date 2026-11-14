@@ -15,6 +15,8 @@ GWLP_HWNDPARENT = -8
 WS_EX_TOPMOST = 0x00000008
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
+WS_EX_LAYERED = 0x00080000
+WS_EX_TRANSPARENT = 0x00000020
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
@@ -24,6 +26,26 @@ SWP_NOOWNERZORDER = 0x0200
 SWP_ASYNCWINDOWPOS = 0x4000
 
 _user32 = None
+
+
+def make_window_click_through(window: object) -> bool:
+    """Apply input transparency to a native overlay; false allows a later retry."""
+    if sys.platform != "win32":
+        return False
+    hwnd_value = _window_handle(window)
+    if hwnd_value is None:
+        return False
+    try:
+        user32 = _load_user32()
+        get_style, set_style, long_ptr = _window_long_functions(user32)
+        hwnd = wintypes.HWND(hwnd_value)
+        style = int(get_style(hwnd, GWL_EXSTYLE))
+        style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+        set_style(hwnd, GWL_EXSTYLE, long_ptr(style))
+        return True
+    except Exception:
+        logger.exception("Could not apply Windows click-through style to overlay.")
+        return False
 
 
 def force_window_topmost(

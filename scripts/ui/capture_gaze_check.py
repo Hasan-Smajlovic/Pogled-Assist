@@ -197,7 +197,7 @@ class CaptureGazeCheck:
         for _ in range(len(TRIAL_WORD) - 2):
             window._finish_trial_target(True, time.monotonic())
         window._finish_trial_target(False, time.monotonic())
-        for row in window._report.trials[-1].rows:
+        for row in window._session.report.trials[-1].rows:
             row.state, row.coverage = "measured", 0.9
         window._render_report()
         self.capture(
@@ -205,11 +205,11 @@ class CaptureGazeCheck:
         )
         window._trial_results = [True] * len(TRIAL_WORD)
         window._trial_losses = window._trial_wrong_selections = 0
-        for row in window._report.trials[-1].rows:
+        for row in window._session.report.trials[-1].rows:
             row.selected = True
             row.wrong_selections = row.cancelled_selections = 0
-        window._report.precision_eyes = EyeTrackingSummary(15.2, 0.98, 0.97, 0.96, 2, 0.4)
-        window._report.trials[-1].eyes = EyeTrackingSummary(11.8, 0.99, 0.98, 0.98, 1, 0.2)
+        window._session.report.precision_eyes = EyeTrackingSummary(15.2, 0.98, 0.97, 0.96, 2, 0.4)
+        window._session.report.trials[-1].eyes = EyeTrackingSummary(11.8, 0.99, 0.98, 0.98, 1, 0.2)
         window._render_report()
         self.capture(
             window, "gaze-check-results-complete", "Gaze check: targets and trial passed", size=size
@@ -309,7 +309,7 @@ class CaptureGazeCheck:
         )
 
     def _capture_reports(self, window, size):
-        window._view_report = window._report
+        window._view_report = window._session.report
         window._render_report()
         window._result_tabs.setCurrentIndex(1)
         self.capture(
@@ -320,15 +320,15 @@ class CaptureGazeCheck:
             window, "gaze-check-report-context", "Gaze check: settings and environment", size=size
         )
         window._result_tabs.setCurrentIndex(0)
-        window._reports.states[window._report.id] = "error"
+        window._reports.states[window._session.report.id] = "error"
         window._render_storage()
         self.capture(
             window, "gaze-check-save-error", "Gaze check: save failed, export available", size=size
         )
-        window._reports.states[window._report.id] = "saving"
+        window._reports.states[window._session.report.id] = "saving"
         window._render_storage()
         self.capture(window, "gaze-check-saving", "Gaze check: saving in background", size=size)
-        window._reports.states[window._report.id] = "memory"
+        window._reports.states[window._session.report.id] = "memory"
         window._render_storage()
         self.capture(window, "gaze-check-logging-off", "Gaze check: session-only result", size=size)
         window._export_token = "synthetic-export"
