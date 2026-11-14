@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 DOC_TEST = "tests/tooling/test_repository_docs.py"
+TYPE_BASELINE = ".basedpyright/baseline.json"
 # Keep consumers of each boundary in the map, not just its unit tests.
 RULES = (
     (
@@ -151,6 +152,8 @@ def select_tests(root: Path, paths: list[str], git_error: str | None = None) -> 
         ):
             reason = "shared configuration, dependency, check or bundled data: full suite"
             full_suite = True
+        elif path == TYPE_BASELINE:
+            reason = "type baseline: verified by the static checks, not by tests"
         elif path.startswith("tests/"):
             if path in all_tests:
                 patterns = (path,)

@@ -1,0 +1,30 @@
+# Paths whose final diff a human must read before merge. AGENTS.md owns the list under
+# "Never merges without a human"; tests/tooling/test_repository_docs.py keeps both in step.
+
+/.github/workflows/ @Hasan-Smajlovic @TajibSmajlovic
+/packaging/windows/ @Hasan-Smajlovic @TajibSmajlovic
+/scripts/release/build_windows_package.ps1 @Hasan-Smajlovic @TajibSmajlovic
+/scripts/release/publish_github_release.ps1 @Hasan-Smajlovic @TajibSmajlovic
+/VERSION @Hasan-Smajlovic @TajibSmajlovic
+
+/update_windows.ps1 @Hasan-Smajlovic @TajibSmajlovic
+/setup_windows.ps1 @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/release_update.py @Hasan-Smajlovic @TajibSmajlovic
+
+/pogled_assist/settings_store.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/speech/speech_library.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/suggestions/learning.py @Hasan-Smajlovic @TajibSmajlovic
+
+/pogled_assist/tracking/gaze_provider.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/interaction/mouse_controller.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/interaction/gaze_selection.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/windows/windows_input.py @Hasan-Smajlovic @TajibSmajlovic
+/pogled_assist/tracking/tobii_stream_engine*.py @Hasan-Smajlovic @TajibSmajlovic
+
+/language/ @Hasan-Smajlovic @TajibSmajlovic
+/tests/fixtures/speech_suggestions/ @Hasan-Smajlovic @TajibSmajlovic
+
+/pyproject.toml @Hasan-Smajlovic @TajibSmajlovic
+/.basedpyright/baseline.json @Hasan-Smajlovic @TajibSmajlovic
+/.github/zizmor.yml @Hasan-Smajlovic @TajibSmajlovic
+/.github/CODEOWNERS @Hasan-Smajlovic @TajibSmajlovic

@@ -17,6 +17,16 @@ A valid cache skips the download; an incomplete module is replaced only after a 
 
 The CI tool-cache key includes the installer scripts, so a committed installer change creates a different key. A successful cache restore does not prove the analyzer step passed. Likewise, a Ruff failure before tool setup leaves analyzer installation untested in that run. Follow a focused repair with the complete check from the development guide.
 
+## Static checks fail
+
+Read the stage named after `Failed static checks:`; every stage runs, so one run lists all of them. The [stage table and recorded exceptions](DEVELOPMENT.md#lint-and-formatting) explain what each stage accepts.
+
+- **A tool `is not installed`:** run `.\dev.ps1 setup`; the check tools are pinned in `requirements-dev.txt`.
+- **Types, with `baselined errors changed but the baseline file cannot be updated`:** the change fixed recorded errors. Run the static checks locally and commit the updated `.basedpyright/baseline.json`.
+- **Types, with new errors:** fix them. If the errors are in code the change did not touch, compare the installed package versions with `requirements-dev.txt`.
+- **Import contracts:** the output shows the import chain that crosses a layer. Move the dependency to the importing side's layer or below it.
+- **Workflow security:** follow the audit link printed with the finding. Pin a new action to a commit SHA with its version as a trailing comment.
+
 ## Bundled model metadata has an outdated source checksum
 
 If `tests/suggestions/test_suggestion_text.py` fails on `preparation_sha256` or `tokenizer_sha256`, compare the recorded hash in the corresponding model metadata with the source file. Refactoring or formatting changes the hash even when the intended model behavior is unchanged. A model copied from another checkout can also have metadata for different source files.
