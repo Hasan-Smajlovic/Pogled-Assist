@@ -106,6 +106,8 @@ QPushButton:hover { background: #334355; border-color: #84c5d9; }
 QPushButton:focus { border: 2px solid #84c5d9; }
 QFrame#checkResources, QFrame#checkDeviceActions { border: 0; border-right: 1px solid #394959; }
 QPushButton#checkPrimary { background: #2e6478; border-color: #84c5d9; }
+QPushButton:disabled, QPushButton#checkPrimary:disabled { background: #222b35;
+    border-color: #455363; color: #8595a6; }
 QProgressBar { background: #394959; border: none; border-radius: 3px; }
 QProgressBar::chunk { background: #84c5d9; border-radius: 3px; }
 QScrollArea, QScrollArea QWidget { background: #1d242d; border: none; }

@@ -87,7 +87,7 @@ Shared assets under `docs/design/assets/` have these owners:
 - `reference.js`: navigation and preview session state; `reference.css`: tokens and shared controls.
 - `eye-policy.js`: shared eye-policy choices and labels.
 - `diagnostic-preview.js`: synthetic recording states and badges; [Diagnostics](design/diagnostics.html) owns their placement. The preview records no real input and creates no files.
-- `keyboard-data.js`: keyboard data; `gaze-demo.js`: mouse gaze simulation. Tracking also reuses Speech layout styles.
+- `keyboard-data.js`: keyboard data; `gaze-demo.js` and `gaze-demo.css`: mouse gaze simulation. Tracking also reuses Speech layout styles.
 
 The reference describes intended behavior; it is not an implementation status report. Where a reference still differs from Qt, state the concrete difference in its notes. Verify Qt through the gallery, automated checks and applicable Windows/Tobii checks.
 
@@ -187,7 +187,7 @@ On a normal development machine, verify:
 - During delayed Tobii discovery, bridge readiness, recovery and cleanup, ordinary UI events remain responsive. Closing during pending startup must not restore input or leave a bridge process behind.
 - ElevenLabs setup fits 1280 × 720. Check saved, replaced, cancelled and removed credentials, masked input after a failed save, and refusal to use an unsaved key.
 - The voice list matches My Voices. A missing selected ID requires explicit reselection before either Settings page can test it. An empty list says **Nema glasova**.
-- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [user guide](features/elevenlabs.md) owns defaults, cache behavior and timing.
+- Check all three Stability buttons and the Similarity slider/−/+ controls. Restart and confirm persistence. The [ElevenLabs guide](features/elevenlabs.md) owns defaults, cache behavior and timing.
 - Check credit warnings and unavailable balance without User: Read. A slow balance refresh leaves voice/model choices and an unrelated dwell usable.
 - During preparation/playback, check the indicator inside the lower part of the Speech button, alignment with Fraze, stable text/target geometry, Stop, preserved text and no repeated paid test until gaze leaves its completed button. Check the static activity mark when the platform style disables widget animations. Stop and immediately speak again; the new request must reach ElevenLabs without a false timeout.
 - Check missing catalog permissions. The read-only check must not generate speech. Separately listen to the intended Fikret clone, Eleven v4 and sentence-case text.
@@ -225,7 +225,7 @@ On the Tobii machine, additionally verify:
 - With Eye Tracker 5, verify both settings/calibration entry points visibly open Experience and send no Core Guest shortcut. Repeat the Core routes when 4C hardware is available. Check position/depth show unavailable when unsupported while per-eye validity, precision/free checks and the word test still work.
 - Pointer mapping reaches all corners of the calibrated display.
 - Left, right, double-click, precision zoom, and Quick actions work.
-- Default and human-like speech are tested separately.
+- **Standardni**, **Prirodni** and **Efendija** speech are tested separately.
 - Select Arabic groups, letters, marks, and the script switch by Tobii. Eye loss and script/page changes must cancel pending dwell; a replacement label must require leaving and returning before another action. Record actual Hamed audio playback and pronunciation separately from process startup and fake speech.
 
 Record software-only and hardware results separately in the pull request.
