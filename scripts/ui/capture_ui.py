@@ -34,7 +34,6 @@ from pogled_assist.tracking.feedback import TrackingNotice
 from pogled_assist.tracking.status import TrackingState, TrackingStatus
 from pogled_assist.ui import settings_window as settings_module
 from pogled_assist.ui import sidebar_panel as sidebar_module
-from pogled_assist.ui.controller_window import ControllerWindow
 from pogled_assist.ui.gaze_check_window import GazeCheckWindow
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
@@ -731,37 +730,22 @@ class _CaptureSession(
                 (self.keyboard._show_symbols, "keyboard-symbols", "Keyboard: symbols"),
             ),
         )
-        self.controller = ControllerWindow(self.gaze_settings, self.speech_settings)
-        self.widgets.append(self.controller)
-        self._capture_sidebar_modes(
-            self.controller,
-            size,
-            (
-                (None, "controller-general", "Controller: general"),
-                (self.controller._show_keyboard_tab, "controller-keyboard", "Controller: keyboard"),
-                (self.controller._show_settings_tab, "controller-settings", "Controller: settings"),
-            ),
-        )
         small_groups = replace(self.speech_settings, letters_per_group=2)
         self.keyboard.update_settings(small_groups)
         self.keyboard._show_letter_groups()
-        self.controller.update_speech_settings(small_groups)
-        self.controller._show_keyboard_tab()
-        for widget, name, title in (
-            (self.keyboard, "keyboard-latin-paged", "Keyboard: Latin, two letters per group"),
-            (
-                self.controller,
-                "controller-latin-paged",
-                "Controller: Latin, two letters per group",
-            ),
-        ):
-            self.capture(widget, name, title, size=(380, 640))
-        for widget, name in ((self.keyboard, "keyboard"), (self.controller, "controller")):
-            widget._recording_badge.set_status(
-                {"busy": True, "state": "recording", "remaining_seconds": 83}
-            )
-            self.capture(widget, f"{name}-recording", f"{name}: recording status", size=(380, 640))
-            widget._recording_badge.set_status(None)
+        self.capture(
+            self.keyboard,
+            "keyboard-latin-paged",
+            "Keyboard: Latin, two letters per group",
+            size=(380, 640),
+        )
+        self.keyboard._recording_badge.set_status(
+            {"busy": True, "state": "recording", "remaining_seconds": 83}
+        )
+        self.capture(
+            self.keyboard, "keyboard-recording", "keyboard: recording status", size=(380, 640)
+        )
+        self.keyboard._recording_badge.set_status(None)
 
     def capture_arabic(self) -> None:
         # Arabic uses the same services and storage fakes, with original Unicode.
@@ -809,18 +793,6 @@ class _CaptureSession(
         self.keyboard._show_symbols()
         self.capture(
             self.keyboard, "keyboard-arabic-symbols", "Keyboard: Arabic symbols, page 2", size=size
-        )
-        self.controller.update_speech_settings(settings)
-        self.controller._show_keyboard_tab()
-        self.capture(self.controller, "controller-arabic", "Controller: Arabic keyboard", size=size)
-        self.controller._show_keyboard_symbols()
-        self.controller._keyboard_group_page = 1
-        self.controller._show_keyboard_symbols()
-        self.capture(
-            self.controller,
-            "controller-arabic-symbols",
-            "Controller: Arabic symbols, page 2",
-            size=size,
         )
 
     def close(self) -> None:

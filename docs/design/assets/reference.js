@@ -4,7 +4,7 @@
     ['design-system', 'design-system.html', 'Boje i komponente'],
     ['hotbar', 'hotbar.html', 'Početni meni'],
     ['sidebar', 'keyboard.html', 'Tastatura'],
-    ['controller', 'controller-keyboard.html', 'Upravljač: tastatura'],
+    ['quick-actions', 'quick-actions.html', 'Brze radnje'],
     ['speech', 'speech.html', 'Govor'],
     ['settings', 'settings.html', 'Postavke'],
     ['installation', 'installation.html', 'Instalacija'],

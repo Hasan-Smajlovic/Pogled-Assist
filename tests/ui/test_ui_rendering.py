@@ -40,27 +40,6 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
             assert first_group.text() == "A B"
             assert next_page.isVisible()
             assert next_page.isEnabled()
-        if name in (
-            "controller-keyboard",
-            "controller-latin-paged",
-            "controller-arabic",
-            "controller-arabic-symbols",
-        ):
-            assert widget._script_button.isVisible(), (
-                name,
-                widget._active_tab,
-                widget._script_button.isHidden(),
-                widget._script_button.geometry(),
-            )
-            assert widget._script_button.height() >= 52
-            assert widget._script_button.geometry().bottom() < widget._content_host.geometry().top()
-            image = QImage(str(snapshot))
-            expected = widget._script_button.grab().toImage()
-            actual = image.copy(widget._script_button.geometry().adjusted(8, 8, -8, -8))
-            expected = expected.copy(expected.rect().adjusted(8, 8, -8, -8))
-            assert actual.convertToFormat(QImage.Format.Format_ARGB32) == expected.convertToFormat(
-                QImage.Format.Format_ARGB32
-            ), name
         return snapshot
 
     monkeypatch.setattr(preview, "_capture_widget", capture_with_script_control_check)
@@ -76,9 +55,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
     unrelated.write_bytes(b"leave caller files alone")
     snapshots = capture_ui(output_dir, width=size[0], height=size[1])
 
-    assert len(snapshots) == 76
+    assert len(snapshots) == 71
     assert {path.stem for path in snapshots} == CORE_NAMES
-    assert len(encountered) == 159  # Extended states remain available without PNG encoding.
+    assert len(encountered) == 153  # Extended states remain available without PNG encoding.
     assert not omitted.exists()
     assert unrelated.read_bytes() == b"leave caller files alone"
     unrelated.unlink()  # Keep the CI artifact limited to actual previews.
@@ -92,7 +71,7 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
         assert image.height() >= 70, snapshot.name
         if snapshot.name.startswith(("settings-", "gaze-check-")):
             assert (image.width(), image.height()) == (1280, 720), snapshot.name
-        if snapshot.name in ("keyboard-latin-paged.png", "controller-latin-paged.png"):
+        if snapshot.name == "keyboard-latin-paged.png":
             assert (image.width(), image.height()) == (380, 640), snapshot.name
 
 
@@ -100,9 +79,9 @@ def test_representative_ui_preview_surfaces_render(qapp, tmp_path, monkeypatch):
 def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, tmp_path):
     from PySide6.QtCore import QPoint, QRect
 
+    from pogled_assist.ui import quick_action_menu as menu_module
     from pogled_assist.ui import quick_action_zoom as zoom_module
     from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
-    from pogled_assist.ui.quick_action_menu import QuickActionRadialMenu
     from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
     from scripts.ui.capture_pointer_overlays import MARKER_SCENE_SIZE, PreviewDesktop
 
@@ -110,9 +89,10 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
         path.stem: QImage(str(path))
         for path in capture_ui(tmp_path, profile="full", groups=("tracking",))
     }
-    overlays = {"quick-actions-menu", "precision-zoom", "gaze-marker"}
+    overlays = {"quick-actions-menu", "quick-actions-menu-edge", "precision-zoom", "gaze-marker"}
     assert overlays <= snapshots.keys()
-    assert not overlays & CORE_NAMES  # Review states only; CI keeps rendering the core set.
+    # CI renders the main Quick actions grid; the other overlays are review states only.
+    assert overlays & CORE_NAMES == {"quick-actions-menu"}
     desktop = PreviewDesktop((1280, 720))
     desktop.show()
     qapp.processEvents()
@@ -120,26 +100,62 @@ def test_full_gallery_shows_quick_actions_precision_zoom_and_gaze_marker(qapp, t
     document = desktop.findChild(QWidget, "previewDocument").geometry()
     desktop.close()
 
-    # Quick actions opens around the gaze target: left click on top, right click on the
-    # right, double click below and cancel on the left, as the user guide lists them.
+    # Quick actions opens a 3x3 grid around the gaze target; the centre shows the point.
     menu = snapshots["quick-actions-menu"]
-    reach = QuickActionRadialMenu.MENU_RADIUS - 12
-    top, right, bottom, left = (
-        menu.pixelColor(target + offset)
-        for offset in (QPoint(0, -reach), QPoint(reach, 0), QPoint(0, reach), QPoint(-reach, 0))
-    )
-    assert top.green() > max(top.red(), top.blue())  # Teal
-    assert right.blue() > max(right.red(), right.green())  # Blue
-    assert bottom.red() > bottom.green() and bottom.blue() > bottom.green()  # Purple
-    assert left.red() > max(left.green(), left.blue())  # Red
-    # Only the looked-at left-click sector shows progress, starting at twelve o'clock.
-    icon_offset = round(QuickActionRadialMenu.MENU_RADIUS * 0.58)
-    progress_radius = 38 // 2 + 8
-    assert _is_white(menu.pixelColor(target + QPoint(0, -icon_offset - progress_radius)))
-    assert not _is_white(menu.pixelColor(target + QPoint(icon_offset, -progress_radius)))
-    # The hotbar's shared selection ring also fills around the looked-at icon.
-    icon = target + QPoint(0, -icon_offset)
+    grid = menu_module.grid_rect_around(target, QRect(0, 0, 1280, 720))
+
+    def tile(row, column):
+        return menu_module._cell_rect(grid, row, column)
+
+    assert tile(1, 1).contains(target)
+    assert _is_white(menu.pixelColor(target))
+
+    def fill(row, column):
+        return menu.pixelColor(tile(row, column).topLeft() + QPoint(16, 16)).name()
+
+    # Only the looked-at left click tile is selected; Odustani keeps its muted red tone.
+    assert fill(0, 1) == "#2e6478"
+    assert fill(1, 0) == "#2b1f27"
+    assert {fill(0, 0), fill(0, 2), fill(1, 2), fill(2, 0), fill(2, 1), fill(2, 2)} == {"#283442"}
+
+    def border(row, column, inset):
+        return menu.pixelColor(
+            QPoint(tile(row, column).left() + inset, tile(row, column).center().y())
+        )
+
+    # A white selected border and a lighter Odustani border keep at least 3:1 contrast.
+    assert _is_white(border(0, 1, 2))
+    assert border(1, 0, 1).name() == "#af7a86"
+    assert border(0, 0, 1).name() == "#71869b"
+    # An opaque panel fills the gaps and an 8-pixel frame, even over the light document,
+    # while the open centre still shows the dimmed document around the point.
+    gap = QPoint(tile(0, 0).right() + 6, tile(0, 0).center().y())
+    frame = QPoint(grid.left() - 4, tile(1, 0).center().y())
+    assert document.contains(gap) and document.contains(frame)
+    assert menu.pixelColor(gap).name() == menu.pixelColor(frame).name() == "#15191f"
+    opening = tile(1, 1).topLeft() + QPoint(20, 40)
+    assert document.contains(opening)
+    assert menu.pixelColor(opening).lightness() > 90
+    # The shared selection ring surrounds the same icon as the tile's own arc and leaves
+    # the label below it clear.
+    icon = menu_module._icon_rect(tile(0, 1)).center()
     assert any(_is_shared_ring(menu.pixelColor(icon + QPoint(r, 0))) for r in range(24, 37))
+    label_top = tile(0, 1).center().y() + 12
+    assert not any(
+        _is_shared_ring(menu.pixelColor(QPoint(x, label_top + 6)))
+        for x in range(icon.x() - 40, icon.x() + 41)
+    )
+
+    # Near a corner the whole grid shifts inside the screen and the point stays marked.
+    edge = snapshots["quick-actions-menu-edge"]
+    corner_grid = menu_module.grid_rect_around(QPoint(60, 40), QRect(0, 0, 1280, 720))
+    assert corner_grid.topLeft() == QPoint(8, 8)
+    assert _is_white(edge.pixelColor(QPoint(60, 40)))
+    bottom_right = menu_module._cell_rect(corner_grid, 2, 2)
+    assert edge.pixelColor(bottom_right.topLeft() + QPoint(16, 16)).name() == "#283442"
+    # The panel frame reaches the screen edge without leaving it.
+    frame_at_edge = QPoint(2, menu_module._cell_rect(corner_grid, 1, 0).center().y())
+    assert edge.pixelColor(frame_at_edge).name() == "#15191f"
 
     # Precision zoom magnifies the area around the target three times over a dimmed desktop.
     zoom = snapshots["precision-zoom"]

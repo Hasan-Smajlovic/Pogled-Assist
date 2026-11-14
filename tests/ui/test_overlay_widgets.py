@@ -5,7 +5,7 @@ from PySide6.QtCore import QPoint, QRect
 
 from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
-from pogled_assist.ui.quick_action_menu import LEFT_CLICK, QuickActionRadialMenu
+from pogled_assist.ui.quick_action_menu import LEFT_CLICK, QuickActionMenu
 from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
 
 
@@ -108,11 +108,11 @@ def test_enabling_gaze_bubble_rejects_stale_points_received_while_hidden(qtbot, 
     assert bubble.isHidden()
 
 
-def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
+def test_quick_action_menu_selects_stable_tile_by_gaze(qtbot, monkeypatch):
     monkeypatch.setattr(
         "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    menu = QuickActionRadialMenu()
+    menu = QuickActionMenu()
     qtbot.addWidget(menu)
     selected = []
     menu.action_selected.connect(selected.append)
@@ -120,9 +120,15 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     menu.show_at(QPoint(400, 300))
     now = freeze_monotonic(monkeypatch, 1.0)
 
-    for at in (1.0, 1.249, 1.25, 1.4):
+    tile = menu.tile_rect(LEFT_CLICK)
+    for at, point in (
+        (1.0, tile.center()),
+        (1.249, tile.topLeft()),
+        (1.25, tile.center()),
+        (1.4, tile.bottomRight()),
+    ):
         now[0] = at
-        menu.handle_gaze(QPoint(400, 200))
+        menu.handle_gaze(point)
 
     assert selected == [LEFT_CLICK]
     assert menu._selection_emitted is True

@@ -24,16 +24,8 @@
 .gaze-marker-dot { position: absolute; top: 170px; left: 60%; width: 46px; height: 46px; pointer-events: none; }
 .gaze-marker-dot::before { content: ''; position: absolute; inset: 1.75px; border: 2.5px solid #84c5d9f0; border-radius: 50%; box-shadow: 0 0 0 1px #0b1723be, inset 0 0 0 1px #0b1723be; }
 .gaze-marker-dot::after { content: ''; position: absolute; top: 50%; left: 50%; width: 7.5px; height: 7.5px; transform: translate(-50%, -50%); border: 1.5px solid #0b1723dc; border-radius: 50%; background: #ffffffeb; }
-.quick-actions-preview, .zoom-preview { margin: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 12px; border: 1px solid var(--border); border-radius: 8px; background: #1f2a37; }
-.quick-actions-preview figcaption, .zoom-preview figcaption { color: #bec9d9; text-align: center; }
-.quick-actions-dial { position: relative; width: 248px; height: 248px; border-radius: 50%; border: 2px solid #ffffff78; background: conic-gradient(from -45deg, #14b8a6ba 0 90deg, #3b82f676 90deg 180deg, #a855f776 180deg 270deg, #ef444476 270deg 360deg); box-shadow: inset 0 0 0 4px transparent; }
-.quick-actions-dial::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 5px solid transparent; border-top-color: #ffffffdc; transform: rotate(0deg); }
-.quick-actions-dial::after { content: ''; position: absolute; inset: 70px; border-radius: 50%; border: 3px solid #ffffffd7; background: #0f172ad2; }
-.quick-actions-icon { position: absolute; width: 38px; height: 38px; display: grid; place-items: center; font-size: 26px; color: #fff; }
-.quick-actions-top { left: 105px; top: 15px; border-radius: 50%; box-shadow: 0 0 0 8px transparent; outline: 5px solid #ffffffeb; outline-offset: 8px; clip-path: inset(-14px -14px 0 0); }
-.quick-actions-right { right: 15px; top: 105px; }
-.quick-actions-bottom { left: 105px; bottom: 15px; }
-.quick-actions-left { left: 15px; top: 105px; color: #fff1f2; }
+.zoom-preview { margin: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 12px; border: 1px solid var(--border); border-radius: 8px; background: #1f2a37; }
+.zoom-preview figcaption { color: #bec9d9; text-align: center; }
 .zoom-square { position: relative; width: min(100%, 360px); aspect-ratio: 1; border: 4px solid #ffffffeb; outline: 10px solid #00000082; background: #f4f6f8; display: grid; place-items: center; }
 .zoom-square::before { content: ''; position: absolute; inset: 8px; border: 2px solid #60a5fad2; }
 .zoom-sample-button { padding: 10px 28px; border: 2px solid #8a96a3; border-radius: 8px; background: #e4e8ed; color: #1f2933; font-size: 34px; }

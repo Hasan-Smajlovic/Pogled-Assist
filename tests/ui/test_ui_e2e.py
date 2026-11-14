@@ -4,17 +4,13 @@ import pytest
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _speech_fixtures import make_speech_window as make_speech_window
 from _ui_fakes import (
-    FakeAppBar,
-    FakeControllerInput,
     FakeLibraryStore,
     FakeSpeech,
     grouped_fake_speech,
 )
 from PySide6.QtCore import QPoint, QRect, Qt
 
-from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.speech.speech_service import SpeechSettings
-from pogled_assist.ui.controller_window import CONTROLLER_WINDOW_ACTION_PREFIX, ControllerWindow
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
 
 
@@ -182,119 +178,6 @@ def test_speech_rest_control_uses_bosnian_copy_and_preserves_message(
     window.handle_gaze_action(f"{SPEECH_WINDOW_ACTION_PREFIX}sleep:wake")
     assert window._dialogs.active is None
     assert window._input.text() == "TREBAM ODMOR"
-
-
-def _check_sidebar_row(window, buttons):
-    rects = [QRect(button.mapTo(window, QPoint(0, 0)), button.size()) for button in buttons]
-    assert min(rect.left() for rect in rects) == 10
-    assert max(rect.right() for rect in rects) == window.width() - 11
-    assert max(rect.width() for rect in rects) - min(rect.width() for rect in rects) <= 1
-    assert all(window.rect().contains(rect) for rect in rects)
-    for button in buttons:
-        _assert_sidebar_hit(window, button)
-
-
-def _assert_sidebar_hit(window, button):
-    center = button.mapToGlobal(button.rect().center())
-    expected = (
-        next(action for action, target in window._action_buttons.items() if target is button)
-        if button.isEnabled()
-        else None
-    )
-    assert window.action_at_global_point(center) == expected
-
-
-@pytest.mark.e2e
-@pytest.mark.parametrize(
-    "case",
-    [
-        ((320, 640), "latin", 2),
-        ((320, 640), "arabic", 2),
-        ((380, 640), "latin", 5),
-        ((380, 640), "arabic", 5),
-        ((380, 950), "latin", 2),
-        ((380, 950), "arabic", 5),
-    ],
-)
-def test_controller_keyboard_rows_fill_sidebar_width(qtbot, monkeypatch, case):
-    from pogled_assist.ui import sidebar_panel
-
-    size, script, letters_per_group = case
-    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
-    window = ControllerWindow(
-        GazeSettings(),
-        SpeechSettings(keyboard_script=script, letters_per_group=letters_per_group),
-    )
-    qtbot.addWidget(window)
-    window._input = FakeControllerInput()
-    window.resize(*size)
-    window.show()
-    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
-
-    def check_row(buttons):
-        qtbot.waitUntil(lambda: _check_sidebar_row(window, buttons))
-
-    window._tab_buttons["keyboard"].click()
-    for tab, group_command, key_command in (
-        ("letters", "keyboard_group", "keyboard_letter:0"),
-        ("numpad", "keyboard_numpad_group", "keyboard_numpad"),
-        ("symbols", "keyboard_symbol_group", "keyboard_symbol"),
-    ):
-        window._keyboard_tab_buttons[tab].click()
-        check_row(list(window._keyboard_tab_buttons.values()))
-        check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
-        check_row(
-            [
-                window._action_buttons[f"{prefix}{command}"]
-                for command in ("keyboard_space", "keyboard_backspace")
-            ]
-        )
-        _check_controller_paging(window, check_row)
-
-        window._action_buttons[f"{prefix}{group_command}:0"].click()
-        check_row(list(window._keyboard_tab_buttons.values()))
-        _check_controller_key_row(window, key_command, check_row)
-        check_row(
-            [
-                window._action_buttons[f"{prefix}{command}"]
-                for command in ("keyboard_groups", "keyboard_space", "keyboard_backspace")
-            ]
-        )
-        window.handle_gaze_action(f"{prefix}{key_command}:0")
-        check_row(list(window._keyboard_tab_buttons.values()))
-        check_row([window._action_buttons[f"{prefix}{group_command}:{i}"] for i in (0, 1)])
-
-    def check_first_row():
-        buttons = [
-            button
-            for button in window._action_buttons.values()
-            if button.isVisible() and button.objectName() in ("shortcutButton", "checkButton")
-        ]
-        assert buttons
-        first_row = [
-            button for button in buttons if button.y() == min(target.y() for target in buttons)
-        ]
-        _check_sidebar_row(window, first_row)
-
-    for tab in ("general", "settings"):
-        window._tab_buttons[tab].click()
-        qtbot.waitUntil(check_first_row)
-
-
-def _check_controller_paging(window, check_row):
-    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
-    if f"{prefix}keyboard-page:1" not in window._action_buttons:
-        return
-    check_row([window._action_buttons[f"{prefix}keyboard-page:{i}"] for i in (-1, 1)])
-    window._action_buttons[f"{prefix}keyboard-page:1"].click()
-    check_row(list(window._keyboard_tab_buttons.values()))
-    window._action_buttons[f"{prefix}keyboard-page:-1"].click()
-
-
-def _check_controller_key_row(window, key_command, check_row):
-    prefix = CONTROLLER_WINDOW_ACTION_PREFIX
-    if f"{prefix}{key_command}:2" in window._action_buttons:
-        check_row([window._action_buttons[f"{prefix}{key_command}:{i}"] for i in range(3)])
 
 
 @pytest.mark.e2e

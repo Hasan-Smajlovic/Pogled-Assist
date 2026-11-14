@@ -3,20 +3,24 @@ from __future__ import annotations
 import pytest
 from _hotbar_fixtures import edge_surface as edge_surface
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
-from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeSpeechService, StaleWorkArea
-from PySide6.QtCore import QRect
+from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeSpeechService
+from PySide6.QtCore import QPoint
 
 from pogled_assist.interaction.mouse_controller import (
-    CONTROLLER,
     KEYBOARD,
     LEFT_CLICK,
     QUICK_ACTIONS,
+    SCROLL_DOWN,
+    SCROLL_UP,
     SETTINGS,
     SPEECH,
+    TYPE_HERE,
+    GazeScreenPoint,
     GazeSettings,
 )
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.toolbar import HotbarWindow
+from pogled_assist.ui.quick_action_menu import CANCEL_QUICK_ACTION
 
 # Bound before the hotbar fixture replaces startup services with a no-op.
 REAL_START_SERVICES = HotbarWindow._start_services
@@ -46,7 +50,7 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     assert window._quick_actions_button.text() == "Brze radnje"
     assert window._foreground.ready
     assert window._foreground.window == 50
-    assert window._foreground.cursor == (600, 500)
+    assert "Upravljač" not in [button.text() for button in window._buttons.values()]
 
     window._run_toolbar_action(LEFT_CLICK, checked=True, source="mouse")
     assert window._mouse.active_mode == LEFT_CLICK
@@ -58,18 +62,143 @@ def test_hotbar_coordinates_primary_ui_surfaces(qtbot, monkeypatch):
     window._run_toolbar_action(KEYBOARD, checked=True, source="mouse")
     assert window._keyboard_window is not None and window._keyboard_window.isVisible()
 
-    window._run_toolbar_action(CONTROLLER, checked=True, source="mouse")
-    assert window._keyboard_window.isHidden()
-    assert window._controller_window is not None and window._controller_window.isVisible()
-
     window._run_toolbar_action(SPEECH, source="mouse")
     assert window._speech_window is not None and window._speech_window.isVisible()
     window._speech_window.quit_requested.emit()
     assert quit_requests == [True]
 
     window._run_toolbar_action(SETTINGS, source="mouse")
-    assert window._controller_window.isHidden()
+    assert window._keyboard_window.isHidden()
     assert window._settings_window is not None and window._settings_window.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(("action", "opens_keyboard"), [(TYPE_HERE, True), (SCROLL_DOWN, False)])
+def test_quick_grid_type_here_clicks_then_opens_the_keyboard(
+    qtbot, monkeypatch, action, opens_keyboard
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import sidebar_panel
+
+    monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
+    monkeypatch.setattr(toolbar, "load_app_settings", lambda: (GazeSettings(), SpeechSettings()))
+    monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
+    window = toolbar.HotbarWindow()
+    qtbot.addWidget(window)
+    mouse = window._mouse
+    mouse._input = FakeHotbarInput()
+    mouse.handle_eye_status(True, True)
+    mouse._quick_menu_open = True
+    mouse._quick_target = GazeScreenPoint(QPoint(30, 40), QPoint(130, 240))
+
+    window._quick_action_selected_handler(action)
+
+    keyboard = window._keyboard_window
+    assert (keyboard is not None and keyboard.isVisible()) is opens_keyboard
+    if opens_keyboard:
+        assert mouse._input.clicks == [(130, 240, {"button": "left"})]
+    else:
+        assert mouse._input.scrolls == [-3]
+
+
+def _quick_grid_hotbar(qtbot, monkeypatch):
+    from _clock import freeze_monotonic
+
+    from pogled_assist import toolbar
+    from pogled_assist.ui import quick_action_menu, sidebar_panel
+
+    settings = GazeSettings(selection_pause_ms=100, dwell_ms=200, click_cooldown_ms=100)
+    monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(toolbar, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(toolbar, "SpeechService", FakeSpeechService)
+    monkeypatch.setattr(toolbar, "load_app_settings", lambda: (settings, SpeechSettings()))
+    monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
+    monkeypatch.setattr(quick_action_menu, "force_window_topmost", lambda *_a, **_k: True)
+    window = toolbar.HotbarWindow()
+    qtbot.addWidget(window)
+    mouse = window._mouse
+    mouse._input = FakeHotbarInput()
+    mouse.handle_eye_status(True, True)
+    menu = window._quick_menu
+    point = menu.screen().geometry().center()
+    mouse._quick_menu_open = True
+    mouse._quick_target = GazeScreenPoint(point, QPoint(130, 240))
+    window._open_quick_action_menu(point)
+    now = freeze_monotonic(monkeypatch, 10.0)
+
+    def hold(target, seconds):
+        for _ in range(round(seconds / 0.05)):
+            now[0] += 0.05
+            menu.handle_gaze(target)
+
+    return window, mouse, menu, hold
+
+
+@pytest.mark.e2e
+def test_quick_grid_returns_after_a_scroll_so_the_next_scroll_is_one_dwell(qtbot, monkeypatch):
+    _window, mouse, menu, hold = _quick_grid_hotbar(qtbot, monkeypatch)
+    tile = menu.tile_rect(SCROLL_DOWN).center()
+
+    hold(tile, 0.5)
+    assert mouse._input.scrolls == [-3]
+    assert not menu.isVisible()
+    qtbot.waitUntil(menu.isVisible, timeout=1000)
+
+    # A steady look at the used tile does not repeat it; one look away and back does.
+    hold(tile, 1.0)
+    assert mouse._input.scrolls == [-3]
+    hold(menu.tile_rect(SCROLL_UP).center(), 0.05)
+    hold(tile, 0.5)
+    assert mouse._input.scrolls == [-3, -3]
+    assert mouse._input.moves == [(130, 240), (130, 240)]
+    qtbot.waitUntil(menu.isVisible, timeout=1000)
+
+    hold(menu.tile_rect(CANCEL_QUICK_ACTION).center(), 0.5)
+    assert not menu.isVisible()
+    assert mouse.quick_target_ready is False
+    qtbot.wait(200)
+    assert not menu.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("interruption", ["eye_loss", "stale_gaze", "suspended", "hidden_hotbar"])
+def test_quick_grid_does_not_return_after_an_interruption(qtbot, monkeypatch, interruption):
+    window, mouse, menu, hold = _quick_grid_hotbar(qtbot, monkeypatch)
+
+    hold(menu.tile_rect(SCROLL_UP).center(), 0.5)
+    assert mouse._input.scrolls == [3]
+    assert not menu.isVisible()
+    if interruption == "eye_loss":
+        window._handle_eye_status_changed(True, False)
+    elif interruption == "stale_gaze":
+        # Only the controller drops the point; the grid must not return without it.
+        mouse._eye_gate.cancel(reason="gaze_freshness_expired")
+    elif interruption == "suspended":
+        mouse.set_input_suspended(True)
+    else:
+        window._hide_hotbar()
+    qtbot.wait(300)
+
+    assert not menu.isVisible()
+    assert mouse.quick_target_ready is False
+
+
+@pytest.mark.e2e
+def test_quick_grid_closes_when_a_scroll_is_skipped(qtbot, monkeypatch):
+    window, mouse, menu, _hold = _quick_grid_hotbar(qtbot, monkeypatch)
+    mouse.handle_eye_status(True, False)
+
+    window._quick_action_selected_handler(SCROLL_DOWN)
+
+    assert mouse._input.scrolls == []
+    assert not menu.isVisible()
+    assert not menu._return_timer.isActive()
 
 
 @pytest.mark.e2e
@@ -114,41 +243,6 @@ def test_hotbar_and_keyboard_discard_progress_after_interruption(edge_surface, r
     feed(center, 980)
     feed(center, 1200)
     assert actions == []
-
-
-@pytest.mark.e2e
-@pytest.mark.parametrize(("first", "second"), [(KEYBOARD, CONTROLLER), (CONTROLLER, KEYBOARD)])
-def test_switching_sidebars_takes_the_same_place_instead_of_narrowing_twice(
-    hotbar_gaze, monkeypatch, first, second
-):
-    from pogled_assist.ui import sidebar_panel
-
-    hotbar = hotbar_gaze[0]
-    area = StaleWorkArea(QRect(0, 0, 1280, 720))
-    monkeypatch.setattr(sidebar_panel, "QGuiApplication", area)
-    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", area.app_bar)
-    panels = {
-        KEYBOARD: lambda: hotbar._keyboard_window,
-        CONTROLLER: lambda: hotbar._controller_window,
-    }
-
-    hotbar._run_toolbar_action(first, source="gaze")
-    area.process_events()
-    place = panels[first]().geometry()
-    assert place.right() == 1279 and place.top() == hotbar.BAR_HEIGHT
-
-    # Hiding one panel and showing the other runs in one call, before Qt sees the
-    # released strip, so the new panel must not position itself from the stale work area.
-    hotbar._run_toolbar_action(second, source="gaze")
-    assert panels[first]().isHidden()
-    assert panels[second]().isVisible()
-    assert panels[second]().geometry() == place
-    assert list(area.right_reservations.values()) == [place.width()]
-
-    area.process_events()
-    hotbar._run_toolbar_action(first, source="gaze")
-    assert panels[first]().geometry() == place
-    assert list(area.right_reservations.values()) == [place.width()]
 
 
 @pytest.mark.e2e

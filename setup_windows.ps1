@@ -816,7 +816,6 @@ function Get-RequiredRepositoryFiles {
         "pogled_assist\interaction\mouse_controller.py",
         "pogled_assist\interaction\screen_mapping.py",
         "pogled_assist\ui\__init__.py",
-        "pogled_assist\ui\controller_window.py",
         "pogled_assist\ui\gaze_bubble.py",
         "pogled_assist\ui\gaze_feedback.py",
         "pogled_assist\ui\hotbar_controls.py",

@@ -6,21 +6,24 @@
   <meta name="color-scheme" content="dark">
   <title>Pogled Assist · Provjera instalacije</title>
   <link rel="stylesheet" href="assets/reference.css">
+  <link rel="stylesheet" href="assets/installation.css">
 
   <script src="assets/reference.js" defer></script>
 
 </head>
 <body data-reference-page="installation">
   <nav class="reference-switcher" aria-label="Referentni prikazi"><a href="speech-keyboard-reference.html">Svi prikazi</a></nav>
-  <main id="installation-screen" aria-label="Provjera instalacije" style="max-width:900px;margin:24px auto;padding:24px;background:#1c2029;border-radius:12px">
+  <main id="installation-screen" aria-label="Provjera instalacije">
     <h1>Provjera instalacije</h1>
-    <p>Provjerite spremnost programa i dovršite podešavanje Tobii uređaja.</p>
-    <p><strong>Govor — Spremno</strong><br>Standardni glas radi bez interneta. Prirodni glas zahtijeva internet.</p>
-    <p><strong>Tobii most — Spremno</strong><br>Uključeno je 32-bitno okruženje za povezivanje.</p>
-    <p><strong>Tobii softver — Potrebna instalacija</strong><br>Preuzmite službeni softver za svoj model uređaja.</p>
-    <p><strong>Tobii uređaj — Nije prepoznat</strong><br>Povežite uređaj, instalirajte drajvere i ponovite provjeru.</p>
-    <p><strong>Kalibracija — Potrebna provjera</strong><br>Pokrenite kalibraciju u Tobii softveru. Ova provjera ne potvrđuje praćenje pogleda.</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <p class="installation-intro">Provjerite spremnost programa i dovršite podešavanje Tobii uređaja.</p>
+    <div class="installation-results" aria-label="Rezultati provjere">
+      <p><strong>Govor — Spremno</strong><span>Standardni glas radi bez interneta. Prirodni glas zahtijeva internet.</span></p>
+      <p><strong>Tobii most — Spremno</strong><span>Uključeno je 32-bitno okruženje za povezivanje.</span></p>
+      <p><strong>Tobii softver — Potrebna instalacija</strong><span>Preuzmite službeni softver za svoj model uređaja.</span></p>
+      <p><strong>Tobii uređaj — Nije prepoznat</strong><span>Povežite uređaj, instalirajte drajvere i ponovite provjeru.</span></p>
+      <p><strong>Kalibracija — Potrebna provjera</strong><span>Pokrenite kalibraciju u Tobii softveru. Ova provjera ne potvrđuje praćenje pogleda.</span></p>
+    </div>
+    <div class="installation-actions">
       <button type="button" onclick="document.getElementById('installation-note').textContent='Otvara se službena Tobii stranica za izbor uređaja.'">Preuzmi Tobii softver</button>
       <button type="button" disabled>Pokreni kalibraciju</button>
       <button type="button" onclick="document.getElementById('installation-note').textContent='Provjeravam… Radnje su privremeno onemogućene. Ako se prozor zatvori tokom provjere, čeka se završetak.'">Ponovi provjeru</button>
@@ -31,5 +34,9 @@
          installed Experience opens first for its profile UI without the Guest
          shortcut. Without Experience, the Core route retains that shortcut. -->
   </main>
+  <section class="design-notes" aria-label="Napomene o izgledu">
+    <p>Prozor je 900 × 650 px s unutrašnjom marginom od 24 px i razmakom od 12 px između dijelova. Rezultati počinju odmah ispod uvoda i ne šire se po visini: naziv i stanje su podebljani, objašnjenje je ispod, a između rezultata je 12 px. Rezultat bez objašnjenja prikazuje samo naziv i stanje. Kada rezultata ima više nego što stane, pomjera se samo njihova lista.</p>
+    <p>Četiri radnje su u dvije kolone, visine najmanje 64 px. Onemogućena radnja ima zajednički onemogućeni izgled. Red statusa ispod radnji prikazuje tok provjere.</p>
+  </section>
 </body>
 </html>

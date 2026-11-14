@@ -167,7 +167,7 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 - Confirm the bundled x86 bridge imports after installation into a path with spaces, without a system Python or configured Python environment variables.
 - Confirm the setup summary distinguishes missing software, absent devices, detection failures, and unverified calibration. Check its download and calibration buttons and repeat check. Verify unattended installs show no UI.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
-- Open Settings, Speech, Keyboard, and Controller.
+- Open Settings, Speech, Keyboard, and the Quick actions grid.
 - Disconnect networking before first Speech use and confirm the suggestion row still offers starting words, completions, and next words.
 - Confirm suggestion selection and `Poništi riječ` produce the same text with mouse and simulated gaze, including Bosnian letters and punctuation spacing.
 - Open a phrase or answer editor, use a suggestion, cancel, and confirm the conversation and its undo state return unchanged. Repeat with a successful save.
@@ -181,7 +181,7 @@ Hardware checks on the target Tobii machine:
 - Confirm Tobii software detects and calibrates the tracker.
 - Confirm the runtime log reports Tobii Pro SDK, Stream Engine, or the x86 bridge.
 - Confirm both-eye tracking moves the pointer and dwell actions fire.
-- Confirm left, right, double-click, keyboard, controller, and calibration actions.
+- Confirm left, right, double-click, keyboard, Quick actions, and calibration actions.
 - Confirm **Standardni** (eSpeak NG), **Prirodni** and optional **Efendija** speech separately.
 
 ## Known limits

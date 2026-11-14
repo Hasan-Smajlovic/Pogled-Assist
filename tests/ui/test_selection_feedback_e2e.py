@@ -61,19 +61,6 @@ def test_keyboard_selection_rings_stay_inside_their_controls(hotbar_gaze, qtbot,
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("tab", ["general", "keyboard", "settings"])
-def test_controller_selection_rings_stay_inside_their_controls(hotbar_gaze, qtbot, tab):
-    hotbar, rings = _ring_probe(hotbar_gaze)
-    hotbar._show_controller_sidebar()
-    window = hotbar._controller_window
-    qtbot.waitUntil(window.isVisible)
-    getattr(window, f"_show_{tab}_tab")()
-    qtbot.wait(1)
-
-    _check_rings(rings, _sidebar_targets(window))
-
-
-@pytest.mark.e2e
 @pytest.mark.parametrize("tab", range(4), ids=["general", "gaze", "speech", "support"])
 def test_settings_selection_rings_stay_inside_their_controls(hotbar_gaze, qtbot, tab):
     hotbar, rings = _ring_probe(hotbar_gaze)

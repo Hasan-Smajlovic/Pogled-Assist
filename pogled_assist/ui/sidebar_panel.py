@@ -62,17 +62,13 @@ class SidebarPanel(QWidget):
     def diagnostic_context(self, _action: str | None = None) -> diagnostics.TargetContext:
         return self._diagnostic_context
 
-    def show_sidebar(
-        self, *, full_height: bool = False, replacing: SidebarPanel | None = None
-    ) -> None:
-        """Show the panel; ``replacing`` is the panel this one just took over from."""
+    def show_sidebar(self, *, full_height: bool = False) -> None:
         self._full_height = bool(full_height)
         self._ensure_input_controller()
         self._remember_foreground_target()
         if self._full_height:
             self._appbar.unregister()
-        if not self._take_place_of(replacing):
-            self._position_on_primary_screen()
+        self._position_on_primary_screen()
         self.show()
         self.raise_()
         self._register_appbar()
@@ -290,21 +286,6 @@ class SidebarPanel(QWidget):
             current = self._action_buttons.get(self._gaze_target_action)
             if current is not None:
                 set_gaze_feedback(current, True)
-
-    def _take_place_of(self, other: SidebarPanel | None) -> bool:
-        # Qt refreshes its cached work area only after the event loop handles Windows'
-        # WM_SETTINGCHANGE. Right after the other panel releases its AppBar, that cache
-        # still excludes the released strip, so positioning from it would put this panel
-        # beside the empty strip and narrow the desktop twice. Take the same place instead.
-        if other is None or other is self:
-            return False
-        if (other._full_height, other._reserved_top_height) != (
-            self._full_height,
-            self._reserved_top_height,
-        ):
-            return False
-        self.setGeometry(other.geometry())
-        return True
 
     def _position_on_primary_screen(self) -> None:
         screen = QGuiApplication.primaryScreen()

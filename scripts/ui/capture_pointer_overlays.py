@@ -11,7 +11,7 @@ from pogled_assist.ui import quick_action_menu as menu_module
 from pogled_assist.ui import quick_action_zoom as zoom_module
 from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
-from pogled_assist.ui.quick_action_menu import QuickActionRadialMenu
+from pogled_assist.ui.quick_action_menu import QuickActionMenu, grid_rect_around
 from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
 
 # A light third-party window on a dark desktop: the overlays work on any application.
@@ -93,30 +93,48 @@ class CapturePointerOverlays:
         self.app.processEvents()
         return scene
 
-    def _shared_ring(self, scene: QWidget, source: QWidget) -> None:
-        """Draw the shared selection ring the hotbar shows over every gaze selection."""
+    def _shared_ring(self, scene: QWidget, source: QWidget, origin: QPoint | None = None) -> None:
+        """Draw the shared selection ring the hotbar shows over every gaze selection.
+
+        ``origin`` converts global points from a source that works in global coordinates.
+        """
 
         ring = InteractionOverlayWindow()
         ring.setParent(scene, Qt.Widget)
         ring._timer.timeout.disconnect(ring._tick)
-        source.selection_progress_changed.connect(ring.show_progress)
+        if origin is None:
+            source.selection_progress_changed.connect(ring.show_progress)
+        else:
+            source.selection_progress_changed.connect(
+                lambda point, progress, label: ring.show_progress(point - origin, progress, label)
+            )
 
     def _capture_quick_actions_menu(self) -> None:
         scene = self._pointer_scene()
-        center = scene.target()
-        menu = QuickActionRadialMenu()
+        menu = self._quick_actions_grid(scene, scene.target())
+        self._shared_ring(scene, menu, scene.mapToGlobal(QPoint(0, 0)))
+        # Look at the left click tile until the selection is partly complete.
+        _hold_gaze(menu_module, menu.handle_gaze, menu.tile_rect(LEFT_CLICK).center())
+        self.capture(scene, "quick-actions-menu", "Quick actions: left click selecting")
+
+        # Near a corner the grid shifts to stay on screen and the point lies on a tile.
+        scene = self._pointer_scene()
+        self._quick_actions_grid(scene, QPoint(60, 40))
+        self.capture(scene, "quick-actions-menu-edge", "Quick actions: near the edge")
+
+    def _quick_actions_grid(self, scene: QWidget, center: QPoint) -> QuickActionMenu:
+        # The grid works in global coordinates, like the full-screen menu in the app.
+        origin = scene.mapToGlobal(QPoint(0, 0))
+        menu = QuickActionMenu()
         menu.setParent(scene, Qt.Widget)
         menu.setGeometry(scene.rect())
-        menu._center_global = QPoint(center)
-        menu._center_local = QPoint(center)
+        menu._center_global = center + origin
+        menu._grid_global = grid_rect_around(center + origin, scene.rect().translated(origin))
         menu.set_selection_settings(
             pause_ms=SELECTION_PAUSE_MS, dwell_ms=SELECTION_DWELL_MS, radius_px=48
         )
         menu.show()
-        self._shared_ring(scene, menu)
-        # Look at the top (left click) sector until the selection is partly complete.
-        _hold_gaze(menu_module, menu.handle_gaze, menu._selection_center_global(LEFT_CLICK))
-        self.capture(scene, "quick-actions-menu", "Quick actions: left click selecting")
+        return menu
 
     def _capture_precision_zoom(self) -> None:
         scene = self._pointer_scene()

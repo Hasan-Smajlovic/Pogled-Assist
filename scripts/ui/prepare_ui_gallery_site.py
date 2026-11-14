@@ -35,7 +35,7 @@ PREVIEWS = (
     ("hotbar.png", "Hotbar"),
     ("speech-arabic.png", "Arabic Speech"),
     ("keyboard-letters.png", "Keyboard"),
-    ("controller-general.png", "Controller"),
+    ("quick-actions-menu.png", "Quick actions"),
 )
 MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 MAX_IMAGE_BYTES = 4 * 1024 * 1024

@@ -5,7 +5,7 @@ Pogled Assist places a toolbar at the top of the primary Windows display. It can
 - [Installation readiness](#installation-readiness) and [before starting](#before-starting)
 - [Tracking notifications](#tracking-notifications-in-speech), [gaze check](#gaze-check) and [saved results](#saved-gaze-check-results)
 - [Hotbar controls](#hotbar-controls) and [quick actions](#quick-actions)
-- [Speech](#speech), [Keyboard](#keyboard), and [Controller](#controller)
+- [Speech](#speech) and [Keyboard](#keyboard)
 - [Settings](#settings) and [updates](#update)
 - [Troubleshooting](#troubleshooting), [diagnostic recording](#diagnostic-log-collection) and [exit](#exit)
 
@@ -73,7 +73,6 @@ The left side of the hotbar contains:
 6. Double click
 7. Speech
 8. Keyboard
-9. Controller
 
 Hide removes the AppBar reservation and the entire hotbar, including its tracking status. It leaves a floating Show button near the top-left corner. Show restores the hotbar and its current status. The status is passive and has no dwell action, blinking animation, or sound during eye loss. Left, Right, and Double click arm one action. Keep your gaze on the target until the progress overlay completes. The mode resets after the click to reduce accidental repeats.
 
@@ -85,14 +84,22 @@ A gaze-driven right click arms one direct left click for selecting a context-men
 
 ## Quick actions
 
-Quick actions is a toggle. With precision zoom enabled, holding gaze on a target first opens a magnified square. Choose the exact point inside the square, then use the radial menu:
+Quick actions is a toggle. With precision zoom enabled, holding gaze on a target first opens a magnified square. Choose the exact point inside the square, then use the grid of actions around that point. With precision zoom disabled, the grid opens directly at the stable gaze point. Gaze does not move the real pointer while the zoom or grid is open.
 
-- Top: left click
-- Right: right click
-- Bottom: double click
-- Left: cancel
+The grid has three rows of three tall rectangles, 150 × 190 pixels each, with the chosen point marked in the empty middle cell:
 
-With precision zoom disabled, the radial menu opens directly at the stable gaze point. Gaze does not move the real pointer while the zoom or menu is open.
+| | Left | Middle | Right |
+| --- | --- | --- | --- |
+| Top | **Piši ovdje** | **Lijevi klik** | **Pomjeri gore** |
+| Middle | **Odustani** | chosen point | **Desni klik** |
+| Bottom | **Potvrdi** | **Dvostruki klik** | **Pomjeri dolje** |
+
+- **Piši ovdje** left-clicks the point to place the cursor there, then opens [Keyboard](#keyboard) to type into that window.
+- **Pomjeri gore** and **Pomjeri dolje** move the pointer to the point and scroll three wheel steps, so the window under the point scrolls. The grid then hides for **Pauza između radnji** and returns at the same point, so the next scroll needs only one dwell. Look away from the tile you used, at another tile, the middle cell or the page, then back to scroll again; a steady look does not repeat it. Every other tile closes the grid.
+- **Potvrdi** presses Enter in the active window.
+- **Odustani**, Escape, or a mouse click on the middle cell or outside the grid closes the grid without an action.
+
+The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look at another tile or the empty middle cell before that tile can be selected; gaze at the screen edge outside the grid does not count. Quick actions need both eyes, like direct desktop clicks. Losing an eye, stale gaze, the gaze check, hiding the hotbar or opening Settings closes the grid, also while it is hidden between two scrolls, and it does not return.
 
 ## Speech
 
@@ -138,11 +145,11 @@ Efendija sends text to ElevenLabs. Preparation failure can fall back to Prirodni
 
 ### Arabic keyboard
 
-Choose **Arapski** under **Govor i tastatura > Pismo tastature**, or select `Arapski` on Speech, Keyboard, or the Controller keyboard. The choice applies to all three keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
+Choose **Arapski** under **Govor i tastatura > Pismo tastature**, or select `Arapski` on Speech or Keyboard. The choice applies to both keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
 
-Arabic always uses group-then-letter selection, whichever letter layout is chosen. Letters and the message read right to left, with normal Unicode shaping. `Brojevi i znakovi` in Speech and the Numbers and Symbols tabs in the side panels include both `0123456789` and Arabic-Indic digits, Arabic punctuation, vowel and tanwin marks, shadda, sukun, dagger alif, extended marks, and combining Quranic signs. Symbols in Arabic Speech are grouped, and long group lists in side panels use `Prethodna` and `Sljedeća` to keep gaze targets large. A dotted circle makes standalone marks visible on buttons; only the actual mark is entered. `Obriši slovo` removes the last entered character, so a mark can be corrected without removing its letter. Mixed Arabic and Latin text is preserved.
+Arabic always uses group-then-letter selection, whichever letter layout is chosen. Letters and the message read right to left, with normal Unicode shaping. `Brojevi i znakovi` in Speech and the Numbers and Symbols tabs in Keyboard include both `0123456789` and Arabic-Indic digits, Arabic punctuation, vowel and tanwin marks, shadda, sukun, dagger alif, extended marks, and combining Quranic signs. Symbols in Arabic Speech are grouped, and long group lists in Keyboard use `Prethodna` and `Sljedeća` to keep gaze targets large. A dotted circle makes standalone marks visible on buttons; only the actual mark is entered. `Obriši slovo` removes the last entered character, so a mark can be corrected without removing its letter. Mixed Arabic and Latin text is preserved.
 
-Both Latin and Arabic side-panel keyboards show at most eight groups per page, including when **Broj slova u grupi** is set to one or two. Selecting a character returns to the same page. Changing the script or keyboard tab returns to page one.
+Both Latin and Arabic Keyboard layouts show at most eight groups per page, including when **Broj slova u grupi** is set to one or two. Selecting a character returns to the same page. Changing the script or keyboard tab returns to page one.
 
 Arabic has no word suggestions or new personal learning in this release. Returning to Latin restores the existing Bosnian suggestions and learned data.
 
@@ -153,10 +160,6 @@ Automated checks verify Unicode entry, switching, layout, and voice commands. Th
 ## Keyboard
 
 Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Letters always appear in groups here; **Raspored slova u Govoru** changes only Speech. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
-
-## Controller
-
-Controller opens a right-side panel with General, Keyboard, Speech, and Settings tabs. General provides left, right, and double-click actions, Enter, and scrolling. The embedded Keyboard tab contains the same letters, numpad, and symbols controls. Only Keyboard or Controller can reserve the right work area at one time. Switching from one to the other puts the new panel in the same place, so the work area stays narrowed by one panel width.
 
 ## Settings
 
@@ -188,7 +191,7 @@ The edge duration applies when gaze moves just beyond a button. The short eye-tr
 
 ### Selection stability near edges
 
-Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's word test copies this setting when opened.
+Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, the Quick actions grid and direct desktop actions retain their existing rules. The gaze check's word test copies this setting when opened.
 
 While gaze is briefly outside A but still near its edge, the pause or ring freezes. Only returning inside the same unchanged A before expiry can resume it; outside time, including the interval up to the first returning point, earns no progress. If gaze stays on a nearby B until expiry, A is discarded and B starts its full pause and dwell from the first eligible sample after expiry. B earns no time while A is frozen. Moving farther away switches immediately. Changing the duration cancels an unfinished selection; completed buttons still require departure before repetition. A tracking interruption cannot extend an already running edge deadline.
 
@@ -218,11 +221,11 @@ For example, with an 850 ms initial pause, 650 ms fill and H = 300 ms, returning
 
 Both-eye loss, switching the sole tracked eye without fresh both-eye gaze between, a changed target/content/geometry, lost connection, suspended input or relevant timing/policy changes discard retained progress. Existing stale-data and delivery-gap checks take precedence and can discard it before 500 ms. Repeated eye reports do not restart either deadline, and tracking retention cannot extend an edge-hold deadline. Completed controls still require looking away before repetition.
 
-The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and word test use the selected policy and display its name; eye indicators, per-eye shares and both-eye availability remain actual measurements. Its interruption count follows the selected policy. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
+The policy applies to all application gaze controls, including keyboards, dialogs and Settings. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. The gaze check's precision, free view and word test use the selected policy and display its name; eye indicators, per-eye shares and both-eye availability remain actual measurements. Its interruption count follows the selected policy. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
 
 ### Speech settings
 
-Speech settings controls eSpeak speed (155 words per minute by default, 80 to 320), the Speech letter layout, letters per group (5 by default, 1 to 12), and the voice preset. `Raspored slova u Govoru` accepts `Sva slova` (the default, also for existing installations) or `Grupe slova`; it applies to Latin Speech only. Letters per group applies to the Keyboard and Controller, and to Speech with groups or Arabic. `Pismo tastature` accepts `Latinica` (the default for existing installations) or `Arapski`. The voice choices appear directly below it. The selected voice button stays selected when pressed again. Arabic replaces the Bosnian choices with Hamed while retaining the Bosnian preference. The speed control appears only for Standardni and applies to eSpeak. `Naučene riječi` opens the personal vocabulary. Select one word and then `Zaboravi riječ` to remove its personal ranking contribution without changing messages, phrases, answers, or the bundled dictionary. If learning cannot be read or saved, the page preserves the last file, reports the problem, and offers `Pokušaj ponovo` while normal typing and speech remain usable. Other settings are saved immediately to `data\app_settings.json`.
+Speech settings controls eSpeak speed (155 words per minute by default, 80 to 320), the Speech letter layout, letters per group (5 by default, 1 to 12), and the voice preset. `Raspored slova u Govoru` accepts `Sva slova` (the default, also for existing installations) or `Grupe slova`; it applies to Latin Speech only. Letters per group applies to the Keyboard, and to Speech with groups or Arabic. `Pismo tastature` accepts `Latinica` (the default for existing installations) or `Arapski`. The voice choices appear directly below it. The selected voice button stays selected when pressed again. Arabic replaces the Bosnian choices with Hamed while retaining the Bosnian preference. The speed control appears only for Standardni and applies to eSpeak. `Naučene riječi` opens the personal vocabulary. Select one word and then `Zaboravi riječ` to remove its personal ranking contribution without changing messages, phrases, answers, or the bundled dictionary. If learning cannot be read or saved, the page preserves the last file, reports the problem, and offers `Pokušaj ponovo` while normal typing and speech remain usable. Other settings are saved immediately to `data\app_settings.json`.
 
 ## Update
 
@@ -280,7 +283,7 @@ Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets
 
 #### Understand the indicator
 
-A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Speech's Controls column and deletion/exit/alarm dialogs, Settings, Keyboard, Controller, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
+A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Speech's Controls column and deletion/exit/alarm dialogs, Settings, Keyboard, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
 
 | Message | Meaning |
 | --- | --- |
