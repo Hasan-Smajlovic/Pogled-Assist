@@ -2,31 +2,11 @@
 
 Windows desktop controls for Tobii Eye Tracker 4C and Eye Tracker 5. The app turns gaze into pointer movement, dwell clicks, a Bosnian speech keyboard, an on-screen keyboard, and a compact controller panel. Connect one tracker at a time; [tracker setup and replacement](docs/USER_GUIDE.md#before-starting) describe the matching Tobii software and reconnection limits.
 
+![Pogled Assist screens: the full-screen Speech keyboard speaking a typed greeting, the saved answers of a Speech category, the caregiver gaze check, and a key with its dwell-selection ring](docs/images/readme-hero.png)
+
+The image uses synthetic preview data from the [rendered UI gallery](docs/UI_DEVELOPMENT.md#rendered-ui-gallery).
+
 [Download a Windows release](https://github.com/Hasan-Smajlovic/Pogled-Assist/releases)
-
-## Screenshots
-
-The screenshots use synthetic preview data from the [rendered UI gallery](docs/UI_DEVELOPMENT.md#rendered-ui-gallery).
-
-**Hotbar**
-
-![Hotbar with Settings, Quick actions, click modes, Speech, Keyboard and Controller buttons, and eye tracking ready for both eyes](docs/images/readme-hotbar.png)
-
-**Speech keyboard**
-
-![Full-screen Bosnian speech keyboard with an empty message field, five word suggestions, the alphabet, and Alarm, Rest and Exit buttons](docs/images/readme-speech.png)
-
-**Controller panel**
-
-![Controller panel with left, right and double click, confirm, and scroll up and down buttons](docs/images/readme-controller.png)
-
-**Settings**
-
-![Gaze and selection settings with the eye-tracking mode and selection timings in milliseconds](docs/images/readme-settings.png)
-
-**Gaze check result**
-
-![Finished caregiver gaze check showing five targets on a screen map with samples, valid data, offset and spread for each target](docs/images/readme-gaze-check.png)
 
 ## Features
 
