@@ -21,6 +21,7 @@ from ..interaction.mouse_controller import (
     SHOW_HOTBAR,
     SPEECH,
 )
+from .icons import themed_icon
 from .theme import CONTROL_STATES
 from .tracking_status import TrackingStatusWidget
 
@@ -203,25 +204,19 @@ class HotbarControls:
         return button
 
     def _icon(self, icon_name: str, action: str) -> QIcon:
-        try:
-            import qtawesome as qta
-
-            color = "#ffffff" if action in CLICK_ACTIONS else "#dce6f3"
-            return qta.icon(icon_name, color=color)
-        except Exception:
-            logger.exception("Could not load qtawesome icon %s; using fallback.", icon_name)
-            fallback = {
-                LEFT_CLICK: QStyle.StandardPixmap.SP_ArrowForward,
-                RIGHT_CLICK: QStyle.StandardPixmap.SP_DialogApplyButton,
-                DOUBLE_LEFT_CLICK: QStyle.StandardPixmap.SP_BrowserReload,
-                QUICK_ACTIONS: QStyle.StandardPixmap.SP_ComputerIcon,
-                SPEECH: QStyle.StandardPixmap.SP_MediaVolume,
-                KEYBOARD: QStyle.StandardPixmap.SP_FileDialogDetailedView,
-                SETTINGS: QStyle.StandardPixmap.SP_FileDialogInfoView,
-                HIDE_HOTBAR: QStyle.StandardPixmap.SP_TitleBarMinButton,
-                SHOW_HOTBAR: QStyle.StandardPixmap.SP_TitleBarNormalButton,
-            }.get(action, QStyle.StandardPixmap.SP_FileIcon)
-            return self.window.style().standardIcon(fallback)
+        color = "#ffffff" if action in CLICK_ACTIONS else "#dce6f3"
+        fallback = {
+            LEFT_CLICK: QStyle.StandardPixmap.SP_ArrowForward,
+            RIGHT_CLICK: QStyle.StandardPixmap.SP_DialogApplyButton,
+            DOUBLE_LEFT_CLICK: QStyle.StandardPixmap.SP_BrowserReload,
+            QUICK_ACTIONS: QStyle.StandardPixmap.SP_ComputerIcon,
+            SPEECH: QStyle.StandardPixmap.SP_MediaVolume,
+            KEYBOARD: QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            SETTINGS: QStyle.StandardPixmap.SP_FileDialogInfoView,
+            HIDE_HOTBAR: QStyle.StandardPixmap.SP_TitleBarMinButton,
+            SHOW_HOTBAR: QStyle.StandardPixmap.SP_TitleBarNormalButton,
+        }.get(action, QStyle.StandardPixmap.SP_FileIcon)
+        return themed_icon(icon_name, color, self.window.style(), fallback)
 
 
 def no_focus_tool_window_flags() -> Qt.WindowFlags:

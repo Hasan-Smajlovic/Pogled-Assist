@@ -4,7 +4,7 @@ from itertools import product
 
 import pytest
 from _ui_fakes import FakeAppBar, FakeKeyboardInput
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
 
 from pogled_assist.keyboard_layouts import ARABIC_LETTERS, ARABIC_SYMBOLS, SYMBOL_KEYS
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -80,6 +80,7 @@ class _Sidebar:
             window.size(),
         )
         assert window._script_button.isVisible()
+        assert window._action_buttons[f"{self.prefix}enter"].isVisible()
         if pages > 1:
             assert window._action_buttons[self._page_action(-1)].isEnabled() == (page > 0)
             assert window._action_buttons[self._page_action(1)].isEnabled() == (page + 1 < pages)
@@ -147,6 +148,46 @@ def test_keyboard_sidebar_routes_letters_numbers_symbols_and_keys(qtbot):
 
     assert fake_input.typed == ["A", "7", ","]
     assert fake_input.pressed == ["backspace"]
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("script", ["latin", "arabic"])
+def test_keyboard_enter_stays_available_and_restores_external_target(qtbot, monkeypatch, script):
+    from pogled_assist.ui import sidebar_panel
+
+    monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
+    sidebar = _Sidebar(qtbot, SpeechSettings(keyboard_script=script))
+    window = sidebar.window
+    events = []
+    # Pogled Assist has the foreground: restore the remembered external window first.
+    monkeypatch.setattr(sidebar.input, "foreground_window", lambda: 99)
+    monkeypatch.setattr(sidebar.input, "belongs_to_current_process", lambda hwnd: hwnd == 99)
+    monkeypatch.setattr(
+        sidebar.input, "set_foreground_window", lambda hwnd: events.append(("focus", hwnd)) or True
+    )
+    monkeypatch.setattr(sidebar.input, "press_key", lambda key: events.append(("key", key)))
+    enter = window._action_buttons[f"{sidebar.prefix}enter"]
+    geometry = None
+    for show in (
+        window._show_letter_groups,
+        lambda: window._show_letter_group(0),
+        window._show_numpad,
+        lambda: window._show_numpad_group(0),
+        window._show_symbols,
+        lambda: window._show_symbol_group(0),
+    ):
+        show()
+        qtbot.waitUntil(enter.isVisible)
+        QCoreApplication.sendPostedEvents(None, QEvent.LayoutRequest)
+        rect = window.action_bounds(f"{sidebar.prefix}enter")
+        assert rect is not None and rect.height() >= 58 and rect.width() >= 150
+        geometry = rect if geometry is None else geometry
+        assert rect == geometry
+        state = window._active_tab, window._group_page, window._active_group_index
+        events.clear()
+        qtbot.mouseClick(enter, Qt.LeftButton)
+        assert events == [("focus", 50), ("key", "enter")]
+        assert (window._active_tab, window._group_page, window._active_group_index) == state
 
 
 @pytest.mark.e2e

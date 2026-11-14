@@ -12,7 +12,7 @@ from pogled_assist.tracking.gaze_check import FixationResult
 from pogled_assist.tracking.gaze_check_store import GazeCheckStore
 from pogled_assist.ui.gaze_check_reports import GazeCheckReports
 from pogled_assist.ui.gaze_check_views import TRIAL_WORD
-from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+from pogled_assist.ui.gaze_check_window import GazeCheckServices, GazeCheckWindow
 
 pytestmark = pytest.mark.e2e
 WORD_LENGTH = len(TRIAL_WORD)
@@ -23,7 +23,7 @@ def check(qtbot, monkeypatch, tmp_path, request):
     reports = GazeCheckReports(GazeCheckStore(tmp_path / "results"))
     window = GazeCheckWindow(
         GazeSettings(logging_enabled=getattr(request, "param", True)),
-        reports=reports,
+        services=GazeCheckServices(reports=reports),
         simulated=True,
     )
     qtbot.addWidget(window)
@@ -51,7 +51,7 @@ def complete_precision(window, qtbot):
 def test_completion_saves_only_with_logging_and_keeps_memory_on_reopen(check, qtbot):
     window, reports, _now = check
     complete_precision(window, qtbot)
-    report_id = window._report.id
+    report_id = window._session.report.id
     if window._settings.logging_enabled:
         qtbot.waitUntil(lambda: reports.states[report_id] == "saved")
         assert reports.store.load()[0].report.id == report_id
@@ -61,7 +61,7 @@ def test_completion_saves_only_with_logging_and_keeps_memory_on_reopen(check, qt
     window._show_results()  # Rendering must not create another report or emit new measurements.
     window.close()
     assert list(reports.reports) == [report_id]
-    reopened = GazeCheckWindow(GazeSettings(), reports=reports)
+    reopened = GazeCheckWindow(GazeSettings(), services=GazeCheckServices(reports=reports))
     qtbot.addWidget(reopened)
     reopened.show()
     reopened._open_history()
@@ -113,7 +113,7 @@ def test_interruption_finalizes_once_without_fabricating_misses(check, qtbot, tr
 def test_repeated_trials_keep_attempt_ids_and_per_group_counts(check, qtbot):
     window, reports, now = check
     complete_precision(window, qtbot)
-    report_id = window._report.id
+    report_id = window._session.report.id
     for _attempt in range(2):
         window._start_trial()
         for index in range(WORD_LENGTH):
@@ -145,7 +145,7 @@ def test_save_failure_is_visible_retry_works_and_export_does_not_change_storage(
 
     monkeypatch.setattr(reports.store, "save", fail)
     complete_precision(window, qtbot)
-    key = window._report.id
+    key = window._session.report.id
     qtbot.waitUntil(lambda: reports.states[key] == "error")
     assert window._retry_save_button.isVisible()
     destination = tmp_path / "manual.zip"
@@ -188,7 +188,7 @@ def test_blocked_disk_worker_keeps_qt_responsive_and_older_save_cannot_mark_new_
         window._repeat_button.click()
         window._start_trial()
         window._test_back_button.click()
-        key = window._report.id
+        key = window._session.report.id
         release.set()
         qtbot.waitUntil(newer_entered.is_set)
         qtbot.waitUntil(lambda: not reports.loading)
@@ -209,7 +209,7 @@ def test_export_cancel_failure_and_retry_preserve_result_and_exact_path(
 
     window, reports, _now = check
     complete_precision(window, qtbot)
-    key = window._report.id
+    key = window._session.report.id
     qtbot.waitUntil(lambda: reports.states[key] == "saved")
     monkeypatch.setattr(gaze_check_history.QFileDialog, "getSaveFileName", lambda *_a: ("", ""))
     window._export_button.click()
@@ -249,7 +249,7 @@ def test_finalized_trial_summary_survives_reset_history_return_and_archived_deta
         now[0] = start + 2
         window._finish_trial_target(True, now[0])
     summary, advice = window._trial_summary.text(), window._result_advice.text()
-    key = window._report.id
+    key = window._session.report.id
     window._calibration_button.click()
     assert window._phase == "position"
     window._open_history()

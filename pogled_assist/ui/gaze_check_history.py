@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from ..interaction.eye_tracking_policy import EYE_TRACKING_POLICY_CHOICES
 from ..tracking.gaze_check_report import ENVIRONMENT_KEYS, SETTING_KEYS
+from .check_surface import scroll_content
 from .gaze_check_text import eye_summary_text
 
 STATES = {"completed": "Završeno", "interrupted": "Prekinuto"}
@@ -31,14 +31,6 @@ STORAGE = {
     "saved": "Rezultat je sačuvan. Najnovijih 100 izvještaja, do ukupno 10 MiB.",
     "error": "Čuvanje nije uspjelo. Rezultat je u memoriji; pokušajte ponovo ili izvezite ZIP.",
 }
-
-
-def scroll_content(widget: QWidget) -> QScrollArea:
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QScrollArea.NoFrame)
-    scroll.setWidget(widget)
-    return scroll
 
 
 class GazeCheckHistory:

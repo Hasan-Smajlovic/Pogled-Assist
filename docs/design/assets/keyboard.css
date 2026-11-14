@@ -7,7 +7,8 @@
 .sidebar-reference footer button { min-height: 58px; }
 .sidebar-reference-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .sidebar-reference-grid button { min-height: 54px; }
-.sidebar-reference > [data-script-toggle] { min-height: 52px; font-size: 18px; padding: 6px; }
+.sidebar-command-row { display: flex; gap: 8px; }
+.sidebar-command-row button { flex: 1 1 0; min-height: 58px; font-size: 16px; padding: 6px; }
 .sidebar-reference-grid button { white-space: pre-line; font-size: 19px; padding: 6px; }
 .sidebar-reference .sidebar-pages button { min-height: 52px; font-size: 16px; }
 .system-actions button { white-space: normal; }

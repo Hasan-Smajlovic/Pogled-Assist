@@ -109,7 +109,7 @@ def _quick_grid_hotbar(qtbot, monkeypatch):
     from _clock import freeze_monotonic
 
     from pogled_assist import toolbar
-    from pogled_assist.ui import quick_action_menu, sidebar_panel
+    from pogled_assist.ui import sidebar_panel
 
     settings = GazeSettings(selection_pause_ms=100, dwell_ms=200, click_cooldown_ms=100)
     monkeypatch.setattr(toolbar, "WindowsAppBar", FakeAppBar)
@@ -119,7 +119,9 @@ def _quick_grid_hotbar(qtbot, monkeypatch):
     monkeypatch.setattr(toolbar, "save_app_settings", lambda *_settings: None)
     monkeypatch.setattr(sidebar_panel, "WindowsAppBar", FakeAppBar)
     monkeypatch.setattr(sidebar_panel, "WindowsInputController", FakeHotbarInput)
-    monkeypatch.setattr(quick_action_menu, "force_window_topmost", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_a, **_k: True
+    )
     window = toolbar.HotbarWindow()
     qtbot.addWidget(window)
     mouse = window._mouse

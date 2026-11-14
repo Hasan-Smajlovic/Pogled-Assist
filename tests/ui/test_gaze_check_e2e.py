@@ -157,8 +157,8 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
     # The word test follows the targets; the targets are already saved.
     assert window._phase == "trial"
     assert window._step.text().startswith("3 · Riječ")
-    assert [row.near for row in window._report.precision] == [True] * 5
-    assert window._report.precision_eyes is not None
+    assert [row.near for row in window._session.report.precision] == [True] * 5
+    assert window._session.report.precision_eyes is not None
     window._test_back_button.click()
     assert window._phase == "results"
     assert "5 od 5" in window._result_summary.text()
@@ -1177,9 +1177,9 @@ def test_tests_hide_the_live_panel_and_save_each_tests_interruptions(gaze_check,
             )
         )
     window._test_back_button.click()
-    eyes = window._report.trials[-1].eyes
+    eyes = window._session.report.trials[-1].eyes
     assert eyes.interruptions == 1
     assert eyes.longest_interruption_seconds == pytest.approx(0.5)
-    assert window._report.precision_eyes is not None
+    assert window._session.report.precision_eyes is not None
     assert "Riječ · lijevo" in window._eye_summary_label.text()
     assert "prekidi 1, najduži 0,5 s" in window._eye_summary_label.text()
