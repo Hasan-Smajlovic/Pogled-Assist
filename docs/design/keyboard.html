@@ -19,7 +19,7 @@
   <main id="sidebar-screen">
     <section class="sidebar-reference" aria-label="Samostalna tastatura">
       <nav><button type="button" data-side-tab="letters" data-edge-control>Slova</button><button type="button" data-side-tab="numbers" data-edge-control>Brojevi</button><button type="button" data-side-tab="symbols" data-edge-control>Znakovi</button></nav>
-      <button type="button" data-script-toggle data-edge-control>Arapski</button>
+      <div class="sidebar-command-row"><button type="button" data-script-toggle data-edge-control>Arapski</button><button type="button" data-side-enter data-edge-control>Potvrdi</button></div>
       <div class="sidebar-reference-grid">
         <button type="button" data-edge-control>A B C Č Ć</button><button type="button" data-edge-control>D DŽ Đ E F</button>
         <button type="button" data-edge-control>G H I J K</button><button type="button" data-edge-control>L LJ M N NJ</button>
@@ -31,6 +31,7 @@
     </section>
     <p>Tastatura koristi istu toleranciju ruba kao Govor: najviše 24 logička piksela ili četvrtinu kraće stranice. Trajanje se podešava na kartici Stabilnost uz rub: zadano 120 ms, raspon 0 do 300 ms, korak 20 ms; nula isključuje čuvanje. Izvan dugmeta nema potvrde ni napretka. Novo dugme nakon isteka dobija puno vrijeme odabira; promjena grupe ili skrivanje poništava prethodni odabir. Gubitak oka prati izabrani režim i ne produžava rok čuvanja uz rub.</p>
     <p>Oba pisma prikazuju najviše osam grupa po stranici. Prethodna i Sljedeća pojavljuju se samo kada ima više stranica. Duže latinične grupe prikazuju se u više redova kako bi zadržale širinu bočne tastature od 380 px. Odabir znaka vraća istu stranicu; promjena pisma ili kartice vraća prvu stranicu. Raspored staje u radni prostor od 640 logičkih piksela ispod trake.</p>
+    <p>Potvrdi šalje Enter u vanjski prozor u koji se piše. Ostaje uz izbor pisma na svim karticama, stranicama i unutar grupa, bez promjene otvorene grupe ili kartice. Novo potvrđivanje traži da pogled napusti dugme i vrati se. Referenca ne šalje tipke drugim prozorima.</p>
   </main>
   <details class="reference-tools"><summary>Opcije pregleda</summary><label>Broj slova u grupi <select id="sidebar-group-size"><option value="1">1</option><option value="2">2</option><option value="5" selected>5</option><option value="12">12</option></select></label><label><input id="gaze-demo" type="checkbox" checked> Miš simulira pogled</label></details>
   <div id="gaze-ring" aria-hidden="true" hidden></div>

@@ -16,7 +16,7 @@ The image uses synthetic preview data from the [rendered UI gallery](docs/UI_DEV
 - A Quick actions grid of eight large targets for clicking, scrolling, Enter, or typing at the current gaze target.
 - A visible gaze bubble and action progress overlay.
 - A full-screen Bosnian speech keyboard with offline word completion and next-word suggestions, reusable phrases, and local personal learning.
-- A right-side Keyboard panel for typing into other applications.
+- A right-side Keyboard panel for typing into other applications, with an always-visible Enter button.
 - Gaze-selectable settings for timing, smoothing, speech, startup, and logging.
 - Adjustable [edge selection stability](docs/USER_GUIDE.md#selection-stability-near-edges) for Speech, Keyboard and the hotbar.
 - An optional caregiver gaze check with live positioning, per-eye tracking with interruption counts, timed targets, a word written by gaze, and [saved results and ZIP export](docs/features/gaze-check.md#saved-gaze-check-results).

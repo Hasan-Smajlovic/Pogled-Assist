@@ -161,6 +161,8 @@ Automated checks verify Unicode entry, switching, layout, and voice commands. Th
 
 Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Letters always appear in groups here; **Raspored slova u Govoru** changes only Speech. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
 
+**Potvrdi** beside the script switch sends Enter to the external window you are typing into. It stays available on every tab and inside each group, without changing your current keyboard page or group. After typing an address or search, select it once to submit. Look away and return before selecting it again by gaze.
+
 ## Settings
 
 The four navigation choices are **Aplikacija**, **Pogled i odabir**, **Govor i tastatura** and **Podrška**. Notification and action-progress switches share a separated row below the timing controls. Each switch sits next to its label.
