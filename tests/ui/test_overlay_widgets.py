@@ -11,9 +11,9 @@ from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
 
 def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    monkeypatch.setattr(GazeBubbleWindow, "_apply_windows_click_through", lambda self: None)
+    monkeypatch.setattr("pogled_assist.ui.overlay_window.make_window_click_through", lambda _: True)
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
 
@@ -46,9 +46,9 @@ def test_gaze_bubble_keeps_its_interior_clear_with_a_visible_ring_and_center(qtb
 
 def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.interaction_overlay.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    monkeypatch.setattr(InteractionOverlayWindow, "_apply_windows_click_through", lambda self: None)
+    monkeypatch.setattr("pogled_assist.ui.overlay_window.make_window_click_through", lambda _: True)
     overlay = InteractionOverlayWindow()
     qtbot.addWidget(overlay)
 
@@ -72,7 +72,7 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
 def test_gaze_bubble_expires_without_fresh_positions(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
     monkeypatch.setattr(
-        "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
@@ -110,7 +110,7 @@ def test_enabling_gaze_bubble_rejects_stale_points_received_while_hidden(qtbot, 
 
 def test_quick_action_menu_selects_stable_tile_by_gaze(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     menu = QuickActionMenu()
     qtbot.addWidget(menu)

@@ -28,12 +28,12 @@ from ..interaction.mouse_controller import (
     TYPE_HERE,
     action_label,
 )
-from ..windows.windows_z_order import force_window_topmost
+from .icons import themed_icon
+from .overlay_window import TOPMOST_REFRESH_INTERVAL_MS, OverlayStacking, overlay_window_flags
 
 logger = logging.getLogger(__name__)
 
 CANCEL_QUICK_ACTION = "cancel_quick_action"
-TOPMOST_REFRESH_INTERVAL_MS = 33
 
 TILE_WIDTH = 150
 TILE_HEIGHT = 190
@@ -97,11 +97,11 @@ class QuickActionMenu(QWidget):
         self._selection_dwell_ms = 500
         self._selection_emitted = False
         self._blocked_action: str | None = None
-        self._last_topmost_ms = 0.0
+        self._stacking = OverlayStacking(self)
         self._icons = {tile.action: self._icon(tile) for tile in TILES}
 
         self.setWindowTitle("Brze radnje")
-        self.setWindowFlags(_overlay_window_flags())
+        self.setWindowFlags(overlay_window_flags(click_through=False))
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -109,7 +109,7 @@ class QuickActionMenu(QWidget):
 
         self._timer = QTimer(self)
         self._timer.setInterval(TOPMOST_REFRESH_INTERVAL_MS)
-        self._timer.timeout.connect(self._refresh_windows_topmost_due)
+        self._timer.timeout.connect(self._stacking.refresh_if_due)
         self._return_timer = QTimer(self)
         self._return_timer.setSingleShot(True)
         # A coarse timer may fire early; the grid must not return inside the cooldown.
@@ -175,7 +175,7 @@ class QuickActionMenu(QWidget):
         self._selection_timer.cancel(reason=reason)
         self._selection_emitted = False
         self._blocked_action = None
-        self._last_topmost_ms = 0.0
+        self._stacking.reset()
         self._timer.stop()
         self.hide()
         if was_visible:
@@ -192,7 +192,7 @@ class QuickActionMenu(QWidget):
         self._timer.start()
         self.show()
         self.raise_()
-        self._refresh_windows_topmost(force=True)
+        self._stacking.refresh(force=True)
 
     def tile_rect(self, action: str) -> QRect | None:
         """Global rectangle of an action's tile, or None for an unknown action."""
@@ -349,26 +349,6 @@ class QuickActionMenu(QWidget):
             _menu_label(tile.action),
         )
 
-    def _refresh_windows_topmost_due(self) -> None:
-        if not self.isVisible():
-            return
-
-        now_ms = time.monotonic() * 1000
-        if now_ms - self._last_topmost_ms >= TOPMOST_REFRESH_INTERVAL_MS:
-            self._refresh_windows_topmost(now_ms=now_ms)
-
-    def _refresh_windows_topmost(
-        self,
-        *,
-        force: bool = False,
-        now_ms: float | None = None,
-    ) -> None:
-        if not force and not self.isVisible():
-            return
-
-        force_window_topmost(self, show=True, aggressive=True)
-        self._last_topmost_ms = now_ms if now_ms is not None else time.monotonic() * 1000
-
     def _action_for_global_point(self, point: QPoint) -> str | None:
         """Return the tile under ``point``; gaps belong to the nearest tile."""
         half_gap = TILE_GAP // 2
@@ -396,14 +376,8 @@ class QuickActionMenu(QWidget):
         return QPoint(self._center_global) if rect is None else _icon_rect(rect).center()
 
     def _icon(self, tile: QuickActionTile) -> QIcon:
-        try:
-            import qtawesome as qta
-
-            color = "#fff1f2" if tile.action == CANCEL_QUICK_ACTION else "#ffffff"
-            return qta.icon(tile.icon_name, color=color)
-        except Exception:
-            logger.exception("Could not load quick action icon %s; using fallback.", tile.icon_name)
-            return self.style().standardIcon(tile.fallback)
+        color = "#fff1f2" if tile.action == CANCEL_QUICK_ACTION else "#ffffff"
+        return themed_icon(tile.icon_name, color, self.style(), tile.fallback)
 
 
 def grid_rect_around(center: QPoint, bounds: QRect) -> QRect:
@@ -448,13 +422,3 @@ def _cell_rect(grid: QRect, row: int, column: int) -> QRect:
 
 def _menu_label(action: str) -> str:
     return "Odustani" if action == CANCEL_QUICK_ACTION else action_label(action)
-
-
-def _overlay_window_flags() -> Qt.WindowFlags:
-    flags = Qt.FramelessWindowHint | Qt.Window | Qt.WindowStaysOnTopHint
-    no_focus = getattr(Qt, "WindowDoesNotAcceptFocus", None)
-    if no_focus is None:
-        no_focus = getattr(Qt.WindowType, "WindowDoesNotAcceptFocus", None)
-    if no_focus is not None:
-        flags |= no_focus
-    return flags

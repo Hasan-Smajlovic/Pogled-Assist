@@ -88,7 +88,7 @@ def test_quick_menu_labels_are_20_px_bold_and_fit_on_one_line(qapp):
 
 def test_quick_menu_requires_leaving_the_tile_under_the_point_at_an_edge(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     menu = QuickActionMenu()
     qtbot.addWidget(menu)
@@ -111,7 +111,7 @@ def test_quick_menu_edge_gaze_outside_the_grid_keeps_the_point_tile_blocked(
     from _clock import freeze_monotonic
 
     monkeypatch.setattr(
-        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     menu = QuickActionMenu()
     qtbot.addWidget(menu)
@@ -149,7 +149,7 @@ def _visible_menu(qtbot, monkeypatch):
     from _clock import freeze_monotonic
 
     monkeypatch.setattr(
-        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     menu = QuickActionMenu()
     qtbot.addWidget(menu)

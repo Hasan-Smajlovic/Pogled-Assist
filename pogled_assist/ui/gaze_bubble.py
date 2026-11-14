@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import ctypes
 import logging
-import sys
 import time
-from ctypes import wintypes
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
@@ -14,17 +11,12 @@ from PySide6.QtWidgets import QWidget
 
 from .. import diagnostics
 from ..tracking.gaze_provider import GAZE_DELIVERY_GAP_SECONDS
-from ..windows.windows_z_order import force_window_topmost
+from .overlay_window import TOPMOST_REFRESH_INTERVAL_MS, OverlayStacking, overlay_window_flags
 
 logger = logging.getLogger(__name__)
 
-GWL_EXSTYLE = -20
-WS_EX_LAYERED = 0x00080000
-WS_EX_TRANSPARENT = 0x00000020
-WS_EX_NOACTIVATE = 0x08000000
 MIN_MOVE_INTERVAL_MS = 20
 MIN_MOVE_DISTANCE_PX = 2
-TOPMOST_REFRESH_INTERVAL_MS = 33
 
 
 class GazeBubbleWindow(QWidget):
@@ -40,7 +32,7 @@ class GazeBubbleWindow(QWidget):
         self._last_move_ms = 0.0
         self._last_gaze_ms = 0.0
         self._last_raise_ms = 0.0
-        self._windows_click_through_applied = False
+        self._stacking = OverlayStacking(self)
         self._diagnostic_gaze_at: float | None = None
         self._diagnostic_hide_reason = "hidden_or_closed"
         self._diagnostic_metrics = diagnostics.StreamMetrics(event_name="marker_summary")
@@ -49,7 +41,7 @@ class GazeBubbleWindow(QWidget):
         self._topmost_timer.timeout.connect(self._refresh_windows_topmost)
 
         self.setWindowTitle("Oznaka pogleda")
-        self.setWindowFlags(_bubble_window_flags())
+        self.setWindowFlags(overlay_window_flags(click_through=True))
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
@@ -153,7 +145,7 @@ class GazeBubbleWindow(QWidget):
 
     def _show_without_focus(self) -> None:
         self.show()
-        self._apply_windows_click_through()
+        self._stacking.apply_click_through()
         self.raise_()
         self._refresh_windows_topmost()
         if not self._topmost_timer.isActive():
@@ -172,51 +164,7 @@ class GazeBubbleWindow(QWidget):
             self.clear(reason="gaze_stale")
             return
 
-        force_window_topmost(self, show=True, aggressive=True)
+        self._stacking.refresh()
 
     def _gaze_is_fresh(self) -> bool:
         return time.monotonic() * 1000 - self._last_gaze_ms < GAZE_DELIVERY_GAP_SECONDS * 1000
-
-    def _apply_windows_click_through(self) -> None:
-        if self._windows_click_through_applied or sys.platform != "win32":
-            return
-
-        try:
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            hwnd = wintypes.HWND(int(self.winId()))
-            if ctypes.sizeof(ctypes.c_void_p) == 8:
-                get_window_long = user32.GetWindowLongPtrW
-                set_window_long = user32.SetWindowLongPtrW
-                long_ptr = ctypes.c_longlong
-            else:
-                get_window_long = user32.GetWindowLongW
-                set_window_long = user32.SetWindowLongW
-                long_ptr = ctypes.c_long
-
-            get_window_long.argtypes = [wintypes.HWND, ctypes.c_int]
-            get_window_long.restype = long_ptr
-            set_window_long.argtypes = [wintypes.HWND, ctypes.c_int, long_ptr]
-            set_window_long.restype = long_ptr
-
-            style = int(get_window_long(hwnd, GWL_EXSTYLE))
-            style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
-            set_window_long(hwnd, GWL_EXSTYLE, long_ptr(style))
-            self._windows_click_through_applied = True
-            logger.info("Applied Windows click-through style to gaze bubble.")
-        except Exception:
-            logger.exception("Could not apply Windows click-through style to gaze bubble.")
-
-
-def _bubble_window_flags() -> Qt.WindowFlags:
-    flags = Qt.FramelessWindowHint | Qt.Window | Qt.WindowStaysOnTopHint
-    no_focus = getattr(Qt, "WindowDoesNotAcceptFocus", None)
-    if no_focus is None:
-        no_focus = getattr(Qt.WindowType, "WindowDoesNotAcceptFocus", None)
-    if no_focus is not None:
-        flags |= no_focus
-    transparent_input = getattr(Qt, "WindowTransparentForInput", None)
-    if transparent_input is None:
-        transparent_input = getattr(Qt.WindowType, "WindowTransparentForInput", None)
-    if transparent_input is not None:
-        flags |= transparent_input
-    return flags

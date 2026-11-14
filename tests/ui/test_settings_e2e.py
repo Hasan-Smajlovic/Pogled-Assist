@@ -181,7 +181,7 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     window.show()
     updates = []
     window.speech_settings_changed.connect(updates.append)
-    window._cycle_keyboard_script()
+    window._controls._actions[window._speech_page._script_combo]()
     qtbot.wait(1)
     assert updates[-1].keyboard_script == "arabic"
     assert updates[-1].voice_preset == preset
@@ -197,7 +197,7 @@ def test_settings_arabic_voice_caption_and_script_selection_fit_150_percent(
     ):
         assert window.rect().contains(QRect(control.mapTo(window, QPoint(0, 0)), control.size()))
         assert control.height() >= 58
-    window._cycle_keyboard_script()
+    window._controls._actions[window._speech_page._script_combo]()
     assert updates[-1].keyboard_script == "latin"
     assert updates[-1].voice_preset == preset
     assert window._speech_page._voice_buttons[preset].isChecked()
@@ -219,7 +219,7 @@ def test_speech_letter_layout_choice_is_saved_and_reflects_the_current_setting(q
     updates = []
     window.speech_settings_changed.connect(updates.append)
 
-    window._cycle_letter_layout()
+    window._controls._actions[window._speech_page._letter_layout_combo]()
     qtbot.wait(1)
     assert updates[-1].letter_layout == "all"
     assert combo.currentText() == "Sva slova"
@@ -251,7 +251,7 @@ def test_selection_sound_level_is_saved_and_previewed_at_the_chosen_level(qtbot,
     window.speech_settings_changed.connect(updates.append)
 
     for _ in range(3):
-        window._cycle_selection_sound()
+        window._controls._actions[window._general_page._selection_sound_combo]()
     qtbot.wait(1)
     assert [update.selection_sound for update in updates] == ["medium", "loud", "off"]
     assert sound.levels == ["medium", "loud", "off"]

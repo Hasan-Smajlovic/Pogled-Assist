@@ -1,6 +1,6 @@
 """General speech choices, tuning and test actions in Settings."""
 
-from PySide6.QtCore import QSignalBlocker, QSize
+from PySide6.QtCore import QSignalBlocker, QSize, Signal
 from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from ..keyboard_layouts import ARABIC_SCRIPT, KEYBOARD_SCRIPTS, LETTER_LAYOUTS
@@ -10,6 +10,7 @@ from .settings_controls import (
     CONTROL_HEIGHT,
     busy_indicator,
     content_layout,
+    cycle_choice,
     retain_size_when_hidden,
     setting_row,
     styled_label,
@@ -24,10 +25,20 @@ ARABIC_VOICE_HINT = "Arapski koristi prirodni muški glas Hamed. Potreban je int
 
 
 class SpeechSettingsPage(QFrame):
-    def __init__(self, owner):
-        super().__init__(owner)
-        self._owner = owner
-        self._controls = owner._controls
+    script_combo_changed = Signal(str)
+    adjust_speech_speed = Signal(int)
+    letter_layout_combo_changed = Signal(str)
+    adjust_letters_per_group = Signal(int)
+    set_voice_preset = Signal(str)
+    open_eleven = Signal()
+    request_speech_test = Signal()
+    open_learning = Signal()
+    open_audio = Signal()
+    speech_stop_requested = Signal()
+
+    def __init__(self, controls, parent=None):
+        super().__init__(parent)
+        self._controls = controls
         self._build()
 
     def _build(self):
@@ -45,8 +56,8 @@ class SpeechSettingsPage(QFrame):
 
         self._script_combo = self._controls.choice(
             KEYBOARD_SCRIPTS,
-            self._owner._script_combo_changed,
-            self._owner._cycle_keyboard_script,
+            lambda index: self.script_combo_changed.emit(self._script_combo.itemData(index)),
+            lambda: cycle_choice(self._script_combo),
             "Pismo tastature",
         )
         script_row, script_layout, _hint = setting_row(self, "Pismo tastature")
@@ -57,15 +68,17 @@ class SpeechSettingsPage(QFrame):
         row, self._speed_value = self._controls.adjust_row(
             "Brzina govora",
             "Broj riječi u minuti koji koristi eSpeak NG.",
-            self._owner._adjust_speech_speed,
+            self.adjust_speech_speed.emit,
             5,
         )
         layout.addWidget(row)
         self._speed_row = row
         self._letter_layout_combo = self._controls.choice(
             LETTER_LAYOUTS,
-            self._owner._letter_layout_combo_changed,
-            self._owner._cycle_letter_layout,
+            lambda index: self.letter_layout_combo_changed.emit(
+                self._letter_layout_combo.itemData(index)
+            ),
+            lambda: cycle_choice(self._letter_layout_combo),
             "Raspored slova u Govoru",
         )
         layout_row, layout_grid, _hint = setting_row(
@@ -76,7 +89,7 @@ class SpeechSettingsPage(QFrame):
         row, self._letters_group_value = self._controls.adjust_row(
             "Broj slova u grupi",
             "Grupe na Tastaturi, te u Govoru s grupama slova ili arapskim pismom.",
-            self._owner._adjust_letters_per_group,
+            self.adjust_letters_per_group.emit,
             1,
         )
         layout.addWidget(row)
@@ -96,7 +109,7 @@ class SpeechSettingsPage(QFrame):
         self._voice_buttons = {}
         for value, label in VOICE_PRESETS:
             button = self._controls.toggle_button(
-                label, lambda preset=value: self._owner._set_voice_preset(preset), QSize(180, 58)
+                label, lambda preset=value: self.set_voice_preset.emit(preset), QSize(180, 58)
             )
             voices.addWidget(button, 1)
             self._voice_buttons[value] = button
@@ -119,7 +132,7 @@ class SpeechSettingsPage(QFrame):
             self, "Efendija · ElevenLabs", FALLBACK_NOTE
         )
         self._eleven_button = self._controls.button(
-            "Podesi ElevenLabs", self._owner._open_eleven, QSize(220, 58)
+            "Podesi ElevenLabs", self.open_eleven.emit, QSize(220, 58)
         )
         grid.addWidget(self._eleven_button, 0, 1, 2, 1)
         layout.addWidget(self._eleven_summary)
@@ -127,18 +140,18 @@ class SpeechSettingsPage(QFrame):
     def _build_speech_actions(self, layout):
         page = self
         self._test_speech_button = self._controls.button(
-            "Isprobaj govor", self._owner._request_speech_test, QSize(240, 58), "fa5s.play"
+            "Isprobaj govor", self.request_speech_test.emit, QSize(240, 58), "fa5s.play"
         )
         self._test_speech_button.setObjectName("primaryButton")
         self._stop_speech_button = self._controls.button(
-            "Zaustavi", self._owner.speech_stop_requested.emit, QSize(120, 58), "fa5s.stop"
+            "Zaustavi", self.speech_stop_requested.emit, QSize(120, 58), "fa5s.stop"
         )
         self._stop_speech_button.hide()
         self._learned_words_button = self._controls.button(
-            "Naučene riječi", self._owner._open_learning, QSize(240, 58)
+            "Naučene riječi", self.open_learning.emit, QSize(240, 58)
         )
         self._saved_audio_button = self._controls.button(
-            "Sačuvani zvuk", self._owner._open_audio, QSize(220, 58)
+            "Sačuvani zvuk", self.open_audio.emit, QSize(220, 58)
         )
         actions = QGridLayout()
         actions.setHorizontalSpacing(12)
@@ -195,3 +208,9 @@ class SpeechSettingsPage(QFrame):
         self._controls.rename(self._test_speech_button, test_label)
         self._test_speech_button.setEnabled(not active and (not efendija or account.can_test_voice))
         self._voice_hint.setText(ARABIC_VOICE_HINT if arabic else BOSNIAN_VOICE_HINT)
+
+    def playback_controls(self):
+        return self._test_speech_button, self._stop_speech_button
+
+    def check_voice(self, preset: str) -> None:
+        self._voice_buttons[preset].setChecked(True)
