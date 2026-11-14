@@ -114,3 +114,36 @@ def test_keyboard_letter_entry_survives_brief_edge_jitter(hotbar_gaze, qtbot):
     assert actions == [action]
     assert window._input.typed == ["A"]
     assert window._active_group_index is None
+
+
+@pytest.mark.e2e
+def test_keyboard_enter_by_gaze_cancels_on_eye_loss_and_needs_departure_to_repeat(
+    hotbar_gaze, qtbot
+):
+    hotbar, controller, feed, actions, _progress = hotbar_gaze
+    hotbar._show_keyboard_sidebar()
+    window = hotbar._keyboard_window
+    window.setGeometry(900, 76, 380, 644)
+    action = f"{KEYBOARD_WINDOW_ACTION_PREFIX}enter"
+    button = window._action_buttons[action]
+    qtbot.waitUntil(button.isVisible)
+    qtbot.wait(1)
+    point = button.mapToGlobal(button.rect().center())
+    away = window._space_button.mapToGlobal(window._space_button.rect().center())
+    feed(point, 0)
+    feed(point, 700)
+    controller.handle_eye_status(True, False)
+    feed(point, 1100)
+    assert window._input.pressed == []
+    controller.handle_eye_status(True, True)
+    for at in (1200, 1700, 2201):
+        feed(point, at)
+    assert actions == [action]
+    assert window._input.pressed == ["enter"]
+    feed(point, 3600)
+    assert window._input.pressed == ["enter"]
+    feed(away, 4000)
+    for at in (4200, 4700, 5201):
+        feed(point, at)
+    assert actions == [action, action]
+    assert window._input.pressed == ["enter", "enter"]
