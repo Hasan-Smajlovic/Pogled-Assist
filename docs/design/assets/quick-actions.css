@@ -4,9 +4,12 @@
 .quick-sample-window { position: absolute; left: 9%; top: 15%; width: 60%; height: 66%; padding: 24px; border: 1px solid #c9d0d8; border-radius: 6px; background: #fff; color: #25303b; font: 16px/1.6 Arial, sans-serif; }
 #quick-actions-screen::after { content: ''; position: absolute; inset: 0; background: rgba(10, 13, 18, .55); pointer-events: none; }
 .quick-grid { position: absolute; left: 50%; top: 50%; z-index: 1; transform: translate(-50%, -50%); display: grid; grid-template-columns: repeat(3, 150px); grid-template-rows: repeat(3, 190px); gap: 12px; }
-.quick-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; padding: 8px; border: 2px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 18px; font-weight: 700; }
-.quick-grid button:hover, .quick-grid button[data-selected] { border: 4px solid var(--cyan); background: var(--blue); }
-.quick-grid .quick-cancel { border-color: #684354; background: #2b1f27; }
+/* An opaque panel with an 8 px frame keeps every tile edge visible over any application.
+   The centre cell is cut out so the dimmed content around the chosen point stays visible. */
+.quick-grid::before { content: ''; position: absolute; inset: -8px; z-index: -1; background: var(--canvas); clip-path: path(evenodd, 'M20 0H470A20 20 0 0 1 490 20V590A20 20 0 0 1 470 610H20A20 20 0 0 1 0 590V20A20 20 0 0 1 20 0Z M182 210H308A12 12 0 0 1 320 222V388A12 12 0 0 1 308 400H182A12 12 0 0 1 170 388V222A12 12 0 0 1 182 210Z'); }
+.quick-grid button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; padding: 8px 4px; border: 2px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 20px; font-weight: 700; }
+.quick-grid button:hover, .quick-grid button[data-selected] { border: 4px solid #fff; background: var(--blue); }
+.quick-grid .quick-cancel { border-color: #af7a86; background: #2b1f27; }
 .quick-icon { font-size: 40px; line-height: 1; }
 .quick-center { display: grid; place-items: center; border: 2px dashed rgba(184, 197, 210, .45); border-radius: 12px; }
 .quick-point { width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px var(--canvas); }
@@ -14,5 +17,6 @@
 .design-notes { max-width: 1080px; margin: 16px auto; padding: 0 12px 24px; color: var(--muted); line-height: 1.5; }
 @media (max-width: 560px) {
   .quick-grid { grid-template-columns: repeat(3, 96px); grid-template-rows: repeat(3, 132px); gap: 8px; }
+  .quick-grid::before { clip-path: path(evenodd, 'M20 0H300A20 20 0 0 1 320 20V408A20 20 0 0 1 300 428H20A20 20 0 0 1 0 408V20A20 20 0 0 1 20 0Z M124 148H196A12 12 0 0 1 208 160V268A12 12 0 0 1 196 280H124A12 12 0 0 1 112 268V160A12 12 0 0 1 124 148Z'); }
   .quick-grid button { font-size: 14px; }
 }
