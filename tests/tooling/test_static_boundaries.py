@@ -155,9 +155,14 @@ def test_ci_isolates_serial_ui_tests_and_enforces_combined_coverage():
     assert "--cov-fail-under" not in ui["run"]  # Use the configured 60 percent floor.
     assert "--cov-report=xml:coverage.xml" in ui["run"]
     assert "POGLED_ASSIST_UI_GALLERY" in ui["env"]
+    assert "--junitxml=dist/test-results/non-ui.xml" in parallel["run"]
+    assert "--junitxml=dist/test-results/ui.xml" in ui["run"]
     for step in runs:
         assert "--cov=pogled_assist" in step["run"]
         assert not step.get("continue-on-error", False)
+    upload = next(step for step in steps if step.get("with", {}).get("name") == "test-results")
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "dist/test-results"
 
 
 def test_python_environment_is_restored_in_every_job_and_saved_only_from_development():

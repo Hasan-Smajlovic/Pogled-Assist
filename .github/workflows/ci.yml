@@ -134,6 +134,7 @@ jobs:
             -n 4 --dist=loadfile --ignore=tests/ui `
             -vv -o faulthandler_timeout=120 `
             --durations=30 `
+            --junitxml=dist/test-results/non-ui.xml `
             --cov=pogled_assist --cov-report= --cov-fail-under=0
 
       - name: Run UI workflows and enforce combined coverage
@@ -146,6 +147,7 @@ jobs:
             -n 0 tests/ui `
             -vv -o faulthandler_timeout=120 `
             --durations=30 `
+            --junitxml=dist/test-results/ui.xml `
             --cov=pogled_assist --cov-append `
             --cov-report=term-missing:skip-covered `
             --cov-report=xml:coverage.xml
@@ -156,6 +158,15 @@ jobs:
         with:
           name: ui-gallery
           path: dist/ui-gallery
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results
+          path: dist/test-results
           if-no-files-found: warn
           retention-days: 14
 

@@ -85,6 +85,8 @@ Without coverage, tests default to two xdist processes with `--dist=loadfile`, k
 
 Coverage, sequential `check` and each parallel check group default to one test process. CI, including release verification, runs tests outside `tests/ui/` in four processes grouped by file (`-n 4 --dist=loadfile --ignore=tests/ui`), then runs `tests/ui/` in one process (`-n 0`) with `--cov-append`. Only the first, partial collection defers the coverage floor; the UI step enforces the configured 60 percent floor against both collections and writes the combined report. Either step failing fails the job. UI workflows stay serial because parallel coverage can leave prediction threads contending on the tracer and stall window cleanup. Measure repeated runs on the same commit before changing either worker count. CI prints verbose names, the 30 slowest tests and thread stacks when setup/call/teardown exceeds 120 seconds. The dump is diagnostic, not a timeout extension or cancellation.
 
+CI uploads `dist/test-results/` as the `test-results` artifact for 14 days, including when tests fail. Its separate `non-ui.xml` and `ui.xml` JUnit reports retain both test collections without overwriting results. Each records the test result and total setup, call and teardown time. Compare repeated runs on the same commit and runner before attributing a timing change to an optimization.
+
 `coverage` and `check` temporarily clear and then restore `PYTEST_ADDOPTS`, including on failure, so external options cannot omit tests or override coverage. Use `test` or `test-ui` with `-TestPaths` for focused/custom diagnosis. `coverage`, `check` and `check-fast` reject `-TestPaths`.
 
 After lint, `check -Parallel` overlaps:
