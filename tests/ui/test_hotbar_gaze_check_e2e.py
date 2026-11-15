@@ -7,6 +7,26 @@ from PySide6.QtCore import QPoint
 
 
 @pytest.mark.e2e
+def test_gaze_check_shared_history_records_current_tracker_for_each_attempt(
+    hotbar_gaze, monkeypatch
+):
+    hotbar = hotbar_gaze[0]
+    hotbar._open_gaze_check()
+    check = hotbar._gaze_check_window
+
+    for model in ("Eye Tracker 4C", "IS5_Large_Eyetracker_5"):
+        monkeypatch.setattr(hotbar._gaze, "check_environment", lambda model=model: {"model": model})
+        check._start_trial()
+        check.reset_check()
+
+    report = next(iter(hotbar._gaze_check_reports.reports.values()))
+    assert [attempt.environment["model"] for attempt in report.trials] == [
+        "Eye Tracker 4C",
+        "IS5_Large_Eyetracker_5",
+    ]
+
+
+@pytest.mark.e2e
 def test_opening_check_by_gaze_stops_the_same_pointer_sample(hotbar_gaze, qtbot, monkeypatch):
     from pogled_assist.ui import settings_window
 

@@ -62,7 +62,7 @@ def flush_summaries() -> None:
     for item in metrics:
         try:
             item.summary(force=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 - one failed summary must not stop the rest
             observation_failed()
 
 
@@ -85,7 +85,7 @@ def emit(event: str, *, trace: bool = False, priority: bool = False, **fields) -
     if writer is not None:
         try:
             return writer.event(event, fields, trace=trace, priority=priority) is not False
-        except Exception:
+        except Exception:  # noqa: BLE001 - an observation must not fail its caller
             # An observation must never escape into the input or check callback.
             writer.observation_failed()
     return False

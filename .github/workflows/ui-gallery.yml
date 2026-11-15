@@ -35,19 +35,19 @@ jobs:
       pages: read
     steps:
       - name: Check out the trusted default branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
 
       - name: Read the configured Pages URL
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
       - name: Build galleries from validated CI images
         env:
@@ -60,12 +60,12 @@ jobs:
             --base-url "$PAGES_BASE_URL"
 
       - name: Upload the Pages site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: ${{ runner.temp }}/ui-gallery-site
 
       - name: Upload the PR comment data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ui-gallery-comments
           path: ${{ runner.temp }}/ui-gallery-comments/comments.json
@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Publish the gallery site
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 
   comment:
     name: comment-ui-gallery
@@ -103,19 +103,19 @@ jobs:
       pull-requests: write
     steps:
       - name: Check out the trusted workflow revision
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
 
       - name: Download the trusted comment data from this workflow
         if: needs.deploy.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: ui-gallery-comments
           path: ${{ runner.temp }}/ui-gallery-comments

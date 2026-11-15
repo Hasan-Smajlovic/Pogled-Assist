@@ -125,7 +125,7 @@ class BoundedCall:
                 result.append((False, "busy"))
             except VoiceError as error:
                 result.append((False, error.reason))
-            except Exception:
+            except Exception:  # noqa: BLE001 - any other worker failure is reported as offline
                 result.append((False, "offline"))
             finally:
                 self._slot.release()
@@ -160,7 +160,7 @@ def request_data(request: Request, budget: Budget):
         raise VoiceError("timeout") from None
     except (VoiceError, SpeechCancelled):
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - any other network failure is reported as offline
         budget.remaining()
         raise VoiceError("offline") from None
     finally:

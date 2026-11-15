@@ -1,0 +1,13 @@
+# Findings accepted after review. Every other finding fails the static checks.
+rules:
+  artipacked:
+    ignore:
+      # Pushes the release branch with the checkout token and uploads no artifact.
+      - prepare-release.yml
+      # Reads the remote release tag through the checkout remote and uploads no artifact.
+      - release.yml
+  dangerous-triggers:
+    ignore:
+      # Runs the trusted default-branch revision and never executes pull request code;
+      # docs/UI_GALLERY.md owns the permissions and artifact rules.
+      - ui-gallery.yml

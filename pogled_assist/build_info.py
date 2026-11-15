@@ -42,12 +42,14 @@ def resolve_build_identity(root: Path | None = None) -> dict:
                 raise ValueError("Invalid build state")
             result.update(build_revision=revision, build_dirty=dirty)
         else:
-            options = dict(cwd=root, capture_output=True, text=True, timeout=2, check=True)
+            options = dict(cwd=root, capture_output=True, text=True, timeout=2)
             if sys.platform == "win32":
                 options["creationflags"] = subprocess.CREATE_NO_WINDOW
-            revision = subprocess.run(["git", "rev-parse", "HEAD"], **options).stdout.strip()
+            revision = subprocess.run(
+                ["git", "rev-parse", "HEAD"], check=True, **options
+            ).stdout.strip()
             changed = subprocess.run(
-                ["git", "status", "--porcelain", "--untracked-files=normal"], **options
+                ["git", "status", "--porcelain", "--untracked-files=normal"], check=True, **options
             ).stdout
             if re.fullmatch(r"[0-9a-f]{40,64}", revision):
                 result.update(build_revision=revision, build_dirty=bool(changed.strip()))

@@ -56,7 +56,7 @@ class AudioPlayback(QObject):
             self._progress_at = time.monotonic()
             self._timer.start()
             player.play()
-        except Exception:
+        except Exception:  # noqa: BLE001 - any Qt Multimedia failure ends this playback as failed
             self._finish("failed")
 
     def stop(self) -> None:

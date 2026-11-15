@@ -268,11 +268,14 @@ class SessionAnalysis:
         if index <= previous_index:
             return
         self.missing_counter_intervals += max(0, index - previous_index - 1)
+        self._add_reason_deltas(valid, previous)
+        self._summary_counters[stream] = index, valid, False
+
+    def _add_reason_deltas(self, valid: dict[str, int], previous: dict[str, int]) -> None:
         for key, value in valid.items():
             delta = max(0, value - previous.get(key, 0))
             if delta:
                 self.reason_totals[key] += delta
-        self._summary_counters[stream] = index, valid, False
 
     def _observe_suppressed(self, counts: object) -> None:
         if not isinstance(counts, dict):

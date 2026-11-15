@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: pip
+    directory: /
+    # Runtime/build package updates need a separate compatibility decision.
+    allow:
+      - dependency-name: basedpyright
+      - dependency-name: import-linter
+      - dependency-name: pytest*
+      - dependency-name: PyYAML
+      - dependency-name: ruff
+      - dependency-name: tomli
+      - dependency-name: zizmor
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build(deps)
+    groups:
+      check-tools:
+        patterns:
+          - "*"

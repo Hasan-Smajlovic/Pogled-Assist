@@ -158,7 +158,7 @@ class DiagnosticRecordings(QObject):
             return True, self._file_operation(action, value)
         except RecordingReadError:
             return False, "unreadable"
-        except Exception:
+        except Exception:  # noqa: BLE001 - any other file failure is reported as failed
             return False, None
         finally:
             if action == "export":

@@ -50,7 +50,7 @@ def test_recovery_keeps_concurrent_persistence_snapshot_consistent():
         sys.settrace(pause_snapshot)
         try:
             snapshots.append(writer.persistence_status())
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - collected and asserted by the test
             errors.append(error)
         finally:
             sys.settrace(None)
@@ -59,7 +59,7 @@ def test_recovery_keeps_concurrent_persistence_snapshot_consistent():
         recovering.set()
         try:
             writer._recovered("manual", "json")
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - collected and asserted by the test
             errors.append(error)
         finally:
             recovered.set()

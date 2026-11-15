@@ -153,7 +153,11 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._trial_interruptions = 0
         self._trial_feedback_loss = False
         self._tracking_state: TrackingState | None = None
+        self._policy_sample_at: float | None = None
         self._build_ui()
+        self._connect_signals(settings)
+
+    def _connect_signals(self, settings: GazeSettings) -> None:
         self._reports.changed.connect(self._reports_changed)
         self._reports.exported.connect(self._export_finished)
         self._eye_gate = EyeTrackingGate(self)
@@ -162,7 +166,6 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._eye_gate.hold_started.connect(self._hold_tracking)
         self._eye_gate.pause_retained.connect(self._retain_tracking_pause)
         self._eye_gate.hold_finished.connect(self._resume_tracking)
-        self._policy_sample_at: float | None = None
         self._escape = QShortcut(QKeySequence("Esc"), self)
         self._escape.activated.connect(self.close)
         self._timer = QTimer(self)
@@ -833,17 +836,17 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
             return
         attempt_id = self._session.attempt_id
         if self._phase == "precision":
-            self._session.finish_precision(
+            report = self._session.finish_precision(
                 self._check, self._finish_stage_eyes("precision"), reason
             )
         else:
-            self._finalize_trial(reason, time.monotonic())
-        self._view_report = self._session.report
-        self._reports.record(self._session.report, auto_save=self._auto_save)
+            report = self._finalize_trial(reason, time.monotonic())
+        self._view_report = report
+        self._reports.record(report, auto_save=self._auto_save)
         diagnostics.emit(
             "gaze_check_result",
             priority=True,
-            report_id=self._session.report.id,
+            report_id=report.id,
             attempt_id=attempt_id,
             phase=self._phase,
             state="interrupted" if reason else "completed",
@@ -853,13 +856,13 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         run, self._stage_eyes = self._stage_eyes, None
         return finish_eye_run(run, stage, self._settings.eye_tracking_policy)
 
-    def _finalize_trial(self, reason: str | None, now: float) -> None:
+    def _finalize_trial(self, reason: str | None, now: float) -> GazeCheckReport:
         rows = list(self._trial_rows)
         for index in range(len(rows), len(TRIAL_WORD)):
             rows.append(TrialRow(index, self._target.key_size()))
         if reason and len(self._trial_rows) < len(TRIAL_WORD):
             self._fill_interrupted_trial(rows[len(self._trial_rows)], now)
-        self._session.finish_trial(
+        return self._session.finish_trial(
             rows, word=TRIAL_WORD, eyes=self._finish_stage_eyes("word"), reason=reason
         )
 

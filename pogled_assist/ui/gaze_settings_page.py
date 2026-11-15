@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..interaction.eye_tracking_policy import (
@@ -18,6 +19,7 @@ from ..interaction.eye_tracking_policy import (
 from ..settings_limits import EDGE_HOLD_MS_STEP
 from .settings_content import SettingsContent
 from .settings_controls import (
+    SettingsControls,
     action_grid,
     content_layout,
     cycle_choice,
@@ -44,7 +46,7 @@ class GazeSettingsPage(QFrame):
     request_calibration = Signal()
     request_gaze_check = Signal()
 
-    def __init__(self, controls, parent=None):
+    def __init__(self, controls: SettingsControls, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controls = controls
         self._build()
@@ -84,6 +86,12 @@ class GazeSettingsPage(QFrame):
         layout.addLayout(tabs)
         self._stack = SettingsContent(self)
         layout.addWidget(self._stack, 1)
+        self._build_selection_page()
+        self._build_pointer_page()
+        self._build_stability_page()
+        self.show_tab(0)
+
+    def _build_selection_page(self) -> None:
         selection_page = QFrame(self)
         selection = QVBoxLayout(selection_page)
         selection.setContentsMargins(0, 0, 0, 0)
@@ -159,6 +167,7 @@ class GazeSettingsPage(QFrame):
         )
         selection.addStretch(1)
 
+    def _build_pointer_page(self) -> None:
         pointer_page = QFrame(self)
         pointer = QVBoxLayout(pointer_page)
         pointer.setContentsMargins(0, 0, 0, 0)
@@ -179,7 +188,7 @@ class GazeSettingsPage(QFrame):
         )
         pointer.addWidget(row)
 
-        pointer.addWidget(styled_label("POKAZIVAČ I PROVJERA", "groupLabel", page))
+        pointer.addWidget(styled_label("POKAZIVAČ I PROVJERA", "groupLabel", self))
         pointer.addLayout(self._build_gaze_actions())
         pointer.addWidget(
             guidance_note(
@@ -191,6 +200,7 @@ class GazeSettingsPage(QFrame):
         )
         pointer.addStretch(1)
 
+    def _build_stability_page(self) -> None:
         stability_page = QFrame(self)
         stability = QVBoxLayout(stability_page)
         stability.setContentsMargins(0, 0, 0, 0)
@@ -218,7 +228,6 @@ class GazeSettingsPage(QFrame):
             )
         )
         stability.addStretch(1)
-        self.show_tab(0)
 
     def show_tab(self, index: int) -> None:
         self._controls.interrupt_gaze()

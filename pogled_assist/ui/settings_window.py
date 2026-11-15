@@ -969,7 +969,7 @@ class SettingsWindow(QWidget):
         self._set_gaze_target(None)
         self._cancel_interaction()
 
-    def _dynamic_control_state(self):
+    def _dynamic_control_state(self) -> dict[object, tuple[str, bool, bool]]:
         controls = (
             *self._speech_page.playback_controls(),
             self._eleven_page.test_button,
@@ -980,7 +980,7 @@ class SettingsWindow(QWidget):
             button: (button.text(), button.isVisible(), button.isEnabled()) for button in controls
         }
 
-    def _cancel_changed_target(self, before):
+    def _cancel_changed_target(self, before: dict[object, tuple[str, bool, bool]]) -> None:
         target = self._gaze_selection.target
         after = self._dynamic_control_state()
         if target in before and before[target] != after[target]:

@@ -167,7 +167,7 @@ class _BenchmarkProbe:
                 # Do not flood callbacks trying to replay a scheduler backlog.
                 deadline = max(deadline, time.perf_counter())
                 self.stopped.wait(max(0.0, deadline - time.perf_counter()))
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - collected and asserted by the benchmark
             self.worker_errors.append(type(error).__name__)
 
     def _produce_sample(self, sequence, active):
@@ -406,4 +406,4 @@ def test_gaze_logging_performance(qtbot, qapp, monkeypatch, request):
         ),
     }
     (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"Gaze benchmark: {output / 'report.json'}")
+    print(f"Gaze benchmark: {output / 'report.json'}")  # noqa: T201 - shows where the report is

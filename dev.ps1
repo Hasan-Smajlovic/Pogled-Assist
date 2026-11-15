@@ -259,10 +259,8 @@ function Invoke-LintChecks {
     } else {
         Write-Host "Actions check skipped: no workflow or shared-check changes."
     }
-    Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "check", ".")
-    Invoke-ExternalCommand -FilePath $python -ArgumentList @("-m", "ruff", "format", "--check", ".")
     Invoke-ExternalCommand -FilePath $python -ArgumentList @(
-        "-B", "-m", "compileall", "-q", "pogled_assist", "scripts", "tests", "run_gaze_mouse.py"
+        "-B", "-m", "scripts.checks.static_checks", "--base-ref", $BaseRef
     )
     if ($null -eq $Plan -or $Plan.all_powershell) {
         & (Join-Path $RepoRoot "scripts\checks\check_powershell.ps1") -RequireAnalyzer
@@ -664,7 +662,8 @@ Pogled Assist development commands
   .\dev.ps1 test -TestPaths tests/gaze    Run an explicitly focused selection
   .\dev.ps1 test-ui     Run only end-to-end UI workflow and rendering tests
   .\dev.ps1 coverage    Run tests with the enforced coverage floor and HTML report
-  .\dev.ps1 lint        Run Actions, Ruff, formatting, compile, and PowerShell checks
+  .\dev.ps1 lint        Run Actions, Python static (Ruff, compile, types, imports, workflows) and PowerShell checks
+  .\dev.ps1 lint -BaseRef origin/development    Override the type-baseline comparison ref
   .\dev.ps1 format      Apply Ruff import fixes and Python formatting
   .\dev.ps1 check-fast  Lint and relevant changed tests, without coverage or package
   .\dev.ps1 check-fast -BaseRef origin/development    Override the comparison ref

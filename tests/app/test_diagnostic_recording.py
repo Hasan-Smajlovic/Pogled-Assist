@@ -493,7 +493,15 @@ def test_restart_recovers_over_budget_crash_remnants_without_touching_active_cap
         "\n".join(trace.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8"
     )
     active = writer.start_recording(folder, 1, context())
-    wait_for(lambda: writer.recording_status()["state"] == "recording")
+    # The start records stay buffered until the writer's next flush. Measure the active capture
+    # after they reach disk, or a slow runner sees it grow past the budget during recovery.
+    wait_for(
+        lambda: (
+            writer.recording_status()["state"] == "recording"
+            and (folder / active / "snimak.jsonl").stat().st_size
+            == writer.recording_status()["bytes"]
+        )
+    )
     store = RecordingStore(folder)
     sizes = [sum(path.stat().st_size for path in (folder / key).iterdir()) for key in ids]
     active_size = sum(path.stat().st_size for path in (folder / active).iterdir())

@@ -185,7 +185,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     arguments = parser.parse_args()
-    print(json.dumps(summarize(arguments.session), ensure_ascii=False, indent=2))
+    print(json.dumps(summarize(arguments.session), ensure_ascii=False, indent=2))  # noqa: T201 - command output
 
 
 if __name__ == "__main__":

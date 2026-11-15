@@ -44,7 +44,7 @@ def checked_download(url: str, target: Path, expected_sha256: str) -> Path:
         temporary = target.with_suffix(target.suffix + ".part")
         try:
             with (
-                urllib.request.urlopen(url, timeout=120) as response,
+                urllib.request.urlopen(url, timeout=120) as response,  # noqa: S310 - pinned https URL, checksum below
                 temporary.open("wb") as out,
             ):
                 shutil.copyfileobj(response, out)
@@ -111,7 +111,7 @@ def prepare_bridge_bundle(destination: Path, cache: Path) -> None:
         for member in source.infolist():
             if not (destination / member.filename).resolve().is_relative_to(destination.resolve()):
                 raise ValueError("Python archive contains an unsafe path")
-        source.extractall(destination)
+        source.extractall(destination)  # noqa: S202 - every member path is checked above
     # The embedded interpreter ignores PYTHONPATH. Explicitly expose only our
     # packaged bridge sources; keep site packages and user Python paths disabled.
     (destination / "python310._pth").write_text(

@@ -250,7 +250,7 @@ def _native_playback_probe():
     QTimer.singleShot(150, replace)
     app.exec()
     faulthandler.cancel_dump_traceback_later()
-    print("native playback completed")
+    print("native playback completed")  # noqa: T201 - read by the parent test process
     return 0
 
 

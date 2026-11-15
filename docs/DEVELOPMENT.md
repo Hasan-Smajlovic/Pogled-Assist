@@ -38,9 +38,10 @@ Automated checks use fake inputs and require no Tobii tracker or external speech
 | `.\dev.ps1 test -TestPaths tests/gaze -Workers 1` | Not required | An explicit focused selection in one process |
 | `.\dev.ps1 test-ui` | Not required | UI workflow and rendering tests selected by the `e2e` marker |
 | `.\dev.ps1 coverage` | Not required | Test suite, 60 percent floor, and `dist\coverage-html` report |
-| `.\dev.ps1 lint` | Not required | Actions, Ruff, Python compilation, and PowerShell checks |
+| `.\dev.ps1 lint` | Not required | Actions, [Python static checks](#lint-and-formatting), and PowerShell checks |
+| `.\dev.ps1 lint -BaseRef origin/development` | Not required | Lint with an explicit [type-baseline comparison](#type-baseline-comparison) ref |
 | `.\dev.ps1 format` | Not required | Ruff safe fixes, import ordering, and source formatting |
-| `.\dev.ps1 check-fast` | Not required | Complete Python lint/format/compilation and relevant changed tests; no coverage or package |
+| `.\dev.ps1 check-fast` | Not required | Complete Python static checks and relevant changed tests; no coverage or package |
 | `.\dev.ps1 check-fast -BaseRef origin/development` | Not required | Fast checks using an explicit Git comparison ref |
 | `.\dev.ps1 check-fast -Workers 2` | Not required | Fast checks with two workers even for a small selection |
 | `.\dev.ps1 check` | Not required | The same complete checks as `check -Parallel`, with stages run sequentially |
@@ -48,7 +49,7 @@ Automated checks use fake inputs and require no Tobii tracker or external speech
 | `.\dev.ps1 coverage -Workers 2` | Not required | Explicit parallel coverage measurement; slower Qt runs are possible |
 | `.\dev.ps1 package` | Not required | Clean PyInstaller build and frozen executable smoke test |
 
-Supporting scripts live in `scripts/checks/`, `scripts/release/`, `scripts/ui/` and `scripts/speech_suggestions/`. Standard lint, test and package verification uses `dev.ps1`. Documented model and diagnostic commands may invoke the same `.venv` directly. Do not substitute system Python, another environment or ad hoc tool installation.
+Supporting scripts live in `scripts/checks/`, `scripts/release/`, `scripts/ui/` and `scripts/speech_suggestions/`. Standard lint, test and package verification uses `dev.ps1`. Documented model and diagnostic commands may invoke the same `.venv` directly. Do not substitute system Python, another environment or ad hoc tool installation. The one exception is the [static checks on another operating system](#static-checks-on-another-operating-system).
 
 ## Verification before a pull request
 
@@ -76,7 +77,7 @@ A handoff or draft PR may precede complete verification. If execution is deferre
 
 Fast selection compares the merge base of `origin/development` with committed, staged, unstaged and untracked changes, including both sides of renames and deletions. Fetch before starting a topic branch; the command does not fetch. Use `-BaseRef <ref>` for a deliberate alternate base. Missing history/ref selects the full suite.
 
-`scripts/checks/select_tests.py` maps runtime changes to boundary tests and consumers. Documentation selects link/repository tests. Unknown paths, shared test helpers, deleted tests, dependencies, workflows/check configuration, model data and bundled assets select every test. Maintain the mapping for new consumers and prefer the full-suite fallback when impact is uncertain. The command prints paths, reasons and selected files; with no changes it still checks Python and explicitly reports no selected tests.
+`scripts/checks/select_tests.py` maps runtime changes to boundary tests and consumers. Documentation selects link/repository tests. Unknown paths, shared test helpers, deleted tests, dependencies, workflows/check configuration, model data and bundled assets select every test. A changed type baseline selects no tests because the static checks verify it. Maintain the mapping for new consumers and prefer the full-suite fallback when impact is uncertain. The command prints paths, reasons and selected files; with no changes it still checks Python and explicitly reports no selected tests.
 
 ### Workers, coverage and logs
 
@@ -98,7 +99,19 @@ Each parallel run keeps stdout/stderr and coverage under a unique `dist/check-<i
 
 ## Lint and formatting
 
-Ruff checks Python correctness, imports and formatting. actionlint checks Actions syntax and expressions. PSScriptAnalyzer uses the focused repository settings rather than broad naming/style rules.
+`scripts/checks/static_checks.py` owns the Python checks shared by `lint`, `check-fast`, `check`, PR CI and release verification. It runs every stage, even after a failure, and names the stages that failed.
+
+| Stage | Tool | Rejects |
+| --- | --- | --- |
+| Exception policy | `scripts/checks/check_policy.py` | Unapproved Ruff exceptions, settings or deselected rules, changed basedpyright settings, alternate configuration files regardless of letter case, Python source omitted by Ruff discovery, file/block suppressions, formatting and import-sorting directives, inline zizmor ignores, or line suppressions without rule codes and reasons |
+| Ruff lint and format | Ruff | The rule families selected in `pyproject.toml`, unsorted imports and unformatted source |
+| Python compilation | `compileall` | Syntax errors in `pogled_assist`, `scripts`, `tests` and `run_gaze_mouse.py` |
+| Type baseline | `scripts/checks/check_type_baseline.py` | Additional baseline entries relative to the Git comparison base, including replacements hidden by an unchanged total |
+| Types | basedpyright | New type errors and unannotated parameters in `pogled_assist`, `scripts` and `run_gaze_mouse.py`; tests are not type-checked |
+| Import contracts | import-linter | A runtime package importing a layer above it, the UI or an entry point, and an external SDK used outside its owning package |
+| Workflow security | zizmor | Unpinned actions, persisted checkout credentials and risky triggers under `.github`; informational findings are not reported |
+
+actionlint checks Actions syntax and expressions. PSScriptAnalyzer uses the focused repository settings rather than broad naming/style rules.
 
 `scripts/checks/check_powershell.ps1` rejects ordinary executable launches using `Start-Process`, `start` or `saps`. Windows PowerShell 5.1 shell launching can display **Open File – Security Warning** before a caller receives the process or starts its timeout. Use `ProcessStartInfo` with `UseShellExecute = $false`; background console probes also use `CreateNoWindow = $true`. Keep normal windows for the app and installation summary. Drain stdout/stderr concurrently and bound output completion as well as process completion.
 
@@ -106,7 +119,38 @@ The AST guard permits explicit `-Verb RunAs` for UAC and the exact `dev.ps1` gal
 
 Installer tests cover Internet-marked unsigned executables, failure cleanup and launch timeouts. Source bootstrap installers use a private Windows job: start suspended, assign the job, resume and wait for descendants. A 15-minute deadline closes the tree; the root exit code, including `3010`, is preserved. The standalone source setup keeps this helper inline for historical installations. See [launch trust limits](WINDOWS_RELEASE.md#windows-launch-warnings-and-signing).
 
-Mypy is not enforced. Any adoption needs a separate plan for PySide signals, dynamic Qt objects and ctypes boundaries.
+### Recorded exceptions
+
+The static checks were adopted on existing code. These records hold what each check accepts:
+
+- **Ruff:** Fix a finding. When the code is deliberate, mark that line with `# noqa: <code> - <reason>`, for example a broad `except` at a thread entry, a Qt slot, a Tobii or Windows call, or in logging. The exception-policy stage parses TOML and checks actual comment tokens in tracked Python files and untracked Python files Git does not ignore. It also compares Ruff's actual file discovery with that Git inventory: omitting a `.py` or `.pyi` file fails, including through `.ignore`, `.gitignore` or local Git excludes. Ignored, untracked environments and generated files stay outside the inventory. Only the path/rule pairs and global exceptions in `scripts/checks/check_policy.py` are allowed; reducing them is permitted. The model generator's sole `S324` exception stays until a model rebuild can incorporate the script's changed hash. `select` must keep the rules listed in the policy; selecting more is allowed. Any other Ruff setting, such as `exclude`, `include`, complexity limits or plugin options, fails until the policy lists it, because each can skip files or relax a rule. Alternate/nested configuration names are rejected regardless of letter case, so `RUFF.TOML` cannot override the reviewed settings on Windows. File/block suppression directives, `# fmt:`/`# isort:` directives and unexplained line suppressions also fail locally and in CI.
+- **Types:** `.basedpyright/baseline.json` holds the errors present at adoption, mostly PySide enum short names, attributes the checker cannot see on Qt mixins, and unannotated parameters. A local basedpyright run removes entries for errors you fixed; commit that change with the fix. With `CI=true` the file is never rewritten and an outdated baseline fails. The separate baseline stage rejects added entries even if `basedpyright --writebaseline` makes the type checker pass. `[tool.basedpyright]` must equal the reviewed settings in `scripts/checks/check_policy.py`, and `pyrightconfig.json` is rejected. `# type: ignore` is not honoured; an intentional line exception uses `# pyright: ignore[<rule>] - <reason>`. File-level `# pyright:` comments are rejected.
+- **Imports:** `ignore_imports` in the layer contract names the diagnostic recording modules that read gaze-check reports. `.importlinter` and `setup.cfg` are rejected because import-linter would read them instead of `pyproject.toml`.
+- **Workflows:** `.github/zizmor.yml` lists each accepted finding with its reason. Inline `# zizmor: ignore` comments are rejected.
+
+These files decide what the checks accept, so changes to them need [human review](../AGENTS.md#never-merges-without-a-human).
+
+### Type baseline comparison
+
+Use a full Git checkout with the comparison ref available. Local commands default to `origin/development`; `.\dev.ps1 lint -BaseRef <ref>` and `python -B -m scripts.checks.static_checks --base-ref <ref>` select another base. The comparison uses its merge base with `HEAD` and checks the current baseline, including uncommitted edits. Missing refs, malformed inventories and shallow history fail, and the message names the Git error; the check never fetches automatically.
+
+PR CI supplies the event's base SHA through `STATIC_CHECK_BASE_REF`; an empty value falls back to `origin/development`. Release verification supplies the pre-push commit. Both checking jobs fetch full history.
+
+The comparison base's baseline is the reference, unless a commit after that base changes the `REVIEWED_INVENTORY = ...` line in `scripts/checks/check_type_baseline.py`. The newest such commit declares the baseline it contains a reviewed inventory, and the check compares with that baseline instead. This covers the adoption, whose base has no baseline, and a release or `master` pull request whose base predates the declaration. A squash merge keeps the declaration and its baseline in one commit. An uncommitted change to the line covers the current baseline until it is committed. Without a declaration, a base without a baseline fails.
+
+Entries are compared by path, rule, diagnostic range shape and multiplicity. Deletions pass; moving or replacing entries, or adding duplicates, fails. Basedpyright does not store source text or absolute line numbers, so matching diagnostic shapes cannot prove that the underlying error is unchanged. Human review still covers the source and configuration.
+
+For a tool upgrade or refactor that changes diagnostic shapes, fix the reported errors first. If a new inventory is still necessary, migrate in a separate pull request: regenerate the baseline with `basedpyright --writebaseline` and change the `REVIEWED_INVENTORY` line in the same commit, naming the reason. The pull request lists the old and new diagnostics and needs [human review](../AGENTS.md#never-merges-without-a-human). Commits after the declaration may only remove entries; another regeneration needs another declaration. Keep such changes out of routine feature work.
+
+### Static checks on another operating system
+
+The static stages do not depend on Windows; type analysis is pinned to the Windows platform in `pyproject.toml`, so every host analyses the same code paths. The pinned dependencies publish wheels for macOS 14 or later and for x86-64 Linux with glibc 2.34 or later. In a Python 3.10 environment with `requirements-dev.txt` installed, run from the repository root:
+
+```text
+python -B -m scripts.checks.static_checks
+```
+
+This covers only the stages in the table above. Tests, packaging, actionlint and the PowerShell checks still need `dev.ps1` on Windows, so report them as not run; this command does not replace [final verification](#final-verification-and-fast-selection).
 
 ## Packaging
 

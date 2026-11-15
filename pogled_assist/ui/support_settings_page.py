@@ -1,9 +1,9 @@
 """Logging and caregiver support actions in Settings."""
 
 from PySide6.QtCore import QSize, Signal
-from PySide6.QtWidgets import QFrame
+from PySide6.QtWidgets import QFrame, QWidget
 
-from .settings_controls import content_layout, setting_row, styled_label
+from .settings_controls import SettingsControls, content_layout, setting_row, styled_label
 
 
 class SupportSettingsPage(QFrame):
@@ -12,7 +12,7 @@ class SupportSettingsPage(QFrame):
     diagnostics_requested = Signal()
     request_gaze_check = Signal()
 
-    def __init__(self, controls, parent=None):
+    def __init__(self, controls: SettingsControls, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = content_layout(self)
         layout.addWidget(styled_label("Podrška", "sectionTitle", self))

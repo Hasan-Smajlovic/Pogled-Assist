@@ -145,7 +145,7 @@ class SuggestionService(QObject):
     def _deliver(signal, future: Future) -> None:
         try:
             result = future.result()
-        except Exception:
+        except Exception:  # noqa: BLE001 - a failed background task delivers None
             result = None
         with suppress(RuntimeError):
             signal.emit(result)

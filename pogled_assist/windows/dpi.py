@@ -14,11 +14,9 @@ def enable_windows_dpi_awareness() -> None:
 
     import ctypes
 
-    try:
+    with contextlib.suppress(Exception):
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
         return
-    except Exception:
-        pass
 
     with contextlib.suppress(Exception):
         ctypes.windll.user32.SetProcessDPIAware()

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QPushButton, QStyle, QStyleOptionButton, QStylePai
 class WrappedButton(QPushButton):
     """Keep long phrases and letter groups inside their allotted grid cell."""
 
-    def paintEvent(self, event: QPaintEvent) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: ARG002 - Qt override signature
         option = QStyleOptionButton()
         self.initStyleOption(option)
         text = option.text

@@ -183,7 +183,7 @@ class TrackingStatusWidget(QWidget):
             self._detail.setText(view.detail)
             try:
                 self._icon.setPixmap(qta.icon(f"fa5s.{view.icon}", color=view.color).pixmap(18, 18))
-            except Exception:
+            except Exception:  # noqa: BLE001 - an icon font failure falls back to text symbols
                 # A font-loading failure must not prevent the hotbar from opening.
                 symbols = {
                     "check-circle": "✓",

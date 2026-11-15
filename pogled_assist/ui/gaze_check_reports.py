@@ -99,7 +99,7 @@ class GazeCheckReports(QObject):
             try:
                 result = self._execute_task(action, value)
                 success = True
-            except Exception:
+            except Exception:  # noqa: BLE001 - any task failure is reported to the window as failed
                 result, success = None, False
             try:
                 self._finished.emit((action, key, revision, success, result))

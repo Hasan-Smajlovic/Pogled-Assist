@@ -96,11 +96,9 @@ class StreamToLogger:
         return False
 
     def fileno(self) -> int:
-        try:
+        with suppress(Exception):
             if self._fallback_stream is not None:
                 return self._fallback_stream.fileno()
-        except Exception:
-            pass
         return -1
 
     @property
@@ -242,7 +240,7 @@ def _flush_diagnostic_summaries() -> None:
 
     try:
         flush_summaries()
-    except Exception:
+    except Exception:  # noqa: BLE001 - shutdown continues, the failure is counted
         diagnostic = diagnostic_writer()
         if diagnostic is not None:
             diagnostic._failure()
@@ -264,7 +262,7 @@ def _read_logging_enabled_setting() -> bool:
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - unreadable settings keep logging enabled
         return True
 
     if not isinstance(data, dict):
@@ -326,7 +324,7 @@ def _archive_latest_log(latest_log: Path) -> Path | None:
     if not latest_log.exists():
         return None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
     archived_log = latest_log.with_name(f"{timestamp}.txt")
     shutil.copy2(latest_log, archived_log)
     return archived_log

@@ -71,7 +71,7 @@ def test_mouse_provider_reports_missing_primary_screen(qapp, monkeypatch):
         "pogled_assist.tracking.mouse_gaze_provider._primary_screen_geometry",
         lambda: None,
     )
-    provider = MouseGazeProvider(cursor_position=lambda: QPoint())
+    provider = MouseGazeProvider(cursor_position=QPoint)
     statuses = []
     tracking = []
     provider.tracking_status_changed.connect(tracking.append)

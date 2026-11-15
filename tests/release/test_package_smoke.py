@@ -53,6 +53,7 @@ def test_packaged_bridge_imports_using_only_declared_source_files(tmp_path):
         capture_output=True,
         text=True,
         timeout=10,
+        check=False,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -96,6 +96,9 @@ class CaptureGazeCheck:
         self._capture_reports(window, size)
         self._capture_free(window, size)
         self._capture_eyes(window, size)
+        self._capture_eye_policies(size)
+
+    def _capture_eye_policies(self, size: tuple[int, int]) -> None:
         single = GazeCheckWindow(replace(self.gaze_settings, eye_tracking_policy="any"))
         self.widgets.append(single)
         single.setFixedSize(*size)
@@ -233,7 +236,7 @@ class CaptureGazeCheck:
             available_fraction=0.98,
         )
         window._render_position()
-        window._live_eyes = self._synthetic_eyes(window, right=lambda step: False)
+        window._live_eyes = self._synthetic_eyes(window, right=lambda _step: False)
         window._render_eyes(time.monotonic())
         self.capture(window, "gaze-check-eyes-one-eye", "Gaze check: one eye tracked", size=size)
         window._snapshot = replace(window._snapshot, right=True, right_position=(0.4, 0.5, 0.45))
@@ -248,7 +251,7 @@ class CaptureGazeCheck:
         window.reset_check()
 
     @staticmethod
-    def _synthetic_eyes(window, *, left=lambda step: True, right=lambda step: True, pairs=False):
+    def _synthetic_eyes(window, *, left=lambda _step: True, right=lambda _step: True, pairs=False):
         """Ten seconds of cumulative telemetry ending now; a False step is a lost eye."""
         now = time.monotonic()
         start = now - HISTORY_SECONDS
@@ -331,7 +334,7 @@ class CaptureGazeCheck:
         window._reports.states[window._session.report.id] = "memory"
         window._render_storage()
         self.capture(window, "gaze-check-logging-off", "Gaze check: session-only result", size=size)
-        window._export_token = "synthetic-export"
+        window._export_token = "synthetic-export"  # noqa: S105 - an export request id
         window._export_finished("synthetic-export", False)
         self.capture(window, "gaze-check-export-error", "Gaze check: export failed", size=size)
         window._export_status.hide()

@@ -40,7 +40,7 @@ def main() -> int:
 
     simulate_gaze = MOUSE_GAZE_SIMULATION_ARG in sys.argv[1:]
     if simulate_gaze and frozen:
-        print("Mouse gaze simulation is available only from a development checkout.")
+        print("Mouse gaze simulation is available only from a development checkout.")  # noqa: T201 - startup console message
         return 2
 
     lock = application_lock()
@@ -68,7 +68,7 @@ def _lock_failure(lock) -> int:
 
     if lock.error() == QLockFile.LockError.LockFailedError:
         return 0
-    print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")
+    print("Pogled Assist ne može osigurati jedno pokretanje aplikacije.")  # noqa: T201 - startup console message
     return 1
 
 
@@ -177,7 +177,7 @@ def package_smoke_test() -> int:
         if getattr(sys, "frozen", False) and not build["build_revision"]:
             raise ValueError("Missing packaged build revision")
         _verify_bundled_runtime()
-    except Exception:
+    except Exception:  # noqa: BLE001 - the smoke check reports any failure with its traceback
         _write_package_smoke_report([traceback.format_exc()])
         return 1
 

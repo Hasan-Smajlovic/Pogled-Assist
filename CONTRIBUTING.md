@@ -155,16 +155,21 @@ Repository policy uses `Protect development` and `Protect master releases`, each
 
 Neither ruleset has bypass actors or requires Code Owner review, approval of the most recent reviewable push, signed commits, or deployments. Neither restricts branch creation or has a separate update restriction. Collaborators with write or administrator permission may merge after the active rules are satisfied.
 
+`.github/CODEOWNERS` names Hasan and Tajib as owners of the paths that [need a human to read the final diff](AGENTS.md#never-merges-without-a-human), so GitHub requests their review when a pull request touches one. The request alone does not block a merge; Hasan decides whether the rulesets should require Code Owner review.
+
 ## CI and required checks
 
 Pull requests targeting `development` or `master` run these checks:
 
 - `dependency-review`: known vulnerabilities introduced by dependency changes; moderate, high, and critical findings fail the job for runtime, development, and unknown dependency scopes. This job runs only on pull request events.
-- `code-quality`: Ruff lint and format checks, Python bytecode compilation, PowerShell parsing, and focused PSScriptAnalyzer rules.
+- `code-quality`: the [Python static checks](docs/DEVELOPMENT.md#lint-and-formatting), including the exception policy and type-baseline comparison, actionlint, PowerShell parsing, and focused PSScriptAnalyzer rules.
 - `tests`: the hardware-independent pytest suite with the Qt offscreen backend and enforced coverage floor.
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable and isolated installer smoke tests.
+- `codeql (actions)` and `codeql (python)`: CodeQL analysis of the workflows and the Python source, from the separate `CodeQL` workflow. It also runs on pushes to `development` and `master` and once a week. It cannot upload results while GitHub's CodeQL default setup is enabled for the repository.
 
-The required checks under this policy are `code-quality`, `tests`, and `windows-package`. Verify the live rulesets before relying on this list. `dependency-review` is an additional CI check; Hasan decides whether to add it to the required checks after its first successful run. **Publish release** repeats the software and packaging checks after a merge to `master`; it is not a pull request check and must not be selected as a required status check.
+The required checks under this policy are `code-quality`, `tests`, and `windows-package`. Verify the live rulesets before relying on this list. `dependency-review` and the `codeql` jobs are additional CI checks; Hasan decides whether to add them to the required checks after their first successful run. **Publish release** repeats the software and packaging checks after a merge to `master`; it is not a pull request check and must not be selected as a required status check.
+
+Keep required job names stable and job names unique across workflows; renaming a required check also requires a coordinated ruleset update. `tests/tooling/test_static_boundaries.py` checks the declared names. `Code scanning results / CodeQL` is GitHub's assessment of findings, separate from the jobs that run and upload the analysis. Requiring only a successful analysis job does not enforce alert severity. Hasan can configure [code scanning merge protection](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/set-merge-protection) to require results and select alert thresholds.
 
 Dependency review requires the GitHub dependency graph. A repository administrator must enable the dependency graph and Dependabot alerts in the repository's security settings, or run this command with an administrator account:
 
@@ -173,6 +178,8 @@ gh api --method PUT repos/Hasan-Smajlovic/Pogled-Assist/vulnerability-alerts
 ```
 
 Alerts cover known vulnerabilities discovered in existing dependencies after a pull request has merged. They do not require a separate repository workflow. Enabling alerts does not enable automatic update PRs.
+
+`.github/dependabot.yml` enables weekly version-update pull requests against the default branch (currently `development`): one group for GitHub Actions and one for the explicitly allowed Python check tools. Runtime and packaging dependencies require a separate compatibility decision before entering that allowlist. Version updates have a seven-day cooldown; security updates are separate and do not wait for this cooldown. These pull requests need the same review and required checks as any other; the [topic branch](#topic-branches) names and [issue references](#issue-linking-and-pull-request-contents) do not apply to them.
 
 Release automation creates tags and GitHub Releases from the exact merged `master` commit without pushing directly to `master`. It therefore does not need a protected-branch bypass. The full packaging and recovery procedure is in [`docs/WINDOWS_RELEASE.md`](docs/WINDOWS_RELEASE.md). Local commands and automated verification are in the [development guide](docs/DEVELOPMENT.md); the [UI development guide](docs/UI_DEVELOPMENT.md#ui-review) owns visual review and manual Windows/Tobii checks.
 

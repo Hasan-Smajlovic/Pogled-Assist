@@ -10,11 +10,15 @@ from ..windows.windows_z_order import force_window_topmost, make_window_click_th
 TOPMOST_REFRESH_INTERVAL_MS = 33
 
 
-def overlay_window_flags(*, click_through: bool = False) -> Qt.WindowFlags:
-    flags = Qt.FramelessWindowHint | Qt.Window | Qt.WindowStaysOnTopHint
-    flags |= Qt.WindowDoesNotAcceptFocus
+def overlay_window_flags(*, click_through: bool = False) -> Qt.WindowType:
+    flags = (
+        Qt.WindowType.FramelessWindowHint
+        | Qt.WindowType.Window
+        | Qt.WindowType.WindowStaysOnTopHint
+    )
+    flags |= Qt.WindowType.WindowDoesNotAcceptFocus
     if click_through:
-        flags |= Qt.WindowTransparentForInput
+        flags |= Qt.WindowType.WindowTransparentForInput
     return flags
 
 

@@ -606,6 +606,20 @@ class _CaptureSession(
         self.speech._recording_badge.set_status(None)
         self.capture_speech_voices()
         self.capture_tracking_feedback()
+        self._capture_speech_lists()
+        self.speech._start_editor()
+        self.capture(self.speech, "speech-editor", "Speech shared editor")
+        alphabet = self.speech._speech_settings
+        twelve = replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT, letters_per_group=12)
+        self.speech.update_settings(twelve)
+        self.speech._show_letter_group(0)
+        self.capture(
+            self.speech, "speech-editor-letters-twelve", "Speech editor: twelve inline letters"
+        )
+        self.speech.update_settings(alphabet)
+        self.capture_speech_dialogs()
+
+    def _capture_speech_lists(self) -> None:
         self.speech._view_mode = "categories"
         self.speech._show_list_level()
         self.capture(self.speech, "speech-categories", "Speech categories")
@@ -624,17 +638,6 @@ class _CaptureSession(
         )
         self.speech._library_store.read_error = False
         self.speech._show_list_level()
-        self.speech._start_editor()
-        self.capture(self.speech, "speech-editor", "Speech shared editor")
-        alphabet = self.speech._speech_settings
-        twelve = replace(alphabet, letter_layout=LETTER_GROUPS_LAYOUT, letters_per_group=12)
-        self.speech.update_settings(twelve)
-        self.speech._show_letter_group(0)
-        self.capture(
-            self.speech, "speech-editor-letters-twelve", "Speech editor: twelve inline letters"
-        )
-        self.speech.update_settings(alphabet)
-        self.capture_speech_dialogs()
 
     def capture_dialog(self, dialog: QWidget, name: str, title: str) -> None:
         self.capture(dialog, name, title, size=(dialog.width(), dialog.height()))

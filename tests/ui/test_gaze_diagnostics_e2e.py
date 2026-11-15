@@ -51,6 +51,12 @@ def diagnostic_mode(request, monkeypatch, tmp_path):
     release.set()
     logging_setup._restore_standard_streams()
     logging_setup._clear_root_handlers()
+    # On a slow runner the drain can outlast stop()'s timeout. The next test would then reuse
+    # the stopping writer, which never opens its log, so wait here for a fresh writer.
+    writer = logging_setup._writer
+    if writer is not None:
+        assert writer.stop(timeout=10)
+        logging_setup.shutdown_application_logging()
     logging.disable(logging.NOTSET)
 
 

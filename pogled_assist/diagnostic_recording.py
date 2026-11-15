@@ -221,7 +221,7 @@ class RecordingSink:
                 RecordingEvent("segment_context", {"snapshot": snapshot}, at, wall), footer=True
             )
 
-    def write(self, event: RecordingEvent, *, footer=False) -> bool:
+    def write(self, event: RecordingEvent, *, footer=False) -> bool:  # noqa: ARG002 - labels footer writes; tests intercept on it
         item = self.recording
         if self.stream is None:
             return False
@@ -570,7 +570,7 @@ class RecordingStore:
             item["analysis"] = analysis
         return item
 
-    def prune(self, *, active_id: str | None = None) -> None:
+    def prune(self) -> None:
         self.maintain()
 
     def export(

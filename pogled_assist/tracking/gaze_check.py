@@ -78,7 +78,8 @@ class CheckSnapshot:
         origins = [origin for origin in (self.left_origin, self.right_origin) if origin]
         if not origins or any(origin[2] <= 0 for origin in origins):
             return None
-        return tuple(sum(origin[axis] for origin in origins) / len(origins) for axis in range(3))
+        x, y, z = (sum(origin[axis] for origin in origins) / len(origins) for axis in range(3))
+        return x, y, z
 
     def origin_distance_in_range(self) -> bool | None:
         center = self.origin_center
@@ -198,8 +199,9 @@ class CheckTelemetry:
             # A valid eye origin does not require a valid gaze point.
             left_position, right_position = self.positions[:2]
         left_origin = right_origin = None
-        if _fresh(self.origins, now):
-            left_origin, right_origin = self.origins[:2]
+        origins = self.origins
+        if origins is not None and _fresh(origins, now):
+            left_origin, right_origin = origins[:2]
         gaze = gaze_at = None
         if eyes_usable(self.policy, left, right) and _fresh(self.gaze, now):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
@@ -540,8 +542,8 @@ class EyeTrackingRun:
         if not ongoing and end - self._last_at >= FRESH_SECONDS:
             losses.append([self._last_at + FRESH_SECONDS if self._usable else self._last_at, None])
         count, longest = 0, 0.0
-        for loss_start, loss_end in losses:
-            loss_end = end if loss_end is None else loss_end
+        for loss_start, recorded_end in losses:
+            loss_end = end if recorded_end is None else recorded_end
             if loss_end < start or loss_start > end:
                 continue
             count += 1

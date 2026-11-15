@@ -86,7 +86,7 @@ def check_installation(root: Path) -> list[InstallationItem]:
         try:
             verify(root)
             results.append(InstallationItem(key, title, "Spremno", detail))
-        except Exception:
+        except Exception:  # noqa: BLE001 - any failed verification is shown as not ready
             results.append(
                 InstallationItem(
                     key, title, "Nije spremno", "Ponovo instalirajte kompletan Pogled Assist paket."
@@ -106,7 +106,7 @@ def check_installation(root: Path) -> list[InstallationItem]:
                 else "Preuzmite službeni softver za svoj model uređaja.",
             )
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - a failed lookup is shown as not checked
         results.append(
             InstallationItem(
                 "software",
@@ -117,7 +117,7 @@ def check_installation(root: Path) -> list[InstallationItem]:
         )
     try:
         results.append(check_tobii_device())
-    except Exception:
+    except Exception:  # noqa: BLE001 - a failed Windows query is shown as not checked
         results.append(
             InstallationItem(
                 "device",

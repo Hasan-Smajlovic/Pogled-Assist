@@ -8,6 +8,7 @@ from ..speech.speech_service import VOICE_PRESET_DEFAULT, VOICE_PRESETS
 from ..speech.voice_state import ACTIVE_PLAYBACK_STATES, FALLBACK_NOTE, PLAYBACK_LABELS
 from .settings_controls import (
     CONTROL_HEIGHT,
+    SettingsControls,
     busy_indicator,
     content_layout,
     cycle_choice,
@@ -36,7 +37,7 @@ class SpeechSettingsPage(QFrame):
     open_audio = Signal()
     speech_stop_requested = Signal()
 
-    def __init__(self, controls, parent=None):
+    def __init__(self, controls: SettingsControls, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controls = controls
         self._build()

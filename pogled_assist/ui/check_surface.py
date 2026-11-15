@@ -1,6 +1,6 @@
 """Shared presentation for caregiver check and diagnostics surfaces."""
 
-from PySide6.QtWidgets import QScrollArea, QWidget
+from PySide6.QtWidgets import QFrame, QScrollArea, QWidget
 
 CHECK_SURFACE_STYLE = """
 QWidget#gazeCheck, QWidget#diagnostics { background: #15191f; color: #edf2f7; font-family: Segoe UI; }
@@ -32,6 +32,6 @@ QComboBox QAbstractItemView { background: #334355; color: #edf2f7; }
 def scroll_content(widget: QWidget) -> QScrollArea:
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QScrollArea.NoFrame)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
     scroll.setWidget(widget)
     return scroll

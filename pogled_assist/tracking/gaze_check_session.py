@@ -1,9 +1,13 @@
 """Attempt lifecycle and aggregate results, independent of Qt widgets."""
 
+from __future__ import annotations
+
 import time
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
 
 from .. import diagnostics
-from .gaze_check import EyeTrackingResult
+from .gaze_check import EyeTrackingResult, EyeTrackingRun, FixationCheck, FixationResult
 from .gaze_check_report import (
     ENVIRONMENT_KEYS,
     SETTING_KEYS,
@@ -11,13 +15,23 @@ from .gaze_check_report import (
     GazeCheckReport,
     PrecisionRow,
     TrialAttempt,
+    TrialRow,
     identity,
     timestamp,
 )
 
+if TYPE_CHECKING:
+    from ..interaction.mouse_controller import GazeSettings
+
 
 class GazeCheckSession:
-    def __init__(self, settings, targets, *, simulated: bool = False) -> None:
+    def __init__(
+        self,
+        settings: GazeSettings,
+        targets: Sequence[tuple[str, float, float]],
+        *,
+        simulated: bool = False,
+    ) -> None:
         self.settings = {key: getattr(settings, key, None) for key in SETTING_KEYS}
         self.targets = targets
         self.simulated = simulated
@@ -51,7 +65,10 @@ class GazeCheckSession:
         }
 
     def finish_precision(
-        self, measurement, eyes: EyeTrackingSummary | None, reason: str | None = None
+        self,
+        measurement: FixationCheck | None,
+        eyes: EyeTrackingSummary | None,
+        reason: str | None = None,
     ) -> GazeCheckReport:
         targets = measurement.targets if measurement is not None else self.targets
         results = measurement.results if measurement is not None else []
@@ -80,7 +97,12 @@ class GazeCheckSession:
         return self.report
 
     def finish_trial(
-        self, rows, *, word: str, eyes: EyeTrackingSummary | None, reason: str | None = None
+        self,
+        rows: Iterable[TrialRow],
+        *,
+        word: str,
+        eyes: EyeTrackingSummary | None,
+        reason: str | None = None,
     ) -> GazeCheckReport:
         attempt = self._finish_attempt(reason)
         if self.report is None:
@@ -108,7 +130,9 @@ class GazeCheckSession:
         return self.report
 
 
-def finish_eye_run(run, stage: str, policy: str) -> EyeTrackingSummary | None:
+def finish_eye_run(
+    run: EyeTrackingRun | None, stage: str, policy: str
+) -> EyeTrackingSummary | None:
     if run is None:
         return None
     result = run.result(time.monotonic())
@@ -147,7 +171,7 @@ def eye_summary(result: EyeTrackingResult) -> EyeTrackingSummary:
     )
 
 
-def observe_fixations(results) -> None:
+def observe_fixations(results: Iterable[FixationResult]) -> None:
     if diagnostics.tracing():
         for index, result in enumerate(results):
             diagnostics.emit(

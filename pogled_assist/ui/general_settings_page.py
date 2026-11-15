@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtWidgets import QFrame, QGridLayout
+from PySide6.QtWidgets import QFrame, QGridLayout, QWidget
 
 from ..speech.selection_sound import SELECTION_SOUND_LEVELS
 from .release_update_row import ReleaseUpdateRow
-from .settings_controls import action_grid, content_layout, cycle_choice, setting_row, styled_label
+from .settings_controls import (
+    SettingsControls,
+    action_grid,
+    content_layout,
+    cycle_choice,
+    setting_row,
+    styled_label,
+)
+
+if TYPE_CHECKING:
+    from ..release_update import ReleaseUpdateManager
 
 SELECTION_SOUND_HINT = (
     "Kratak zvuk potvrđuje odabir pogledom u Govoru. Izgovori i alarm imaju svoj zvuk."
@@ -24,7 +36,12 @@ class GeneralSettingsPage(QFrame):
     restart_confirmed = Signal()
     install_cancelled = Signal()
 
-    def __init__(self, controls, update_manager=None, parent=None):
+    def __init__(
+        self,
+        controls: SettingsControls,
+        update_manager: ReleaseUpdateManager | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._controls = controls
         self._update_manager = update_manager

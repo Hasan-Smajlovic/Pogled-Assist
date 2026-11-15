@@ -190,23 +190,7 @@ class TrackingNoticeWidget(QWidget):
         painter.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 6, 6)
         x = 10
         if self.notice.eyes is not None:
-            for name, valid in zip(("Lijevo", "Desno"), self.notice.eyes, strict=True):
-                color = QColor("#a3d5ba" if valid else "#efd092")
-                painter.setPen(QPen(color, 1.5, Qt.SolidLine if valid else Qt.DashLine))
-                painter.setBrush(Qt.NoBrush)
-                center = self.height() / 2
-                eye = QPainterPath()
-                eye.moveTo(x, center)
-                eye.cubicTo(x + 5, center - 9, x + 17, center - 9, x + 22, center)
-                eye.cubicTo(x + 17, center + 9, x + 5, center + 9, x, center)
-                painter.drawPath(eye)
-                painter.setBrush(color)
-                painter.drawEllipse(QRectF(x + 8, center - 3, 6, 6))
-                eye_font = QFont("Segoe UI")
-                eye_font.setPixelSize(11)
-                painter.setFont(eye_font)
-                painter.drawText(QRectF(x + 25, 0, 35, self.height()), Qt.AlignVCenter, name)
-                x += 66
+            x = self._paint_eyes(painter, self.notice.eyes, x)
         else:
             painter.setPen(QColor(text))
             painter.setFont(QFont("Segoe UI", 12, QFont.Bold))
@@ -243,6 +227,27 @@ class TrackingNoticeWidget(QWidget):
                 Qt.AlignVCenter,
                 line,
             )
+
+    def _paint_eyes(self, painter: QPainter, eyes: tuple[bool, bool], x: int) -> int:
+        """Draw both eye markers starting at x; return the x after them."""
+        for name, valid in zip(("Lijevo", "Desno"), eyes, strict=True):
+            color = QColor("#a3d5ba" if valid else "#efd092")
+            painter.setPen(QPen(color, 1.5, Qt.SolidLine if valid else Qt.DashLine))
+            painter.setBrush(Qt.NoBrush)
+            center = self.height() / 2
+            eye = QPainterPath()
+            eye.moveTo(x, center)
+            eye.cubicTo(x + 5, center - 9, x + 17, center - 9, x + 22, center)
+            eye.cubicTo(x + 17, center + 9, x + 5, center + 9, x, center)
+            painter.drawPath(eye)
+            painter.setBrush(color)
+            painter.drawEllipse(QRectF(x + 8, center - 3, 6, 6))
+            eye_font = QFont("Segoe UI")
+            eye_font.setPixelSize(11)
+            painter.setFont(eye_font)
+            painter.drawText(QRectF(x + 25, 0, 35, self.height()), Qt.AlignVCenter, name)
+            x += 66
+        return x
 
 
 class MessageTrackingHeader(QWidget):
