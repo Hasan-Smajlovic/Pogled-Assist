@@ -298,7 +298,7 @@ class TobiiGazeProvider(QObject):
 
         return gaze, eyes
 
-    def _attach_check_observers(self, backend: object) -> None:
+    def _attach_check_observers(self, backend: Any) -> None:
         generation = self._stream_generation
 
         backend.eye_position_callback = self._position_callback(generation)

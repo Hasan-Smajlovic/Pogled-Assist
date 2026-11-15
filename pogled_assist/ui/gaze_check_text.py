@@ -77,7 +77,9 @@ def _origin_guidance(snapshot: CheckSnapshot) -> str:
     if side is False:
         return "Pomjerite ekran lijevo ili desno tako da Tobii bude ispred lica."
     if depth is False:
-        if snapshot.origin_center[2] < ORIGIN_MIN_DISTANCE_MM:
+        center = snapshot.origin_center
+        assert center is not None  # a distance is out of range only for a known centre
+        if center[2] < ORIGIN_MIN_DISTANCE_MM:
             return "Polako odmaknite ekran od lica."
         return "Polako približite ekran licu."
     return _gaze_guidance(snapshot, side, depth)
@@ -85,7 +87,9 @@ def _origin_guidance(snapshot: CheckSnapshot) -> str:
 
 def origin_side_text(snapshot: CheckSnapshot) -> str:
     """Left-right offset of the eyes from the tracker centre, as the user sees it."""
-    offset = round(snapshot.origin_center[0] / 10)
+    center = snapshot.origin_center
+    assert center is not None  # shown only for origin-only snapshots
+    offset = round(center[0] / 10)
     if offset == 0:
         return "Lijevo-desno · ispred sredine uređaja"
     side = "desno" if offset > 0 else "lijevo"
@@ -93,8 +97,10 @@ def origin_side_text(snapshot: CheckSnapshot) -> str:
 
 
 def origin_distance_text(snapshot: CheckSnapshot) -> str:
+    center = snapshot.origin_center
+    assert center is not None  # shown only for origin-only snapshots
     return (
-        f"Udaljenost {round(snapshot.origin_center[2] / 10)} cm · Tobii prati od "
+        f"Udaljenost {round(center[2] / 10)} cm · Tobii prati od "
         f"{ORIGIN_MIN_DISTANCE_MM / 10:.0f} do {ORIGIN_MAX_DISTANCE_MM / 10:.0f} cm"
     )
 

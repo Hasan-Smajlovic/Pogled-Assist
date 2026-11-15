@@ -92,14 +92,16 @@ class EyePositionView(QWidget):
         positions = _display_positions(self.snapshot)
         if self.snapshot.origin_only:
             # Up-down is unknown, so the markers stay on a dotted middle line.
-            painter.setPen(QPen(QColor("#71869b"), 1, Qt.DotLine))
+            painter.setPen(QPen(QColor("#71869b"), 1, Qt.PenStyle.DotLine))
             painter.drawLine(
                 QPointF(box.left() + 12, box.center().y()),
                 QPointF(box.right() - 12, box.center().y()),
             )
             painter.setPen(QColor("#b8c5d2"))
             painter.drawText(
-                box.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop, "Gore-dolje nije dostupno"
+                box.adjusted(0, 6, 0, 0),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                "Gore-dolje nije dostupno",
             )
         markers = []
         for name, position in zip(("L", "D"), positions, strict=True):

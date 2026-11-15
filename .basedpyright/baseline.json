@@ -4350,22 +4350,6 @@
                 }
             },
             {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportCallIssue",
                 "range": {
                     "startColumn": 41,
