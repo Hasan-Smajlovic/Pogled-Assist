@@ -32,7 +32,7 @@ def speech_workers(monkeypatch):
     for module in (eleven_account, eleven_transport, speech_service):
         monkeypatch.setattr(module, "Thread", thread)
     try:
-        yield
+        yield workers
     finally:
         for worker in workers:
             if worker.ident is not None:

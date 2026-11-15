@@ -47,7 +47,7 @@ def test_connection_check_only_reads_account_and_does_not_generate_audio(account
     assert current.state.options.voices[0][0] == "synthetic-voice"
 
 
-def test_removed_key_invalidates_late_check(account, qtbot):
+def test_removed_key_invalidates_late_check(account, qtbot, qapp, monkeypatch):
     current, store, client = account
     current.save_key("synthetic-key")
     entered, release = threading.Event(), threading.Event()
@@ -59,16 +59,20 @@ def test_removed_key_invalidates_late_check(account, qtbot):
         return original(*args)
 
     client.options = blocked
-    try:
-        current.check()
-        assert entered.wait(1)
-        current.remove_key()
-        release.set()
-        qtbot.wait(50)
-        assert not current.state.has_key and store.key == ""
-        assert current.state.options is None
-    finally:
-        release.set()
+    with speech_workers(monkeypatch) as workers:
+        try:
+            current.check()
+            assert entered.wait(1)
+            # A result already queued on Qt must also lose access to the removed key.
+            current._completed.emit(current._revision, original(), "")
+            current.remove_key()
+            release.set()
+            qtbot.waitUntil(lambda: all(not worker.is_alive() for worker in workers))
+            qapp.processEvents()
+            assert not current.state.has_key and store.key == ""
+            assert current.state.options is None
+        finally:
+            release.set()
 
 
 def test_credential_write_failure_preserves_previous_key(account):
