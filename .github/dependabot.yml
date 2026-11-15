@@ -26,6 +26,13 @@ updates:
       - dependency-name: ruff
       - dependency-name: tomli
       - dependency-name: zizmor
+    # These releases dropped Python 3.10; keep compatible patch updates eligible.
+    # Revisit the ranges when the project's supported Python version changes.
+    ignore:
+      - dependency-name: import-linter
+        versions: [">=2.16"]
+      - dependency-name: zizmor
+        versions: [">=1.31"]
     schedule:
       interval: weekly
     cooldown:
