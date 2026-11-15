@@ -1,4 +1,4 @@
-"""Remember external input targets without letting application controls replace them."""
+"""Remember the external input window without letting application windows replace it."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Protocol
 
-from PySide6.QtCore import QObject, QPoint, QTimer, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from .windows_input import WindowsInputController
 
@@ -15,11 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ForegroundSurface(Protocol):
-    def contains_global_point(self, point: QPoint) -> bool: ...
-
     def set_external_window(self, hwnd: int) -> None: ...
-
-    def set_external_cursor(self, position: tuple[int, int]) -> None: ...
 
 
 class ForegroundTracker(QObject):
@@ -36,7 +31,6 @@ class ForegroundTracker(QObject):
         self._input_factory = input_factory
         self._input: WindowsInputController | None = None
         self.window: int | None = None
-        self.cursor: tuple[int, int] | None = None
         self._timer = QTimer(self)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self.update)
@@ -79,17 +73,7 @@ class ForegroundTracker(QObject):
                     logger.info("Last external foreground window updated: hwnd=%s.", hwnd)
                 self.window = hwnd
                 self._surface.set_external_window(hwnd)
-            self._update_cursor()
         except Exception:
             logger.exception("Foreground window tracking update failed.")
             self._timer.stop()
             self.status_changed.emit("Praćenje aktivnog prozora je zaustavljeno zbog greške.")
-
-    def _update_cursor(self) -> None:
-        if self._input is None or self._surface.contains_global_point(QCursor.pos()):
-            return
-        cursor = self._input.cursor_position()
-        if cursor == self.cursor:
-            return
-        self.cursor = cursor
-        self._surface.set_external_cursor(cursor)

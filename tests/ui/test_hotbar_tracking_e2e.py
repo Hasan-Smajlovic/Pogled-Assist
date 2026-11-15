@@ -16,7 +16,7 @@ from pogled_assist.tracking.status import TrackingState, TrackingStatus
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("hotbar_gaze", [TobiiGazeProvider], indirect=True)
-@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech", "controller"])
+@pytest.mark.parametrize("surface", ["hotbar", "keyboard", "speech"])
 @pytest.mark.parametrize("pause_ms", [100, 500], ids=["completed-pause", "unfinished-pause"])
 def test_hotbar_waiting_status_matches_retained_selection(
     hotbar_gaze, monkeypatch, surface, pause_ms

@@ -17,6 +17,8 @@ Keep inexpensive branch tables parametrized. Layout coverage retains both script
 
 Coverage is a regression floor, not a quality score. The configured floor is 60 percent and should rise only with meaningful coverage. Native fakes verify arguments, filtering, cleanup and ownership; they do not load a real Tobii DLL, reserve a Windows work area or prove cross-application focus. Leave those boundaries to manual checks. Pixel baselines are not enforced because fonts, scaling and GPU backends vary; the rendered gallery still requires visual review.
 
+Coverage merge tests collect each distinct input once and copy shards when only separate paths are needed. Seed the actual merge destination and an unrelated sibling shard to check that stale data cannot lift the floor. Package declaration tests inspect the Python `datas` and PowerShell `$requiredFiles` assignments through their native parsers; filenames in comments do not count as bundled files.
+
 ## Test boundary map
 
 | Boundary or flow | Tests and reusable inputs |
@@ -25,20 +27,22 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Provider fallback, stale delivery and reconnect | `tests/gaze/test_gaze_provider.py`, `tests/gaze/test_gaze_provider_recovery.py` and `tests/gaze/test_gaze_connection_lifecycle.py` (Qt responsiveness, pending startup/cleanup and child-process disposal) |
 | Eye policy, interruption deadlines and the independent desktop gate | `tests/gaze/test_eye_tracking_policy.py` and `tests/ui/test_eye_tracking_policy_e2e.py` |
 | Edge departure, neighboring targets, return timing and repeat blocking | `tests/gaze/test_gaze_selection.py` and `tests/ui/test_edge_stability_e2e.py` |
-| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py` and `tests/ui/test_gaze_check_e2e.py` |
+| Gaze-check measurements and caregiver flow | `tests/gaze/test_gaze_check.py`, `tests/gaze/test_gaze_check_session.py` (attempt identity, context and report construction), and `tests/ui/test_gaze_check_e2e.py` |
 | Aggregate reports, storage, history and ZIP export | `tests/gaze/test_gaze_check_store.py`, `tests/ui/test_gaze_check_reports_e2e.py` and `tests/ui/test_file_workers.py` |
-| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py` , `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
+| Recording admission, loss accounting, crash recovery, retention and support ZIPs | `tests/app/test_diagnostic_recording.py`, `tests/app/test_diagnostic_report.py`, `tests/app/test_diagnostic_regressions.py`, `tests/ui/test_diagnostics_e2e.py` and `tests/ui/test_diagnostic_reasons_e2e.py` |
 | Logging equivalence, blocked sinks and input responsiveness | `tests/app/test_diagnostics.py`, `tests/app/test_logging_async.py` and `tests/ui/test_gaze_diagnostics_e2e.py` |
 | Parallel checks, coverage merging and pinned tool installation | `tests/tooling/test_dev_environment.py` and `tests/tooling/test_dev_coverage.py` |
 | Tracking notice timing, context and geometry | `tests/gaze/test_tracking_feedback.py`, `tests/ui/test_tracking_feedback_e2e.py` and `tests/ui/test_hotbar_tracking_e2e.py` |
 | Native Stream Engine startup, callbacks and cleanup | `tests/gaze/test_stream_engine_native.py` (`FakeLibrary`, without a Tobii DLL or streaming thread) |
 | x86 bridge messages and shutdown | `tests/gaze/test_bridge_protocol.py` and `tests/gaze/test_bridge_entrypoint.py` |
 | AppBar reservation and foreground thread cleanup | `tests/app/test_windows_native.py` (`FakeShell` and `FakeFocusApi`) |
-| External window and cursor tracking | `tests/ui/test_foreground_tracker.py` |
+| External window tracking | `tests/ui/test_foreground_tracker.py` |
+| Quick actions grid layout, edges and actions | `tests/ui/test_ui_helpers.py`, `tests/ui/test_overlay_widgets.py`, `tests/gaze/test_mouse_controller.py` and `tests/ui/test_hotbar_e2e.py` |
 | ElevenLabs account, requests and cancellation | `tests/speech/test_eleven_account.py`, `tests/speech/test_elevenlabs.py` and `tests/speech/test_elevenlabs_cancellation.py` |
 | Efendija routing, cache and playback | `tests/speech/test_voice_router.py`, `tests/speech/test_audio_cache.py`, `tests/speech/test_audio_playback.py`, `tests/speech/test_efendija_service.py` and `tests/ui/test_elevenlabs_e2e.py` |
 | Speech focus, Arabic, library and modal flows | `tests/ui/test_speech_focus_e2e.py`, `tests/ui/test_speech_arabic_e2e.py`, `tests/ui/test_speech_library_e2e.py`, and `tests/ui/test_speech_dialogs_e2e.py` |
-| Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py` and `tests/ui/test_speech_predictions.py` |
+| Selection rings and pointer overlays | `tests/ui/test_selection_feedback_e2e.py` (`hotbar_gaze`), `tests/ui/test_overlay_widgets.py`, `tests/ui/test_overlay_window.py` (shared stacking and fake native click-through styles), and the full-gallery overlay check in `tests/ui/test_ui_rendering.py` |
+| Speech layout and stale prediction delivery | `tests/ui/test_ui_e2e.py`, `tests/ui/test_speech_alphabet_e2e.py` and `tests/ui/test_speech_predictions.py` |
 | Learning checkpoints and ranking selection rules | `tests/suggestions/test_speech_evaluation.py` |
 
 ## Shared fixtures and lifecycle
@@ -50,7 +54,9 @@ Coverage is a regression floor, not a quality score. The configured floor is 60 
 | Windows and UI fakes | `tests/ui/_ui_fakes.py` |
 | Hotbar fixtures | `tests/ui/_hotbar_fixtures.py` |
 | Speech fixtures | `tests/ui/_speech_fixtures.py` |
-| Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) |
+| Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) and `scripts/ui/capture_pointer_overlays.py` (`PreviewDesktop`) |
+
+`tests/ui/test_settings_pages.py` exercises standalone Settings pages against a plain parent and shared controls, including mouse and gaze signals carrying choice values. Window workflow tests retain validation, interruption and persistence checks.
 
 Import fixtures from helper modules, not other test modules, so changed-path selection can identify consumers. Qt cleanup closes top-level widgets and delivers deferred deletion before the next test. Wait for actual geometry, visibility, state or signals through the event loop; sleeps or layout requests alone can miss pending child visibility and polish.
 
@@ -61,6 +67,7 @@ Repository documentation tests check required guides/templates, local links and 
 ## Clocks, processes and blocked work
 
 - For a clock shared across modules, use `freeze_monotonic` from `tests/_clock.py`. Gaze timestamps cross component boundaries, and unrelated Qt teardown timers may read that same clock. For one module only, replace its `time` attribute with `SimpleNamespace(monotonic=...)`. `tests/tooling/test_clock_patches.py` rejects other `time.monotonic` replacements.
+- Log retry tests advance the shared clock through retry and flush deadlines, observing the real worker before asserting recovery. Keep file contents and reservation cleanup checks after the successful flush.
 - Keep deliberately blocked log sinks blocked until the producer finishes. The timeout detects a hang; it is not a throughput target. Compare logging off/basic/trace and manual recording through the same input sequence. [Diagnostic verification](DIAGNOSTICS.md#diagnostic-log-analysis) covers the remaining lifecycle and loss cases.
 - Independent PowerShell probes may share the module-scoped driver in `tests/_powershell.py`. Each case keeps its own working directory, child scope and environment. Batch only bodies that return or throw: `exit` terminates the driver. The harness restores streams, environment and location and kills the process tree on its 120-second deadline. Assert production environment recovery before harness cleanup.
 - Full installer/updater transactions, concurrent updaters, real parallel-stage cleanup and `dev.ps1` initialization/environment-recovery tests retain separate processes and their own cleanup assertions. Updater decisions use deterministic process records; installer tests retain real running-executable checks.
@@ -73,6 +80,7 @@ A complete run discovers the suite, but a test can still require an unavailable 
 | Test | When it runs | What remains unproven |
 | --- | --- | --- |
 | `test_native_buffer_replacement_and_completion_keep_qt_responsive` in `tests/speech/test_audio_playback.py` | When Qt finds an audio output. A probe exits with code 77 and pytest skips it otherwise. | A passing muted, isolated native-decoder probe checks replacement/stop/completion and Qt responsiveness, not audible speech or MP3 quality. |
+| `test_windows_player_loads_the_bundled_tick` in `tests/speech/test_selection_sound.py` | When Qt finds a default audio output; pytest skips it otherwise. | Checks native loading of the bundled selection tick, not audible playback. The WAV contents and player source/ownership are checked even without an audio output. |
 | `test_gaze_logging_performance` in `tests/ui/test_gaze_performance.py` | Windows, explicit environment opt-in and `-Workers 1`. Ordinary CI does not enable it. | Software logging overhead under synthetic input, not physical Tobii latency, native input correctness or audible speech. |
 
 To run the software benchmark on the reference Windows PC, close competing workloads and use:

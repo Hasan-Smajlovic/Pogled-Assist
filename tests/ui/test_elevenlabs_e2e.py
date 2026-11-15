@@ -416,6 +416,8 @@ def test_all_voice_notices_keep_targets_fixed_and_preserve_message_and_selection
         if state.notice is not None:
             assert notice.notice.title == state.notice[1]
             assert notice.notice.detail == state.notice[2]
+            # Successful voice notices must not reuse the warning mark.
+            assert notice.mark == ("✓" if state.notice[0] == "ready" else "!")
 
 
 def test_recovery_hides_itself_after_five_seconds_and_tracking_has_priority(

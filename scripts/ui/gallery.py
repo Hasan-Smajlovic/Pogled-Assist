@@ -8,6 +8,7 @@ GROUPS = {
         "Speech",
         (
             "speech",
+            "speech-groups",
             "speech-letters",
             "speech-letters-twelve",
             "speech-categories",
@@ -25,7 +26,7 @@ GROUPS = {
         ),
     ),
     "keyboards": (
-        "Keyboard and Controller",
+        "Keyboard",
         (
             "keyboard-letters",
             "keyboard-numpad",
@@ -33,12 +34,6 @@ GROUPS = {
             "keyboard-latin-paged",
             "keyboard-arabic",
             "keyboard-arabic-symbols",
-            "controller-general",
-            "controller-keyboard",
-            "controller-settings",
-            "controller-latin-paged",
-            "controller-arabic",
-            "controller-arabic-symbols",
         ),
     ),
     "settings": (
@@ -66,6 +61,7 @@ GROUPS = {
             "hotbar-simulation",
             "hotbar-one-eye-ready",
             "hotbar-selection-held",
+            "quick-actions-menu",
             "selection-progress",
             "selection-held",
             "selection-pause-held",
@@ -117,7 +113,7 @@ OVERVIEW = (
     "hotbar",
     "speech-arabic",
     "keyboard-letters",
-    "controller-general",
+    "quick-actions-menu",
 )
 CORE_NAMES = frozenset(name for _, names in GROUPS.values() for name in names)
 
@@ -127,9 +123,12 @@ def group_for(name: str) -> str:
         return "gaze-check"
     if name == "information-connection":
         return "voice"
-    if name.startswith(("keyboard-", "controller-")):
+    if name.startswith("keyboard-"):
         return "keyboards"
-    if name.startswith(("hotbar", "selection-", "speech-tracking-")):
+    if name.startswith(("hotbar", "quick-actions-", "selection-", "speech-tracking-")) or name in (
+        "precision-zoom",
+        "gaze-marker",
+    ):
         return "tracking"
     if name.startswith(("gaze-check-", "diagnostics-")):
         return "gaze-check"

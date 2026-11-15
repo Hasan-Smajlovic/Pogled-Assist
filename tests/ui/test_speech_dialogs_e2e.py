@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 from _speech_fixtures import make_speech_window as make_speech_window
-from _ui_fakes import FakeAlarmSound, FakeLibraryStore, FakeSpeech, click_speech_action
+from _ui_fakes import (
+    FakeAlarmSound,
+    FakeLibraryStore,
+    FakeSpeech,
+    click_speech_action,
+    grouped_fake_speech,
+)
 from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.speech.speech_library import PhraseRecord, SpeechLibrary, default_categories
@@ -11,7 +17,7 @@ from pogled_assist.ui.speech_window import BOSNIAN_LETTERS, SPEECH_WINDOW_ACTION
 
 @pytest.mark.e2e
 def test_speech_groups_become_inline_letters_with_mouse_and_gaze(qtbot, make_speech_window):
-    speech = FakeSpeech()
+    speech = grouped_fake_speech()
     window = make_speech_window(speech, library_store=FakeLibraryStore())
     window.show()
     qtbot.waitUntil(window.isVisible)
@@ -116,7 +122,7 @@ def test_speech_alarm_stops_speech_blocks_background_and_reports_failure(qtbot, 
 def test_speech_sleep_preserves_unfinished_entry_and_supports_mouse_and_gaze(
     qtbot, make_speech_window
 ):
-    phrases = [PhraseRecord(f"Fraza {index}") for index in range(7)]
+    phrases = [PhraseRecord(f"Fraza {index}") for index in range(10)]
     speech = FakeSpeech()
     window = make_speech_window(
         speech,
@@ -129,7 +135,7 @@ def test_speech_sleep_preserves_unfinished_entry_and_supports_mouse_and_gaze(
     window.show()
     window._input.setText("Razgovor")
     window._phrases_button.click()
-    window._next_page_button.click()
+    window._list_next_button.click()
     window._add_item_button.click()
     window._input.setText("Nedovršena fraza")
     editor = window._editor

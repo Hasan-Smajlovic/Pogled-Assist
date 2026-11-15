@@ -355,3 +355,19 @@ def test_repeated_cleanup_does_not_report_a_started_bridge_as_not_started(monkey
     assert backend.failure_observation == observed
     assert len(events) == count
     assert all(event["process_state"] != "not_started" for event in events)
+
+
+def test_bridge_forwards_gaze_origins_separately_from_box_positions():
+    backend = TobiiStreamEngineBridgeBackend(lambda *_args: None, lambda *_args: None)
+    positions, origins = [], []
+    backend.eye_position_callback = lambda *args: positions.append(args)
+    backend.gaze_origin_callback = lambda *args: origins.append(args)
+    backend._on_started({"eye_position_supported": False, "gaze_origin_supported": True})
+    assert backend.gaze_origin_supported is True
+    backend._handle_message(
+        {"type": "gaze_origin", "left": [3, 113, 391], "right": None, "timestamp": 9}
+    )
+    assert origins == [((3, 113, 391), None, 9)]
+    assert positions == []
+    backend._on_started({"gaze_origin_supported": "yes"})
+    assert backend.gaze_origin_supported is None

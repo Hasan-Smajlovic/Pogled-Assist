@@ -5,15 +5,15 @@ from PySide6.QtCore import QPoint, QRect
 
 from pogled_assist.ui.gaze_bubble import GazeBubbleWindow
 from pogled_assist.ui.interaction_overlay import InteractionOverlayWindow
-from pogled_assist.ui.quick_action_menu import LEFT_CLICK, QuickActionRadialMenu
+from pogled_assist.ui.quick_action_menu import LEFT_CLICK, QuickActionMenu
 from pogled_assist.ui.quick_action_zoom import QuickActionZoomWindow
 
 
 def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    monkeypatch.setattr(GazeBubbleWindow, "_apply_windows_click_through", lambda self: None)
+    monkeypatch.setattr("pogled_assist.ui.overlay_window.make_window_click_through", lambda _: True)
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
 
@@ -31,11 +31,24 @@ def test_gaze_bubble_tracks_points_and_respects_enabled_state(qtbot, monkeypatch
     assert bubble.pos() == QPoint(377, 327)
 
 
+def test_gaze_bubble_keeps_its_interior_clear_with_a_visible_ring_and_center(qtbot):
+    bubble = GazeBubbleWindow()
+    qtbot.addWidget(bubble)
+    bubble.handle_gaze(QPoint(300, 250))
+    image = bubble.grab().toImage()
+    scale = image.devicePixelRatio()
+
+    for x, y in ((10, 23), (15, 23), (23, 10), (23, 15)):
+        assert image.pixelColor(round(x * scale), round(y * scale)).alpha() == 0
+    for x, y in ((23, 3), (23, 23)):
+        assert image.pixelColor(round(x * scale), round(y * scale)).alpha() > 200
+
+
 def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.interaction_overlay.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    monkeypatch.setattr(InteractionOverlayWindow, "_apply_windows_click_through", lambda self: None)
+    monkeypatch.setattr("pogled_assist.ui.overlay_window.make_window_click_through", lambda _: True)
     overlay = InteractionOverlayWindow()
     qtbot.addWidget(overlay)
 
@@ -59,7 +72,7 @@ def test_interaction_overlay_progress_fire_and_clear(qtbot, monkeypatch):
 def test_gaze_bubble_expires_without_fresh_positions(qtbot, monkeypatch):
     now = freeze_monotonic(monkeypatch, 10.0)
     monkeypatch.setattr(
-        "pogled_assist.ui.gaze_bubble.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
     bubble = GazeBubbleWindow()
     qtbot.addWidget(bubble)
@@ -95,11 +108,11 @@ def test_enabling_gaze_bubble_rejects_stale_points_received_while_hidden(qtbot, 
     assert bubble.isHidden()
 
 
-def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
+def test_quick_action_menu_selects_stable_tile_by_gaze(qtbot, monkeypatch):
     monkeypatch.setattr(
-        "pogled_assist.ui.quick_action_menu.force_window_topmost", lambda *_args, **_kwargs: True
+        "pogled_assist.ui.overlay_window.force_window_topmost", lambda *_args, **_kwargs: True
     )
-    menu = QuickActionRadialMenu()
+    menu = QuickActionMenu()
     qtbot.addWidget(menu)
     selected = []
     menu.action_selected.connect(selected.append)
@@ -107,9 +120,15 @@ def test_quick_action_menu_selects_stable_sector_by_gaze(qtbot, monkeypatch):
     menu.show_at(QPoint(400, 300))
     now = freeze_monotonic(monkeypatch, 1.0)
 
-    for at in (1.0, 1.249, 1.25, 1.4):
+    tile = menu.tile_rect(LEFT_CLICK)
+    for at, point in (
+        (1.0, tile.center()),
+        (1.249, tile.topLeft()),
+        (1.25, tile.center()),
+        (1.4, tile.bottomRight()),
+    ):
         now[0] = at
-        menu.handle_gaze(QPoint(400, 200))
+        menu.handle_gaze(point)
 
     assert selected == [LEFT_CLICK]
     assert menu._selection_emitted is True

@@ -266,26 +266,6 @@ def test_grouping_letters_splits_and_keeps_remainder():
     assert _group_letters(["A", "B", "C", "D", "E"], 2) == [["A", "B"], ["C", "D"], ["E"]]
 
 
-def test_default_speech_categories_match_the_design_reference():
-    categories = default_categories()
-
-    assert [category.name for category in categories] == [
-        "Trebam",
-        "Brzi odgovor",
-        "Kako se osjećam",
-        "Ljudi",
-    ]
-    assert categories[0].answers == [
-        "Trebam vode",
-        "Namjesti mi jastuk",
-        "Trebam lijek",
-        "Pomozi mi da se okrenem",
-        "Hladno mi je",
-        "Trebam u toalet",
-    ]
-    assert all(len(category.answers) == 6 for category in categories)
-
-
 def test_phrase_parsing_and_sorting_are_stable():
     assert parse_phrase_record({"phrase": "  Dobar   dan ", "count": "3"}) == ("Dobar dan", 3)
     assert parse_phrase_record({"text": "Test", "uses": -2}) == ("Test", 0)
@@ -314,7 +294,15 @@ def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
     loaded = store.load()
 
     assert loaded.categories == default_categories()
-    assert loaded.phrases == [PhraseRecord("Dobar dan", 4), PhraseRecord("Želim pomoć", 0)]
+    assert loaded.phrases == [
+        PhraseRecord("Dobar dan", 4),
+        PhraseRecord("Drago mi je što ste došli."),
+        PhraseRecord("Molim vas ponovite."),
+        PhraseRecord("Molim vas sačekajte da napišem."),
+        PhraseRecord("Nisam to htio reći."),
+        PhraseRecord("Razgovarat ćemo kasnije."),
+        PhraseRecord("Želim pomoć"),
+    ]
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["version"] == 2
     assert saved["categories"][0] == {
@@ -330,6 +318,11 @@ def test_speech_library_migrates_legacy_phrases_and_round_trips_utf8(tmp_path):
     }
     assert saved["phrases"] == [
         {"text": "Dobar dan", "uses": 4},
+        {"text": "Drago mi je što ste došli.", "uses": 0},
+        {"text": "Molim vas ponovite.", "uses": 0},
+        {"text": "Molim vas sačekajte da napišem.", "uses": 0},
+        {"text": "Nisam to htio reći.", "uses": 0},
+        {"text": "Razgovarat ćemo kasnije.", "uses": 0},
         {"text": "Želim pomoć", "uses": 0},
     ]
     assert json.loads(legacy_path.read_text(encoding="utf-8")) == saved["phrases"]
@@ -342,6 +335,7 @@ def test_speech_library_migrates_current_v2_file_without_losing_categories(tmp_p
         json.dumps(
             {
                 "version": 2,
+                "starter_revision": 1,
                 "categories": [{"name": "Moje", "answers": ["Jedan", "Dva"]}],
                 "phrases": [{"text": "Hvala", "uses": 3}],
             }
@@ -452,6 +446,7 @@ def test_speech_library_preserves_saved_empty_categories_and_new_items(tmp_path)
         json.dumps(
             {
                 "version": 2,
+                "starter_revision": 1,
                 "categories": [
                     {"name": "Moje", "answers": ["Prvi odgovor", "prvi  odgovor", "Drugi"]},
                 ],
@@ -468,7 +463,7 @@ def test_speech_library_preserves_saved_empty_categories_and_new_items(tmp_path)
     )
 
     path.write_text(
-        json.dumps({"version": 2, "categories": [], "phrases": []}),
+        json.dumps({"version": 2, "starter_revision": 1, "categories": [], "phrases": []}),
         encoding="utf-8",
     )
     assert store.load() == SpeechLibrary()
@@ -477,7 +472,11 @@ def test_speech_library_preserves_saved_empty_categories_and_new_items(tmp_path)
 def test_speech_library_load_recovers_from_bad_data_and_save_reports_failure(tmp_path):
     path = tmp_path / "speech_phrases.json"
     path.write_text("{", encoding="utf-8")
-    assert SpeechLibraryStore(path).load() == SpeechLibrary(categories=default_categories())
+    store = SpeechLibraryStore(path)
+    fallback = store.load()
+    assert store.read_error
+    assert fallback.categories[0].answers[0] == "Trebam vode"
+    assert fallback.phrases[0] == PhraseRecord("Drago mi je što ste došli.")
 
     blocked_parent = tmp_path / "blocked"
     blocked_parent.write_text("not a directory", encoding="utf-8")

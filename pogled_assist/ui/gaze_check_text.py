@@ -10,6 +10,8 @@ from ..tracking.gaze_check import (
     EYE_GAP_FRACTION,
     EYE_LOW_FRACTION,
     FRESH_SECONDS,
+    ORIGIN_MAX_DISTANCE_MM,
+    ORIGIN_MIN_DISTANCE_MM,
     CheckSnapshot,
     EyeTrackingResult,
 )
@@ -24,6 +26,11 @@ def position_notice(snapshot: CheckSnapshot, tracking_state: TrackingState | Non
         TrackingState.UNAVAILABLE,
     ):
         return "Veza uređaja je prekinuta. Čekam ponovno povezivanje."
+    if snapshot.origin_only:
+        return (
+            "Uređaj šalje udaljenost i lijevo-desno. "
+            "Gore-dolje nije dostupno; preciznost provjerite na metama."
+        )
     if snapshot.position_supported is False:
         return "Uređaj ne šalje položaje očiju za ovaj prikaz. Koristite Tobii prikaz položaja."
     if snapshot.left_position is None and snapshot.right_position is None:
@@ -45,6 +52,8 @@ def position_guidance(snapshot: CheckSnapshot, policy: str = BOTH_EYES) -> str:
 
 
 def _tracked_position_guidance(snapshot: CheckSnapshot) -> str:
+    if snapshot.origin_only:
+        return _origin_guidance(snapshot)
     position, depth = snapshot.in_box((0, 1)), snapshot.in_box((2,))
     if position is False:
         return "Pomjerajte i nagnite ekran tako da su obje oznake unutar okvira."
@@ -61,6 +70,33 @@ def _gaze_guidance(snapshot: CheckSnapshot, position: bool | None, depth: bool |
     if position is None or depth is None:
         return "Uređaj ne šalje položaj za ovaj prikaz. Podesite ekran uz Tobii prikaz položaja."
     return "Zadržite položaj i odaberite „Pokreni provjeru“."
+
+
+def _origin_guidance(snapshot: CheckSnapshot) -> str:
+    side, depth = snapshot.origin_side_in_range(), snapshot.origin_distance_in_range()
+    if side is False:
+        return "Pomjerite ekran lijevo ili desno tako da Tobii bude ispred lica."
+    if depth is False:
+        if snapshot.origin_center[2] < ORIGIN_MIN_DISTANCE_MM:
+            return "Polako odmaknite ekran od lica."
+        return "Polako približite ekran licu."
+    return _gaze_guidance(snapshot, side, depth)
+
+
+def origin_side_text(snapshot: CheckSnapshot) -> str:
+    """Left-right offset of the eyes from the tracker centre, as the user sees it."""
+    offset = round(snapshot.origin_center[0] / 10)
+    if offset == 0:
+        return "Lijevo-desno · ispred sredine uređaja"
+    side = "desno" if offset > 0 else "lijevo"
+    return f"Lijevo-desno · {abs(offset)} cm {side} od sredine uređaja"
+
+
+def origin_distance_text(snapshot: CheckSnapshot) -> str:
+    return (
+        f"Udaljenost {round(snapshot.origin_center[2] / 10)} cm · Tobii prati od "
+        f"{ORIGIN_MIN_DISTANCE_MM / 10:.0f} do {ORIGIN_MAX_DISTANCE_MM / 10:.0f} cm"
+    )
 
 
 def _depth_guidance(snapshot: CheckSnapshot) -> str:
@@ -99,8 +135,8 @@ def _fresh_gaze(snapshot: CheckSnapshot, now: float) -> bool:
 
 def visible_eyes(snapshot: CheckSnapshot) -> tuple[bool | None, bool | None]:
     return (
-        snapshot.left_position is not None or snapshot.left,
-        snapshot.right_position is not None or snapshot.right,
+        snapshot.left_position is not None or snapshot.left_origin is not None or snapshot.left,
+        snapshot.right_position is not None or snapshot.right_origin is not None or snapshot.right,
     )
 
 

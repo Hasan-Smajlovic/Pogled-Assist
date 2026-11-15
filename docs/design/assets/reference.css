@@ -25,8 +25,7 @@ body[data-preview-clean="true"] > .reference-tools,
 body[data-preview-clean="true"] > .check-preview-tools,
 body[data-preview-clean="true"] > .diagnostics-preview-tools,
 body[data-preview-clean="true"] > .design-notes { display: none; }
-body[data-preview-clean="true"] > #sidebar-screen > p,
-body[data-preview-clean="true"] > #controller-screen > p { display: none; }
+body[data-preview-clean="true"] > #sidebar-screen > p { display: none; }
 [hidden] { display: none !important; }
 body { margin: 0; padding: 12px; }
 button, input, select, textarea { font: inherit; }

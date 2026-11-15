@@ -72,8 +72,9 @@ def test_gaze_check_suspends_all_input_and_preserves_speech_and_settings(
 
 
 @pytest.mark.e2e
-def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
-    hotbar_gaze, qtbot, monkeypatch
+@pytest.mark.parametrize("model", ["Eye Tracker 4C", "IS5_Large_Eyetracker_5", None])
+def test_settings_calibration_routes_by_connected_tracker_model(
+    hotbar_gaze, qtbot, monkeypatch, model
 ):
     from pogled_assist import toolbar
     from pogled_assist.ui import settings_window
@@ -81,16 +82,44 @@ def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     requests = []
     monkeypatch.setattr(
-        toolbar, "launch_tobii_settings", lambda: requests.append(True) or "Requested"
+        toolbar,
+        "launch_tobii_guest_calibration",
+        lambda *, device_model: requests.append(device_model) or "Requested",
+    )
+    hotbar = hotbar_gaze[0]
+    monkeypatch.setattr(hotbar._gaze, "check_environment", lambda: {"model": model})
+    hotbar._open_settings()
+    hotbar._settings_window._gaze_page._calibration_button.click()
+    qtbot.wait(1)
+    # An unknown model stays empty so routing prefers Experience, the primary device.
+    assert requests == [model or ""]
+    assert not hotbar._settings_window.isVisible()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("model", ["Eye Tracker 4C", "IS5_Large_Eyetracker_5"])
+def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
+    hotbar_gaze, qtbot, monkeypatch, model
+):
+    from pogled_assist import toolbar
+    from pogled_assist.ui import settings_window
+
+    monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
+    requests = []
+    monkeypatch.setattr(
+        toolbar,
+        "launch_tobii_settings",
+        lambda *, device_model: requests.append(device_model) or "Requested",
     )
     hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    monkeypatch.setattr(hotbar._gaze, "check_environment", lambda: {"model": model})
     hotbar._open_settings()
     settings = hotbar._settings_window
     settings._gaze_page._gaze_check_button.click()
     check = hotbar._gaze_check_window
     check._calibration_button.click()
     qtbot.wait(1)
-    assert requests == [True]
+    assert requests == [model]
     assert controller._input_suspended
     assert check.isMinimized()
     hotbar._open_settings()
@@ -102,13 +131,14 @@ def test_gaze_check_calibration_handoff_keeps_pause_and_shutdown_closes_check(
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("launch_fails", [False, True])
+@pytest.mark.parametrize("model", ["Eye Tracker 4C", "IS5_Large_Eyetracker_5"])
 def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
-    hotbar_gaze, qtbot, monkeypatch, launch_fails
+    hotbar_gaze, qtbot, monkeypatch, launch_fails, model
 ):
     from pogled_assist import toolbar
     from pogled_assist.ui import settings_window
 
-    def launch():
+    def launch(**_kwargs):
         if launch_fails:
             raise RuntimeError("Synthetic launch failure")
         return "Otvaranje Tobii postavki je zatraženo."
@@ -116,14 +146,15 @@ def test_gaze_check_settings_feedback_keeps_one_actionable_profile_route(
     monkeypatch.setattr(settings_window, "is_windows_startup_enabled", lambda: False)
     monkeypatch.setattr(toolbar, "launch_tobii_settings", launch)
     hotbar, controller, _feed, _actions, _progress = hotbar_gaze
+    monkeypatch.setattr(hotbar._gaze, "check_environment", lambda: {"model": model})
     hotbar._open_settings()
     hotbar._settings_window._gaze_page._gaze_check_button.click()
     check = hotbar._gaze_check_window
     check._calibration_button.click()
     qtbot.wait(1)
     assert controller._input_suspended
-    assert check._notice.text().count("Test and recalibrate") == 1
-    assert "> Recalibrate" in check._notice.text()
+    assert "Test and recalibrate" not in check._notice.text()
+    assert check._notice.text().count("ponovnu kalibraciju") == 1
     assert "profil korisnika" in check._notice.text()
     if launch_fails:
         assert not check.isMinimized()

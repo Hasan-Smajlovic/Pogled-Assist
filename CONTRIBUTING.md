@@ -7,8 +7,7 @@ This document defines how changes move from an issue to a release in `Hasan-Smaj
 - `development` is the integration branch for normal work. Check GitHub for the current default branch; that setting can differ from the integration branch.
 - `master` contains release history and urgent hotfixes only.
 - Do not develop directly on either long-lived branch.
-- Every change to `development` or `master` must go through a pull request.
-- Direct pushes, force-pushes, and deletion are blocked on both long-lived branches.
+- Every change to `development` or `master` must go through a pull request; [repository protection](#repository-protection) enforces this.
 
 ## Topic branches
 
@@ -101,16 +100,12 @@ When a normal pull request is squash-merged into `development`, its title become
 
 ## Review and merge responsibility
 
-- One approving review from a collaborator with write permission is required.
+- [Repository protection](#repository-protection) lists the approval, review conversation and check rules every merge must satisfy.
 - A pull request author cannot approve their own pull request.
 - Hasan reviews Tajib's pull requests.
 - Tajib reviews Hasan's pull requests.
-- New commits dismiss previous approvals. The latest diff must be approved again.
-- Every review conversation must be resolved before merge.
 - Hasan, Tajib, and Ali may perform the final merge into `development` or `master` after all applicable quality rules are satisfied.
 - An approval means the reviewer accepts the implementation and the reported verification. It does not replace CI or required Windows and Tobii hardware checks.
-
-There is no active maintainer-only update restriction. Collaborators with write or administrator permission may merge, but the independent pull request quality rulesets apply to everyone and have no bypass actors.
 
 ## Merge strategy
 
@@ -156,12 +151,7 @@ This process prevents unfinished development work from entering an urgent releas
 
 ## Repository protection
 
-Repository policy uses `Protect development` and `Protect master releases`, each targeting its named branch. Verify the live GitHub configuration before relying on enforcement. Both block deletion and force-pushes and require a pull request, one approving review, dismissal of stale approvals after new commits, resolved review conversations, and successful `code-quality`, `tests`, and `windows-package` checks on an up-to-date branch. GitHub's secure default also requires an extra human approval for unattributed Copilot changes.
-
-| Branch | History and allowed merge method |
-| --- | --- |
-| `development` | Linear history; squash merge only |
-| `master` | Merge commit only; linear history is not required |
+Repository policy uses `Protect development` and `Protect master releases`, each targeting its named branch. Verify the live GitHub configuration before relying on enforcement. Both block deletion and force-pushes and require a pull request, one approving review from a collaborator with write permission, dismissal of stale approvals after new commits, resolved review conversations, and the [required checks](#ci-and-required-checks) on an up-to-date branch. GitHub's secure default also requires an extra human approval for unattributed Copilot changes. Each ruleset allows only its branch's [merge method](#merge-strategy); `development` also requires linear history, `master` does not.
 
 Neither ruleset has bypass actors or requires Code Owner review, approval of the most recent reviewable push, signed commits, or deployments. Neither restricts branch creation or has a separate update restriction. Collaborators with write or administrator permission may merge after the active rules are satisfied.
 

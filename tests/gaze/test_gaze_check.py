@@ -618,3 +618,24 @@ def test_stream_engine_check_reports_no_per_eye_gaze(qapp):
     assert snapshot.eye_gaze_supported is False
     assert snapshot.eye_gaze_pairs == ()
     assert snapshot.left is True
+
+
+def test_gaze_origins_reach_only_an_active_check_and_expire(qapp, monkeypatch):
+    now = freeze_monotonic(monkeypatch, 1.0)
+    provider = TobiiGazeProvider()
+    backend = SimpleNamespace()
+    provider._attach_check_observers(backend)
+    backend.gaze_origin_callback((3.0, 113.0, 391.0), (70.0, 112.0, 385.0), 1)
+    provider.set_check_active(True)
+    assert provider.check_snapshot().left_origin is None
+    provider._attach_check_observers(backend)
+    backend.gaze_origin_callback((3.0, 113.0, 391.0), (70.0, 112.0, 385.0), 1)
+    snapshot = provider.check_snapshot()
+    assert snapshot.left_origin == (3.0, 113.0, 391.0)
+    assert snapshot.origin_only is True
+    assert snapshot.in_box((0, 1, 2)) is None  # Origins never become box positions.
+    assert snapshot.origin_distance_in_range() is False
+    assert snapshot.origin_side_in_range() is True
+    now[0] = 1.6
+    assert provider.check_snapshot().left_origin is None
+    assert provider.check_snapshot().origin_only is False

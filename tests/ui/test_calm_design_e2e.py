@@ -5,11 +5,12 @@ from dataclasses import replace
 import pytest
 from _clock import freeze_monotonic
 from _speech_fixtures import make_speech_window as make_speech_window
-from _ui_fakes import FakeLibraryStore, FakeSpeech
+from _ui_fakes import FakeLibraryStore, FakeSpeech, grouped_fake_speech
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtWidgets import QFrame, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QToolButton, QWidget
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
+from pogled_assist.keyboard_layouts import ALL_LETTERS_LAYOUT, LETTER_GROUPS_LAYOUT
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.gaze_feedback import set_gaze_feedback, set_gaze_paused
 from pogled_assist.ui.keyboard_window import KEYBOARD_STYLESHEET
@@ -152,25 +153,31 @@ def test_inline_letter_targets_fit_and_recording_does_not_move_them(
     assert (first.x() > second.x()) == (script == "arabic")
 
 
-def test_gaze_highlight_stays_steady_during_selection_and_hold(qtbot):
+def test_gaze_highlight_preserves_selection_through_hold_and_clears_pause(qtbot):
     button = QToolButton()
     qtbot.addWidget(button)
     button.setText("Odaberi")
     button.resize(180, 80)
     button.show()
     set_gaze_feedback(button, True)
-    state = button.property("gazePulse")
-    qtbot.wait(220)
-    assert button.property("gazePulse") == state
+    assert button.property("gazeTarget") is True
     set_gaze_paused(button, True)
+    assert button.property("gazePaused") is True
     assert button.property("gazeTarget") is True
     set_gaze_paused(button, False)
+    assert button.property("gazePaused") is False
+    assert button.property("gazeTarget") is True
+    # Clearing a held selection must clear its pause too.
+    set_gaze_paused(button, True)
     set_gaze_feedback(button, False)
     assert button.property("gazeTarget") is False
+    assert button.property("gazePaused") is False
 
 
 def test_voice_update_preserves_the_displayed_keyboard_page(qtbot, make_speech_window):
-    window = make_speech_window(FakeSpeech(), letters_per_group=1, library_store=FakeLibraryStore())
+    window = make_speech_window(
+        grouped_fake_speech(), letters_per_group=1, library_store=FakeLibraryStore()
+    )
     window.resize(1280, 720)
     window.show()
     window._next_page_button.click()
@@ -187,18 +194,27 @@ def test_voice_update_preserves_the_displayed_keyboard_page(qtbot, make_speech_w
     assert window._action("group:0") in window._action_buttons
 
 
-@pytest.mark.parametrize("script", ["latin", "arabic"])
+@pytest.mark.parametrize(
+    "script,layout",
+    [
+        ("latin", ALL_LETTERS_LAYOUT),
+        ("latin", LETTER_GROUPS_LAYOUT),
+        ("arabic", ALL_LETTERS_LAYOUT),
+    ],
+)
 def test_every_dense_editor_page_fits_without_resizing_the_window(
-    qtbot, make_speech_window, script
+    qtbot, make_speech_window, script, layout
 ):
     speech = FakeSpeech()
-    speech._settings = SpeechSettings(keyboard_script=script)
+    speech._settings = SpeechSettings(keyboard_script=script, letter_layout=layout)
     window = make_speech_window(speech, letters_per_group=1, library_store=FakeLibraryStore())
     window.resize(1280, 720)
     window.show()
     window._phrases_button.click()
     window._add_item_button.click()
     pages = window._keyboard_pages
+    # One letter per group pages the grouped keyboards; the alphabet fits on one page.
+    assert (pages > 1) == (script == "arabic" or layout == LETTER_GROUPS_LAYOUT)
     for page in range(pages):
         qtbot.waitUntil(lambda expected=page: window._keyboard_page == expected)
         qtbot.wait(1)
@@ -291,10 +307,10 @@ def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
     assert len(window.findChildren(QFrame, "speechDivider")) == 3
     if script == "latin":
         for row, command in enumerate(("alarm:start", "sleep:start", "exit")):
-            group = window._action_buttons[window._action(f"group:{row * 2}")]
+            letter = window._action_buttons[window._action(f"letter:{row * 10}")]
             system = window._action_buttons[window._action(command)]
-            assert group.mapTo(window, QPoint()).y() == system.mapTo(window, QPoint()).y()
-            assert abs(group.height() - system.height()) <= 1
+            assert letter.mapTo(window, QPoint()).y() == system.mapTo(window, QPoint()).y()
+            assert abs(letter.height() - system.height()) <= 1
     for action in window._main_dynamic_actions:
         button = window._action_buttons[action]
         rect = QRect(button.mapTo(window, QPoint()), button.size())
@@ -307,4 +323,118 @@ def test_speech_sections_and_utility_groups_align_without_status_layout_shift(
     assert [button.geometry() for button in utility] == before
     window._switch_keyboard_script()
     qtbot.waitUntil(lambda: window._speech_settings.keyboard_script != script)
+    qtbot.wait(1)
+    after = [QRect(button.geometry()) for button in utility]
+    assert [(rect.top(), rect.height()) for rect in after] == [
+        (rect.top(), rect.height()) for rect in before
+    ]
+    # Latin all-letters uses the narrow app-control column and Arabic always uses groups,
+    # so the script button widens or narrows toward the keys. Its right edge stays put, and
+    # the wider button covers the narrower one, so gaze resting on it stays on it.
+    assert after[3].right() == before[3].right()
+    assert after[3].contains(before[3]) or before[3].contains(after[3])
+    system = window._action_buttons[window._action("alarm:start")]
+    assert window._script_button.mapTo(window, QPoint()).x() == system.mapTo(window, QPoint()).x()
+    assert window._script_button.width() == system.width()
+
+
+def test_switching_script_with_letter_groups_keeps_the_bottom_row_in_place(
+    qtbot, make_speech_window
+):
+    speech = FakeSpeech()
+    speech._settings = SpeechSettings(letter_layout="groups")
+    window = make_speech_window(speech, library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(lambda: window._space_button.width() > 200)
+    utility = (
+        window._space_button,
+        window._backspace_button,
+        window._keyboard_toggle_button,
+        window._script_button,
+    )
+    before = [QRect(button.geometry()) for button in utility]
+    window._switch_keyboard_script()
+    qtbot.waitUntil(lambda: window._speech_settings.keyboard_script == "arabic")
+    qtbot.wait(1)
     assert [button.geometry() for button in utility] == before
+
+
+def test_speech_role_tones_separate_words_editing_views_and_app_controls(qtbot, make_speech_window):
+    window = make_speech_window(FakeSpeech(), library_store=FakeLibraryStore())
+    window.resize(1280, 720)
+    window.show()
+    qtbot.waitUntil(lambda: window._space_button.width() > 200)
+    # Predictions arrive asynchronously, so fix one offered word and one empty slot.
+    word, empty_word = window._prediction_buttons[:2]
+    word.setText("DA")
+    word.setEnabled(True)
+    empty_word.setText("·")
+    empty_word.setEnabled(False)
+
+    def fill(button):
+        # Sample the fill above the centred label, inside the one-pixel border.
+        return button.grab().toImage().pixelColor(button.width() // 2, 6).name()
+
+    def action(name):
+        return window._action_buttons[window._action(name)]
+
+    tones = {
+        "#283442": [action("letter:0")],
+        "#293d49": [word],
+        "#202c3a": [window._space_button, window._backspace_button],
+        "#2b354b": [
+            window._categories_button,
+            window._phrases_button,
+            window._keyboard_toggle_button,
+            window._script_button,
+        ],
+        "#1d242d": [action("sleep:start"), action("exit")],
+        "#3b3325": [window._clear_button],
+        "#442b33": [action("alarm:start")],
+        "#2e6478": [window._play_button],
+        # Disabled controls keep one shared look whatever their role.
+        "#222b35": [empty_word, window._undo_word_button],
+    }
+    assert {name: [fill(button) for button in buttons] for name, buttons in tones.items()} == {
+        name: [name] * len(buttons) for name, buttons in tones.items()
+    }
+    window._categories_button.setChecked(True)
+    assert fill(window._categories_button) == "#2e6478"
+
+
+def _assert_information_fits(button, qtbot):
+    button.show_help()
+    popup = button.popup
+    qtbot.waitUntil(popup.isVisible)
+    for label in popup.findChildren(QLabel):
+        assert label.height() >= label.heightForWidth(label.width()), label.text()
+        assert popup.rect().contains(label.geometry()), label.text()
+    popup.close()
+    qtbot.waitUntil(popup.isHidden)
+
+
+# Both windows have a minimum width above 372 px, so the popup is always 340 px wide.
+def test_settings_information_popup_shows_all_of_its_text(qtbot, monkeypatch):
+    monkeypatch.setattr(
+        "pogled_assist.ui.settings_window.is_windows_startup_enabled", lambda: False
+    )
+    window = SettingsWindow(GazeSettings(), SpeechSettings())
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._open_eleven()
+    qtbot.waitUntil(window._eleven_page.connection_help.isVisible)
+    _assert_information_fits(window._eleven_page.connection_help, qtbot)
+
+
+def test_gaze_check_information_popup_shows_all_of_its_text(qtbot):
+    from pogled_assist.ui.gaze_check_window import GazeCheckWindow
+
+    window = GazeCheckWindow(GazeSettings(), simulated=True)
+    qtbot.addWidget(window)
+    window.resize(1280, 720)
+    window.show()
+    window._timer.stop()
+    qtbot.waitUntil(window._position_help.isVisible)
+    _assert_information_fits(window._position_help, qtbot)

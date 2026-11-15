@@ -1,6 +1,6 @@
 # Windows release installation and validation
 
-The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder application, an installer, a launcher, a release updater, this guide, and the release `VERSION`. The package includes Python, PySide6, QtAwesome resources, the app icon, the Settings checkbox asset, the Tobii Pro SDK Python package, speech tools, and the isolated Python runtime and source for the 32-bit Stream Engine bridge.
+The versioned Windows x64 release is a ZIP containing a PyInstaller one-folder application, an installer, a launcher, a release updater, this guide, and the release `VERSION`. The package includes Python, PySide6, QtAwesome resources, the app icon, the Settings checkbox asset, the alarm and selection sounds, the bundled Bosnian suggestion models, the Tobii Pro SDK Python package, speech tools, and the isolated Python runtime and source for the 32-bit Stream Engine bridge.
 
 ## Install a release
 
@@ -32,7 +32,7 @@ The package builder, installer smoke tests, packaged launcher, and installation 
 
 Direct launching does not grant trust to a binary. [SmartScreen](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/), [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control), and organization application-control policies can still warn or block it. Keep those protections enabled; a blocked launch must be reported as a failure. Explorer launches and UAC can still identify this unsigned release as an unknown publisher.
 
-The release pipeline currently has no Windows Authenticode signing step. Before relying on publisher trust for distribution to colleagues, the release owner must provision a trusted code-signing identity (a suitable CA certificate or Microsoft Artifact Signing account), protect its key/service credentials in the release environment, and add signing plus a trusted timestamp for project-built EXEs and DLLs before final smoke tests, ZIP creation and SHA-256 generation. Preserve and verify third-party signatures where supplied, and verify all distributed executable components with the intended Windows trust policy on a clean machine. The pipeline must fail on signing or signature-verification errors. Certificate/service provisioning, CI credentials, signing integration and clean-machine policy validation remain outstanding; no certificate or Windows policy is configured by the launch fix.
+The release pipeline currently has no Windows Authenticode signing step. Before relying on publisher trust for distribution to colleagues, the release owner must provision a trusted code-signing identity (a suitable CA certificate or Microsoft Artifact Signing account), protect its key/service credentials in the release environment, and add signing plus a trusted timestamp for project-built EXEs and DLLs before final smoke tests, ZIP creation and SHA-256 generation. Preserve and verify third-party signatures where supplied, and verify all distributed executable components with the intended Windows trust policy on a clean machine. The pipeline must fail on signing or signature-verification errors. Certificate/service provisioning, CI credentials, signing integration and clean-machine policy validation remain outstanding.
 
 ## Update an installed release
 
@@ -71,23 +71,22 @@ Do not manually delete hidden `.PogledAssist.install-*` or `.PogledAssist.backup
 
 ## Included speech tools
 
-The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone
-`edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.0. Installation
-copies them under `speech/` along with their runtimes, licenses, and matching
-source archives. Users do not need to install Python, use pip, or adjust PATH.
-The portable ZIP also includes these tools. Standard speech works offline;
-natural speech uses Microsoft's online service and requires internet when used.
+The release includes eSpeak NG 1.52.0 with the Bosnian `bs` voice and standalone `edge-playback.exe` and `edge-tts.exe` built from edge-tts 7.3.1. Installation copies them under `speech/` along with their runtimes, licenses, and matching source archives. Users do not need to install Python, use pip, or adjust PATH. The portable ZIP also includes these tools. **Standardni** works offline; **Prirodni** uses Microsoft's online service and requires internet when used.
+
+The Edge dependency includes the [v2 service authentication](https://github.com/rany2/edge-tts/releases/tag/7.3.0) and [locale-independent server-date parsing](https://github.com/rany2/edge-tts/releases/tag/7.3.1). Tests require at least 7.3.1 and match the application dependency pin to the bundle's installed version, source archive and license path. The build verifies the source archive's SHA-256 before including it. These checks cannot detect future Microsoft service changes; online synthesis and audible playback still need separate release validation.
 
 The launcher and direct executable prefer these bundled tools over discovered system installations. Explicit `ESPEAK_NG_EXE` and `EDGE_PLAYBACK_EXE` overrides still take priority. Existing `.venv` and `tools` directories are preserved for compatibility; versioned files under `speech/` are replaced with each release.
 
 The installer verifies bundled speech during staging and after installation. It generates a short Bosnian WAV without playing sound and starts both Edge commands with `--help`, using no external speech installation or online service. A missing or broken bundled component fails verification and uses the existing installation rollback behavior. This does not prove online voice availability or audio-device playback; test those separately after installation.
 
-## Components installed separately
+## Included Tobii bridge runtime
 
 The package includes the official Python 3.10.11 32-bit embeddable distribution under `runtime/python-x86/`, verified against its pinned SHA-256 at build time. Its isolated path file exposes only the bundled standard library and bridge sources under `_internal/`. The bridge source set includes the bounded logging transport, ordinary output, context snapshots and in-process path reservations; it does not import Qt or the recording/report stack. No system Python, pip, PATH, or registry changes are needed. The bridge honors valid new and legacy explicit Python overrides, then tries the bundled runtime before system installations. Package verification runs its actual entry point with `--check` to verify architecture and imports without opening a tracker. `runtime/` is replaced transactionally with each release; existing user-owned `tools/` remains preserved.
 
+## Components installed separately
+
 - Tobii runtime and calibration: install the official software appropriate for the tracker, connect the device, and complete calibration. The package cannot safely install or calibrate hardware.
-- Tobii Stream Engine: Tobii Eye Tracker 4C setups commonly obtain `tobii_stream_engine.dll` from Tobii Core or Game Hub. The app searches common install locations. Set `TOBII_STREAM_ENGINE_DLL` when the DLL is elsewhere.
+- Tobii Stream Engine: 4C setups commonly obtain `tobii_stream_engine.dll` from Tobii Core or Game Hub; Eye Tracker 5 uses its Experience runtime. The app validates common runtime candidates, including preserved external DLLs. See the [native SDK contract](ARCHITECTURE.md#native-stream-engine-compatibility) for supported API versions and explicit overrides. Driver replacement remains separate from app updates; follow [tracker setup](USER_GUIDE.md#before-starting).
 
 The application launches without these external components. Missing Tobii software disables gaze input while the provider retries.
 
@@ -114,6 +113,14 @@ The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the re
 dist\PogledAssist-v<version>-windows-x64.zip
 ```
 
+The executable icon is written during the build from `assets/icon.png`, the same image the app window shows, at 16, 24, 32, 48, 64, 128 and 256 pixels. That PNG is rendered from the SVG master `docs/design/assets/app-icon.svg`; after editing the master, regenerate it and commit both files:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.release.windows_icon
+```
+
+`tests/release/test_windows_icon.py` fails while the PNG differs from the master.
+
 The build downloads the pinned eSpeak MSI, Python x86 ZIP, and source archives into `.dev-tools/speech-cache`, verifies SHA-256 checksums, extracts eSpeak without installing it globally, and freezes both Edge commands with a shared Python runtime. The first build needs internet; cached assets are rechecked on every build. A checksum mismatch fails the build before extraction.
 
 Each package also includes `BUILD_INFO.json`, generated from the source revision and local dirty state. The frozen smoke check validates that identity; recordings, normal logs and gaze-check reports use the same source. See the [build identity contract](DIAGNOSTICS.md#build-identity). Verify the packaged revision/dirty state in a local support export before release. Logs and diagnostic recordings are preserved with the rest of `logs/` during installation and rollback.
@@ -122,18 +129,7 @@ No physical tracker, Tobii runtime, system speech installation, or network speec
 
 ## Automated release
 
-After normal changes have reached `development`, use the manual **Prepare release** workflow on `master` and select `patch`, `minor`, or `major`. It calculates the next version from `master`'s `VERSION` and prepares `release/v<version>` from the latest `master`, merges `development`, updates `VERSION`, and opens a draft release PR. Complete its verification and review before merging with a merge commit. The full branch procedure is in [CONTRIBUTING.md](../CONTRIBUTING.md#release-process).
-
-Pull requests targeting `development` or `master` run:
-
-- `dependency-review` (pull request events only)
-- `code-quality`
-- `tests`
-- `windows-package`
-
-Repository policy requires `code-quality`, `tests`, and `windows-package`. Verify live rulesets before a release. The checks cover Ruff formatting, focused PSScriptAnalyzer rules, hardware-independent UI rendering, and the enforced Python coverage floor. `dependency-review` additionally checks changed dependencies for known vulnerabilities. Its threshold and GitHub setup are documented in [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks); the documented required checks do not include it.
-
-The separate **UI gallery** workflow publishes screenshots after CI completes and keeps the existing PR comment current while CI runs or publication fails. Its `build-ui-gallery`, `publish-ui-gallery`, and `comment-ui-gallery` jobs are not required PR checks. Pages setup and permissions are documented in [the UI gallery guide](UI_GALLERY.md#activation-and-recovery), and visual review is documented in [the UI development guide](UI_DEVELOPMENT.md#ui-review). Screenshots do not replace the software checks or manual Windows and Tobii validation.
+The **Prepare release** workflow, the release PR review and its merge follow the [release process](../CONTRIBUTING.md#release-process). [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks) owns the pull request checks, the required subset and dependency-review setup. Verify the live rulesets before a release.
 
 After an approved merge to `master`, **Publish release** checks out exactly `github.sha`, repeats all software checks, builds the package, and creates the `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft, then publishes the draft only after both assets exist.
 
@@ -151,6 +147,7 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 
 - Play Efendija MP3 audio through packaged Qt Multimedia, including decoder failure and stop/restart.
 - Exercise Prirodni fallback through packaged in-process `edge_tts`, then Standardni offline.
+- Test directly selected Prirodni (`bs-BA-GoranNeural`) and Arabic Hamed (`ar-SA-HamedNeural`) through the packaged Edge tools with internet available.
 - Confirm the Credential Manager key and saved settings survive update and rollback.
 - Listen to the Fikret clone with Eleven v4, sentence-case text and all three stability choices.
 - Check quota fallback/recovery and whole saved-entry playback while offline. Service availability, remaining credits and network delay remain external limits; see [ElevenLabs setup](features/elevenlabs.md).
@@ -166,11 +163,11 @@ Manual checks on a clean Windows x64 environment (including audible playback and
 - Hold the installation folder open in File Explorer during an update. Confirm the updater reports which folder to close, leaves the older version and user files intact, and succeeds after the Explorer window is closed and retried.
 - Confirm `data`, including `speech_learning.json`, `logs`, `install_info.json`, and existing root logs other than the appended `update_windows.log` are byte-for-byte unchanged after update and rollback tests.
 - Confirm any local `.venv` speech tools and `tools` bridge components remain available after source-install migration and release updates.
-- On a clean Windows machine without Python or external speech tools, install the ZIP and verify Standard speech offline and Natural speech online. Also repeat both voice tests when starting `PogledAssist.exe` directly.
+- On a clean Windows machine without Python or external speech tools, install the ZIP and verify **Standardni** offline and **Prirodni** online. Also repeat both voice tests when starting `PogledAssist.exe` directly.
 - Confirm the bundled x86 bridge imports after installation into a path with spaces, without a system Python or configured Python environment variables.
 - Confirm the setup summary distinguishes missing software, absent devices, detection failures, and unverified calibration. Check its download and calibration buttons and repeat check. Verify unattended installs show no UI.
 - Start the app from the desktop shortcut and confirm the toolbar appears.
-- Open Settings, Speech, Keyboard, and Controller.
+- Open Settings, Speech, Keyboard, and the Quick actions grid.
 - Disconnect networking before first Speech use and confirm the suggestion row still offers starting words, completions, and next words.
 - Confirm suggestion selection and `Poništi riječ` produce the same text with mouse and simulated gaze, including Bosnian letters and punctuation spacing.
 - Open a phrase or answer editor, use a suggestion, cancel, and confirm the conversation and its undo state return unchanged. Repeat with a successful save.
@@ -184,8 +181,8 @@ Hardware checks on the target Tobii machine:
 - Confirm Tobii software detects and calibrates the tracker.
 - Confirm the runtime log reports Tobii Pro SDK, Stream Engine, or the x86 bridge.
 - Confirm both-eye tracking moves the pointer and dwell actions fire.
-- Confirm left, right, double-click, keyboard, controller, and calibration actions.
-- Confirm default eSpeak NG speech and optional human-like speech separately.
+- Confirm left, right, double-click, keyboard, Quick actions, and calibration actions.
+- Confirm **Standardni** (eSpeak NG), **Prirodni** and optional **Efendija** speech separately.
 
 ## Known limits
 

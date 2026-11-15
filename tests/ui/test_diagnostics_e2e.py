@@ -525,7 +525,6 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     }
     hotbar._recording_changed()
     hotbar._show_keyboard_sidebar()
-    hotbar._show_controller_sidebar()
     hotbar._open_speech()
     speech = hotbar._speech_window
     speech._show_letter_group(0)
@@ -535,7 +534,6 @@ def test_new_windows_and_speech_dialogs_show_current_recording(hotbar_gaze, qtbo
     }
     badges = [
         hotbar._keyboard_window._recording_badge,
-        hotbar._controller_window._recording_badge,
         speech._recording_badge,
         *speech._dialogs.recording_badges,
     ]

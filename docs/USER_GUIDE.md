@@ -1,9 +1,11 @@
 # User guide
 
+Pogled Assist places a toolbar at the top of the primary Windows display. It can move the pointer from gaze, select its own controls by dwell, and perform a click after you hold your gaze on a stable target.
+
 - [Installation readiness](#installation-readiness) and [before starting](#before-starting)
 - [Tracking notifications](#tracking-notifications-in-speech), [gaze check](#gaze-check) and [saved results](#saved-gaze-check-results)
 - [Hotbar controls](#hotbar-controls) and [quick actions](#quick-actions)
-- [Speech](#speech), [Keyboard](#keyboard), and [Controller](#controller)
+- [Speech](#speech) and [Keyboard](#keyboard)
 - [Settings](#settings) and [updates](#update)
 - [Troubleshooting](#troubleshooting), [diagnostic recording](#diagnostic-log-collection) and [exit](#exit)
 
@@ -13,23 +15,25 @@ After installation, **Provjera instalacije** shows whether the speech tools and 
 
 The person setting up the computer can use **Preuzmi Tobii softver** to open the official download page, **Pokreni kalibraciju** to request calibration through installed Tobii software, and **Ponovi provjeru** after making changes. Nothing is downloaded or calibrated automatically. Use mouse or keyboard in this setup window; gaze tracking starts in the main application.
 
-You can close the summary and reopen it with `PogledAssist.exe --installation-check`. Standard speech is available offline; the natural voice still requires internet.
-
-Pogled Assist places a toolbar at the top of the primary Windows display. It can move the pointer from gaze, select its own controls by dwell, and perform a click after you hold your gaze on a stable target.
+You can close the summary and reopen it with `PogledAssist.exe --installation-check`. **Standardni** speech is available offline; **Prirodni** still requires internet.
 
 ## Before starting
 
 Opening the app again keeps the existing instance and its current focus. It does not start another tracker, keyboard, or copy of the saved data.
 
-Connect and calibrate the Tobii Eye Tracker 4C with the matching Tobii software. The app tries these tracking backends in order:
+Connect and calibrate one Tobii Eye Tracker 4C or Eye Tracker 5 with its matching Tobii software. Eye Tracker 5 uses Tobii Experience; existing 4C Core installations remain supported. The app detects the attached tracker without a device selector and tries these tracking backends in order:
 
 1. Tobii Pro SDK through `tobii-research`.
 2. A directly loadable Tobii Stream Engine DLL.
 3. The optional 32-bit Python bridge for 32-bit Stream Engine installations.
 
+Eye Tracker 5 uses Stream Engine even if Pro SDK discovery lists the device; Pro SDK does not provide its gaze stream. The existing backend order remains in place for 4C.
+
 The top-right status uses an icon, color, and visible text. **Praćenje spremno** requires a connected tracker, both eyes and fresh gaze. With the experimental one-eye policy, **Odabir jednim okom** identifies usable application selection with one eye; direct desktop input still needs both. **Odabir na čekanju** identifies a selection attempt whose progress is still retained during a short interruption. When an unfinished initial pause is discarded at the full-progress deadline, the status changes to **Praćenje pauzirano**; an already completed pause can remain on hold until 500 ms total from the loss. **Praćenje pauzirano** keeps both labeled eye indicators visible: a check means valid data and a dash means no valid data. These indicate SDK validity, not physical eye closure or calibration accuracy. **Čekam podatke** reports missing or stale data, **Povezivanje…** reports discovery, and **Uređaj nije povezan** reports automatic retry. Source simulation keeps the **Simulacija uz riječ** label; its [shortcuts](UI_DEVELOPMENT.md#mouse-gaze-simulation) use synthetic input. Application selection follows the [chosen policy](#eye-tracking-policy).
 
-Missing eye-status delivery pauses input. A prolonged interruption in the x86 bridge or a closed bridge starts automatic reconnection; normal invalid-eye samples do not restart the connection. A direct native connection stays paused until fresh data returns. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
+Missing eye-status delivery pauses input. After three seconds without delivery, or a reported Stream Engine failure, the app closes the old connection and searches again. This applies to Pro SDK, direct Stream Engine and the x86 bridge. A blocked native thread or unfinished cleanup keeps input paused and prevents a second subscription; restart the app if it cannot recover. Normal invalid-eye samples do not restart the connection. After a gaze-delivery gap of at least 500 ms, pending selection restarts from zero; time spent waiting cannot confirm the target.
+
+To use the spare tracker, disconnect the first and connect the replacement. Fresh data and the saved eye policy still govern input; timings and settings are not changed for the model. Calibrate the replacement in Tobii software while it is connected, so the app's [calibration actions](features/gaze-check.md#calibration-handoff) open the matching software; without a connected model they prefer Experience. Automatic app discovery does not install or switch drivers: Tobii's [4C-to-5 instructions](https://help.tobii.com/hc/en-us/articles/360009708277-Upgrading-from-4C-to-ET5) require removing the older driver, and [Experience lists 4C support as beta](https://help.tobii.com/hc/en-us/articles/360002918474-Which-app-do-I-need-for-my-device). Verify the intended driver combination before relying on USB replacement as a backup procedure.
 
 The action overlay uses a steady cyan progress ring with a transparent center on application controls. It freezes with a pause mark during a hold and shows a full ring for 220 ms after confirmation. This changes feedback, not selection timing or eye eligibility.
 
@@ -69,7 +73,6 @@ The left side of the hotbar contains:
 6. Double click
 7. Speech
 8. Keyboard
-9. Controller
 
 Hide removes the AppBar reservation and the entire hotbar, including its tracking status. It leaves a floating Show button near the top-left corner. Show restores the hotbar and its current status. The status is passive and has no dwell action, blinking animation, or sound during eye loss. Left, Right, and Double click arm one action. Keep your gaze on the target until the progress overlay completes. The mode resets after the click to reduce accidental repeats.
 
@@ -81,28 +84,38 @@ A gaze-driven right click arms one direct left click for selecting a context-men
 
 ## Quick actions
 
-Quick actions is a toggle. With precision zoom enabled, holding gaze on a target first opens a magnified square. Choose the exact point inside the square, then use the radial menu:
+Quick actions is a toggle. With precision zoom enabled, holding gaze on a target first opens a magnified square. Choose the exact point inside the square, then use the grid of actions around that point. With precision zoom disabled, the grid opens directly at the stable gaze point. Gaze does not move the real pointer while the zoom or grid is open.
 
-- Top: left click
-- Right: right click
-- Bottom: double click
-- Left: cancel
+The grid has three rows of three tall rectangles, 150 × 190 pixels each, with the chosen point marked in the empty middle cell:
 
-With precision zoom disabled, the radial menu opens directly at the stable gaze point. Gaze does not move the real pointer while the zoom or menu is open.
+| | Left | Middle | Right |
+| --- | --- | --- | --- |
+| Top | **Piši ovdje** | **Lijevi klik** | **Pomjeri gore** |
+| Middle | **Odustani** | chosen point | **Desni klik** |
+| Bottom | **Potvrdi** | **Dvostruki klik** | **Pomjeri dolje** |
+
+- **Piši ovdje** left-clicks the point to place the cursor there, then opens [Keyboard](#keyboard) to type into that window.
+- **Pomjeri gore** and **Pomjeri dolje** move the pointer to the point and scroll three wheel steps, so the window under the point scrolls. The grid then hides for **Pauza između radnji** and returns at the same point, so the next scroll needs only one dwell. Look away from the tile you used, at another tile, the middle cell or the page, then back to scroll again; a steady look does not repeat it. Every other tile closes the grid.
+- **Potvrdi** presses Enter in the active window.
+- **Odustani**, Escape, or a mouse click on the middle cell or outside the grid closes the grid without an action.
+
+The progress ring fills on the tile you look at and restarts only when gaze moves to another tile; the gap between two tiles belongs to the nearer tile. Near a screen edge the grid shifts to stay fully visible. If the chosen point then lies on a tile, look at another tile or the empty middle cell before that tile can be selected; gaze at the screen edge outside the grid does not count. Quick actions need both eyes, like direct desktop clicks. Losing an eye, stale gaze, the gaze check, hiding the hotbar or opening Settings closes the grid, also while it is hidden between two scrolls, and it does not return.
 
 ## Speech
 
-The first three bottom controls share the letter area; **Arapski / Latinica** aligns with the system controls on the right. Dividers separate typing, keyboard changes and system actions. Dense keyboards show at most twelve keys per page, with **Prethodna** and **Sljedeća** for the remaining keys. Categories, answers and phrases show four entries per page. Selecting a letter returns to the same keyboard page; changing script or switching letters/symbols starts on page one. Selecting a group replaces the groups with individual letters in the keyboard area. The message, suggestions and other controls stay available. **Nazad na grupe** or Escape returns without entering a letter. Diagnostic recording stays above the system controls.
+Speech opens a full-screen Bosnian keyboard. All 30 letters appear at once in alphabetical order, in three rows of ten, and one selection enters a letter; DŽ, LJ and NJ are single keys. The letters stay in place after each selection, so look away and return to enter the same letter again. All letters fit at 1920×1080 with Windows scaling set to 150%, including while adding an entry. To use larger keys with two selections per letter, choose **Grupe slova** under **Govor i tastatura > Raspored slova u Govoru**; then select a letter group, then a letter. The message field is ready for typing when Speech opens, after its controls or dialogs are used, and when returning to Speech with Alt+Tab. Returning focus preserves the caret and any selected text. While adding a category, answer, or phrase, typing belongs to that new entry. Modal dialogs and **Odmor** block typing into the message until closed; Settings and other Windows applications keep their focus until you return to Speech. Launch still opens the hotbar. Space and Backspace stay on the bottom row. `Izgovori` sends the current text to the selected speech engine without clearing it. `Kategorije` contains saved groups of answers, while `Fraze` contains standalone reusable text. Both lists support adding and deleting entries with the same keyboard as the message. The conversation message and all category, answer, and phrase content appear and are entered in uppercase. Text typed or pasted with lowercase letters is converted immediately. With groups, Settings can show 1 to 12 letters per group. A group of 12 letters uses four columns in the same keyboard area, or five columns while editing a saved entry to leave room for Save and Cancel. **Nazad na grupe** is the last choice. All choices fit at 1920×1080 with Windows scaling set to 150%. After a group changes into letters, look away and return before selecting a new target.
+
+Latin text is left-aligned in the message field and while adding a category, answer or phrase, keeping the start of a short entry fixed while typing. Arabic text remains right-aligned.
+
+The first three bottom controls share the letter area; **Arapski / Latinica** aligns with the system controls on the right. Dividers separate typing, keyboard changes and system actions. Letter-group lists and symbol layouts show at most twelve choices per page, with **Prethodna** and **Sljedeća** for the remaining choices. Categories, answers and phrases show up to nine entries per page in three columns. The list name and, with more than one page, the page number sit on the line above the entries. A strip on the right of the entries holds **‹ Kategorije** at the top while answers are open, then **+ Dodaj** and **Obriši**, then **‹ Prethodna** and **Sljedeća ›**. Categories use the blue of the view buttons, end in **›** and show their number of answers; answers and phrases add their text to the message. Changing script or switching letters/symbols starts on page one. With **Grupe slova**, selecting a group replaces the groups with individual letters in the keyboard area. The message, suggestions and other controls stay available. Selecting a letter returns to the same page of groups; **Nazad na grupe** or Escape returns without entering a letter. Diagnostic recording stays above the system controls.
 
 For **Standardni**, **Prirodni**, and **Efendija**, **Izgovori** becomes **Zaustavi** in the same position while preparing or speaking. A thin activity bar appears inside its lower edge, keeping the button aligned with **Fraze** and its text centered. The bar shows activity rather than a percentage and lets clicks reach the button. Select it again, or press Enter, to stop without submitting a second request. The message remains available. The stop action stays available while adding a phrase or answer; it does not speak the unfinished saved entry. Completion, failure and stopping remove the bar and restore **Izgovori**. Playback status alone does not verify audible sound.
 
 If a library file cannot be read, **Kategorije** and **Fraze** show **Biblioteka nije učitana** and **Učitaj ponovo**. Available entries still work for composing a message, but adding, deleting, and saving usage counts are blocked to protect the original files. Retry after restoring access to the file; a successful reload restores the library without changing your message. A damaged file must be repaired or restored from a backup before retrying.
 
-Speech opens a full-screen Bosnian keyboard. Select a letter group, then a letter. The message field is ready for typing when Speech opens, after its controls or dialogs are used, and when returning to Speech with Alt+Tab. Returning focus preserves the caret and any selected text. While adding a category, answer, or phrase, typing belongs to that new entry. Modal dialogs and **Odmor** block typing into the message until closed; Settings and other Windows applications keep their focus until you return to Speech. Launch still opens the hotbar. Space and Backspace stay on the bottom row. `Izgovori` sends the current text to the selected speech engine without clearing it. `Kategorije` contains saved groups of answers, while `Fraze` contains standalone reusable text. Both lists support adding and deleting entries with the same grouped keyboard. The conversation message and all category, answer, and phrase content appear and are entered in uppercase. Text typed or pasted with lowercase letters is converted immediately. Settings can show 1 to 12 letters per group. A group of 12 letters uses four columns in the same keyboard area, or five columns while editing a saved entry to leave room for Save and Cancel. **Nazad na grupe** is the last choice. All choices fit at 1920×1080 with Windows scaling set to 150%. Selecting a letter returns to the groups. After a group changes into letters, look away and return before selecting a new target.
-
 On Speech controls, a brief gaze movement just beyond a button edge freezes the pause or ring instead of clearing it. Returning before the configured [edge duration](#selection-stability-near-edges) expires resumes that progress. The button cannot activate while gaze is outside it. Moving farther away or staying outside longer starts a new selection. This applies to letter groups, letters, word suggestions, and `Izgovori`, as well as the other Speech controls. A brief edge movement does not unlock a button for repeat selection. Returning after the edge tolerance expires permits a repeat with a full new pause and dwell, even if no further gaze sample arrived while outside. Mouse actions, changed views, and window resizing cancel pending progress. Eye loss follows the [selected policy](#eye-tracking-policy) and cannot extend an already running edge deadline. A changed word suggestion requires looking away before selecting it.
 
-The suggestion row shows up to five uppercase Bosnian words. It completes the word at the end of the input or adds a next word followed by one space. The suggestions work without internet access, preserve the rest of the message, and never speak automatically. They are inactive while text is selected, the cursor is away from the end, or a category name is being entered.
+The suggestion row shows up to five uppercase Bosnian words. It completes the word at the end of the input or adds a next word followed by one space. A word you have already typed in full is not offered again; select `Razmak` to continue. The suggestions work without internet access, preserve the rest of the message, and never speak automatically. They are inactive while text is selected, the cursor is away from the end, or a category name is being entered.
 
 `Poništi riječ` restores the exact text from before the most recent suggestion. It remains available until the text is otherwise edited, even after `Izgovori`. If `.`, `,`, `?`, or `!` is entered immediately after a suggestion, the keyboard removes only the space it added and places the punctuation after the word. A period or question mark then adds one space automatically, so the next sentence can begin without selecting `Razmak`.
 
@@ -110,13 +123,17 @@ The offline dictionary also includes reviewed Bosnian Islamic terminology and co
 
 The same suggestions are available while adding a phrase or category answer. That editor has its own undo state and cannot replace the saved conversation message. A phrase or answer contributes to personal learning only after it is successfully saved. Category names are never learned.
 
-The controls on the right remain available while browsing or adding entries:
+The controls on the right remain available while browsing or adding entries. A thin vertical line separates them from the keyboard and lists. With all letters they form a narrow column that shows only their names, so the letter keys get more width. With letter groups or Arabic the column is wider and adds a short description under each name. The column width follows the saved layout and script, so it does not move while Fraze, Kategorije or symbols are open.
 
 - `Alarm` stops speech, repeats a distinct local emergency sound, and opens a dialog. Select `Zaustavi alarm` to silence it and return to the same Speech state.
 - `Odmor` stops speech and blacks out the display. Select `Nastavi` by gaze or mouse to restore the message, current list and page, and any unfinished entry.
 - `Izlaz` offers three choices. `Odustani` returns to the same state, `Izađi` closes only Speech mode while preserving the conversation message, and `Ugasi aplikaciju` closes the whole application through its normal shutdown path.
 
 Saved categories, answers, and phrases use UTF-8 text. Selecting an answer or phrase appends it to the message, and saved phrases remain ordered by usage count. The full library is stored in `data\speech_library.json`. The app also maintains `data\speech_phrases.json` so older releases can read standalone phrases during rollback. Personal word and short-context counts are stored locally in `data\speech_learning.json`; message transcripts are not stored.
+
+The starter library contains **Trebam**, **Brzi odgovor**, **Kako se osjećam**, **Ljudi**, **Selami i dove**, **Namaz i ibadet**, and **Kur'an i čitanje**. The last three contain four messages each for greetings and duas, prayer and ablution, and Qur'an listening and reading. **Ljudi** also includes `Kako su naši?` and `Prenesi im selam.` The five starter phrases are `Drago mi je što ste došli.`, `Molim vas ponovite.`, `Molim vas sačekajte da napišem.`, `Nisam to htio reći.`, and `Razgovarat ćemo kasnije.`
+
+On the first successful load after this content update, existing libraries receive missing new categories, answers and phrases without replacing personal entries or phrase usage counts. The two new **Ljudi** answers are added only if that category still exists. Existing categories keep their order. After the update is saved, deleting an added entry keeps it deleted on later launches. The app does not speak these messages automatically.
 
 Standardni uses eSpeak NG with the Bosnian `bs` voice. Prirodni uses `edge-playback` with `bs-BA-GoranNeural` and requires internet access. Efendija uses the ElevenLabs voice selected in Settings.
 
@@ -128,25 +145,23 @@ Efendija sends text to ElevenLabs. Preparation failure can fall back to Prirodni
 
 ### Arabic keyboard
 
-Choose **Arapski** under **Govor i tastatura > Pismo tastature**, or select `Arapski` on Speech, Keyboard, or the Controller keyboard. The choice applies to all three keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
+Choose **Arapski** under **Govor i tastatura > Pismo tastature**, or select `Arapski` on Speech or Keyboard. The choice applies to both keyboards and is saved immediately. Select `Latinica` to return. Switching preserves the message, an unfinished phrase or answer, saved entries, and the existing Bosnian voice and gaze settings. Controls remain in Bosnian and keep their established order; this does not translate text or the interface.
 
-Arabic uses the same group-then-letter selection. Letters and the message read right to left, with normal Unicode shaping. `Brojevi i znakovi` in Speech and the Numbers and Symbols tabs in the side panels include both `0123456789` and Arabic-Indic digits, Arabic punctuation, vowel and tanwin marks, shadda, sukun, dagger alif, extended marks, and combining Quranic signs. Symbols in Arabic Speech are grouped, and long group lists in side panels use `Prethodna` and `Sljedeća` to keep gaze targets large. A dotted circle makes standalone marks visible on buttons; only the actual mark is entered. `Obriši slovo` removes the last entered character, so a mark can be corrected without removing its letter. Mixed Arabic and Latin text is preserved.
+Arabic always uses group-then-letter selection, whichever letter layout is chosen. Letters and the message read right to left, with normal Unicode shaping. `Brojevi i znakovi` in Speech and the Numbers and Symbols tabs in Keyboard include both `0123456789` and Arabic-Indic digits, Arabic punctuation, vowel and tanwin marks, shadda, sukun, dagger alif, extended marks, and combining Quranic signs. Symbols in Arabic Speech are grouped, and long group lists in Keyboard use `Prethodna` and `Sljedeća` to keep gaze targets large. A dotted circle makes standalone marks visible on buttons; only the actual mark is entered. `Obriši slovo` removes the last entered character, so a mark can be corrected without removing its letter. Mixed Arabic and Latin text is preserved.
 
-Both Latin and Arabic side-panel keyboards show at most eight groups per page, including when **Broj slova u grupi** is set to one or two. Selecting a character returns to the same page. Changing the script or keyboard tab returns to page one.
+Both Latin and Arabic Keyboard layouts show at most eight groups per page, including when **Broj slova u grupi** is set to one or two. Selecting a character returns to the same page. Changing the script or keyboard tab returns to page one.
 
 Arabic has no word suggestions or new personal learning in this release. Returning to Latin restores the existing Bosnian suggestions and learned data.
 
-Arabic Speech uses the natural male **Hamed** voice (`ar-SA-HamedNeural`) through the already included `edge-playback` tool. It requires internet and sends the spoken text to Microsoft's speech service, like the existing natural Bosnian voice. No Windows Arabic keyboard layout, new model download, or additional speech installation is required. The standard/natural Bosnian choice is retained for returning to Latin. Arabic does not silently use a Bosnian or offline voice if the natural voice is unavailable: Speech reports that the selected voice is unavailable and preserves the message for retry.
+Arabic Speech uses the natural male **Hamed** voice (`ar-SA-HamedNeural`) through the already included `edge-playback` tool. It requires internet and sends the spoken text to Microsoft's speech service, like **Prirodni**. No Windows Arabic keyboard layout, new model download, or additional speech installation is required. The selected Bosnian voice is retained for returning to Latin. Arabic does not silently use a Bosnian or offline voice if **Hamed** is unavailable: Speech reports that the selected voice is unavailable and preserves the message for retry.
 
 Automated checks verify Unicode entry, switching, layout, and voice commands. They do not establish audible playback, pronunciation, online service availability, external application text direction, or physical Tobii accuracy. Review those on the target Windows machine at 1920 × 1080 and 150% scaling using the [UI development checklist](UI_DEVELOPMENT.md#ui-review).
 
 ## Keyboard
 
-Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
+Keyboard opens a right-side panel with Letters, Numpad, and Symbols tabs. The panel sends normal Windows keyboard input to the last external foreground window. It reserves the right work area while the hotbar is visible and expands to the full screen height while the hotbar is hidden. Letters always appear in groups here; **Raspored slova u Govoru** changes only Speech. Its controls use the same brief edge tolerance as [Speech](#speech). Changing groups, hiding or resizing cancels pending selection. Eye loss follows the [selected policy](#eye-tracking-policy).
 
-## Controller
-
-Controller opens a right-side panel with General, Keyboard, Speech, and Settings tabs. General provides left, right, and double-click actions, Enter, and scrolling. The embedded Keyboard tab contains the same letters, numpad, and symbols controls. Only Keyboard or Controller can reserve the right work area at one time.
+**Potvrdi** beside the script switch sends Enter to the external window you are typing into. It stays available on every tab and inside each group, without changing your current keyboard page or group. After typing an address or search, select it once to submit. Look away and return before selecting it again by gaze.
 
 ## Settings
 
@@ -156,7 +171,7 @@ Changes apply immediately. If saving fails, **Postavke \*** on the hotbar and a 
 
 Windows startup queries and changes run in the background, so other settings remain usable. The startup checkbox follows the latest requested choice while a change is pending. Closing Settings keeps requested Windows changes running while the application remains open. Reopening Settings reads the state after those changes finish. A launcher-window choice made during the initial query also applies to an existing enabled startup task.
 
-**Aplikacija** controls startup, updates, and whether the PowerShell launcher window stays visible. **Podrška** contains ordinary logging, diagnostic recording and the gaze check. The active Settings page can be scrolled with the mouse wheel or scrollbar. Scrolling cancels an unfinished gaze selection; clipped controls cannot be selected through the surrounding window. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
+**Aplikacija** controls startup, the selection sound, updates, and whether the PowerShell launcher window stays visible. `Zvuk pri odabiru` plays a short tick when a gaze selection in Speech completes, at the moment the letter, word or action takes effect. It accepts `Isključen`, `Tih` (the default, also for existing installations), `Srednji` or `Glasan`; choosing a level plays the tick once at that level. `Izgovori` and the alarm buttons have no tick because speaking and the alarm are their own confirmation, and mouse clicks stay silent. A tick while speaking leaves speech playing. **Podrška** contains ordinary logging, diagnostic recording and the gaze check. The active Settings page can be scrolled with the mouse wheel or scrollbar. Scrolling cancels an unfinished gaze selection; clipped controls cannot be selected through the surrounding window. Start with Windows creates a per-user Scheduled Task that runs the launcher with administrator privileges.
 
 Gaze settings uses these values:
 
@@ -172,11 +187,13 @@ Gaze settings uses these values:
 
 **Pogled i odabir** has three tabs. **Odabir pogledom** contains the eye-tracking policy, interruption duration, pause, dwell, cooldown, notifications and action-overlay visibility. **Pokazivač i provjera** contains radius, smoothing, pointer movement, the gaze bubble, precision zoom, calibration and the gaze check. **Stabilnost uz rub** contains the shared edge duration. Existing saved timing values remain unchanged when installing a version with new defaults.
 
+The gaze bubble marks the current gaze position with a light-blue ring, a transparent interior and a small white center dot. Dark outlines keep it visible on light backgrounds. The separate selection ring shows dwell progress on the targeted control.
+
 The edge duration applies when gaze moves just beyond a button. The short eye-tracking interruption applies when one eye loses valid tracking in **Oba oka uz kratke prekide**. They are separate settings; neither fills progress or permits activation while paused. Neither corrects calibration or establishes which setting is best for a person.
 
 ### Selection stability near edges
 
-Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, Controller controls and direct desktop actions retain their existing rules. The gaze check's word test copies this setting when opened.
+Use **Postavke > Pogled i odabir > Stabilnost uz rub > Čuvanje odabira uz rub** to adjust brief edge departures on Speech, the standalone Keyboard and the hotbar. The range is listed above; **Isključeno** means zero retention. The spatial tolerance stays unchanged. Settings controls, the Quick actions grid and direct desktop actions retain their existing rules. The gaze check's word test copies this setting when opened.
 
 While gaze is briefly outside A but still near its edge, the pause or ring freezes. Only returning inside the same unchanged A before expiry can resume it; outside time, including the interval up to the first returning point, earns no progress. If gaze stays on a nearby B until expiry, A is discarded and B starts its full pause and dwell from the first eligible sample after expiry. B earns no time while A is frozen. Moving farther away switches immediately. Changing the duration cancels an unfinished selection; completed buttons still require departure before repetition. A tracking interruption cannot extend an already running edge deadline.
 
@@ -206,11 +223,11 @@ For example, with an 850 ms initial pause, 650 ms fill and H = 300 ms, returning
 
 Both-eye loss, switching the sole tracked eye without fresh both-eye gaze between, a changed target/content/geometry, lost connection, suspended input or relevant timing/policy changes discard retained progress. Existing stale-data and delivery-gap checks take precedence and can discard it before 500 ms. Repeated eye reports do not restart either deadline, and tracking retention cannot extend an edge-hold deadline. Completed controls still require looking away before repetition.
 
-The policy applies to all application gaze controls, including keyboards, dialogs, Settings and Controller click buttons. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. Controller click buttons keep their existing external pointer target. The gaze check's precision, free view and word test use the selected policy and display its name; eye indicators, per-eye shares and both-eye availability remain actual measurements. Its interruption count follows the selected policy. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
+The policy applies to all application gaze controls, including keyboards, dialogs and Settings. Direct desktop pointer movement, direct desktop clicks, Quick actions and precision zoom require both eyes in every mode. The gaze check's precision, free view and word test use the selected policy and display its name; eye indicators, per-eye shares and both-eye availability remain actual measurements. Its interruption count follows the selected policy. The hold contributes no measurement samples. Tracking notices use the chosen eligibility rule and do not report stopped selection solely because one eye is invalid in the experimental mode.
 
 ### Speech settings
 
-Speech settings controls eSpeak speed (155 words per minute by default, 80 to 320), letters per group (5 by default, 1 to 12), and the voice preset. `Pismo tastature` accepts `Latinica` (the default for existing installations) or `Arapski`. The voice choices appear directly below it. The selected voice button stays selected when pressed again. Arabic replaces the Bosnian choices with Hamed while retaining the Bosnian preference. The speed control appears only for Standardni and applies to eSpeak. `Naučene riječi` opens the personal vocabulary. Select one word and then `Zaboravi riječ` to remove its personal ranking contribution without changing messages, phrases, answers, or the bundled dictionary. If learning cannot be read or saved, the page preserves the last file, reports the problem, and offers `Pokušaj ponovo` while normal typing and speech remain usable. Other settings are saved immediately to `data\app_settings.json`.
+Speech settings controls eSpeak speed (155 words per minute by default, 80 to 320), the Speech letter layout, letters per group (5 by default, 1 to 12), and the voice preset. `Raspored slova u Govoru` accepts `Sva slova` (the default, also for existing installations) or `Grupe slova`; it applies to Latin Speech only. Letters per group applies to the Keyboard, and to Speech with groups or Arabic. `Pismo tastature` accepts `Latinica` (the default for existing installations) or `Arapski`. The voice choices appear directly below it. The selected voice button stays selected when pressed again. Arabic replaces the Bosnian choices with Hamed while retaining the Bosnian preference. The speed control appears only for Standardni and applies to eSpeak. `Naučene riječi` opens the personal vocabulary. Select one word and then `Zaboravi riječ` to remove its personal ranking contribution without changing messages, phrases, answers, or the bundled dictionary. If learning cannot be read or saved, the page preserves the last file, reports the problem, and offers `Pokušaj ponovo` while normal typing and speech remain usable. Other settings are saved immediately to `data\app_settings.json`.
 
 ## Update
 
@@ -243,7 +260,7 @@ If the log contains `[WinError 193] %1 is not a valid Win32 application`, the To
 $env:POGLED_ASSIST_X86_PYTHON = "C:\Path\To\Python310-32\python.exe"
 ```
 
-An existing `TOBII_GAZE_MOUSE_X86_PYTHON` setting from the previous app is also accepted when it points to a valid 32-bit Python 3.10. The new setting takes priority if both are present.
+The older app's `TOBII_GAZE_MOUSE_X86_PYTHON` remains a fallback; [runtime requirements](../README.md#runtime-requirements) list every override.
 
 If Stream Engine is installed outside a common location:
 
@@ -251,7 +268,7 @@ If Stream Engine is installed outside a common location:
 $env:TOBII_STREAM_ENGINE_DLL = "C:\Path\To\tobii_stream_engine.dll"
 ```
 
-If calibration needs a product-specific command, set `TOBII_CALIBRATION_COMMAND` before launching the app. This override belongs to the existing Guest calibration action, which still sends Ctrl+Shift+F10 after requesting the command. It is not used by **Otvori Tobii postavke**.
+If calibration needs a product-specific command, set `TOBII_CALIBRATION_COMMAND` before launching the app. This override is tried before discovered launch targets by the installation and Settings calibration actions. A successful custom command is followed by Ctrl+Shift+F10 for other or unknown tracker models; an identified Eye Tracker 5 skips that Core Guest shortcut. The override is not used by **Otvori Tobii postavke**.
 
 Runtime diagnostics are written to `logs\latest.txt` when logging is enabled. The launcher writes `start_gaze_mouse.log` even when its window is hidden. Updater diagnostics are appended to `update_windows.log` in the installation folder.
 
@@ -268,7 +285,7 @@ Use a [gaze-check result](#saved-gaze-check-results) to compare measured targets
 
 #### Understand the indicator
 
-A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Speech's Controls column and letter/delete/exit/alarm dialogs, Settings, Keyboard, Controller, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
+A steady **Snimanje dijagnostike · MM:SS** indicator shows remaining time in Speech's Controls column and deletion/exit/alarm dialogs, Settings, Keyboard, gaze check and diagnostics. The hotbar Settings button uses a compact countdown. Space stays reserved while hidden, so countdowns and state changes do not move targets or replace tracking/speech notices. Rest keeps its black screen.
 
 | Message | Meaning |
 | --- | --- |
@@ -281,7 +298,7 @@ A persistence error stays visible through recording, finishing and saved confirm
 
 #### Review and export
 
-**Sačuvani snimci** lists recordings available after restart. Review the reason, final-record presence, omitted-event count, write errors and truncated-data count. Time expiry or a manual stop can be complete; a size cap, shutdown, write error, missing final record or reported loss is incomplete. A force-killed application can leave a useful partial stream. Missing segments make a recording incomplete even if its final record survived. Retained readable segments can still be exported; the summary and manifest state the gaps. An unreadable or mixed-identity recording cannot be exported. Failed reading offers **Osvježi listu**. Use **Postavke > Podrška > Prostor za logove** to choose the shared space for ordinary logs and manual recordings: **4 GB** by default, **1-10 GB**. One GB is 1,000,000,000 bytes. The oldest closed logs are deleted automatically, without priority between ordinary and manual logs. Active output, whole active recordings and sources queued for export are protected and can temporarily exceed the budget. Diagnostics shows actual usage, budget, oldest known log time and storage status. The recording page also lists persistence interruptions with their affected output, reason, start time and recovery time. An ongoing gap says **još traje**; a notice identifies a history shortened to the latest 64 interruptions. Low disk space also triggers cleanup. Exported ZIPs and gaze-check results are preserved. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns file locations and retention details.
+**Sačuvani snimci** lists recordings available after restart. Review the reason, final-record presence, omitted-event count, write errors and truncated-data count. Time expiry or a manual stop can be complete; a size cap, shutdown, write error, missing final record or reported loss is incomplete. A force-killed application can leave a useful partial stream. Missing segments make a recording incomplete even if its final record survived. Retained readable segments can still be exported; the summary and manifest state the gaps. An unreadable or mixed-identity recording cannot be exported. Failed reading offers **Osvježi listu**. Use **Postavke > Podrška > Prostor za logove** to choose the shared space for ordinary logs and manual recordings: **4 GB** by default, **1-10 GB**. One GB is 1,000,000,000 bytes. The oldest closed logs are deleted automatically, without priority between ordinary and manual logs. Active output, whole active recordings and sources queued for export are protected and can temporarily exceed the budget. Diagnostics shows actual usage, budget, oldest known log time and storage status. The recording page also lists persistence interruptions with their affected output, reason, start time and recovery time. An ongoing gap says **još traje**; a notice identifies a history shortened to the latest 64 interruptions. Low disk space also triggers cleanup. Exported ZIPs and gaze-check results are preserved. [Persistent storage](ARCHITECTURE.md#persistent-data-and-logs) owns file locations; [log retention](DIAGNOSTICS.md#history-recovery-and-retention) owns cleanup details.
 
 Choose **Izvezi ZIP** and a destination in Windows Save As. The package includes all segments of the selected detailed recording, `kontekst.json`, a Bosnian `sazetak.txt` with selection/hold outcomes, settings, delays and coverage limits, and `manifest.json` with version, recording identity/state, byte sizes and SHA-256 hashes. **Dodaj rezultat Provjere pogleda** optionally includes one saved or current-memory report, including an interrupted report. Its own date, policy, simulation flag and state remain separate; no report is selected automatically. Export is local and sends nothing. Failure leaves the recording and any earlier destination intact, allowing retry.
 

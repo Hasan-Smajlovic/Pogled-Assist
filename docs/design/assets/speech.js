@@ -3,9 +3,10 @@
   const { GROUPS, ARABIC_LETTERS, SYMBOLS, ARABIC_SPEECH_SYMBOLS, grouped, keyLabel, readScript, writeScript } = ReferenceKeyboard;
   const $ = id => document.getElementById(id);
   const WORDS = ['SELAM', 'JA', 'KAKO', 'MOŽE', 'HVALA', 'ŽELIM', 'VODU', 'VODE', 'VODA', 'RAZGOVARATI', 'ČAJ', 'ĆUP', 'DOĐI', 'DJECA', 'ĐAK', 'DŽEM', 'LJETO', 'NJIVA', 'JUTRO', 'SAM', 'MOLIM', 'TE', 'TREBAM', 'DOBRO', 'DONESI', 'MI', 'JASTUK', 'TELEFON', 'SADA', 'KASNIJE', 'HLADNO', 'TOPLO', "KUR'AN", 'ABDEST', 'NAMAZ', 'DŽUMA', 'HUTBA', 'DŽEMAT', 'IMAM', 'RAMAZAN', 'IFTAR', 'DOVA'];
-  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 4, KEY_PAGE_SIZE = 12;
+  const STORE_KEY = 'pogled-assist-design-v1', PAGE_SIZE = 9, KEY_PAGE_SIZE = 12;
   const gazeDemo = createReferenceGaze();
   let arabic = readScript();
+  let letterGroups = new URLSearchParams(location.search).get('layout') === 'groups';
   let activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
   const message = $('message');
   const content = $('content');
@@ -62,7 +63,10 @@
     editor = null;
     message.value = '';
     savedMessage = '';
-    if (previewState.includes('single')) activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
+    if (previewState.includes('single')) {
+      letterGroups = true;
+      activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
+    }
     if (previewState === 'editor-single') editor = { kind: 'phrase', view: 'phrases', category: null, page: 0 };
   }
   if (requestedVoiceState && !message.value) message.value = 'TREBAM VODE, MOLIM TE.';
@@ -115,14 +119,25 @@
   }
 
   $('library-read-error').addEventListener('change', () => { deleting = false; render(); });
+  $('letter-groups-preview').checked = letterGroups;
+  $('letter-groups-preview').addEventListener('change', event => {
+    letterGroups = event.target.checked;
+    activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
+    selectedLetters = null; symbols = false; page = 0; render();
+  });
   $('single-letter-preview').addEventListener('click', () => {
+    showLetterGroups();
     activeGroups = (arabic ? ARABIC_LETTERS : GROUPS.flat()).map(letter => [letter]);
     switchView('keyboard');
   });
   $('twelve-letters-preview').addEventListener('click', () => {
+    showLetterGroups();
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
     switchView('keyboard'); openLetters(0, 12);
   });
+  function showLetterGroups() { letterGroups = true; $('letter-groups-preview').checked = true; }
+  // Settings choose the layout; Arabic always keeps its groups.
+  function showsAlphabet() { return !arabic && !letterGroups; }
   for (const button of document.querySelectorAll('[data-script-toggle]')) button.addEventListener('click', () => {
     arabic = !arabic; writeScript(arabic);
     activeGroups = arabic ? grouped(ARABIC_LETTERS) : GROUPS;
@@ -222,15 +237,21 @@
   function renderScript() {
     for (const button of document.querySelectorAll('[data-script-toggle]')) button.textContent = arabic ? 'Latinica' : 'Arapski';
     message.dir = arabic ? 'rtl' : 'ltr';
-    message.style.textAlign = arabic ? 'right' : 'center';
+    message.style.textAlign = arabic ? 'right' : 'left';
     document.querySelector('.predictions').hidden = arabic;
+    // All letters need width, so the app controls narrow; groups keep the wider column.
+    $('speech-screen').dataset.layout = showsAlphabet() ? 'alphabet' : 'groups';
   }
 
   function viewTitle() {
     if (editor) return editorTitle();
     if (view === 'phrases') return 'Moje fraze';
-    if (view !== 'keyboard') return library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs') || 'Kategorije';
-    return symbols ? 'Brojevi i znakovi' : 'Odaberite grupu slova';
+    if (view !== 'keyboard') {
+      const name = library.categories.find(item => item.id === category)?.name.toLocaleUpperCase('bs');
+      return name ? `Kategorije › ${name}` : 'Kategorije';
+    }
+    if (symbols) return 'Brojevi i znakovi';
+    return showsAlphabet() ? 'Odaberite slovo' : 'Odaberite grupu slova';
   }
 
   function renderViewHeader() {
@@ -241,8 +262,13 @@
     }
     $('message-label').textContent = editor ? editorTitle() : 'Vaša poruka';
     message.placeholder = editor ? 'Unesite tekst…' : '';
-    $('view-header').hidden = !editor && view === 'keyboard';
+    // Lists name themselves on the section line; only the editor keeps the header row.
+    const browsing = !editor && view !== 'keyboard';
+    $('view-header').hidden = !editor;
     $('view-title').textContent = viewTitle();
+    $('list-heading').hidden = !browsing;
+    $('list-title').textContent = viewTitle();
+    $('main-panel').dataset.list = String(browsing);
     $('cancel-edit').hidden = !editor;
     $('save').hidden = !editor;
   }
@@ -250,23 +276,20 @@
   function renderLibraryActions() {
     const browsing = view !== 'keyboard';
     const libraryBlocked = $('library-read-error').checked;
+    $('list-controls').hidden = !browsing;
+    $('list-controls').dataset.back = String(Boolean(category));
     $('back').hidden = !browsing || !category;
     $('add').hidden = $('manage').hidden = !browsing || libraryBlocked;
-    $('add').textContent = addEntryLabel();
     $('retry-library').hidden = !browsing || !libraryBlocked;
-    if (browsing && libraryBlocked) $('view-title').textContent = 'Biblioteka nije učitana';
+    if (browsing && libraryBlocked) $('list-title').textContent = 'Biblioteka nije učitana';
     $('manage').textContent = deleting ? 'Gotovo' : 'Obriši';
     $('manage').setAttribute('aria-pressed', String(deleting));
   }
 
-  function addEntryLabel() {
-    if (view === 'phrases') return 'Dodaj frazu';
-    return category ? 'Dodaj odgovor' : 'Dodaj kategoriju';
-  }
-
   function renderKeyboardGrid() {
     const browsing = view !== 'keyboard';
-    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? 'Grupe slova' : 'Brojevi i znakovi';
+    const lettersLabel = showsAlphabet() ? 'Slova' : 'Grupe slova';
+    $('keyboard-toggle').textContent = browsing ? 'Tastatura' : symbols ? lettersLabel : 'Brojevi i znakovi';
     content.replaceChildren();
     content.className = browsing ? 'item-grid' : 'key-grid';
     content.style.gridTemplateColumns = '';
@@ -277,6 +300,13 @@
   }
 
   function fillKeyboard() {
+    if (!symbols && showsAlphabet()) {
+      // One gaze selection types each letter; the keys stay in place after typing.
+      $('paging').hidden = true;
+      content.className = 'key-grid alphabet';
+      content.replaceChildren(...GROUPS.flat().map(letter => makeButton(letter, 'alphabet-letter', letter, 'alphabet-key')));
+      return;
+    }
     if (selectedLetters) {
       $('paging').hidden = true;
       const columns = selectedLetters.length < 6 ? 3 : 4;
@@ -309,6 +339,7 @@
     'group': value => { openLetters(Number(value)); },
     'symbol-group': value => { openLetters(Number(value), 0, grouped(ARABIC_SPEECH_SYMBOLS)); },
     'letter': value => { append(value); selectedLetters = null; render(); },
+    'alphabet-letter': value => { append(value); },
     'symbol': value => { append(value); },
     'close-letters': value => { selectedLetters = null; render(); },
     'word': value => { appendWord(value, true); },
@@ -325,6 +356,8 @@
     'back': value => { category = null; page = 0; deleting = false; render(); },
     'previous': value => { page--; renderKeyboardGrid(); },
     'next': value => { page++; renderKeyboardGrid(); },
+    'list-previous': value => { page--; renderKeyboardGrid(); },
+    'list-next': value => { page++; renderKeyboardGrid(); },
     'manage': value => { deleting = !deleting; render(); say(deleting ? 'Odaberite stavku koju želite obrisati.' : ''); },
     'item': value => { selectItem(value); },
     'add': value => { startEditor(); },
@@ -383,10 +416,13 @@
     updatePaging(items.length, PAGE_SIZE);
     content.replaceChildren();
     for (const item of items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
-      const button = makeButton((item.name || item.text).toLocaleUpperCase('bs'), 'item', item.id, deleting ? 'item danger' : 'item');
+      const label = (item.name || item.text).toLocaleUpperCase('bs');
+      // A category opens its answers, so it looks like navigation rather than text to add.
+      const folder = item.items && !deleting;
+      const button = makeButton(folder ? `${label}\u00a0›` : label, 'item', item.id, deleting ? 'item danger' : folder ? 'item folder' : 'item');
       if (deleting || item.items) {
         const hint = document.createElement('small');
-        hint.textContent = deleting ? 'Obriši' : `Odgovori: ${item.items.length}`;
+        hint.textContent = deleting ? 'Obriši' : answerCount(item.items.length);
         button.append(hint);
       }
       content.append(button);
@@ -400,13 +436,23 @@
     $('manage').disabled = !items.length;
   }
 
+  function answerCount(count) {
+    if (!count) return 'Nema odgovora';
+    return count % 10 === 1 && count % 100 !== 11 ? `${count} odgovor` : `${count} odgovora`;
+  }
+
   function updatePaging(count, size) {
     const pages = Math.max(1, Math.ceil(count / size));
+    const list = !editor && view !== 'keyboard';
     page = Math.min(Math.max(page, 0), pages - 1);
-    $('paging').hidden = pages === 1;
+    // Lists page from the strip beside the cards; keyboards keep the row below the keys.
+    $('paging').hidden = list || pages === 1;
     $('page-number').textContent = `${page + 1} / ${pages}`;
-    document.querySelector('[data-action="previous"]').disabled = page === 0;
-    document.querySelector('[data-action="next"]').disabled = page === pages - 1;
+    $('list-page').textContent = list && pages > 1 ? `· stranica ${page + 1} od ${pages}` : '';
+    for (const [previous, next] of [['[data-action="previous"]', '[data-action="next"]'], ['#list-previous', '#list-next']]) {
+      document.querySelector(previous).disabled = page === 0;
+      document.querySelector(next).disabled = page === pages - 1;
+    }
   }
 
   function selectItem(id) {
@@ -442,7 +488,7 @@
     deleting = false;
     symbols = false;
     render();
-    say('Unesite tekst pomoću grupa slova, zatim odaberite Sačuvaj.');
+    say('Unesite tekst, zatim odaberite Sačuvaj.');
   }
 
   function editorTitle() {
@@ -558,7 +604,8 @@
     const letters = partial.match(/dj|./gu) || [];
     const variants = { dj: '(?:dj|đ)', c: '[cčć]', d: '[dđ]', s: '[sš]', z: '[zž]' };
     const pattern = new RegExp('^' + letters.map(letter => variants[letter] || letter).join(''), 'iu');
-    return WORDS.filter(word => pattern.test(word));
+    // The word typed in full is not offered: selecting it would only add the space.
+    return WORDS.filter(word => pattern.test(word) && word.toLocaleLowerCase('bs') !== partial);
   }
 
   function predictionsEnabled(partial) {
@@ -708,9 +755,12 @@
         category('needs', 'Trebam', ['Trebam vode', 'Namjesti mi jastuk', 'Trebam lijek', 'Pomozi mi da se okrenem', 'Hladno mi je', 'Trebam u toalet']),
         category('answers', 'Brzi odgovor', ['Da', 'Ne', 'Možda', 'Hvala', 'Molim te', 'Nisam razumio']),
         category('feelings', 'Kako se osjećam', ['Dobro sam', 'Boli me', 'Umoran sam', 'Nervozan sam', 'Sretan sam', 'Neugodno mi je']),
-        category('people', 'Ljudi', ['Pozovi Hasana', 'Želim porodicu', 'Pozovi medicinsku sestru', 'Želim razgovarati', 'Ko je ovdje?', 'Ostani sa mnom'])
+        category('people', 'Ljudi', ['Pozovi Hasana', 'Želim porodicu', 'Pozovi medicinsku sestru', 'Želim razgovarati', 'Ko je ovdje?', 'Ostani sa mnom', 'Kako su naši?', 'Prenesi im selam.']),
+        category('greetings', 'Selami i dove', ['Selam alejkum.', 'Alejkumu selam.', 'Allah razi olsun.', 'Neka vam Allah podari svako dobro.']),
+        category('worship', 'Namaz i ibadet', ['Je li vrijeme za namaz?', 'Želim klanjati.', 'Pomozi mi da uzmem abdest.', 'Okreni me prema kibli.']),
+        category('reading', "Kur'an i čitanje", ["Želim slušati učenje Kur'ana.", 'Pročitaj mi prijevod ovog ajeta.', 'Otvori tefsir.', 'Pročitaj mi još jednom.'])
       ],
-      phrases: ['Trebam vode', 'Hvala ti', 'Pozovi Hasana', 'Namjesti mi jastuk'].map((text, index) => ({ id: `phrase-${index}`, text }))
+      phrases: ['Drago mi je što ste došli.', 'Molim vas ponovite.', 'Molim vas sačekajte da napišem.', 'Nisam to htio reći.', 'Razgovarat ćemo kasnije.'].map((text, index) => ({ id: `phrase-${index}`, text }))
     };
   }
 
