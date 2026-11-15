@@ -62,7 +62,7 @@ Coverage merge tests collect each distinct input once and copy shards when only 
 
 Import fixtures from helper modules, not other test modules, so changed-path selection can identify consumers. Qt cleanup closes top-level widgets and delivers deferred deletion before the next test. Wait for actual geometry, visibility, state or signals through the event loop; sleeps or layout requests alone can miss pending child visibility and polish.
 
-Service fixtures cancel requests and join speech, account and network workers before their Qt owners leave scope. Unhandled worker-thread exceptions fail the suite. Provider regressions must exercise queued eye transitions, stale gaze after a GUI stall, and callbacks pending during reconnect/shutdown; sequential callbacks cannot prove their dispatch ordering.
+Service fixtures cancel requests and join speech, account and network workers before their Qt owners leave scope. `speech_workers` yields its tracked threads and restores the previous thread factory on exit, so a nested context joins its own workers and the enclosing fixture context tracks later ones. Cancellation tests use `wait_for_speech_workers` to require a started worker, wait for every tracked worker to exit and process queued Qt events before checking that late results were discarded. Unhandled worker-thread exceptions fail the suite. Provider regressions must exercise queued eye transitions, stale gaze after a GUI stall, and callbacks pending during reconnect/shutdown; sequential callbacks cannot prove their dispatch ordering.
 
 Repository documentation tests check required guides/templates, local links and anchors, skill metadata and Claude pointers. Skill metadata requires unique YAML keys, non-empty `name` and `description`, a name matching the folder, and a pointer with identical metadata linking to the source. Generated reports and model checksums follow the [language guide](../language/bs/README.md).
 
@@ -73,7 +73,7 @@ Repository documentation tests check required guides/templates, local links and 
 - Keep deliberately blocked log sinks blocked until the producer finishes. The timeout detects a hang; it is not a throughput target. Compare logging off/basic/trace and manual recording through the same input sequence. [Diagnostic verification](DIAGNOSTICS.md#diagnostic-log-analysis) covers the remaining lifecycle and loss cases.
 - Independent PowerShell probes may share the module-scoped driver in `tests/_powershell.py`. Each case keeps its own working directory, child scope and environment. Batch only bodies that return or throw: `exit` terminates the driver. The harness restores streams, environment and location and kills the process tree on its 120-second deadline. Assert production environment recovery before harness cleanup.
 - Full installer/updater transactions, concurrent updaters, real parallel-stage cleanup and `dev.ps1` initialization/environment-recovery tests retain separate processes and their own cleanup assertions. Updater decisions use deterministic process records; installer tests retain real running-executable checks.
-- Git hotfix cases copy a base history with independent objects and refs. Never share a mutable repository across cases; preserve merge shapes, conflicts, already-applied changes, version preservation and reruns.
+- Git hotfix and type-baseline cases copy a base history with independent objects and refs. Never share a mutable repository across cases; preserve merge shapes, conflicts, already-applied changes, version preservation and reruns.
 
 ## Conditional tests
 

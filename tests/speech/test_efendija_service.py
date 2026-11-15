@@ -4,6 +4,7 @@ import threading
 from dataclasses import replace
 
 import pytest
+from _speech_fakes import speech_workers, wait_for_speech_workers
 from _speech_service_fakes import service as service
 
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -39,7 +40,9 @@ def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_v
     assert (request, "preparing") in states and (request, "speaking") in states
 
 
-def test_stop_and_replacement_discard_late_network_audio_and_voice_events(service, qtbot):
+def test_stop_and_replacement_discard_late_network_audio_and_voice_events(
+    service, qtbot, monkeypatch
+):
     instance, client, played = service
     instance.set_saved_texts({"FIRST"})
     entered, release = threading.Event(), threading.Event()
@@ -53,20 +56,21 @@ def test_stop_and_replacement_discard_late_network_audio_and_voice_events(servic
     states, voices = [], []
     instance.playback_changed.connect(lambda request, state: states.append((request, state)))
     instance.voice_changed.connect(lambda request, state: voices.append(state))
-    try:
-        instance.speak("FIRST")
-        first = instance.request_id
-        assert entered.wait(1)
-        instance.stop()
-        instance._worker_voice.emit(first, VoiceState("human_like", "quota"))
-        release.set()
-        qtbot.wait(50)
-        assert played == voices == []
-        assert list(instance.audio_cache.root.glob("*.audio")) == []
-        assert (first, "stopped") in states
-        assert (first, "finished") not in states
-    finally:
-        release.set()
+    with speech_workers(monkeypatch) as workers:
+        try:
+            instance.speak("FIRST")
+            first = instance.request_id
+            assert entered.wait(1)
+            instance.stop()
+            instance._worker_voice.emit(first, VoiceState("human_like", "quota"))
+            release.set()
+            wait_for_speech_workers(qtbot, workers)
+            assert played == voices == []
+            assert list(instance.audio_cache.root.glob("*.audio")) == []
+            assert (first, "stopped") in states
+            assert (first, "finished") not in states
+        finally:
+            release.set()
 
 
 @pytest.mark.e2e
@@ -199,24 +203,24 @@ def test_model_or_tuning_change_cancels_request_before_native_stop_and_rejects_l
         return b"late old-model audio"
 
     client.synthesize = blocked
-    try:
-        assert instance.test_efendija()
-        request, cancel = instance.request_id, instance._cancel
-        assert entered.wait(1)
+    with speech_workers(monkeypatch) as workers, monkeypatch.context() as patch:
+        try:
+            assert instance.test_efendija()
+            request, cancel = instance.request_id, instance._cancel
+            assert entered.wait(1)
 
-        def stop():
-            assert cancel.is_set()
-            assert instance.request_id != request and instance._cancel is None
+            def stop():
+                assert cancel.is_set()
+                assert instance.request_id != request and instance._cancel is None
 
-        monkeypatch.setattr(instance._audio, "stop", stop)
-        instance.update_settings(replace(instance.settings, **{setting: value}))
-        release.set()
-        qtbot.wait(50)
-        assert played == []
-        assert getattr(instance.settings, setting) == value
-    finally:
-        release.set()
-        monkeypatch.undo()
+            patch.setattr(instance._audio, "stop", stop)
+            instance.update_settings(replace(instance.settings, **{setting: value}))
+            release.set()
+            wait_for_speech_workers(qtbot, workers)
+            assert played == []
+            assert getattr(instance.settings, setting) == value
+        finally:
+            release.set()
 
 
 def test_settings_and_http_failures_do_not_log_text_or_key(service, qtbot, caplog):
