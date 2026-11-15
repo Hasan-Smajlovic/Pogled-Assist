@@ -84,25 +84,126 @@ jobs:
     assert "unpinned-uses" in invalid.stdout + invalid.stderr
 
 
+def _workflow(filename):
+    return yaml.safe_load((ROOT / ".github" / "workflows" / filename).read_text(encoding="utf-8"))
+
+
+def _uses(step, action):
+    return step.get("uses", "").startswith(f"{action}@")
+
+
 def test_baseline_comparison_has_history_and_a_trusted_event_base():
-    for filename, job, expected in (
-        (
-            "ci.yml",
-            "code-quality",
-            "${{ github.event.pull_request.base.sha || 'origin/development' }}",
-        ),
-        ("release.yml", "release", "${{ github.event.before }}"),
-    ):
-        config = yaml.safe_load((ROOT / ".github" / "workflows" / filename).read_text())
-        steps = config["jobs"][job]["steps"]
-        checkout = next(
-            step for step in steps if step.get("uses", "").startswith("actions/checkout@")
+    # Pull requests compare with their base. Development pushes and the release verification,
+    # which reuses these jobs for a master push, compare with the commit before the push.
+    steps = _workflow("ci.yml")["jobs"]["code-quality"]["steps"]
+    checkout = next(step for step in steps if _uses(step, "actions/checkout"))
+    check = next(
+        step for step in steps if step.get("run") == "python -B -m scripts.checks.static_checks"
+    )
+    assert checkout["with"]["fetch-depth"] == 0
+    assert check["env"]["STATIC_CHECK_BASE_REF"] == (
+        "${{ github.event.pull_request.base.sha || github.event.before || 'origin/development' }}"
+    )
+
+
+def test_release_publishes_only_the_package_verified_by_the_ci_jobs():
+    ci = _workflow("ci.yml")
+    release = _workflow("release.yml")
+    verify = release["jobs"]["verify"]
+    publish = release["jobs"]["release"]
+
+    # The merged master commit passes the same read-only jobs as a pull request.
+    assert verify["uses"] == "./.github/workflows/ci.yml"
+    assert verify["permissions"] == {"contents": "read"}
+    assert ci["permissions"] == {"contents": "read"}
+    assert all("permissions" not in job for job in ci["jobs"].values())
+    assert ci[True]["workflow_call"]["outputs"]["artifact_name"]["value"] == (
+        "${{ jobs.windows-package.outputs.artifact_name }}"
+    )
+    assert ci["jobs"]["windows-package"]["outputs"]["artifact_name"] == (
+        "${{ steps.build.outputs.artifact_name }}"
+    )
+
+    # Only the publishing job holds a write token. It starts after verification and
+    # publishes the package built and smoke-tested there, without building or testing.
+    writers = [
+        name
+        for name, job in release["jobs"].items()
+        if "write" in (job.get("permissions") or {}).values()
+    ]
+    assert writers == ["release"]
+    assert publish["needs"] == "verify"
+    download = next(step for step in publish["steps"] if _uses(step, "actions/download-artifact"))
+    assert download["with"]["name"] == "${{ needs.verify.outputs.artifact_name }}"
+    commands = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert "publish_github_release.ps1" in commands
+    for verification in ("pip", "pytest", "static_checks", "build_windows_package"):
+        assert verification not in commands
+
+
+def test_ci_isolates_serial_ui_tests_and_enforces_combined_coverage():
+    steps = _workflow("ci.yml")["jobs"]["tests"]["steps"]
+    runs = [step for step in steps if "pytest" in step.get("run", "")]
+    assert len(runs) == 2
+    parallel, ui = runs
+    # Excluding one directory from discovery and then running exactly that directory
+    # keeps every test, including future directories, without executing any twice.
+    assert "-n 4 --dist=loadfile --ignore=tests/ui" in parallel["run"]
+    assert "--cov-fail-under=0" in parallel["run"]
+    assert "--cov-report=" in parallel["run"]
+    assert "--cov-append" not in parallel["run"]
+    assert "-n 0 tests/ui" in ui["run"]
+    assert "--cov-append" in ui["run"]
+    assert "--cov-fail-under" not in ui["run"]  # Use the configured 60 percent floor.
+    assert "--cov-report=xml:coverage.xml" in ui["run"]
+    assert "POGLED_ASSIST_UI_GALLERY" in ui["env"]
+    assert "--junitxml=dist/test-results/non-ui.xml" in parallel["run"]
+    assert "--junitxml=dist/test-results/ui.xml" in ui["run"]
+    for step in runs:
+        assert "--cov=pogled_assist" in step["run"]
+        assert not step.get("continue-on-error", False)
+    upload = next(step for step in steps if step.get("with", {}).get("name") == "test-results")
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "dist/test-results"
+
+
+def test_python_environment_is_restored_in_every_job_and_saved_only_from_development():
+    ci = _workflow("ci.yml")
+    assert ci[True]["push"]["branches"] == ["development"]
+    restores = []
+    saves = []
+    for name, job in ci["jobs"].items():
+        steps = job.get("steps", [])
+        setup = next(
+            (i for i, step in enumerate(steps) if _uses(step, "actions/setup-python")), None
         )
-        check = next(
-            step for step in steps if step.get("run") == "python -B -m scripts.checks.static_checks"
-        )
-        assert checkout["with"]["fetch-depth"] == 0
-        assert check["env"]["STATIC_CHECK_BASE_REF"] == expected
+        if setup is None:
+            continue
+        # A setup-python pip cache would be saved separately for every pull request.
+        assert "cache" not in steps[setup]["with"], name
+        restore = next(i for i, step in enumerate(steps) if _uses(step, "actions/cache/restore"))
+        assert restore < setup, name
+        restores.append(steps[restore]["with"])
+        saves += [
+            (name, i, step) for i, step in enumerate(steps) if _uses(step, "actions/cache/save")
+        ]
+
+    assert len(restores) == 3
+    assert all(item == restores[0] for item in restores)
+    assert restores[0]["path"] == "${{ runner.tool_cache }}/Python/3.10.*"
+    for requirements in ("requirements.txt", "requirements-dev.txt", "requirements-build.txt"):
+        assert f"'{requirements}'" in restores[0]["key"]
+
+    # Pull requests and the release only restore. One development job saves the pinned
+    # installation before any repository code runs in that job.
+    assert len(saves) == 1
+    name, index, save = saves[0]
+    steps = ci["jobs"][name]["steps"]
+    assert "pip install" in steps[index - 1]["run"]
+    assert all("run" not in step for step in steps[: index - 1])
+    assert save["with"]["path"] == restores[0]["path"]
+    assert "github.event_name == 'push'" in save["if"]
+    assert "github.ref == 'refs/heads/development'" in save["if"]
 
 
 def test_required_job_names_stay_stable_and_workflow_job_names_are_unique():

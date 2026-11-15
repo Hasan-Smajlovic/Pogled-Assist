@@ -24,6 +24,14 @@ from pogled_assist.ui.quick_action_menu import (
 from pogled_assist.ui.quick_action_zoom import _centered_square, _square_around
 
 
+def test_ui_dictionary_is_ready_before_window_workers_start():
+    from pogled_assist.suggestions.model import load_model
+
+    # Run this test alone to exercise the same cold process as the CI UI step.
+    assert load_model.cache_info().currsize == 1
+    assert load_model().predict("žel")[0] == "ŽELIM"
+
+
 def test_zoom_squares_stay_inside_screen_bounds():
     bounds = QRect(100, 200, 800, 600)
 

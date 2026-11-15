@@ -84,6 +84,14 @@ $WorkRoot = Join-Path $OutputRoot ".pyinstaller-build"
 $ArtifactName = "PogledAssist-v$Version-windows-x64.zip"
 $ArtifactPath = Join-Path $OutputRoot $ArtifactName
 
+function Write-PhaseTiming {
+    param([string]$Name)
+
+    Write-Host ("Package phase: {0} ({1:N1}s)" -f $Name, $PhaseTimer.Elapsed.TotalSeconds)
+    $PhaseTimer.Restart()
+}
+
+$PhaseTimer = [Diagnostics.Stopwatch]::StartNew()
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 foreach ($path in @($PackageRoot, $WorkRoot, $ArtifactPath)) {
     if (Test-Path -LiteralPath $path) {
@@ -108,6 +116,7 @@ try {
     $env:PATH = $previousPath
     Pop-Location
 }
+Write-PhaseTiming "Application PyInstaller build"
 
 $packageFiles = @{
     (Join-Path $RepoRoot "packaging\windows\install_windows.ps1") = "install_windows.ps1"
@@ -134,6 +143,7 @@ $SpeechRoot = Join-Path $PackageRoot "speech"
 if ($LASTEXITCODE -ne 0) {
     throw "Preparing the bundled speech assets failed."
 }
+Write-PhaseTiming "Package files and speech assets"
 & $PythonExecutable -m PyInstaller --noconfirm --clean `
     --distpath $SpeechRoot `
     --workpath (Join-Path $WorkRoot "speech") `
@@ -141,6 +151,7 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Building the bundled Edge speech tools failed."
 }
+Write-PhaseTiming "Speech tools PyInstaller build"
 
 $requiredFiles = @(
     "PogledAssist.exe",
@@ -239,12 +250,14 @@ function Invoke-BuiltPackageSmokeTest {
 }
 
 Invoke-BuiltPackageSmokeTest -PackageRoot $PackageRoot -SmokeReportPath (Join-Path $OutputRoot "package-smoke-test.txt")
+Write-PhaseTiming "Required files and packaged smoke test"
 
 & (Join-Path $PSScriptRoot "compress_package.ps1") -PackageRoot $PackageRoot -ArtifactPath $ArtifactPath
 
 if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf)) {
     throw "Windows package was not created: $ArtifactPath"
 }
+Write-PhaseTiming "ZIP archive"
 
 $InstallerSmokeRoot = Join-Path $OutputRoot (".installer-smoke-{0}" -f [Guid]::NewGuid().ToString("N"))
 try {
@@ -252,12 +265,14 @@ try {
     $InstallRoot = Join-Path $InstallerSmokeRoot "installed"
     New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null
     Expand-Archive -LiteralPath $ArtifactPath -DestinationPath $ExtractRoot
+    Write-PhaseTiming "ZIP extraction"
 
     $InstallerPath = Join-Path $ExtractRoot "PogledAssist\install_windows.ps1"
     $installResult = Invoke-IsolatedInstaller -InstallerPath $InstallerPath -InstallRoot $InstallRoot
     if ($installResult.ExitCode -ne 0) {
         throw "Isolated installer failed with exit code $($installResult.ExitCode)."
     }
+    Write-PhaseTiming "Isolated install"
 
     $preservedFiles = @{
         ".venv\Scripts\edge-playback.exe" = "preserved edge playback"
@@ -280,6 +295,7 @@ try {
             throw "Installer did not preserve external component: $relativePath"
         }
     }
+    Write-PhaseTiming "Isolated upgrade"
 
     $sourceScript = Join-Path $InstallRoot "run_gaze_mouse.py"
     Set-Content `
@@ -308,6 +324,7 @@ try {
         }
         $sourceProcess.Dispose()
     }
+    Write-PhaseTiming "Running-app rejection"
 
     Write-Host "Isolated install, upgrade preservation, and running-app checks passed."
 } finally {

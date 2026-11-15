@@ -107,7 +107,7 @@ Use Windows x64 and Python 3.10:
 .\dev.ps1 package
 ```
 
-The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the release updater, checks required assets, executes the packaged `--package-smoke-test`, installs an extracted copy in an isolated directory, and creates:
+The build reads `VERSION`, uses the checked-in PyInstaller spec, includes the release updater, checks required assets, executes the packaged `--package-smoke-test`, installs an extracted copy in an isolated directory, and prints the duration of each phase as `Package phase: <name> (<seconds>s)`. It creates:
 
 ```text
 dist\PogledAssist-v<version>-windows-x64.zip
@@ -131,7 +131,7 @@ No physical tracker, Tobii runtime, system speech installation, or network speec
 
 The **Prepare release** workflow, the release PR review and its merge follow the [release process](../CONTRIBUTING.md#release-process). [CONTRIBUTING.md](../CONTRIBUTING.md#ci-and-required-checks) owns the pull request checks, the required subset and dependency-review setup. Verify the live rulesets before a release.
 
-After an approved merge to `master`, **Publish release** checks out exactly `github.sha`, repeats all software checks, builds the package, and creates the `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft, then publishes the draft only after both assets exist.
+After an approved merge to `master`, **Publish release** runs the CI jobs on exactly `github.sha`: code quality, tests and the package build with its smoke and installer checks run in parallel without write access. Only after all of them pass does its `release` job, the only job with write access, download that verified package and create the `v<version>` tag at that commit. It uploads the ZIP and a SHA-256 file to a draft, then publishes the draft only after both assets exist.
 
 Rerunning the same commit is idempotent. A complete public release is left unchanged. An incomplete draft for the same commit is repaired and published. If the version tag points to any other commit, the workflow fails and requires a new `VERSION`. It never moves or overwrites an existing version tag.
 
