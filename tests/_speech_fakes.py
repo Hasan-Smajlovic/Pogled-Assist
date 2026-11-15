@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from threading import Thread
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 
 from pogled_assist.keyboard_layouts import LETTER_GROUPS_LAYOUT
 from pogled_assist.speech.audio_cache import AudioCache
@@ -19,7 +19,11 @@ from pogled_assist.speech.voice_state import ACTIVE_PLAYBACK_STATES, VOICE_TEST_
 
 @contextmanager
 def speech_workers(monkeypatch):
-    """Join real speech workers while their Qt owners are still alive."""
+    """Join real speech workers while their Qt owners are still alive.
+
+    Exiting restores the previous thread factory, so an enclosing fixture context
+    tracks the workers started after a nested context closes.
+    """
     from pogled_assist.speech import eleven_account, eleven_transport, speech_service
 
     workers = []
@@ -29,18 +33,26 @@ def speech_workers(monkeypatch):
         workers.append(worker)
         return worker
 
-    for module in (eleven_account, eleven_transport, speech_service):
-        monkeypatch.setattr(module, "Thread", thread)
-    try:
-        yield workers
-    finally:
-        for worker in workers:
-            if worker.ident is not None:
-                worker.join(10)
-        alive = [worker.name for worker in workers if worker.is_alive()]
-        if alive:
-            faulthandler.dump_traceback()
-        assert not alive, f"Speech workers did not stop: {alive}"
+    with monkeypatch.context() as patch:
+        for module in (eleven_account, eleven_transport, speech_service):
+            patch.setattr(module, "Thread", thread)
+        try:
+            yield workers
+        finally:
+            for worker in workers:
+                if worker.ident is not None:
+                    worker.join(10)
+            alive = [worker.name for worker in workers if worker.is_alive()]
+            if alive:
+                faulthandler.dump_traceback()
+            assert not alive, f"Speech workers did not stop: {alive}"
+
+
+def wait_for_speech_workers(qtbot, workers):
+    """Wait until started workers exit, then deliver the Qt results they queued."""
+    assert workers, "No speech worker was started."
+    qtbot.waitUntil(lambda: not any(worker.is_alive() for worker in workers))
+    QCoreApplication.processEvents()
 
 
 class FakeCredentials:

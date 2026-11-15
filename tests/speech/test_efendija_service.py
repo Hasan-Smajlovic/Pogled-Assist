@@ -4,7 +4,7 @@ import threading
 from dataclasses import replace
 
 import pytest
-from _speech_fakes import speech_workers
+from _speech_fakes import speech_workers, wait_for_speech_workers
 from _speech_service_fakes import service as service
 
 from pogled_assist.speech.speech_service import SpeechSettings
@@ -41,7 +41,7 @@ def test_preparation_and_playback_delivery_use_qt_thread_and_preserve_selected_v
 
 
 def test_stop_and_replacement_discard_late_network_audio_and_voice_events(
-    service, qtbot, qapp, monkeypatch
+    service, qtbot, monkeypatch
 ):
     instance, client, played = service
     instance.set_saved_texts({"FIRST"})
@@ -64,8 +64,7 @@ def test_stop_and_replacement_discard_late_network_audio_and_voice_events(
             instance.stop()
             instance._worker_voice.emit(first, VoiceState("human_like", "quota"))
             release.set()
-            qtbot.waitUntil(lambda: all(not worker.is_alive() for worker in workers))
-            qapp.processEvents()
+            wait_for_speech_workers(qtbot, workers)
             assert played == voices == []
             assert list(instance.audio_cache.root.glob("*.audio")) == []
             assert (first, "stopped") in states
@@ -192,7 +191,7 @@ def test_paid_voice_test_emits_failure_instead_of_fallback_success(service, qtbo
     ],
 )
 def test_model_or_tuning_change_cancels_request_before_native_stop_and_rejects_late_audio(
-    service, qtbot, qapp, monkeypatch, change
+    service, qtbot, monkeypatch, change
 ):
     setting, value = change
     instance, client, played = service
@@ -217,8 +216,7 @@ def test_model_or_tuning_change_cancels_request_before_native_stop_and_rejects_l
             patch.setattr(instance._audio, "stop", stop)
             instance.update_settings(replace(instance.settings, **{setting: value}))
             release.set()
-            qtbot.waitUntil(lambda: all(not worker.is_alive() for worker in workers))
-            qapp.processEvents()
+            wait_for_speech_workers(qtbot, workers)
             assert played == []
             assert getattr(instance.settings, setting) == value
         finally:
