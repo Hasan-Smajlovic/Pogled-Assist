@@ -3,9 +3,15 @@ from __future__ import annotations
 import threading
 
 import pytest
-from _speech_fakes import FakeCredentials, FakeElevenClient, speech_workers
+from _speech_fakes import (
+    FakeCredentials,
+    FakeElevenClient,
+    speech_workers,
+    wait_for_speech_workers,
+)
 from PySide6.QtCore import QObject
 
+from pogled_assist.speech import eleven_account
 from pogled_assist.speech.eleven_account import ElevenAccount
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.windows.credentials import CredentialError
@@ -47,7 +53,17 @@ def test_connection_check_only_reads_account_and_does_not_generate_audio(account
     assert current.state.options.voices[0][0] == "synthetic-voice"
 
 
-def test_removed_key_invalidates_late_check(account, qtbot):
+def test_nested_worker_tracking_returns_later_workers_to_the_enclosing_context(monkeypatch):
+    with speech_workers(monkeypatch) as outer:
+        with speech_workers(monkeypatch) as inner:
+            during = eleven_account.Thread(target=lambda: None)
+        after = eleven_account.Thread(target=lambda: None)
+
+    assert inner == [during]
+    assert outer == [after]
+
+
+def test_removed_key_invalidates_late_check(account, qtbot, monkeypatch):
     current, store, client = account
     current.save_key("synthetic-key")
     entered, release = threading.Event(), threading.Event()
@@ -59,16 +75,19 @@ def test_removed_key_invalidates_late_check(account, qtbot):
         return original(*args)
 
     client.options = blocked
-    try:
-        current.check()
-        assert entered.wait(1)
-        current.remove_key()
-        release.set()
-        qtbot.wait(50)
-        assert not current.state.has_key and store.key == ""
-        assert current.state.options is None
-    finally:
-        release.set()
+    with speech_workers(monkeypatch) as workers:
+        try:
+            current.check()
+            assert entered.wait(1)
+            # A reply already queued on Qt before the key is removed must also be discarded.
+            current._completed.emit(current._revision, original(), "")
+            current.remove_key()
+            release.set()
+            wait_for_speech_workers(qtbot, workers)
+            assert not current.state.has_key and store.key == ""
+            assert current.state.options is None
+        finally:
+            release.set()
 
 
 def test_credential_write_failure_preserves_previous_key(account):

@@ -85,6 +85,8 @@ Without coverage, tests default to two xdist processes with `--dist=loadfile`, k
 
 Coverage, sequential `check`, each parallel check group, PR CI and release verification default to one test process. Parallel coverage previously slowed Qt sidebar interactions; measure repeated runs on the same commit before increasing workers. CI prints verbose names, the 30 slowest tests and thread stacks when setup/call/teardown exceeds 120 seconds. The dump is diagnostic, not a timeout extension or cancellation.
 
+PR CI uploads `dist/test-results.xml` as the `test-results` artifact for 14 days, including when tests fail. The JUnit report records every test's result and total setup, call and teardown time. Compare repeated runs on the same commit and runner before attributing a timing change to an optimization.
+
 `coverage` and `check` temporarily clear and then restore `PYTEST_ADDOPTS`, including on failure, so external options cannot omit tests or override coverage. Use `test` or `test-ui` with `-TestPaths` for focused/custom diagnosis. `coverage`, `check` and `check-fast` reject `-TestPaths`.
 
 After lint, `check -Parallel` overlaps:

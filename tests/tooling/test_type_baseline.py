@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -32,15 +33,22 @@ def _commit(root):
     _git(root, "-c", "core.hooksPath=", "commit", "-m", "test snapshot")
 
 
+@pytest.fixture(scope="module")
+def baseline_history(tmp_path_factory):
+    root = tmp_path_factory.mktemp("baseline-history")
+    _git(root, "init")
+    _git(root, "config", "user.name", "Baseline Test")
+    _git(root, "config", "user.email", "baseline@example.invalid")
+    _git(root, "config", "commit.gpgsign", "false")
+    _write(root, [FINDING])
+    _commit(root)
+    _git(root, "branch", "base")
+    return root
+
+
 @pytest.fixture
-def baseline_repo(tmp_path):
-    _git(tmp_path, "init")
-    _git(tmp_path, "config", "user.name", "Baseline Test")
-    _git(tmp_path, "config", "user.email", "baseline@example.invalid")
-    _git(tmp_path, "config", "commit.gpgsign", "false")
-    _write(tmp_path, [FINDING])
-    _commit(tmp_path)
-    _git(tmp_path, "branch", "base")
+def baseline_repo(baseline_history, tmp_path):
+    shutil.copytree(baseline_history, tmp_path, dirs_exist_ok=True)
     return tmp_path
 
 
