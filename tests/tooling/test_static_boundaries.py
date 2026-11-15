@@ -6,7 +6,9 @@ import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
 
+import pytest
 import yaml
+from packaging.specifiers import SpecifierSet
 
 from scripts.checks import static_checks
 
@@ -235,3 +237,31 @@ def test_dependabot_version_updates_cover_exactly_the_pinned_check_tools():
     assert [p for p in patterns if not any(fnmatch(name, p) for name in tools)] == []
     # Runtime and packaging updates need a separate compatibility decision.
     assert {name for name in runtime if any(fnmatch(name, p) for p in patterns)} == set()
+
+
+@pytest.mark.parametrize(
+    "name,version,ignored",
+    (
+        ("import-linter", "2.15", False),
+        ("import-linter", "2.15.1", False),
+        ("import-linter", "2.16", True),
+        ("import-linter", "2.17", True),
+        ("import-linter", "3.0", True),
+        ("zizmor", "1.30.1", False),
+        ("zizmor", "1.30.2", False),
+        ("zizmor", "1.31.0", True),
+        ("zizmor", "1.32.0", True),
+        ("zizmor", "2.0.0", True),
+        ("ruff", "0.17.4", False),
+        ("tomli", "2.5.0", False),
+    ),
+)
+def test_dependabot_ignores_tool_versions_without_python310_support(name, version, ignored):
+    config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text())
+    pip = next(update for update in config["updates"] if update["package-ecosystem"] == "pip")
+    blocked = any(
+        fnmatch(name, rule["dependency-name"])
+        and any(SpecifierSet(spec).contains(version) for spec in rule.get("versions", []))
+        for rule in pip.get("ignore", [])
+    )
+    assert blocked is ignored

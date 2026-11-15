@@ -4,8 +4,8 @@ pytest-qt==4.5.0
 pytest-cov==7.1.0
 pytest-xdist==3.8.0
 PyYAML==6.0.3
-tomli==2.4.1
-ruff==0.16.7
+tomli==2.5.0
+ruff==0.17.4
 basedpyright==1.40.2
 import-linter==2.15
 zizmor==1.30.1
