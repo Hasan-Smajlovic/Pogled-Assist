@@ -55,6 +55,7 @@ def _run_bridge() -> int:
     _install_signal_handlers()
     backend = TobiiStreamEngineBackend(_emit_gaze, _emit_eye_status)
     backend.eye_position_callback = _emit_eye_position
+    backend.gaze_origin_callback = _emit_gaze_origin
     backend.gaze_invalid_callback = _emit_gaze_invalid
     try:
         backend.start()
@@ -63,6 +64,7 @@ def _run_bridge() -> int:
             label=backend.label,
             dll_path=backend.dll_path,
             eye_position_supported=backend.eye_position_supported,
+            gaze_origin_supported=getattr(backend, "gaze_origin_supported", None),
             diagnostic_metadata=getattr(backend, "diagnostic_metadata", {}),
         )
         while _running:
@@ -97,6 +99,10 @@ def _emit_eye_status(left_open: bool, right_open: bool, timestamp: int) -> None:
 
 def _emit_eye_position(left: object, right: object, timestamp: int) -> None:
     _emit("eye_position", left=left, right=right, timestamp=timestamp)
+
+
+def _emit_gaze_origin(left: object, right: object, timestamp: int) -> None:
+    _emit("gaze_origin", left=left, right=right, timestamp=timestamp)
 
 
 def _emit_gaze_invalid(timestamp: int) -> None:

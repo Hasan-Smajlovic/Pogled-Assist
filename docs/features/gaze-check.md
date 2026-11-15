@@ -6,7 +6,7 @@ Open **Postavke > Pogled i odabir > Pokazivač i provjera > Provjera pogleda** t
 
 ## Position and tracking
 
-**Položaj i praćenje** shows each eye, gaze delivery and recent tracking continuity. Adjust the screen with its attached tracker. When the runtime supplies positions, the frame shows the eyes and the bar shows depth from **Bliže uređaju** to **Dalje od uređaja**. A checkmark means inside the reported tracking area, not verified accuracy; a dash means unavailable or stale data. Depth is not measured in centimetres. Position guidance can work before valid gaze returns. If positions are unsupported, use the Tobii app's positioning display; the target tests remain available.
+**Položaj i praćenje** shows each eye, gaze delivery and recent tracking continuity. Adjust the screen with its attached tracker. When the runtime supplies positions, the frame shows the eyes and the bar shows depth from **Bliže uređaju** to **Dalje od uređaja**. A checkmark means inside the reported tracking area, not verified accuracy; a dash means unavailable or stale data. In that frame, depth is not measured in centimetres. Position guidance can work before valid gaze returns. Eye Tracker 5 sends no positions in the tracking area, only each eye's distance from the tracker. There the eyes sit on a dotted middle line, **Gore-dolje nije dostupno** marks the missing up-down position, and the two lines show the distance in centimetres and how far the eyes are left or right of the tracker centre, compared with the [published Eye Tracker 5 range](../ARCHITECTURE.md#native-stream-engine-compatibility). If no positions or distances arrive, use the Tobii app's positioning display; the target tests remain available.
 
 ## Per-eye tracking
 

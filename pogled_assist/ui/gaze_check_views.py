@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from ..tracking.gaze_check import CheckSnapshot, FixationResult
+from ..tracking.gaze_check import (
+    ORIGIN_HALF_ANGLE_DEGREES,
+    ORIGIN_MAX_DISTANCE_MM,
+    ORIGIN_MIN_DISTANCE_MM,
+    CheckSnapshot,
+    FixationResult,
+    Position,
+)
 
 TARGETS = (
     ("Sredina", 0.5, 0.5),
@@ -80,7 +89,18 @@ class EyePositionView(QWidget):
         box = QRectF(26, 24, max(1, self.width() - 52), max(1, self.height() - 88))
         painter.setPen(QPen(QColor("#71869b"), 2, Qt.DashLine))
         painter.drawRoundedRect(box, 10, 10)
-        positions = (self.snapshot.left_position, self.snapshot.right_position)
+        positions = _display_positions(self.snapshot)
+        if self.snapshot.origin_only:
+            # Up-down is unknown, so the markers stay on a dotted middle line.
+            painter.setPen(QPen(QColor("#71869b"), 1, Qt.DotLine))
+            painter.drawLine(
+                QPointF(box.left() + 12, box.center().y()),
+                QPointF(box.right() - 12, box.center().y()),
+            )
+            painter.setPen(QColor("#b8c5d2"))
+            painter.drawText(
+                box.adjusted(0, 6, 0, 0), Qt.AlignHCenter | Qt.AlignTop, "Gore-dolje nije dostupno"
+            )
         markers = []
         for name, position in zip(("L", "D"), positions, strict=True):
             if position is None:
@@ -128,6 +148,27 @@ class EyePositionView(QWidget):
         labels = QRectF(26, self.height() - 29, self.width() - 52, 25)
         painter.drawText(labels, Qt.AlignLeft | Qt.AlignVCenter, "Bliže uređaju")
         painter.drawText(labels, Qt.AlignRight | Qt.AlignVCenter, "Dalje od uređaja")
+
+
+def _display_positions(snapshot: CheckSnapshot) -> tuple[Position | None, Position | None]:
+    """Box positions, or millimetre origins mapped onto the same normalized box.
+
+    Origins keep the vertical middle, scale left-right over the published field of view
+    and place depth over the published operating distance.
+    """
+    if not snapshot.origin_only:
+        return snapshot.left_position, snapshot.right_position
+    span = ORIGIN_MAX_DISTANCE_MM - ORIGIN_MIN_DISTANCE_MM
+    half_angle = math.radians(ORIGIN_HALF_ANGLE_DEGREES)
+
+    def mapped(origin: Position | None) -> Position | None:
+        if origin is None or origin[2] <= 0:
+            return None
+        # TBCS x runs from the user's right to the left; origin x grows to the user's right.
+        side = math.atan2(origin[0], origin[2]) / half_angle
+        return (0.5 - side / 2, 0.5, (origin[2] - ORIGIN_MIN_DISTANCE_MM) / span)
+
+    return mapped(snapshot.left_origin), mapped(snapshot.right_origin)
 
 
 class CheckTargetView(QWidget):

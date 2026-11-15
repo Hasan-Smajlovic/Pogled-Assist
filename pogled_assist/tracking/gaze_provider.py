@@ -142,6 +142,7 @@ class TobiiGazeProvider(QObject):
                 self._position_callback(generation),
                 self._invalid_callback(generation),
                 research,
+                self._origin_callback(generation),
             ),
             backend_types=(TobiiStreamEngineBackend, TobiiStreamEngineBridgeBackend),
             generation=generation,
@@ -298,6 +299,7 @@ class TobiiGazeProvider(QObject):
         generation = self._stream_generation
 
         backend.eye_position_callback = self._position_callback(generation)
+        backend.gaze_origin_callback = self._origin_callback(generation)
         backend.gaze_invalid_callback = self._invalid_callback(generation)
 
     def _position_callback(self, generation: int):
@@ -326,6 +328,20 @@ class TobiiGazeProvider(QObject):
                         )
 
         return positions
+
+    def _origin_callback(self, generation: int):
+        """Eye origins in millimetres; shown only by the check, never used for input."""
+
+        def origins(left: object, right: object, _timestamp: int) -> None:
+            with self._sample_lock:
+                if generation == self._stream_generation and self._check_active:
+                    self._check_telemetry.origins = (
+                        finite_eye_position(left),
+                        finite_eye_position(right),
+                        time.monotonic(),
+                    )
+
+        return origins
 
     def _invalid_callback(self, generation: int):
         def gaze_invalid(_timestamp: int) -> None:

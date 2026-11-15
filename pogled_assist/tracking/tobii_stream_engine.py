@@ -118,6 +118,8 @@ class TobiiStreamEngineBackend:
         self._eye_status_callback = eye_status_callback
         # Optional diagnostic observer; never participates in the input gate.
         self.eye_position_callback: EyePositionCallback | None = None
+        # Optional diagnostic observer of eye origins in millimetres from the tracker.
+        self.gaze_origin_callback: EyePositionCallback | None = None
         self.gaze_invalid_callback: GazeInvalidCallback | None = None
         self.diagnostic_metadata: dict = {"eye_validity_source": "unknown"}
         self._lib: ctypes.CDLL | None = None
@@ -151,6 +153,10 @@ class TobiiStreamEngineBackend:
     @property
     def eye_position_supported(self) -> bool:
         return bool(self._device) and self._eye_position_receiver is not None
+
+    @property
+    def gaze_origin_supported(self) -> bool:
+        return bool(self._device) and self._gaze_origin_receiver is not None
 
     @property
     def label(self) -> str:
@@ -516,6 +522,12 @@ class TobiiStreamEngineBackend:
                 int(gaze_origin.right_validity),
                 int(gaze_origin.timestamp_us),
             )
+            if self.gaze_origin_callback is not None:
+                self.gaze_origin_callback(
+                    finite_eye_position(gaze_origin.left_xyz, gaze_origin.left_validity),
+                    finite_eye_position(gaze_origin.right_xyz, gaze_origin.right_validity),
+                    int(gaze_origin.timestamp_us),
+                )
 
         self._gaze_origin_receiver = GazeOriginReceiver(receive_gaze_origin)
         status = self._lib.tobii_gaze_origin_subscribe(

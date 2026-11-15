@@ -126,7 +126,8 @@ class GazeConnectionSession:
 
     def _start_backend(self, name: str, backend_type: Callable) -> GazeConnection | None:
         connection = GazeConnection(name)
-        gaze, eyes, position, invalid, _research = self._callbacks
+        gaze, eyes, position, invalid, _research, *optional = self._callbacks
+        origin = optional[0] if optional else None
         try:
             connection.backend = backend_type(
                 self._guard(gaze, connection), self._guard(eyes, connection)
@@ -138,6 +139,8 @@ class GazeConnectionSession:
                 return None
             connection.backend.eye_position_callback = self._guard(position, connection)
             connection.backend.gaze_invalid_callback = self._guard(invalid, connection)
+            if origin is not None:
+                connection.backend.gaze_origin_callback = self._guard(origin, connection)
             connection.backend.start()
             connection.label = connection.backend.label
             connection.metadata = getattr(connection.backend, "diagnostic_metadata", {})
