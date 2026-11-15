@@ -590,3 +590,24 @@ def test_each_dll_folder_joins_the_search_path_once(monkeypatch, tmp_path):
         for candidate in (first / engine.DLL_NAMES[0], second / engine.DLL_NAMES[0]):
             assert engine._load_candidate_dll(candidate) == str(candidate)
     assert added == [str(first), str(second)]
+
+
+def test_native_gaze_origin_reaches_its_own_observer_in_millimetres(native_backend):
+    backend, library, _gaze, eyes = native_backend
+    library.errors["tobii_eye_position_normalized_subscribe"] = 3
+    positions, origins = [], []
+    backend.eye_position_callback = lambda *args: positions.append(args)
+    backend.gaze_origin_callback = lambda *args: origins.append(args)
+    backend.start()
+    assert backend.eye_position_supported is False
+    assert backend.gaze_origin_supported is True
+    origin = engine.TobiiGazeOrigin()
+    origin.timestamp_us = 44
+    origin.left_validity = 0
+    origin.right_validity = 1
+    origin.left_xyz[:] = (3.0, 113.0, 391.0)
+    origin.right_xyz[:] = (70.0, 112.0, 385.0)
+    library.callbacks["origin"](ctypes.pointer(origin), None)
+    assert eyes == [(False, True, 44)]
+    assert origins == [(None, pytest.approx((70.0, 112.0, 385.0)), 44)]
+    assert positions == []

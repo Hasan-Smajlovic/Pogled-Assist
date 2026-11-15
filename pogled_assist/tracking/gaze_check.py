@@ -22,6 +22,12 @@ EYE_GAP_FRACTION = 0.2
 AGREEMENT_MIN_FRACTION = 0.8
 MIN_AGREEMENT_SAMPLES = 12
 
+# Tobii lists 45 to 95 cm operating distance and a 40 x 40 degree field of view
+# for Eye Tracker 5, which sends eye origins in millimetres instead of positions.
+ORIGIN_MIN_DISTANCE_MM = 450.0
+ORIGIN_MAX_DISTANCE_MM = 950.0
+ORIGIN_HALF_ANGLE_DEGREES = 20.0
+
 Position = tuple[float, float, float]
 Point = tuple[float, float]
 # Left and right gaze points on the display area, normalized, and their time.
@@ -54,6 +60,37 @@ class CheckSnapshot:
     # Per-eye gaze points exist only where the backend reports them separately.
     eye_gaze_supported: bool | None = None
     eye_gaze_pairs: tuple[EyeGazePair, ...] = ()
+    # Eye origins in millimetres from the tracker: x toward the user's right, z toward the user.
+    left_origin: Position | None = None
+    right_origin: Position | None = None
+
+    @property
+    def origin_only(self) -> bool:
+        """Only millimetre origins arrived, so up-down and box positions stay unknown."""
+        return (
+            self.left_position is None
+            and self.right_position is None
+            and self.origin_center is not None
+        )
+
+    @property
+    def origin_center(self) -> Position | None:
+        origins = [origin for origin in (self.left_origin, self.right_origin) if origin]
+        if not origins or any(origin[2] <= 0 for origin in origins):
+            return None
+        return tuple(sum(origin[axis] for origin in origins) / len(origins) for axis in range(3))
+
+    def origin_distance_in_range(self) -> bool | None:
+        center = self.origin_center
+        if center is None:
+            return None
+        return ORIGIN_MIN_DISTANCE_MM <= center[2] <= ORIGIN_MAX_DISTANCE_MM
+
+    def origin_side_in_range(self) -> bool | None:
+        center = self.origin_center
+        if center is None:
+            return None
+        return abs(math.degrees(math.atan2(center[0], center[2]))) <= ORIGIN_HALF_ANGLE_DEGREES
 
     @property
     def stable(self) -> bool | None:
@@ -89,6 +126,7 @@ class CheckTelemetry:
         self.policy = BOTH_EYES
         self.eyes: tuple[bool, bool, float] | None = None
         self.positions: tuple[Position | None, Position | None, float] | None = None
+        self.origins: tuple[Position | None, Position | None, float] | None = None
         self.gaze: tuple[float, float, float] | None = None
         self.gaze_interruptions = 0
         self.position_supported: bool | None = None
@@ -159,6 +197,9 @@ class CheckTelemetry:
         if _fresh(self.positions, now):
             # A valid eye origin does not require a valid gaze point.
             left_position, right_position = self.positions[:2]
+        left_origin = right_origin = None
+        if _fresh(self.origins, now):
+            left_origin, right_origin = self.origins[:2]
         gaze = gaze_at = None
         if eyes_usable(self.policy, left, right) and _fresh(self.gaze, now):
             gaze, gaze_at = self.gaze[:2], self.gaze[2]
@@ -183,6 +224,8 @@ class CheckTelemetry:
             both_seconds=both_seconds,
             eye_gaze_supported=self.eye_gaze_supported,
             eye_gaze_pairs=tuple(pair for pair in self._eye_gaze_pairs if pair[-1] <= now),
+            left_origin=left_origin,
+            right_origin=right_origin,
         )
 
     def _availability(self, now: float) -> tuple[float, float, float]:

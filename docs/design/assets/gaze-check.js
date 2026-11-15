@@ -534,18 +534,34 @@
     returnMode = 'position';
     historyItems = [makeReport('provjera-014', '21.10.2026. · 17:45', 'hold'), makeReport('provjera-013', '21.10.2026. · 17:38', 'any', true)];
     if (view === 'empty') historyItems = [];
-    else if (!['position', 'word-timeout'].includes(view)) {
+    else if (!['position', 'position-et5', 'word-timeout'].includes(view)) {
       currentReport = previewReport(view);
       rememberReport(currentReport);
     }
     if (view === 'history-error') historyItems.unshift({ id: 'provjera-016', date: '22.10.2026. · 14:40', unreadable: true });
     eyeExample = eyeExamples[view.startsWith('eyes') ? view : 'eyes-live'];
+    renderPositionExample(view === 'position-et5');
     if (view.startsWith('eyes')) { currentReport = null; renderFrame(); return; }
     if (view === 'word-timeout') { checkStage('trial'); checkTrialResults = [false]; checkTrialIndex = 1; checkStage('trial'); return; }
     if (['history', 'empty', 'history-error'].includes(view)) showHistory();
     else if (currentReport) { reportTab = view.startsWith('trial') ? 'trial' : 'precision'; showReport(currentReport); }
   }
 
+  // Eye Tracker 5 sends eye origins in millimetres, so only distance and left-right are known.
+  function renderPositionExample(originOnly) {
+    const line = (id, pass, text) => {
+      checkEl(id).textContent = (pass ? '✓ ' : '! ') + text;
+      checkEl(id).className = 'check-line ' + (pass ? 'check-pass' : 'check-attention');
+    };
+    checkEl('check-eye-box').classList.toggle('origin-only', originOnly);
+    checkEl('check-depth').classList.toggle('too-close', originOnly);
+    checkEl('check-position-notice').textContent = originOnly
+      ? 'Uređaj šalje udaljenost i lijevo-desno. Gore-dolje nije dostupno; preciznost provjerite na metama.'
+      : 'Okvir pokazuje položaj očiju, traka ispod udaljenost.';
+    line('check-position-line', true, originOnly ? 'Lijevo-desno · 4 cm desno od sredine uređaja' : 'Položaj u području praćenja');
+    line('check-distance-line', !originOnly, originOnly ? 'Udaljenost 39 cm · Tobii prati od 45 do 95 cm' : 'Udaljenost u području praćenja');
+    checkEl('check-guidance').textContent = originOnly ? 'Polako odmaknite ekran od lica.' : 'Zadržite položaj i odaberite „Pokreni provjeru“.';
+  }
   function previewReport(view) {
     const report = makeReport('provjera-015', '22.10.2026. · 14:32', ReferenceEyePolicy.read(), view === 'interrupted');
     report.storage = storageForPreview();

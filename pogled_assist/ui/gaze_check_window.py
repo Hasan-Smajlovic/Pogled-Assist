@@ -60,6 +60,8 @@ from .gaze_check_reports import GazeCheckReports
 from .gaze_check_text import (
     eye_summary_text,
     free_gaze_is_visible,
+    origin_distance_text,
+    origin_side_text,
     position_guidance,
     position_notice,
     precision_feedback,
@@ -295,7 +297,9 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         self._position_help = InformationButton(
             "O položaju i udaljenosti",
             "Prikaz pokazuje položaj očiju unutar područja koje Tobii može pratiti. "
-            "Udaljenost nije mjerenje u centimetrima. Preciznost provjerite na metama.",
+            "Udaljenost nije mjerenje u centimetrima. Eye Tracker 5 šalje udaljenost u "
+            "centimetrima i pomak lijevo-desno; gore-dolje tada nije dostupno. "
+            "Preciznost provjerite na metama.",
             card,
         )
         self._position_help.setFixedSize(44, 44)
@@ -304,7 +308,8 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
         layout.addWidget(_label("Polako pomjerajte ekran s pričvršćenim Tobijem.", card))
         self._eyes_view = EyePositionView(card)
         self._eyes_view.setToolTip(
-            "Udaljenost unutar područja koje uređaj može pratiti; nije mjerenje u centimetrima."
+            "Udaljenost unutar područja koje uređaj može pratiti. Na Eye Trackeru 5 "
+            "pokazuje izmjerene centimetre i lijevo-desno, bez gore-dolje."
         )
         layout.addWidget(self._eyes_view, 1)
         self._position_notice = _label("Čekam podatke o položaju očiju.", card, "checkHint")
@@ -650,6 +655,29 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 state
             ]
             self._state(label, state, f"{name} · {detail}")
+        if snapshot.origin_only:
+            self._state(
+                self._position_label,
+                snapshot.origin_side_in_range(),
+                origin_side_text(snapshot),
+            )
+            self._state(
+                self._distance_label,
+                snapshot.origin_distance_in_range(),
+                origin_distance_text(snapshot),
+            )
+        else:
+            self._render_box_position(snapshot)
+        self._state(
+            self._gaze_label,
+            True if snapshot.gaze is not None else None,
+            "Pogled se prati" if snapshot.gaze is not None else "Čekam pogled na ekranu",
+        )
+        self._eyes_view.snapshot = snapshot
+        self._eyes_view.update()
+        self._guidance.setText(position_guidance(snapshot, self._settings.eye_tracking_policy))
+
+    def _render_box_position(self, snapshot: CheckSnapshot) -> None:
         position, depth = snapshot.in_box((0, 1)), snapshot.in_box((2,))
         self._state(
             self._position_label,
@@ -669,14 +697,6 @@ class GazeCheckWindow(GazeCheckHistory, QWidget):
                 None: "Udaljenost nije dostupna",
             }[depth],
         )
-        self._state(
-            self._gaze_label,
-            True if snapshot.gaze is not None else None,
-            "Pogled se prati" if snapshot.gaze is not None else "Čekam pogled na ekranu",
-        )
-        self._eyes_view.snapshot = snapshot
-        self._eyes_view.update()
-        self._guidance.setText(position_guidance(snapshot, self._settings.eye_tracking_policy))
 
     def _next(self) -> None:
         if self._phase == "position":

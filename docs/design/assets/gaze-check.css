@@ -44,6 +44,10 @@ footer:has(#check-device-actions[hidden]) .check-flow-actions > span { display:n
 .eye-box { height:min(120px, 10dvh); margin-top:8px; border:2px dashed var(--border); position:relative; border-radius:12px; }
 .eye-dot { position: absolute; top: 46%; left: 39%; width: 24px; height: 24px; border: 3px solid var(--success); border-radius: 50%; }
 .eye-dot + .eye-dot { left: 57%; }
+.eye-box-note { display: none; position: absolute; left: 0; right: 0; top: 8px; text-align: center; font-size: 13px; color: var(--muted); }
+.eye-box.origin-only::before { content: ''; position: absolute; left: 12px; right: 12px; top: calc(46% + 12px); border-top: 1px dotted var(--border); }
+.eye-box.origin-only .eye-box-note { display: block; }
+.check-depth.too-close::after { left: 2%; background: var(--warning); }
 .check-depth { height: 8px; margin: 12px 0; border-radius: 4px; background: var(--divider); position: relative; }
 .check-depth::after { content: ''; position: absolute; left: 45%; top: -2px; width: 12px; height: 12px; background: var(--success); border-radius: 50%; }
 .check-stage { flex: 1; position: relative; border: 1px solid var(--divider); border-radius: 12px; }
