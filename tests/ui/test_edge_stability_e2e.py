@@ -7,7 +7,6 @@ from _clock import freeze_monotonic
 from _hotbar_fixtures import edge_surface as edge_surface
 from _hotbar_fixtures import hotbar_gaze as hotbar_gaze
 from _hotbar_fixtures import speech_gaze as speech_gaze
-from _ui_fakes import click_speech_action
 from PySide6.QtCore import QPoint, QRect, Qt
 
 from pogled_assist.interaction.mouse_controller import GazeSettings
@@ -48,9 +47,8 @@ def test_saved_edge_duration_controls_real_application_targets(edge_surface, dur
 def test_neighbor_starts_from_zero_only_after_edge_hold_expires(speech_gaze, qtbot, duration):
     window, controller, _speech, feed, actions, _progress = speech_gaze
     controller.update_settings(replace(controller.settings, edge_hold_ms=duration))
-    click_speech_action(qtbot, window, "group:0")
-    first = window._action_buttons[window._action("letter:0:0")]
-    second = window._action_buttons[window._action("letter:0:1")]
+    first = window._action_buttons[window._action("letter:0")]
+    second = window._action_buttons[window._action("letter:1")]
     a = first.mapToGlobal(first.rect().center())
     b = second.mapToGlobal(QPoint(2, second.height() // 2))
     feed(a, 0)
@@ -58,13 +56,13 @@ def test_neighbor_starts_from_zero_only_after_edge_hold_expires(speech_gaze, qtb
     for at in range(820, 821 + duration, 20):
         feed(b, at)
     assert actions == []
-    assert controller._toolbar_selection.target == window._action("letter:0:1")
+    assert controller._toolbar_selection.target == window._action("letter:1")
     assert controller._toolbar_selection.diagnostic_snapshot()["credited_ms"] == 0
     for at in range(840 + duration, 1820 + duration, 20):
         feed(b, at)
         assert actions == []
     feed(b, 1821 + duration)
-    assert actions == [window._action("letter:0:1")]
+    assert actions == [window._action("letter:1")]
     assert window._input.text() == "B"
 
 

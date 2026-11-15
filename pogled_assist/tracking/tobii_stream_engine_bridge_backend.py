@@ -54,6 +54,8 @@ class TobiiStreamEngineBridgeBackend:
         self.eye_position_callback: EyePositionCallback | None = None
         self.gaze_invalid_callback: GazeInvalidCallback | None = None
         self.eye_position_supported: bool | None = None
+        self.gaze_origin_callback: EyePositionCallback | None = None
+        self.gaze_origin_supported: bool | None = None
         self.diagnostic_metadata: dict = {"eye_validity_source": "unknown"}
         self._process: subprocess.Popen[str] | None = None
         self._stdout_thread: threading.Thread | None = None
@@ -74,6 +76,7 @@ class TobiiStreamEngineBridgeBackend:
             "gaze": self._on_gaze,
             "eyes": self._on_eyes,
             "eye_position": self._on_eye_position,
+            "gaze_origin": self._on_gaze_origin,
             "gaze_invalid": self._on_gaze_invalid,
             "error": self._on_error,
             "stopped": self._on_stopped,
@@ -321,6 +324,8 @@ class TobiiStreamEngineBridgeBackend:
     def _on_started(self, message: dict) -> None:
         supported = message.get("eye_position_supported")
         self.eye_position_supported = supported if isinstance(supported, bool) else None
+        origins = message.get("gaze_origin_supported")
+        self.gaze_origin_supported = origins if isinstance(origins, bool) else None
         metadata = message.get("diagnostic_metadata")
         if isinstance(metadata, dict):
             self.diagnostic_metadata = {
@@ -363,13 +368,20 @@ class TobiiStreamEngineBridgeBackend:
         self._eye_status_callback(left_open, right_open, timestamp)
 
     def _on_eye_position(self, message: dict) -> None:
-        if self.eye_position_callback is None:
+        self._forward_positions(self.eye_position_callback, message)
+
+    def _on_gaze_origin(self, message: dict) -> None:
+        self._forward_positions(self.gaze_origin_callback, message)
+
+    @staticmethod
+    def _forward_positions(callback: EyePositionCallback | None, message: dict) -> None:
+        if callback is None:
             return
         try:
             timestamp = int(message.get("timestamp") or 0)
         except (TypeError, ValueError, OverflowError):
             return
-        self.eye_position_callback(
+        callback(
             finite_eye_position(message.get("left")),
             finite_eye_position(message.get("right")),
             timestamp,

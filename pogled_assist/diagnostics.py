@@ -131,11 +131,7 @@ class TargetContext:
 def control_role(action: object) -> str:
     if not isinstance(action, str):
         return "control"
-    command = (
-        action.removeprefix("speech_window:")
-        .removeprefix("keyboard_window:")
-        .removeprefix("controller_window:")
-    )
+    command = action.removeprefix("speech_window:").removeprefix("keyboard_window:")
     kind = command.partition(":")[0]
     kind = kind.removeprefix("keyboard_")
     if kind in {"group", "letter", "confirm", "suggestion", "key", "phrase", "category", "answer"}:

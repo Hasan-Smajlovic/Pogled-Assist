@@ -36,7 +36,7 @@ Reproduce the frozen Bosnian suggestion measurements from the repository root:
 .\.venv\Scripts\python.exe scripts\speech_suggestions\evaluate_speech_model.py --dataset heldout --output language\bs\evaluation\reports\heldout.json
 ```
 
-Use the development set for model decisions; do not tune from held-out results. The original held-out messages have been inspected in repeated reviews and now provide regression evidence, not a fresh blind estimate. `tests/fixtures/speech_suggestions/protocol.md` and its checksum are frozen records of the first comparison; do not rewrite that protocol to describe a later review. Fresh validation requires an independently authored set withheld until model selection is complete. Reports distinguish starters, next-word hits before typing and completions along the typing path; their percentages are not interchangeable.
+Use the development set for model decisions; do not tune from held-out results. The original held-out messages have been inspected in repeated reviews and now provide regression evidence, not a fresh blind estimate. `tests/fixtures/speech_suggestions/protocol.md` and its checksum are frozen records of the first comparison; do not rewrite that protocol to describe a later review. Fresh validation requires an independently authored set withheld until model selection is complete. Reports distinguish starters, next-word hits before typing and completions along the typing path; their percentages are not interchangeable. Beside the frozen grouped comparison, each report measures the default all-letters keyboard, where one activation enters a letter.
 
 When changing the prepared language data, compare the supported vocabulary sizes in one corpus pass before rebuilding the bundled model:
 

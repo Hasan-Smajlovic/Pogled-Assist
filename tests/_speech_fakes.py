@@ -8,6 +8,7 @@ from threading import Thread
 
 from PySide6.QtCore import QObject, Signal
 
+from pogled_assist.keyboard_layouts import LETTER_GROUPS_LAYOUT
 from pogled_assist.speech.audio_cache import AudioCache
 from pogled_assist.speech.eleven_account import ElevenAccount
 from pogled_assist.speech.elevenlabs import AccountOptions, Subscription
@@ -78,6 +79,13 @@ class FakeElevenClient:
             (("eleven_v4", "Eleven v4"),),
             None,
         )
+
+
+def grouped_fake_speech(**options):
+    """Speech whose Latin letters use the Settings group layout instead of the alphabet."""
+    speech = FakeSpeech(**options)
+    speech._settings = replace(speech._settings, letter_layout=LETTER_GROUPS_LAYOUT)
+    return speech
 
 
 class FakeSpeech(QObject):

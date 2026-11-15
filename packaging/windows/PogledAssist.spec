@@ -1,15 +1,23 @@
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 
 repo_root = Path(SPEC).resolve().parents[2]
+sys.path.insert(0, str(repo_root))
+from scripts.release.windows_icon import write_icon
+
 tobii_datas, tobii_binaries, tobii_hidden_imports = collect_all("tobiiresearch")
 
 datas = [
     (str(repo_root / "assets" / "icon.png"), "assets"),
     (
         str(repo_root / "pogled_assist" / "assets" / "emergency_alarm.wav"),
+        "pogled_assist/assets",
+    ),
+    (
+        str(repo_root / "pogled_assist" / "assets" / "selection_tick.wav"),
         "pogled_assist/assets",
     ),
     (str(repo_root / "pogled_assist" / "assets" / "checkbox_x.svg"), "pogled_assist/assets"),
@@ -79,7 +87,7 @@ executable = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(repo_root / "assets" / "icon.png"),
+    icon=str(write_icon(repo_root / "assets" / "icon.png", Path(workpath) / "PogledAssist.ico")),
 )
 
 bundle = COLLECT(

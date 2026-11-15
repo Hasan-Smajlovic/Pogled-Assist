@@ -42,13 +42,15 @@ $installer = Join-Path $PSScriptRoot "installer.coverage"
 $combined = Join-Path $PSScriptRoot ".coverage"
 $env:COVERAGE_FILE = $application
 Invoke-TestSuite -Coverage Collect -Paths @($partial) -WorkerCount 1
-$env:COVERAGE_FILE = $infrastructure
-Invoke-TestSuite -Coverage Collect -Paths @($partial) -WorkerCount 1
+# The merge needs separate input paths, not another identical pytest run.
+Copy-Item -LiteralPath $application -Destination $infrastructure
 if (Test-Path -LiteralPath $html) { throw "Partial HTML was generated" }
 # Seed unrelated data that would incorrectly lift the floor if combine appended.
 $env:COVERAGE_FILE = $combined
 Invoke-TestSuite -Coverage Collect -Paths @($remaining) -WorkerCount 1
 Copy-Item -LiteralPath $combined -Destination "$combined.stale"
+# Merge-CheckCoverage writes here, then publishes to COVERAGE_FILE.
+Copy-Item -LiteralPath $combined -Destination (Join-Path $PSScriptRoot "combined.coverage")
 $floorFailed = $false
 try {
     Merge-CheckCoverage -Files @($application, $infrastructure)
@@ -58,8 +60,7 @@ try {
 }
 if (-not $floorFailed) { throw "Combined coverage floor was bypassed" }
 if (-not (Test-Path -LiteralPath $html)) { throw "Failed coverage report missing" }
-$env:COVERAGE_FILE = $installer
-Invoke-TestSuite -Coverage Collect -Paths @($remaining) -WorkerCount 1
+Copy-Item -LiteralPath "$combined.stale" -Destination $installer
 $env:COVERAGE_FILE = $combined
 try {
     Merge-CheckCoverage -Files @($application, (Join-Path $PSScriptRoot "missing.coverage"))

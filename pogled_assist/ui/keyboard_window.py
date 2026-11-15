@@ -48,6 +48,7 @@ BUTTON_HEIGHTS = {
     "groupButton": KEY_MIN_HEIGHT,
     "keyButton": KEY_MIN_HEIGHT,
     "utilityButton": UTILITY_MIN_HEIGHT,
+    "commandButton": UTILITY_MIN_HEIGHT,
 }
 
 KEYBOARD_STYLESHEET = """
@@ -88,6 +89,9 @@ KEYBOARD_STYLESHEET = """
                 border-color: #684354;
                 font-size: 16px;
             }
+            QToolButton#commandButton {
+                font-size: 16px;
+            }
             """
 
 
@@ -123,6 +127,7 @@ class KeyboardWindow(SidebarPanel):
             "groups": self._show_current_group_level,
             "space": lambda: self._type_text(" "),
             "backspace": lambda: self._press_key("backspace"),
+            "enter": lambda: self._press_key("enter"),
         }
         self._argument_commands: dict[str, Callable[[str], None]] = {
             "group-page": self._turn_group_page,
@@ -244,10 +249,21 @@ class KeyboardWindow(SidebarPanel):
         self._script_button = self._make_button(
             switch_label(self._settings.keyboard_script),
             self._action("script-toggle"),
-            "tabButton",
+            "commandButton",
             dynamic=False,
         )
-        root.addWidget(self._script_button)
+        self._enter_button = self._make_button(
+            "Potvrdi",
+            self._action("enter"),
+            "commandButton",
+            dynamic=False,
+        )
+        command_row = QHBoxLayout()
+        command_row.setContentsMargins(0, 0, 0, 0)
+        command_row.setSpacing(8)
+        command_row.addWidget(self._script_button, 1)
+        command_row.addWidget(self._enter_button, 1)
+        root.addLayout(command_row)
         root.addWidget(self._key_host, 1)
         root.addLayout(utility_row)
         root.addWidget(self._recording_badge)

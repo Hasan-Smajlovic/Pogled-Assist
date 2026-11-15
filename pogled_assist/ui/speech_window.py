@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QDialog, QPushButton, QWidget
 
 from .. import diagnostics
 from ..keyboard_layouts import (
+    ALL_LETTERS_LAYOUT,
     ARABIC_SCRIPT,
     key_label,
     letters_for_script,
@@ -25,6 +26,7 @@ from ..keyboard_layouts import BOSNIAN_LETTERS as BOSNIAN_LETTERS
 from ..keyboard_layouts import group_keys as _group_letters
 from ..logging_setup import get_project_root
 from ..speech.alarm_sound import ALARM_UNAVAILABLE_MESSAGE, AlarmSound
+from ..speech.selection_sound import SelectionSound
 from ..speech.speech_library import (
     CategoryRecord,
     PhraseRecord,
@@ -39,16 +41,21 @@ from .speech_editor import EditorContext
 from .speech_library_actions import ITEMS_PER_PAGE, SpeechLibraryActions
 from .speech_playback_controls import SpeechPlaybackControls
 from .speech_predictions import PredictionControls, SpeechPredictions
+from .speech_surface import FORWARD_MARK, SpeechSurface
 from .speech_surface import SPEECH_WINDOW_ACTION_PREFIX as SPEECH_WINDOW_ACTION_PREFIX
-from .speech_surface import SpeechSurface
 
 logger = logging.getLogger(__name__)
 
 MULTI_CHARACTER_LETTERS = ("DŽ", "LJ", "NJ")
 SYMBOLS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", ".", "?")
 PHRASE_BUTTON_MIN_HEIGHT = 64
+# Three columns of three rows keep each card as tall as an all-letters key at 1280 x 720.
+LIST_COLUMNS = 3
 GROUP_GRID_MAX_COLUMNS = 6
 KEYS_PER_PAGE = 12
+ALPHABET_COLUMNS = 10
+# Speaking and the alarm are their own confirmation; a tick would only cover them.
+OWN_SOUND_COMMANDS = frozenset({"play", "alarm:start", "alarm:stop"})
 
 
 class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
@@ -70,6 +77,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         library_store: SpeechLibraryStore | None = None,
         alarm_sound: AlarmSound | None = None,
         suggestions: SuggestionService | None = None,
+        selection_sound: SelectionSound | None = None,
     ) -> None:
         initial_settings = speech.settings
         if letters_per_group is not None:
@@ -96,6 +104,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._library_store = library_store or speech_library_store(get_project_root())
         self._alarm_sound = alarm_sound or AlarmSound(self)
         self._alarm_sound.failed.connect(self._alarm_failed)
+        self._selection_sound = selection_sound or SelectionSound(self)
         self._library = self._library_store.load()
         self._sync_saved_audio()
         self._list_page = 0
@@ -160,14 +169,12 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         logger.info("Speech window shown full-screen.")
 
     def update_settings(self, settings: SpeechSettings) -> None:
-        old_letters_per_group = self._letters_per_group
-        old_script = self._speech_settings.keyboard_script
+        old = self._speech_settings
+        old_keyboard = (self._letters_per_group, old.keyboard_script, old.letter_layout)
         self._speech_settings = replace(settings)
         self._letters_per_group = max(1, self._speech_settings.letters_per_group)
-        if (
-            self._letters_per_group != old_letters_per_group
-            or old_script != settings.keyboard_script
-        ):
+        keyboard = (self._letters_per_group, settings.keyboard_script, settings.letter_layout)
+        if keyboard != old_keyboard:
             self._keyboard_page = 0
             self._close_dialog()
             self._letter_groups = _group_letters(
@@ -191,8 +198,11 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         arabic = self._speech_settings.keyboard_script == ARABIC_SCRIPT
         direction = Qt.RightToLeft if arabic else Qt.LeftToRight
         self._input.setLayoutDirection(direction)
-        self._input.setAlignment((Qt.AlignRight | Qt.AlignAbsolute) if arabic else Qt.AlignCenter)
+        self._input.setAlignment((Qt.AlignRight if arabic else Qt.AlignLeft) | Qt.AlignAbsolute)
         self._script_button.setText(switch_label(self._speech_settings.keyboard_script))
+        # Follow the saved layout and script, not the current view, so the column stays put
+        # while Phrases, Categories or symbols are open.
+        self._set_compact_system_column(self._shows_alphabet())
         self._prediction_divider.setVisible(not arabic)
         for widget in [self._prediction_label, *self._prediction_buttons, self._undo_word_button]:
             widget.setVisible(not arabic)
@@ -254,8 +264,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         logger.info("Speech window gaze action requested: %s", diagnostics.safe_action(action))
         keyboard_actions = set(self._main_dynamic_actions)
         was_inline = self._active_group_index is not None
+        was_compact = self._compact_system_column
+        bounds = self.action_bounds(action)
         self._trigger_action(action, source="gaze")
         self._keep_departure_bounds(was_inline, keyboard_actions)
+        if self._compact_system_column and not was_compact and bounds is not None:
+            # The narrowed script button no longer covers the old area, so a
+            # neighbouring key may now lie under gaze. It must leave first.
+            self._keyboard_departure_bounds = bounds
 
     def _gaze_action_allowed(self, action):
         if not action.startswith(SPEECH_WINDOW_ACTION_PREFIX):
@@ -299,10 +315,40 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if self._editor is None:
             self._view_mode = "keyboard"
         self._clear_main_grid()
+        alphabet = self._shows_alphabet()
         self._view_title.setText(
-            self._editor_title() if self._editor is not None else "Odaberite grupu slova"
+            self._editor_title()
+            if self._editor is not None
+            else "Odaberite slovo"
+            if alphabet
+            else "Odaberite grupu slova"
+        )
+        if alphabet:
+            self._add_alphabet_keys()
+        else:
+            self._add_group_keys()
+        self._update_view_controls()
+        self._set_status("")
+        self._context_changed()
+
+    def _shows_alphabet(self) -> bool:
+        # Arabic keeps its groups; Settings may keep the larger Latin group keys.
+        return (
+            self._speech_settings.letter_layout == ALL_LETTERS_LAYOUT
+            and self._speech_settings.keyboard_script != ARABIC_SCRIPT
         )
 
+    def _add_alphabet_keys(self) -> None:
+        # One selection types each letter, so all 30 stay on one page in alphabetical rows.
+        self._keyboard_pages = 1
+        self._keyboard_page = 0
+        self._set_grid_stretch(len(BOSNIAN_LETTERS), ALPHABET_COLUMNS)
+        for index, letter in enumerate(BOSNIAN_LETTERS):
+            action = self._action(f"letter:{index}")
+            button = self._make_dynamic_button(letter, action, "alphabetButton")
+            self._key_grid.addWidget(button, index // ALPHABET_COLUMNS, index % ALPHABET_COLUMNS)
+
+    def _add_group_keys(self) -> None:
         visible = self._keyboard_items(self._letter_groups)
         group_count = min(KEYS_PER_PAGE, len(self._letter_groups))
         columns = _group_column_count(group_count)
@@ -313,10 +359,6 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             action = self._action(f"group:{index}")
             button = self._make_dynamic_button(" ".join(group), action, "groupButton")
             self._key_grid.addWidget(button, position // columns, position % columns)
-
-        self._update_view_controls()
-        self._set_status("")
-        self._context_changed()
 
     def _show_symbols_level(self) -> None:
         self._active_group_index = None
@@ -356,10 +398,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._symbols_mode = False
         self._clamp_list_page()
         self._clear_main_grid()
-        self._view_title.setText(self._list_title())
 
         items = self._list_items()
-        self._set_grid_stretch(ITEMS_PER_PAGE, 2)
+        rows = self._set_grid_stretch(ITEMS_PER_PAGE, LIST_COLUMNS)
         if not items:
             empty = QPushButton(
                 "Biblioteka nije učitana. Odaberite Učitaj ponovo."
@@ -369,7 +410,7 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             )
             empty.setObjectName("phraseButton")
             empty.setEnabled(False)
-            self._key_grid.addWidget(empty, 0, 0, 2, 2)
+            self._key_grid.addWidget(empty, 0, 0, rows, LIST_COLUMNS)
             self._set_status("")
         else:
             page_start = self._list_page * ITEMS_PER_PAGE
@@ -379,10 +420,16 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
                 button = self._make_dynamic_button(
                     self._list_item_text(item),
                     self._action(f"list:select:{index}"),
-                    "deleteItemButton" if self._deletion_mode else "phraseButton",
+                    self._list_item_style(item),
                 )
                 button.setMinimumHeight(PHRASE_BUTTON_MIN_HEIGHT)
-                self._key_grid.addWidget(button, position // 2, position % 2)
+                self._key_grid.addWidget(button, position // LIST_COLUMNS, position % LIST_COLUMNS)
+            used_rows = math.ceil(len(visible_items) / LIST_COLUMNS)
+            for row in range(used_rows, rows):
+                # Qt drops the spacing of empty rows; a blank cell keeps cards level with the strip.
+                spacer = QWidget(self._key_grid_host)
+                spacer.setAttribute(Qt.WA_TransparentForMouseEvents)
+                self._key_grid.addWidget(spacer, row, 0)
             self._set_status("Odaberite stavku za brisanje." if self._deletion_mode else "")
 
         self._update_view_controls()
@@ -404,14 +451,23 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if self._view_mode == "phrases":
             return "Moje fraze"
         category = self._active_category()
-        return (
-            _uppercase(category.name) if self._view_mode == "answers" and category else "Kategorije"
-        )
+        if self._view_mode == "answers" and category is not None:
+            return f"Kategorije {FORWARD_MARK} {_uppercase(category.name)}"
+        return "Kategorije"
+
+    def _list_item_style(self, item: CategoryRecord | PhraseRecord | str) -> str:
+        if self._deletion_mode:
+            return "deleteItemButton"
+        # A category opens its answers; answers and phrases add text to the message.
+        return "categoryButton" if isinstance(item, CategoryRecord) else "phraseButton"
 
     def _list_item_text(self, item: CategoryRecord | PhraseRecord | str) -> str:
         if isinstance(item, CategoryRecord):
-            suffix = "Obriši" if self._deletion_mode else f"Odgovori: {len(item.answers)}"
-            return f"{_uppercase(item.name)}\n{suffix}"
+            if self._deletion_mode:
+                return f"{_uppercase(item.name)}\nObriši"
+            # The arrow stays with the last word when a long name wraps.
+            count = _answer_count(len(item.answers))
+            return f"{_uppercase(item.name)}\u00a0{FORWARD_MARK}\n{count}"
         text = item.text if isinstance(item, PhraseRecord) else item
         text = _uppercase(text)
         return f"{text}\nObriši" if self._deletion_mode else text
@@ -602,14 +658,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._categories_button.setEnabled(not editor_mode)
         self._phrases_button.setEnabled(not editor_mode)
         self._play_button.setEnabled(not editor_mode or self._speech.is_busy)
-        self._back_button.setVisible(self._view_mode == "answers" and not editor_mode)
+        self._list_controls.setVisible(list_mode)
+        self._list_heading.setVisible(list_mode)
+        self._list_heading.setText(self._list_title() if list_mode else "")
+        back = self._view_mode == "answers" and not editor_mode
+        self._back_button.setVisible(back)
+        self._list_back_line.setVisible(back)
         self._add_item_button.setVisible(list_mode and not self._library_store.read_error)
         self._retry_library_button.setVisible(list_mode and self._library_store.read_error)
-        self._add_item_button.setText(
-            {"phrases": "Dodaj frazu", "answers": "Dodaj odgovor"}.get(
-                self._view_mode, "Dodaj kategoriju"
-            )
-        )
         self._delete_mode_button.setVisible(list_mode and not self._library_store.read_error)
         self._delete_mode_button.setChecked(self._deletion_mode)
         self._delete_mode_button.setText("Gotovo" if self._deletion_mode else "Obriši")
@@ -617,10 +673,14 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         self._save_item_button.setVisible(editor_mode)
         self._cancel_editor_button.setVisible(editor_mode)
         self._refresh_paging(list_mode)
-        self._view_title.setVisible(list_mode or editor_mode)
+        self._view_title.setVisible(editor_mode)
         self._message_label.setText(self._editor_title() if editor_mode else "Vaša poruka")
         self._input.setPlaceholderText(
-            "Unesite tekst…" if editor_mode else "Odaberite grupu slova…"
+            "Unesite tekst…"
+            if editor_mode
+            else "Odaberite slovo…"
+            if self._shows_alphabet()
+            else "Odaberite grupu slova…"
         )
         self._refresh_keyboard_toggle(list_mode)
         self._refresh_suggestions()
@@ -629,7 +689,9 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if list_mode:
             self._keyboard_toggle_button.setText("Tastatura")
         elif self._symbols_mode:
-            self._keyboard_toggle_button.setText("Grupe slova")
+            self._keyboard_toggle_button.setText(
+                "Slova" if self._shows_alphabet() else "Grupe slova"
+            )
         else:
             self._keyboard_toggle_button.setText("Brojevi i znakovi")
 
@@ -695,6 +757,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             "list:delete-mode": self._toggle_deletion_mode,
             "list:page:previous": lambda: self._change_page(-1),
             "list:page:next": lambda: self._change_page(1),
+            "page:previous": lambda: self._change_page(-1),
+            "page:next": lambda: self._change_page(1),
         }
         handler = handlers.get(command)
         if handler is not None:
@@ -702,6 +766,8 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         else:
             self._trigger_indexed_action(command)
         self._restore_input_focus()
+        if source == "gaze" and command not in OWN_SOUND_COMMANDS:
+            self._selection_sound.play(self._speech_settings.selection_sound)
 
     def _trigger_indexed_action(self, command: str) -> None:
         kind, _, value = command.partition(":")
@@ -719,8 +785,12 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
             self._select_list_item(int(command.rsplit(":", 1)[1]))
 
     def _select_letter(self, value):
-        group_index, letter_index = (int(index) for index in value.split(":"))
-        self._append_text(self._letter_groups[group_index][letter_index])
+        group_index, _, letter_index = value.rpartition(":")
+        if not group_index:
+            # Alphabet keys stay in place; the same letter repeats only after gaze leaves.
+            self._append_text(BOSNIAN_LETTERS[int(letter_index)])
+            return
+        self._append_text(self._letter_groups[int(group_index)][int(letter_index)])
         self._show_group_level()
 
     def _select_symbol(self, index):
@@ -823,9 +893,15 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         return list(enumerate(keys))[start : start + KEYS_PER_PAGE]
 
     def _refresh_paging(self, list_mode: bool) -> None:
-        count = self._list_page_count() if list_mode else self._keyboard_pages
-        page = self._list_page if list_mode else self._keyboard_page
-        visible = list_mode or (count > 1 and self._active_group_index is None)
+        # Lists page from the strip beside the cards; keyboards keep the row below the keys.
+        list_count = self._list_page_count()
+        self._list_previous_button.setEnabled(self._list_page > 0)
+        self._list_next_button.setEnabled(self._list_page < list_count - 1)
+        self._list_page_label.setText(f"· stranica {self._list_page + 1} od {list_count}")
+        self._list_page_label.setVisible(list_mode and list_count > 1)
+        count = self._keyboard_pages
+        page = self._keyboard_page
+        visible = not list_mode and count > 1 and self._active_group_index is None
         self._previous_page_button.setVisible(visible)
         self._next_page_button.setVisible(visible)
         self._page_label.setVisible(visible)
@@ -938,6 +1014,13 @@ class SpeechWindow(SpeechPlaybackControls, SpeechLibraryActions, SpeechSurface):
         if text:
             logger.info("Speech status: %s", text)
         self._status_label.setText(text)
+
+
+def _answer_count(count: int) -> str:
+    if count == 0:
+        return "Nema odgovora"
+    # Bosnian keeps the singular after 1, 21, 31 and so on, but not after 11.
+    return f"{count} odgovor" if count % 10 == 1 and count % 100 != 11 else f"{count} odgovora"
 
 
 def _uppercase(text: str) -> str:

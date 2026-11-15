@@ -8,6 +8,10 @@ from dataclasses import dataclass
 LATIN_SCRIPT = "latin"
 ARABIC_SCRIPT = "arabic"
 KEYBOARD_SCRIPTS = ((LATIN_SCRIPT, "Latinica"), (ARABIC_SCRIPT, "Arapski"))
+# Speech shows every Latin letter at once by default; Arabic always keeps its groups.
+ALL_LETTERS_LAYOUT = "all"
+LETTER_GROUPS_LAYOUT = "groups"
+LETTER_LAYOUTS = ((ALL_LETTERS_LAYOUT, "Sva slova"), (LETTER_GROUPS_LAYOUT, "Grupe slova"))
 BOSNIAN_LETTERS = [
     "A",
     "B",

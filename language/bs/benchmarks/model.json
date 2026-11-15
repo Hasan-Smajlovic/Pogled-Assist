@@ -3,14 +3,14 @@
   "dataset": "development",
   "selection_rule": "p95 model latency at most 50 ms; then within 0.5% of the fewest activations prefer fewer missing development words and a smaller model",
   "environment": {
-    "platform": "Windows-10-10.0.26300-SP0",
-    "python": "3.10.11"
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "python": "3.10.21"
   },
-  "preparation_seconds": 271.74,
+  "preparation_seconds": 125.62,
   "recommended_vocabulary": 60000,
   "ranking": {
     "context_discount": 10.0,
-    "implementation_sha256": "5fd672c3e50927920895f20264c6cf3e65cac570b94d98db263000efd4be908b"
+    "implementation_sha256": "eba88db97873bf2e7da5cca011175d6e55830698d464b5ab321b58aba995c31c"
   },
   "candidates": [
     {
@@ -33,14 +33,14 @@
         "žurio"
       ],
       "development_missing_word_count": 10,
-      "loading_ms": 1520.78,
+      "loading_ms": 358.95,
       "latency": {
-        "mean_ms": 0.64,
-        "p95_ms": 2.6,
-        "max_ms": 6.64
+        "mean_ms": 0.29,
+        "p95_ms": 1.21,
+        "max_ms": 2.95
       },
-      "activations": 1063,
-      "activation_reduction_percent": 54.02,
+      "activations": 1057,
+      "activation_reduction_percent": 54.28,
       "next_word_top_one_percent": 27.98,
       "next_word_top_five_percent": 44.05
     },
@@ -58,14 +58,14 @@
         "žurio"
       ],
       "development_missing_word_count": 4,
-      "loading_ms": 1447.73,
+      "loading_ms": 480.87,
       "latency": {
-        "mean_ms": 1.09,
-        "p95_ms": 4.34,
-        "max_ms": 11.82
+        "mean_ms": 0.54,
+        "p95_ms": 2.25,
+        "max_ms": 5.89
       },
-      "activations": 1043,
-      "activation_reduction_percent": 54.89,
+      "activations": 1037,
+      "activation_reduction_percent": 55.15,
       "next_word_top_one_percent": 27.98,
       "next_word_top_five_percent": 44.05
     },
@@ -82,14 +82,14 @@
         "žurio"
       ],
       "development_missing_word_count": 3,
-      "loading_ms": 1659.22,
+      "loading_ms": 602.49,
       "latency": {
-        "mean_ms": 1.59,
-        "p95_ms": 6.76,
-        "max_ms": 17.52
+        "mean_ms": 0.8,
+        "p95_ms": 3.26,
+        "max_ms": 8.88
       },
-      "activations": 1042,
-      "activation_reduction_percent": 54.93,
+      "activations": 1034,
+      "activation_reduction_percent": 55.28,
       "next_word_top_one_percent": 27.98,
       "next_word_top_five_percent": 44.05
     }

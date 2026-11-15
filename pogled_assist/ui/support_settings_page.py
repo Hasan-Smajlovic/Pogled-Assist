@@ -1,14 +1,19 @@
 """Logging and caregiver support actions in Settings."""
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import QFrame
 
 from .settings_controls import content_layout, setting_row, styled_label
 
 
 class SupportSettingsPage(QFrame):
-    def __init__(self, owner):
-        super().__init__(owner)
+    toggle_logging_enabled = Signal()
+    adjust_log_storage = Signal(int)
+    diagnostics_requested = Signal()
+    request_gaze_check = Signal()
+
+    def __init__(self, controls, parent=None):
+        super().__init__(parent)
         layout = content_layout(self)
         layout.addWidget(styled_label("Podrška", "sectionTitle", self))
         description = styled_label(
@@ -17,8 +22,8 @@ class SupportSettingsPage(QFrame):
         description.setWordWrap(True)
         layout.addWidget(description)
         layout.addWidget(styled_label("Zapisivanje", "groupLabel", self))
-        self._logging_checkbox = owner._controls.checkbox(
-            "Uključi zapisivanje", owner._toggle_logging_enabled, QSize(300, 58)
+        self._logging_checkbox = controls.checkbox(
+            "Uključi zapisivanje", self.toggle_logging_enabled.emit, QSize(300, 58)
         )
         layout.addWidget(self._logging_checkbox)
         note = styled_label(
@@ -28,10 +33,10 @@ class SupportSettingsPage(QFrame):
         )
         note.setWordWrap(True)
         layout.addWidget(note)
-        row, self._budget_value = owner._controls.adjust_row(
+        row, self._budget_value = controls.adjust_row(
             "Prostor za logove",
             "Zajedno za opće logove i ručne snimke. Najstariji zatvoreni logovi brišu se automatski.",
-            owner._adjust_log_storage,
+            self.adjust_log_storage.emit,
             1,
         )
         layout.addWidget(row)
@@ -48,16 +53,16 @@ class SupportSettingsPage(QFrame):
         row, grid, _hint = setting_row(
             self, "Snimite problem s pogledom", "Kratak dijagnostički snimak i paket za podršku."
         )
-        self._diagnostics_button = owner._controls.button(
-            "Dijagnostičko snimanje", owner.diagnostics_requested.emit, QSize(270, 58)
+        self._diagnostics_button = controls.button(
+            "Dijagnostičko snimanje", self.diagnostics_requested.emit, QSize(270, 58)
         )
         grid.addWidget(self._diagnostics_button, 0, 1, 2, 1)
         layout.addWidget(row)
         row, grid, _hint = setting_row(
             self, "Provjerite pogled", "Položaj očiju, preciznost i proba odabira."
         )
-        self._check_button = owner._controls.button(
-            "Provjera pogleda", owner._request_gaze_check, QSize(270, 58)
+        self._check_button = controls.button(
+            "Provjera pogleda", self.request_gaze_check.emit, QSize(270, 58)
         )
         grid.addWidget(self._check_button, 0, 1, 2, 1)
         layout.addWidget(row)

@@ -56,8 +56,10 @@ class InformationButton(QToolButton):
         bounds = self.window().rect()
         origin = self.window().mapToGlobal(bounds.topLeft())
         bounds.moveTopLeft(origin)
-        self.popup.setFixedWidth(min(340, max(200, bounds.width() - 32)))
-        self.popup.adjustSize()
+        width = min(340, max(200, bounds.width() - 32))
+        self.popup.setFixedWidth(width)
+        # Wrapped labels need height-for-width; adjustSize() alone clips the text.
+        self.popup.setFixedHeight(self.popup.layout().totalHeightForWidth(width))
         point = self.mapToGlobal(QPoint(self.width() - self.popup.width(), self.height() + 8))
         point.setX(max(bounds.left() + 8, min(point.x(), bounds.right() - self.popup.width() - 8)))
         point.setY(min(point.y(), bounds.bottom() - self.popup.height() - 8))

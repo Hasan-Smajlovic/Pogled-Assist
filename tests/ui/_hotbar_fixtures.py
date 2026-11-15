@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from _clock import freeze_monotonic
 from _ui_fakes import FakeAppBar, FakeHotbarInput, FakeLibraryStore, FakeSpeechService
 from PySide6.QtCore import QPoint
 
 from pogled_assist.interaction.mouse_controller import QUICK_ACTIONS, GazeSettings
+from pogled_assist.keyboard_layouts import LETTER_GROUPS_LAYOUT
 from pogled_assist.speech.speech_service import SpeechSettings
 from pogled_assist.ui.keyboard_window import KEYBOARD_WINDOW_ACTION_PREFIX
 
@@ -71,17 +74,12 @@ def app_control(hotbar, surface):
         window.setGeometry(900, hotbar.BAR_HEIGHT, 380, 720 - hotbar.BAR_HEIGHT)
         action = next(key for key in window._action_buttons if key.endswith("space"))
         button = window._action_buttons[action]
-    elif surface == "speech":
+    else:
         hotbar._open_speech()
         window = hotbar._speech_window
         window.showNormal()
         window.setGeometry(0, 0, 1280, 720)
         action = next(key for key in window._action_buttons if key.endswith("space"))
-        button = window._action_buttons[action]
-    else:
-        hotbar._show_controller_sidebar()
-        window = hotbar._controller_window
-        action = next(key for key in window._action_buttons if key.endswith("left_click"))
         button = window._action_buttons[action]
     return action, button
 
@@ -99,7 +97,7 @@ def edge_surface(hotbar_gaze, qtbot, request):
         window.showNormal()
         window.setGeometry(*controller._logical_screen_rect)
         qtbot.wait(1)
-        action = window._action("group:0")
+        action = window._action("letter:0")
         button = window._action_buttons[action]
     else:
         hotbar._show_keyboard_sidebar()
@@ -116,7 +114,24 @@ def edge_surface(hotbar_gaze, qtbot, request):
 
 @pytest.fixture
 def speech_gaze(hotbar_gaze, qtbot):
+    return open_gaze_speech(hotbar_gaze, qtbot)
+
+
+@pytest.fixture
+def grouped_speech_gaze(hotbar_gaze, qtbot):
+    return open_gaze_speech(hotbar_gaze, qtbot, groups=True)
+
+
+def use_letter_groups(hotbar):
+    hotbar._update_speech_settings(
+        replace(hotbar._speech.settings, letter_layout=LETTER_GROUPS_LAYOUT)
+    )
+
+
+def open_gaze_speech(hotbar_gaze, qtbot, *, groups=False):
     hotbar, controller, feed, actions, progress = hotbar_gaze
+    if groups:
+        use_letter_groups(hotbar)
     hotbar._open_speech()
     window = hotbar._speech_window
     window.showNormal()

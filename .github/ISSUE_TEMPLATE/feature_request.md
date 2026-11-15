@@ -16,4 +16,4 @@ assignees: ""
 
 ## Done when
 
-<!-- List observable acceptance criteria as checkboxes, including any checks or design evidence specific to this feature. Standard verification is in CONTRIBUTING.md. -->
+<!-- List observable acceptance criteria as checkboxes, including any checks or design evidence specific to this feature. Standard verification is defined in docs/DEVELOPMENT.md. -->

@@ -271,3 +271,7 @@ def busy_indicator(parent: QWidget) -> QProgressBar:
     retain_size_when_hidden(indicator)
     indicator.hide()
     return indicator
+
+
+def cycle_choice(combo: QComboBox) -> None:
+    combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())

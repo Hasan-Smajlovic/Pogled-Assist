@@ -224,35 +224,36 @@
     }
   ],
   "environment": {
-    "platform": "Windows-10-10.0.26300-SP0",
-    "python": "3.10.11"
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "python": "3.10.21"
   },
   "profile": "empty per message",
   "assumption": "ideal exact beneficial selection; no intentional mistakes",
   "ranking": {
     "method": "adaptive context interpolation",
     "context_discount": 10.0,
-    "implementation_sha256": "5fd672c3e50927920895f20264c6cf3e65cac570b94d98db263000efd4be908b",
+    "implementation_sha256": "eba88db97873bf2e7da5cca011175d6e55830698d464b5ab321b58aba995c31c",
     "tokenizer_sha256": "5799d0f76faadb8ddb2b7ca5e825b01c4bb4780d92359aeae24aa6331537312c",
-    "evaluator_sha256": "8c18c2362818972519dc8c85d41d69aba4c58ae293862b53611453b1795792ba"
+    "evaluator_sha256": "800721c20c0bba6d3022749f49741029d59129e9793340c4ab6d0c5aa42056c5"
   },
   "metric_notes": {
     "next_word": "One query before typing each non-sentence-initial word; exact inflection required.",
     "sentence_start": "One query before typing each sentence-initial word, reported separately.",
     "completion": "Queries after typing at least one letter, along the ideal selection path; not independent trials.",
-    "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending."
+    "heldout": "The original held-out set is now a regression set after repeated reviews; fresh independent validation remains pending.",
+    "all_letters": "Measured after the protocol was frozen: one activation per letter, as with Sva slova in Latin Speech. Spaces, punctuation and the selection rule follow the protocol; the grouped comparison is unchanged."
   },
-  "loading_ms": 1421.24,
+  "loading_ms": 561.67,
   "latency": {
     "frequency": {
-      "mean_ms": 1.43,
-      "p95_ms": 7.33,
-      "max_ms": 25.75
+      "mean_ms": 0.78,
+      "p95_ms": 4.06,
+      "max_ms": 6.94
     },
     "contextual": {
-      "mean_ms": 1.81,
-      "p95_ms": 9.32,
-      "max_ms": 30.57
+      "mean_ms": 0.98,
+      "p95_ms": 5.05,
+      "max_ms": 9.78
     }
   },
   "totals": {
@@ -278,12 +279,12 @@
       "prediction_selections": 0
     },
     "frequency": {
-      "activations": 3936,
-      "letters": 1489,
-      "suggestion_selections": 516,
-      "same_slot_departures": 5,
-      "top_five_hits": 554,
-      "queries": 2064,
+      "activations": 3912,
+      "letters": 1477,
+      "suggestion_selections": 518,
+      "same_slot_departures": 4,
+      "top_five_hits": 518,
+      "queries": 2052,
       "corrections": 0,
       "undo": 0,
       "sentence_start_queries": 100,
@@ -292,26 +293,26 @@
       "next_word_queries": 475,
       "next_word_top_one_hits": 3,
       "next_word_top_five_hits": 48,
-      "completion_queries": 1489,
-      "completion_top_one_hits": 164,
-      "completion_top_five_hits": 503,
-      "completion_selections": 465,
+      "completion_queries": 1477,
+      "completion_top_one_hits": 154,
+      "completion_top_five_hits": 467,
+      "completion_selections": 467,
       "prediction_selections": 51,
-      "activation_reduction_percent": 38.85,
+      "activation_reduction_percent": 39.23,
       "sentence_start_top_one_percent": 1.0,
       "sentence_start_top_five_percent": 3.0,
       "next_word_top_one_percent": 0.63,
       "next_word_top_five_percent": 10.11,
-      "completion_top_one_percent": 11.01,
-      "completion_top_five_percent": 33.78
+      "completion_top_one_percent": 10.43,
+      "completion_top_five_percent": 31.62
     },
     "contextual": {
-      "activations": 3474,
-      "letters": 1258,
-      "suggestion_selections": 521,
-      "same_slot_departures": 32,
-      "top_five_hits": 555,
-      "queries": 1833,
+      "activations": 3450,
+      "letters": 1246,
+      "suggestion_selections": 522,
+      "same_slot_departures": 35,
+      "top_five_hits": 522,
+      "queries": 1821,
       "corrections": 0,
       "undo": 0,
       "sentence_start_queries": 100,
@@ -320,50 +321,83 @@
       "next_word_queries": 475,
       "next_word_top_one_hits": 83,
       "next_word_top_five_hits": 133,
-      "completion_queries": 1258,
-      "completion_top_one_hits": 118,
-      "completion_top_five_hits": 420,
-      "completion_selections": 386,
+      "completion_queries": 1246,
+      "completion_top_one_hits": 101,
+      "completion_top_five_hits": 387,
+      "completion_selections": 387,
       "prediction_selections": 135,
-      "activation_reduction_percent": 46.03,
+      "activation_reduction_percent": 46.4,
       "sentence_start_top_one_percent": 0.0,
       "sentence_start_top_five_percent": 2.0,
       "next_word_top_one_percent": 17.47,
       "next_word_top_five_percent": 28.0,
-      "completion_top_one_percent": 9.38,
-      "completion_top_five_percent": 33.39
+      "completion_top_one_percent": 8.11,
+      "completion_top_five_percent": 31.06
     }
   },
   "categories": {
     "needs": {
       "keyboard": 1004,
-      "frequency": 581,
+      "frequency": 579,
       "contextual": 459,
       "contextual_reduction_percent": 54.28
     },
     "conversation": {
       "keyboard": 1199,
-      "frequency": 727,
+      "frequency": 725,
       "contextual": 603,
       "contextual_reduction_percent": 49.71
     },
     "humour": {
       "keyboard": 1399,
-      "frequency": 920,
-      "contextual": 890,
-      "contextual_reduction_percent": 36.38
+      "frequency": 916,
+      "contextual": 884,
+      "contextual_reduction_percent": 36.81
     },
     "memories": {
       "keyboard": 1395,
-      "frequency": 886,
-      "contextual": 804,
-      "contextual_reduction_percent": 42.37
+      "frequency": 878,
+      "contextual": 794,
+      "contextual_reduction_percent": 43.08
     },
     "opinions": {
       "keyboard": 1440,
-      "frequency": 822,
-      "contextual": 718,
-      "contextual_reduction_percent": 50.14
+      "frequency": 814,
+      "contextual": 710,
+      "contextual_reduction_percent": 50.69
+    }
+  },
+  "all_letters": {
+    "letter_activations": 1,
+    "keyboard_activations": 3656,
+    "contextual_activations": 2204,
+    "activation_reduction_percent": 39.72,
+    "categories": {
+      "needs": {
+        "keyboard": 576,
+        "contextual": 312,
+        "contextual_reduction_percent": 45.83
+      },
+      "conversation": {
+        "keyboard": 684,
+        "contextual": 395,
+        "contextual_reduction_percent": 42.25
+      },
+      "humour": {
+        "keyboard": 793,
+        "contextual": 542,
+        "contextual_reduction_percent": 31.65
+      },
+      "memories": {
+        "keyboard": 791,
+        "contextual": 499,
+        "contextual_reduction_percent": 36.92
+      },
+      "opinions": {
+        "keyboard": 812,
+        "contextual": 456,
+        "contextual_reduction_percent": 43.84
+      }
     }
   },
   "miss_reasons": {
@@ -437,6 +471,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 29,
+        "contextual": 15
       },
       "misses": [
         {
@@ -554,6 +592,10 @@
         "completion_selections": 3,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 28,
+        "contextual": 15
+      },
       "misses": [
         {
           "target": "ŽELIM",
@@ -670,6 +712,10 @@
         "completion_selections": 3,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 28,
+        "contextual": 15
+      },
       "misses": [
         {
           "target": "MOŽEŠ",
@@ -749,7 +795,7 @@
         "letters": 10,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 15,
         "corrections": 0,
         "undo": 0,
@@ -760,8 +806,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 10,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -770,7 +816,7 @@
         "letters": 8,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 13,
         "corrections": 0,
         "undo": 0,
@@ -781,10 +827,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 8,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 28,
+        "contextual": 17
       },
       "misses": [
         {
@@ -897,7 +947,7 @@
         "letters": 14,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 19,
         "corrections": 0,
         "undo": 0,
@@ -909,7 +959,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 14,
         "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -918,7 +968,7 @@
         "letters": 9,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 14,
         "corrections": 0,
         "undo": 0,
@@ -929,10 +979,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 2,
         "completion_queries": 9,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 3,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 18
       },
       "misses": [
         {
@@ -1050,6 +1104,10 @@
         "completion_selections": 2,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 25,
+        "contextual": 12
+      },
       "misses": [
         {
           "target": "TREBA",
@@ -1149,6 +1207,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 25,
+        "contextual": 15
       },
       "misses": [
         {
@@ -1266,6 +1328,10 @@
         "completion_selections": 2,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 21,
+        "contextual": 12
+      },
       "misses": [
         {
           "target": "RUKE",
@@ -1366,6 +1432,10 @@
         "completion_selections": 2,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 29,
+        "contextual": 12
+      },
       "misses": [
         {
           "target": "SAČEKAJ",
@@ -1465,6 +1535,10 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 32,
+        "contextual": 16
       },
       "misses": [
         {
@@ -1598,6 +1672,10 @@
         "completion_selections": 3,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 27,
+        "contextual": 20
+      },
       "misses": [
         {
           "target": "DODAJ",
@@ -1730,6 +1808,10 @@
         "completion_selections": 1,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 30,
+        "contextual": 20
+      },
       "misses": [
         {
           "target": "POJAČAJ",
@@ -1829,6 +1911,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 22,
+        "contextual": 15
       },
       "misses": [
         {
@@ -1946,6 +2032,10 @@
         "completion_selections": 2,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 29,
+        "contextual": 10
+      },
       "misses": [
         {
           "target": "ŽELIM",
@@ -2045,6 +2135,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 27,
+        "contextual": 18
       },
       "misses": [
         {
@@ -2162,6 +2256,10 @@
         "completion_selections": 4,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 33,
+        "contextual": 16
+      },
       "misses": [
         {
           "target": "POMOZI",
@@ -2257,7 +2355,7 @@
         "letters": 13,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
-        "top_five_hits": 4,
+        "top_five_hits": 3,
         "queries": 17,
         "corrections": 0,
         "undo": 0,
@@ -2268,8 +2366,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 13,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 4,
+        "completion_top_one_hits": 2,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 0
       },
@@ -2278,7 +2376,7 @@
         "letters": 11,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
-        "top_five_hits": 4,
+        "top_five_hits": 3,
         "queries": 15,
         "corrections": 0,
         "undo": 0,
@@ -2289,10 +2387,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 11,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 3,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 30,
+        "contextual": 18
       },
       "misses": [
         {
@@ -2369,12 +2471,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 29,
-        "letters": 10,
+        "activations": 27,
+        "letters": 9,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
         "top_five_hits": 5,
-        "queries": 15,
+        "queries": 14,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -2383,7 +2485,7 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 10,
+        "completion_queries": 9,
         "completion_top_one_hits": 3,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
@@ -2409,6 +2511,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 32,
+        "contextual": 14
       },
       "misses": [
         {
@@ -2526,6 +2632,10 @@
         "completion_selections": 2,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 30,
+        "contextual": 20
+      },
       "misses": [
         {
           "target": "NEMOJ",
@@ -2642,6 +2752,10 @@
         "completion_selections": 2,
         "prediction_selections": 3
       },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 14
+      },
       "misses": [
         {
           "target": "TREBAM",
@@ -2741,6 +2855,10 @@
         "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 3
+      },
+      "all_letters": {
+        "keyboard": 35,
+        "contextual": 16
       },
       "misses": [
         {
@@ -2843,6 +2961,10 @@
         "completion_selections": 4,
         "prediction_selections": 3
       },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 18
+      },
       "misses": [
         {
           "target": "DRAGO",
@@ -2938,7 +3060,7 @@
         "letters": 12,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 17,
         "corrections": 0,
         "undo": 0,
@@ -2949,8 +3071,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 12,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -2974,6 +3096,10 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 28,
+        "contextual": 17
       },
       "misses": [
         {
@@ -3081,7 +3207,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 11,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
@@ -3102,10 +3228,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 10,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 19
       },
       "misses": [
         {
@@ -3213,7 +3343,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 16,
-        "completion_top_one_hits": 3,
+        "completion_top_one_hits": 4,
         "completion_top_five_hits": 7,
         "completion_selections": 7,
         "prediction_selections": 0
@@ -3238,6 +3368,10 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 3
+      },
+      "all_letters": {
+        "keyboard": 39,
+        "contextual": 22
       },
       "misses": [
         {
@@ -3371,6 +3505,10 @@
         "completion_selections": 3,
         "prediction_selections": 4
       },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 14
+      },
       "misses": [
         {
           "target": "PRIČAJ",
@@ -3446,12 +3584,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 41,
-        "letters": 16,
-        "suggestion_selections": 3,
+        "activations": 39,
+        "letters": 15,
+        "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
-        "queries": 21,
+        "top_five_hits": 4,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -3460,10 +3598,10 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 16,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 4,
-        "completion_selections": 2,
+        "completion_queries": 15,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
+        "completion_selections": 3,
         "prediction_selections": 1
       },
       "contextual": {
@@ -3471,7 +3609,7 @@
         "letters": 12,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 17,
         "corrections": 0,
         "undo": 0,
@@ -3482,10 +3620,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 12,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 4,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 31,
+        "contextual": 21
       },
       "misses": [
         {
@@ -3582,7 +3724,7 @@
         "letters": 10,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 15,
         "corrections": 0,
         "undo": 0,
@@ -3594,7 +3736,7 @@
         "next_word_top_five_hits": 1,
         "completion_queries": 10,
         "completion_top_one_hits": 1,
-        "completion_top_five_hits": 4,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
       },
@@ -3618,6 +3760,10 @@
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 27,
+        "contextual": 17
       },
       "misses": [
         {
@@ -3751,6 +3897,10 @@
         "completion_selections": 4,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 28,
+        "contextual": 21
+      },
       "misses": [
         {
           "target": "MENI",
@@ -3846,7 +3996,7 @@
         "letters": 22,
         "suggestion_selections": 2,
         "same_slot_departures": 0,
-        "top_five_hits": 3,
+        "top_five_hits": 2,
         "queries": 26,
         "corrections": 0,
         "undo": 0,
@@ -3857,8 +4007,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 3,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 0
       },
@@ -3867,7 +4017,7 @@
         "letters": 22,
         "suggestion_selections": 2,
         "same_slot_departures": 0,
-        "top_five_hits": 3,
+        "top_five_hits": 2,
         "queries": 26,
         "corrections": 0,
         "undo": 0,
@@ -3878,10 +4028,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 3,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 29
       },
       "misses": [
         {
@@ -4015,6 +4169,10 @@
         "completion_selections": 3,
         "prediction_selections": 3
       },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 14
+      },
       "misses": [
         {
           "target": "VOLIO",
@@ -4131,6 +4289,10 @@
         "completion_selections": 4,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 30,
+        "contextual": 19
+      },
       "misses": [
         {
           "target": "JESTE",
@@ -4226,7 +4388,7 @@
         "letters": 19,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 24,
         "corrections": 0,
         "undo": 0,
@@ -4238,7 +4400,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 19,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -4247,7 +4409,7 @@
         "letters": 19,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 24,
         "corrections": 0,
         "undo": 0,
@@ -4259,9 +4421,13 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 19,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 28
       },
       "misses": [
         {
@@ -4411,6 +4577,10 @@
         "completion_selections": 3,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 33,
+        "contextual": 20
+      },
       "misses": [
         {
           "target": "ČESTITAM",
@@ -4501,7 +4671,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 3,
         "completion_queries": 8,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 3
@@ -4510,7 +4680,7 @@
         "activations": 21,
         "letters": 5,
         "suggestion_selections": 7,
-        "same_slot_departures": 1,
+        "same_slot_departures": 3,
         "top_five_hits": 7,
         "queries": 12,
         "corrections": 0,
@@ -4522,10 +4692,14 @@
         "next_word_top_one_hits": 4,
         "next_word_top_five_hits": 4,
         "completion_queries": 5,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 4
+      },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 16
       },
       "misses": [
         {
@@ -4606,7 +4780,7 @@
         "letters": 15,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -4618,7 +4792,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 15,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -4642,6 +4816,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 33,
+        "contextual": 22
       },
       "misses": [
         {
@@ -4775,6 +4953,10 @@
         "completion_selections": 3,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 15
+      },
       "misses": [
         {
           "target": "MOŽEŠ",
@@ -4854,7 +5036,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -4866,7 +5048,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 15,
         "completion_top_one_hits": 4,
-        "completion_top_five_hits": 7,
+        "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
       },
@@ -4890,6 +5072,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 4
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 17
       },
       "misses": [
         {
@@ -4982,7 +5168,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 14,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
@@ -5003,10 +5189,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 14,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 31,
+        "contextual": 22
       },
       "misses": [
         {
@@ -5103,7 +5293,7 @@
         "letters": 20,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 26,
         "corrections": 0,
         "undo": 0,
@@ -5114,8 +5304,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 20,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
@@ -5124,7 +5314,7 @@
         "letters": 19,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 25,
         "corrections": 0,
         "undo": 0,
@@ -5135,10 +5325,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 19,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 44,
+        "contextual": 28
       },
       "misses": [
         {
@@ -5288,6 +5482,10 @@
         "completion_selections": 5,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 27
+      },
       "misses": [
         {
           "target": "OVA",
@@ -5399,7 +5597,7 @@
         "letters": 13,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 19,
         "corrections": 0,
         "undo": 0,
@@ -5410,8 +5608,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 13,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -5420,7 +5618,7 @@
         "letters": 12,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 18,
         "corrections": 0,
         "undo": 0,
@@ -5431,10 +5629,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 12,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 21
       },
       "misses": [
         {
@@ -5584,6 +5786,10 @@
         "completion_selections": 6,
         "prediction_selections": 0
       },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 23
+      },
       "misses": [
         {
           "target": "ZA",
@@ -5711,7 +5917,7 @@
         "letters": 16,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 5,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -5722,8 +5928,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 16,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 7,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
@@ -5732,7 +5938,7 @@
         "letters": 13,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -5743,10 +5949,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 13,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 39,
+        "contextual": 24
       },
       "misses": [
         {
@@ -5892,12 +6102,12 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 40,
-        "letters": 15,
+        "activations": 38,
+        "letters": 14,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
         "top_five_hits": 6,
-        "queries": 21,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -5906,11 +6116,15 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 15,
-        "completion_top_one_hits": 2,
+        "completion_queries": 14,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 24
       },
       "misses": [
         {
@@ -6019,27 +6233,6 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 51,
-        "letters": 20,
-        "suggestion_selections": 7,
-        "same_slot_departures": 0,
-        "top_five_hits": 7,
-        "queries": 27,
-        "corrections": 0,
-        "undo": 0,
-        "sentence_start_queries": 1,
-        "sentence_start_top_one_hits": 0,
-        "sentence_start_top_five_hits": 0,
-        "next_word_queries": 6,
-        "next_word_top_one_hits": 0,
-        "next_word_top_five_hits": 0,
-        "completion_queries": 20,
-        "completion_top_one_hits": 4,
-        "completion_top_five_hits": 7,
-        "completion_selections": 7,
-        "prediction_selections": 0
-      },
-      "contextual": {
         "activations": 49,
         "letters": 19,
         "suggestion_selections": 7,
@@ -6055,10 +6248,35 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 19,
-        "completion_top_one_hits": 5,
+        "completion_top_one_hits": 4,
         "completion_top_five_hits": 7,
         "completion_selections": 7,
         "prediction_selections": 0
+      },
+      "contextual": {
+        "activations": 47,
+        "letters": 18,
+        "suggestion_selections": 7,
+        "same_slot_departures": 0,
+        "top_five_hits": 7,
+        "queries": 25,
+        "corrections": 0,
+        "undo": 0,
+        "sentence_start_queries": 1,
+        "sentence_start_top_one_hits": 0,
+        "sentence_start_top_five_hits": 0,
+        "next_word_queries": 6,
+        "next_word_top_one_hits": 0,
+        "next_word_top_five_hits": 0,
+        "completion_queries": 18,
+        "completion_top_one_hits": 4,
+        "completion_top_five_hits": 7,
+        "completion_selections": 7,
+        "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 43,
+        "contextual": 29
       },
       "misses": [
         {
@@ -6203,7 +6421,7 @@
         "letters": 21,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 27,
         "corrections": 0,
         "undo": 0,
@@ -6214,8 +6432,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 21,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -6224,7 +6442,7 @@
         "letters": 20,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 26,
         "corrections": 0,
         "undo": 0,
@@ -6235,10 +6453,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 20,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 30
       },
       "misses": [
         {
@@ -6351,7 +6573,7 @@
         "letters": 22,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 28,
         "corrections": 0,
         "undo": 0,
@@ -6362,8 +6584,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -6372,7 +6594,7 @@
         "letters": 21,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 27,
         "corrections": 0,
         "undo": 0,
@@ -6383,10 +6605,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 21,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 40,
+        "contextual": 30
       },
       "misses": [
         {
@@ -6511,12 +6737,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 45,
-        "letters": 18,
+        "activations": 43,
+        "letters": 17,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 23,
+        "queries": 22,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -6525,19 +6751,19 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 18,
+        "completion_queries": 17,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 41,
-        "letters": 16,
+        "activations": 39,
+        "letters": 15,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
         "top_five_hits": 4,
-        "queries": 21,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -6546,11 +6772,15 @@
         "next_word_queries": 4,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 16,
+        "completion_queries": 15,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 24
       },
       "misses": [
         {
@@ -6699,6 +6929,10 @@
         "completion_top_five_hits": 7,
         "completion_selections": 7,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 24
       },
       "misses": [
         {
@@ -6880,6 +7114,10 @@
         "completion_selections": 4,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 25
+      },
       "misses": [
         {
           "target": "DANAS",
@@ -6975,7 +7213,7 @@
         "letters": 16,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -6986,8 +7224,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 16,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 7,
+        "completion_top_one_hits": 2,
+        "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
       },
@@ -6996,7 +7234,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -7007,10 +7245,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 15,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 2,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 26
       },
       "misses": [
         {
@@ -7139,7 +7381,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -7151,7 +7393,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 15,
         "completion_top_one_hits": 3,
-        "completion_top_five_hits": 6,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
       },
@@ -7160,7 +7402,7 @@
         "letters": 14,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 21,
         "corrections": 0,
         "undo": 0,
@@ -7172,9 +7414,13 @@
         "next_word_top_five_hits": 2,
         "completion_queries": 14,
         "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 25
       },
       "misses": [
         {
@@ -7298,7 +7544,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 28,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
@@ -7319,10 +7565,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 28,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 37
       },
       "misses": [
         {
@@ -7488,6 +7738,10 @@
         "completion_selections": 4,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 23
+      },
       "misses": [
         {
           "target": "DOBRO",
@@ -7599,7 +7853,7 @@
         "letters": 22,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 29,
         "corrections": 0,
         "undo": 0,
@@ -7611,7 +7865,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 6,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
@@ -7635,6 +7889,10 @@
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 30
       },
       "misses": [
         {
@@ -7779,7 +8037,7 @@
         "letters": 22,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 28,
         "corrections": 0,
         "undo": 0,
@@ -7790,8 +8048,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
@@ -7800,7 +8058,7 @@
         "letters": 19,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 25,
         "corrections": 0,
         "undo": 0,
@@ -7811,10 +8069,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 19,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 49,
+        "contextual": 29
       },
       "misses": [
         {
@@ -7964,6 +8226,10 @@
         "completion_selections": 4,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 29
+      },
       "misses": [
         {
           "target": "KAD",
@@ -8091,7 +8357,7 @@
         "letters": 23,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 29,
         "corrections": 0,
         "undo": 0,
@@ -8102,8 +8368,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 23,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -8112,7 +8378,7 @@
         "letters": 22,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 28,
         "corrections": 0,
         "undo": 0,
@@ -8123,10 +8389,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 22,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 4,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 32
       },
       "misses": [
         {
@@ -8239,7 +8509,7 @@
         "letters": 22,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 28,
         "corrections": 0,
         "undo": 0,
@@ -8250,8 +8520,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 22,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 2,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -8260,7 +8530,7 @@
         "letters": 21,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 27,
         "corrections": 0,
         "undo": 0,
@@ -8271,10 +8541,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 30
       },
       "misses": [
         {
@@ -8383,12 +8657,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 49,
-        "letters": 19,
+        "activations": 47,
+        "letters": 18,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 26,
+        "queries": 25,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -8397,19 +8671,19 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 19,
-        "completion_top_one_hits": 1,
+        "completion_queries": 18,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 39,
-        "letters": 14,
+        "activations": 37,
+        "letters": 13,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 21,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -8418,11 +8692,15 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 14,
-        "completion_top_one_hits": 0,
+        "completion_queries": 13,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 24
       },
       "misses": [
         {
@@ -8547,12 +8825,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 53,
-        "letters": 21,
+        "activations": 51,
+        "letters": 20,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 28,
+        "queries": 27,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -8561,19 +8839,19 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 21,
+        "completion_queries": 20,
         "completion_top_one_hits": 2,
         "completion_top_five_hits": 7,
         "completion_selections": 7,
         "prediction_selections": 0
       },
       "contextual": {
-        "activations": 39,
-        "letters": 14,
+        "activations": 37,
+        "letters": 13,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 21,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -8582,11 +8860,15 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 14,
-        "completion_top_one_hits": 1,
+        "completion_queries": 13,
+        "completion_top_one_hits": 0,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 47,
+        "contextual": 24
       },
       "misses": [
         {
@@ -8736,7 +9018,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 1,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -8748,9 +9030,13 @@
         "next_word_top_five_hits": 2,
         "completion_queries": 15,
         "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 26
       },
       "misses": [
         {
@@ -8900,6 +9186,10 @@
         "completion_selections": 5,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 33,
+        "contextual": 23
+      },
       "misses": [
         {
           "target": "PRVI",
@@ -9011,7 +9301,7 @@
         "letters": 17,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -9022,8 +9312,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 17,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -9032,7 +9322,7 @@
         "letters": 15,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 4,
         "queries": 21,
         "corrections": 0,
         "undo": 0,
@@ -9043,10 +9333,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 15,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 24
       },
       "misses": [
         {
@@ -9155,12 +9449,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 38,
-        "letters": 14,
-        "suggestion_selections": 5,
+        "activations": 36,
+        "letters": 13,
+        "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 20,
+        "queries": 19,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -9169,19 +9463,19 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 14,
-        "completion_top_one_hits": 4,
+        "completion_queries": 13,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 5,
-        "completion_selections": 4,
+        "completion_selections": 5,
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 34,
-        "letters": 12,
-        "suggestion_selections": 5,
+        "activations": 32,
+        "letters": 11,
+        "suggestion_selections": 6,
         "same_slot_departures": 2,
         "top_five_hits": 6,
-        "queries": 18,
+        "queries": 17,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -9190,11 +9484,15 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 3,
         "next_word_top_five_hits": 3,
-        "completion_queries": 12,
-        "completion_top_one_hits": 2,
+        "completion_queries": 11,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
-        "completion_selections": 2,
+        "completion_selections": 3,
         "prediction_selections": 3
+      },
+      "all_letters": {
+        "keyboard": 33,
+        "contextual": 21
       },
       "misses": [
         {
@@ -9311,6 +9609,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 32,
+        "contextual": 24
       },
       "misses": [
         {
@@ -9444,6 +9746,10 @@
         "completion_selections": 5,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 26
+      },
       "misses": [
         {
           "target": "NAJVIŠE",
@@ -9554,7 +9860,7 @@
         "activations": 51,
         "letters": 21,
         "suggestion_selections": 4,
-        "same_slot_departures": 1,
+        "same_slot_departures": 0,
         "top_five_hits": 4,
         "queries": 27,
         "corrections": 0,
@@ -9566,7 +9872,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
@@ -9587,10 +9893,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 30
       },
       "misses": [
         {
@@ -9714,7 +10024,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 17,
-        "completion_top_one_hits": 2,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
@@ -9735,10 +10045,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 17,
-        "completion_top_one_hits": 2,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 27
       },
       "misses": [
         {
@@ -9851,7 +10165,7 @@
         "letters": 13,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -9862,8 +10176,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 13,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
       },
@@ -9872,7 +10186,7 @@
         "letters": 13,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -9883,10 +10197,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 13,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 40,
+        "contextual": 24
       },
       "misses": [
         {
@@ -10032,12 +10350,12 @@
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 42,
-        "letters": 16,
+        "activations": 40,
+        "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 22,
+        "queries": 21,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -10046,11 +10364,15 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 16,
+        "completion_queries": 15,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 25
       },
       "misses": [
         {
@@ -10163,7 +10485,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 6,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -10174,8 +10496,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 15,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 7,
+        "completion_top_one_hits": 2,
+        "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
       },
@@ -10184,7 +10506,7 @@
         "letters": 16,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 7,
+        "top_five_hits": 5,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -10195,10 +10517,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 16,
-        "completion_top_one_hits": 3,
-        "completion_top_five_hits": 7,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 44,
+        "contextual": 27
       },
       "misses": [
         {
@@ -10343,7 +10669,7 @@
         "letters": 14,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -10354,8 +10680,8 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 14,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 4,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 1
       },
@@ -10364,7 +10690,7 @@
         "letters": 14,
         "suggestion_selections": 3,
         "same_slot_departures": 0,
-        "top_five_hits": 4,
+        "top_five_hits": 3,
         "queries": 20,
         "corrections": 0,
         "undo": 0,
@@ -10375,10 +10701,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 14,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 3,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 2,
         "completion_selections": 2,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 35,
+        "contextual": 23
       },
       "misses": [
         {
@@ -10487,12 +10817,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 46,
-        "letters": 18,
+        "activations": 44,
+        "letters": 17,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 24,
+        "queries": 23,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -10501,19 +10831,19 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
-        "completion_queries": 18,
+        "completion_queries": 17,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
       },
       "contextual": {
-        "activations": 40,
-        "letters": 15,
+        "activations": 38,
+        "letters": 14,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
         "top_five_hits": 6,
-        "queries": 21,
+        "queries": 20,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -10522,11 +10852,15 @@
         "next_word_queries": 5,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
-        "completion_queries": 15,
+        "completion_queries": 14,
         "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 39,
+        "contextual": 24
       },
       "misses": [
         {
@@ -10675,6 +11009,10 @@
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 26
       },
       "misses": [
         {
@@ -10840,6 +11178,10 @@
         "completion_selections": 4,
         "prediction_selections": 2
       },
+      "all_letters": {
+        "keyboard": 43,
+        "contextual": 29
+      },
       "misses": [
         {
           "target": "ZA",
@@ -10972,6 +11314,10 @@
         "completion_selections": 5,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 26
+      },
       "misses": [
         {
           "target": "TO",
@@ -11083,7 +11429,7 @@
         "letters": 17,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -11095,7 +11441,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 17,
         "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
       },
@@ -11104,7 +11450,7 @@
         "letters": 10,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 16,
         "corrections": 0,
         "undo": 0,
@@ -11116,9 +11462,13 @@
         "next_word_top_five_hits": 1,
         "completion_queries": 10,
         "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 20
       },
       "misses": [
         {
@@ -11231,7 +11581,7 @@
         "letters": 21,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
-        "top_five_hits": 8,
+        "top_five_hits": 7,
         "queries": 29,
         "corrections": 0,
         "undo": 0,
@@ -11243,7 +11593,7 @@
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
         "completion_top_one_hits": 2,
-        "completion_top_five_hits": 7,
+        "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
       },
@@ -11252,7 +11602,7 @@
         "letters": 14,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
-        "top_five_hits": 8,
+        "top_five_hits": 7,
         "queries": 22,
         "corrections": 0,
         "undo": 0,
@@ -11263,10 +11613,14 @@
         "next_word_top_one_hits": 2,
         "next_word_top_five_hits": 2,
         "completion_queries": 14,
-        "completion_top_one_hits": 2,
-        "completion_top_five_hits": 6,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 48,
+        "contextual": 26
       },
       "misses": [
         {
@@ -11406,7 +11760,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 18,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 3,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
@@ -11427,10 +11781,14 @@
         "next_word_top_one_hits": 2,
         "next_word_top_five_hits": 2,
         "completion_queries": 14,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 43,
+        "contextual": 24
       },
       "misses": [
         {
@@ -11526,7 +11884,7 @@
         "activations": 44,
         "letters": 17,
         "suggestion_selections": 6,
-        "same_slot_departures": 0,
+        "same_slot_departures": 1,
         "top_five_hits": 6,
         "queries": 23,
         "corrections": 0,
@@ -11547,7 +11905,7 @@
         "activations": 44,
         "letters": 17,
         "suggestion_selections": 6,
-        "same_slot_departures": 0,
+        "same_slot_departures": 1,
         "top_five_hits": 6,
         "queries": 23,
         "corrections": 0,
@@ -11563,6 +11921,10 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 39,
+        "contextual": 27
       },
       "misses": [
         {
@@ -11686,7 +12048,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 16,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
@@ -11711,6 +12073,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 3
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 21
       },
       "misses": [
         {
@@ -11827,6 +12193,10 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 52,
+        "contextual": 30
       },
       "misses": [
         {
@@ -11976,6 +12346,10 @@
         "completion_selections": 4,
         "prediction_selections": 1
       },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 21
+      },
       "misses": [
         {
           "target": "VOLIM",
@@ -12092,7 +12466,7 @@
         "letters": 9,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 15,
         "corrections": 0,
         "undo": 0,
@@ -12103,10 +12477,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 9,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 5,
+        "completion_top_one_hits": 0,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 34,
+        "contextual": 19
       },
       "misses": [
         {
@@ -12230,7 +12608,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
         "completion_queries": 18,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 0
@@ -12251,10 +12629,14 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 14,
-        "completion_top_one_hits": 0,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 23
       },
       "misses": [
         {
@@ -12347,27 +12729,6 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 36,
-        "letters": 13,
-        "suggestion_selections": 6,
-        "same_slot_departures": 0,
-        "top_five_hits": 6,
-        "queries": 19,
-        "corrections": 0,
-        "undo": 0,
-        "sentence_start_queries": 1,
-        "sentence_start_top_one_hits": 0,
-        "sentence_start_top_five_hits": 0,
-        "next_word_queries": 5,
-        "next_word_top_one_hits": 0,
-        "next_word_top_five_hits": 0,
-        "completion_queries": 13,
-        "completion_top_one_hits": 1,
-        "completion_top_five_hits": 6,
-        "completion_selections": 6,
-        "prediction_selections": 0
-      },
-      "contextual": {
         "activations": 34,
         "letters": 12,
         "suggestion_selections": 6,
@@ -12387,6 +12748,31 @@
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
+      },
+      "contextual": {
+        "activations": 32,
+        "letters": 11,
+        "suggestion_selections": 6,
+        "same_slot_departures": 0,
+        "top_five_hits": 6,
+        "queries": 17,
+        "corrections": 0,
+        "undo": 0,
+        "sentence_start_queries": 1,
+        "sentence_start_top_one_hits": 0,
+        "sentence_start_top_five_hits": 0,
+        "next_word_queries": 5,
+        "next_word_top_one_hits": 0,
+        "next_word_top_five_hits": 0,
+        "completion_queries": 11,
+        "completion_top_one_hits": 1,
+        "completion_top_five_hits": 6,
+        "completion_selections": 6,
+        "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 41,
+        "contextual": 21
       },
       "misses": [
         {
@@ -12514,7 +12900,7 @@
         "activations": 36,
         "letters": 13,
         "suggestion_selections": 6,
-        "same_slot_departures": 1,
+        "same_slot_departures": 0,
         "top_five_hits": 6,
         "queries": 19,
         "corrections": 0,
@@ -12526,7 +12912,7 @@
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 1,
         "completion_queries": 13,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
@@ -12551,6 +12937,10 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 17
       },
       "misses": [
         {
@@ -12700,6 +13090,10 @@
         "completion_selections": 3,
         "prediction_selections": 4
       },
+      "all_letters": {
+        "keyboard": 39,
+        "contextual": 17
+      },
       "misses": [
         {
           "target": "LIJEPO",
@@ -12815,6 +13209,10 @@
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 43,
+        "contextual": 24
       },
       "misses": [
         {
@@ -12964,6 +13362,10 @@
         "completion_selections": 1,
         "prediction_selections": 4
       },
+      "all_letters": {
+        "keyboard": 36,
+        "contextual": 15
+      },
       "misses": [
         {
           "target": "NE",
@@ -13063,6 +13465,10 @@
         "completion_top_five_hits": 3,
         "completion_selections": 3,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 32,
+        "contextual": 21
       },
       "misses": [
         {
@@ -13196,6 +13602,10 @@
         "completion_selections": 5,
         "prediction_selections": 0
       },
+      "all_letters": {
+        "keyboard": 37,
+        "contextual": 23
+      },
       "misses": [
         {
           "target": "OVAJ",
@@ -13328,7 +13738,7 @@
         "letters": 12,
         "suggestion_selections": 5,
         "same_slot_departures": 0,
-        "top_five_hits": 6,
+        "top_five_hits": 5,
         "queries": 18,
         "corrections": 0,
         "undo": 0,
@@ -13340,9 +13750,13 @@
         "next_word_top_five_hits": 1,
         "completion_queries": 12,
         "completion_top_one_hits": 0,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 43,
+        "contextual": 22
       },
       "misses": [
         {
@@ -13466,7 +13880,7 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
@@ -13487,10 +13901,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 21,
-        "completion_top_one_hits": 1,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 48,
+        "contextual": 32
       },
       "misses": [
         {
@@ -13615,12 +14033,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 46,
-        "letters": 17,
+        "activations": 44,
+        "letters": 16,
         "suggestion_selections": 8,
         "same_slot_departures": 0,
         "top_five_hits": 8,
-        "queries": 25,
+        "queries": 24,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -13629,19 +14047,19 @@
         "next_word_queries": 7,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 2,
-        "completion_queries": 17,
+        "completion_queries": 16,
         "completion_top_one_hits": 2,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 2
       },
       "contextual": {
-        "activations": 48,
-        "letters": 18,
+        "activations": 44,
+        "letters": 16,
         "suggestion_selections": 8,
         "same_slot_departures": 1,
         "top_five_hits": 8,
-        "queries": 26,
+        "queries": 24,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -13650,11 +14068,15 @@
         "next_word_queries": 7,
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 2,
-        "completion_queries": 18,
-        "completion_top_one_hits": 3,
+        "completion_queries": 16,
+        "completion_top_one_hits": 4,
         "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 2
+      },
+      "all_letters": {
+        "keyboard": 48,
+        "contextual": 28
       },
       "misses": [
         {
@@ -13779,12 +14201,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 33,
-        "letters": 11,
+        "activations": 31,
+        "letters": 10,
         "suggestion_selections": 7,
         "same_slot_departures": 0,
         "top_five_hits": 7,
-        "queries": 18,
+        "queries": 17,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -13793,19 +14215,19 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 2,
-        "completion_queries": 11,
-        "completion_top_one_hits": 3,
+        "completion_queries": 10,
+        "completion_top_one_hits": 2,
         "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 2
       },
       "contextual": {
-        "activations": 23,
-        "letters": 6,
+        "activations": 21,
+        "letters": 5,
         "suggestion_selections": 7,
         "same_slot_departures": 3,
         "top_five_hits": 7,
-        "queries": 13,
+        "queries": 12,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -13814,11 +14236,15 @@
         "next_word_queries": 6,
         "next_word_top_one_hits": 3,
         "next_word_top_five_hits": 3,
-        "completion_queries": 6,
-        "completion_top_one_hits": 2,
+        "completion_queries": 5,
+        "completion_top_one_hits": 1,
         "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 3
+      },
+      "all_letters": {
+        "keyboard": 42,
+        "contextual": 16
       },
       "misses": [
         {
@@ -13915,7 +14341,7 @@
         "letters": 19,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 24,
         "corrections": 0,
         "undo": 0,
@@ -13927,7 +14353,7 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 19,
         "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
       },
@@ -13936,7 +14362,7 @@
         "letters": 19,
         "suggestion_selections": 4,
         "same_slot_departures": 0,
-        "top_five_hits": 5,
+        "top_five_hits": 4,
         "queries": 24,
         "corrections": 0,
         "undo": 0,
@@ -13948,9 +14374,13 @@
         "next_word_top_five_hits": 0,
         "completion_queries": 19,
         "completion_top_one_hits": 2,
-        "completion_top_five_hits": 5,
+        "completion_top_five_hits": 4,
         "completion_selections": 4,
         "prediction_selections": 0
+      },
+      "all_letters": {
+        "keyboard": 38,
+        "contextual": 28
       },
       "misses": [
         {
@@ -14059,12 +14489,12 @@
         "prediction_selections": 0
       },
       "frequency": {
-        "activations": 50,
-        "letters": 19,
+        "activations": 48,
+        "letters": 18,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 8,
-        "queries": 27,
+        "top_five_hits": 6,
+        "queries": 26,
         "corrections": 0,
         "undo": 0,
         "sentence_start_queries": 1,
@@ -14073,9 +14503,9 @@
         "next_word_queries": 7,
         "next_word_top_one_hits": 0,
         "next_word_top_five_hits": 0,
-        "completion_queries": 19,
-        "completion_top_one_hits": 5,
-        "completion_top_five_hits": 8,
+        "completion_queries": 18,
+        "completion_top_one_hits": 3,
+        "completion_top_five_hits": 6,
         "completion_selections": 6,
         "prediction_selections": 0
       },
@@ -14084,7 +14514,7 @@
         "letters": 15,
         "suggestion_selections": 6,
         "same_slot_departures": 0,
-        "top_five_hits": 8,
+        "top_five_hits": 6,
         "queries": 23,
         "corrections": 0,
         "undo": 0,
@@ -14095,10 +14525,14 @@
         "next_word_top_one_hits": 1,
         "next_word_top_five_hits": 1,
         "completion_queries": 15,
-        "completion_top_one_hits": 5,
-        "completion_top_five_hits": 7,
+        "completion_top_one_hits": 3,
+        "completion_top_five_hits": 5,
         "completion_selections": 5,
         "prediction_selections": 1
+      },
+      "all_letters": {
+        "keyboard": 47,
+        "contextual": 27
       },
       "misses": [
         {

@@ -8,13 +8,21 @@ import sys
 from pathlib import Path
 
 import pytest
+from _powershell import powershell_literal, run_powershell_cases
 
 import pogled_assist.main as main_module
 
+ROOT = Path(__file__).resolve().parents[2]
+SUGGESTION_FILES = (
+    "bosnian-model.json.gz",
+    "bosnian-model.meta.json",
+    "bosnian-islamic-model.json.gz",
+    "bosnian-islamic-model.meta.json",
+)
 
-def test_packaged_bridge_imports_using_only_declared_source_files(tmp_path):
-    root = Path(__file__).resolve().parents[2]
-    spec = root / "packaging/windows/PogledAssist.spec"
+
+def _packaged_source_files():
+    spec = ROOT / "packaging/windows/PogledAssist.spec"
     tree = ast.parse(spec.read_text(encoding="utf-8"))
     declaration = next(
         node.value
@@ -22,9 +30,12 @@ def test_packaged_bridge_imports_using_only_declared_source_files(tmp_path):
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == "datas" for target in node.targets)
     )
-    sources = eval(compile(ast.Expression(declaration), str(spec), "eval"), {"repo_root": root})
+    return eval(compile(ast.Expression(declaration), str(spec), "eval"), {"repo_root": ROOT})
+
+
+def test_packaged_bridge_imports_using_only_declared_source_files(tmp_path):
     internal = tmp_path / "release with spaces/_internal"
-    for source, destination in sources:
+    for source, destination in _packaged_source_files():
         if Path(source).suffix == ".py":
             folder = internal / destination
             folder.mkdir(parents=True, exist_ok=True)
@@ -80,18 +91,40 @@ def test_frozen_smoke_rejects_missing_build_revision(monkeypatch, tmp_path):
 
 
 def test_windows_package_declares_the_bundled_suggestion_files():
-    root = Path(__file__).resolve().parents[2]
-    spec = (root / "packaging" / "windows" / "PogledAssist.spec").read_text(encoding="utf-8")
-    build = (root / "scripts" / "release" / "build_windows_package.ps1").read_text(encoding="utf-8")
+    sources = _packaged_source_files()
+    for name in SUGGESTION_FILES:
+        entry = (str(ROOT / "pogled_assist" / "assets" / name), "pogled_assist/assets")
+        assert sources.count(entry) == 1, name
 
-    for name in (
-        "bosnian-model.json.gz",
-        "bosnian-model.meta.json",
-        "bosnian-islamic-model.json.gz",
-        "bosnian-islamic-model.meta.json",
-    ):
-        assert name in spec
-        assert name in build
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell is required")
+def test_windows_build_requires_the_bundled_suggestion_files(tmp_path):
+    build = ROOT / "scripts/release/build_windows_package.ps1"
+    result = run_powershell_cases(
+        tmp_path,
+        {
+            "required-models": {
+                "body": r"""
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    BUILD_SCRIPT, [ref]$tokens, [ref]$errors
+)
+$assignment = @($ast.EndBlock.Statements | Where-Object {
+    $_ -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+    $_.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+    $_.Left.VariablePath.UserPath -eq "requiredFiles"
+})
+if ($errors.Count -or $assignment.Count -ne 1) { throw "Missing requiredFiles declaration" }
+ConvertTo-Json -InputObject @($assignment[0].Right.Expression.SafeGetValue()) -Compress
+""".replace("BUILD_SCRIPT", powershell_literal(build)),
+            }
+        },
+    )["required-models"]
+    assert result.returncode == 0, result.stdout + result.stderr
+    required_files = json.loads(result.stdout)
+    for name in SUGGESTION_FILES:
+        assert required_files.count(rf"_internal\pogled_assist\assets\{name}") == 1, name
 
 
 @pytest.mark.parametrize("supported", [False, True])

@@ -6,6 +6,7 @@ import pytest
 
 from scripts.speech_suggestions import compare_speech_ranking as ranking
 from scripts.speech_suggestions import evaluate_speech_learning as learning
+from scripts.speech_suggestions import evaluate_speech_model as evaluation
 
 
 class LearningModel:
@@ -49,6 +50,44 @@ def test_learning_scenarios_reject_invalid_rows(tmp_path, invalid):
 
     with pytest.raises(ValueError, match="Invalid learning scenario"):
         learning.evaluate_learning(LearningModel(), path)
+
+
+class LastLetterModel:
+    def predict(self, text, *, contextual=True):
+        return ["DA"] if text == "ŽELIM D" else []
+
+
+def test_all_letters_keyboard_costs_one_activation_per_letter():
+    grouped = evaluation.simulate("Želim da.", LastLetterModel())
+    all_letters = evaluation.simulate(
+        "Želim da.", LastLetterModel(), letter_activations=evaluation.ALL_LETTERS_ACTIVATIONS
+    )
+
+    # Grouped: letters cost two, so selecting DA beats opening a group for A.
+    assert (grouped["activations"], grouped["suggestion_selections"]) == (18, 1)
+    # All letters: typing A costs the same as the selection, so the letter is typed.
+    assert (all_letters["activations"], all_letters["suggestion_selections"]) == (12, 0)
+    assert all_letters["letters"] == 7
+
+
+def test_report_sums_all_letters_activations_beside_the_grouped_comparison():
+    summary = evaluation._all_letters_summary(
+        [
+            {"category": "needs", "all_letters": {"keyboard": 10, "contextual": 6}},
+            {"category": "needs", "all_letters": {"keyboard": 10, "contextual": 8}},
+            {"category": "humour", "all_letters": {"keyboard": 20, "contextual": 10}},
+        ]
+    )
+
+    assert summary["letter_activations"] == 1
+    assert (summary["keyboard_activations"], summary["contextual_activations"]) == (40, 24)
+    assert summary["activation_reduction_percent"] == 40.0
+    assert summary["categories"]["needs"] == {
+        "keyboard": 20,
+        "contextual": 14,
+        "contextual_reduction_percent": 30.0,
+    }
+    assert summary["categories"]["humour"]["contextual_reduction_percent"] == 50.0
 
 
 def _ranking_result(**changes):

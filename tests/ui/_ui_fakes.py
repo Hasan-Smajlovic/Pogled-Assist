@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from _speech_fakes import FakeLibraryStore as FakeLibraryStore
 from _speech_fakes import FakeSpeech as FakeSpeech
+from _speech_fakes import grouped_fake_speech as grouped_fake_speech
 from PySide6.QtCore import QObject, Signal
 
 from pogled_assist.ui.speech_window import SPEECH_WINDOW_ACTION_PREFIX
@@ -25,6 +26,15 @@ class FakeAlarmSound(QObject):
 
     def stop(self):
         self.stop_calls += 1
+
+
+class FakeSelectionSound(QObject):
+    def __init__(self):
+        super().__init__()
+        self.levels = []
+
+    def play(self, level):
+        self.levels.append(level)
 
 
 def click_speech_action(qtbot, window, command):

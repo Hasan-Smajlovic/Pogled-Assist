@@ -59,7 +59,7 @@ Supporting scripts live in `scripts/checks/`, `scripts/release/`, `scripts/ui/` 
 | `check-fast` | Python quality checks, affected PowerShell/Actions checks and changed-path test selection | Iteration; no coverage or packaging, even when all tests are selected |
 | `check` | Lint, complete suite with coverage, then package/installer checks | Complete sequential verification |
 | `check -Parallel` | Lint, overlapping test groups and packaging, then installer tests and combined coverage | Same complete verification with overlapping stages |
-| PR CI | `code-quality`, `tests`, `windows-package`, plus PR-only `dependency-review` | Required checks are identified in [CONTRIBUTING](../CONTRIBUTING.md#ci-and-required-checks) |
+| PR CI | The [pull request jobs](../CONTRIBUTING.md#ci-and-required-checks) | The same section identifies the checks required before merge |
 | Release verification | Quality checks, full suite and packaging before publication | Software/package evidence; no physical Tobii or audible playback check |
 
 `-Parallel` overlaps local stages; `-Workers` controls pytest processes within a test invocation. They are independent. A [conditional test](TESTING.md#conditional-tests) can still skip in a complete run; report its reason.
@@ -95,34 +95,6 @@ After lint, `check -Parallel` overlaps:
 Installer integration tests run after these stages because they share process detection and installer locks with package smoke checks. Failures do not cancel the other stages or deferred tests. Three isolated coverage files are combined once, with the same 60 percent floor; missing group data fails the report. Reports use that combined file, excluding stale checkout shards, and copy it to `.coverage` or the incoming `COVERAGE_FILE` destination.
 
 Each parallel run keeps stdout/stderr and coverage under a unique `dist/check-<id>/`. Status lines every five seconds show active stages; all verification commands report stage/total durations, including failures. Elapsed time alone does not prove progress. See [parallel diagnosis](DEVELOPMENT_TROUBLESHOOTING.md#debugging-parallel-test-failures) for reading active logs and isolating contention.
-
-## Test strategy
-
-[Writing and selecting tests](TESTING.md) owns the boundary map, shared fixtures, Qt lifecycle, clocks and process probes.
-
-### Conditional tests
-
-[Conditional tests](TESTING.md#conditional-tests) lists the native audio probe and opt-in gaze benchmark, their commands and evidence limits.
-
-## Mouse gaze simulation
-
-See [mouse gaze simulation](UI_DEVELOPMENT.md#mouse-gaze-simulation) for synthetic input and real-click limits.
-
-## UI review
-
-See [UI development](UI_DEVELOPMENT.md#ui-review) for galleries and manual checks.
-
-### Application design reference workflow
-
-Use the [design surface map](UI_DEVELOPMENT.md#application-design-reference-workflow) before changing visible UI.
-
-## UI gallery publication
-
-[Gallery publication](UI_GALLERY.md) owns Pages setup, permissions and recovery.
-
-## Diagnostic log analysis
-
-[Diagnostic analysis](DIAGNOSTICS.md#diagnostic-log-analysis) owns the offline reader command, loss accounting and interpretation of a reported selection failure.
 
 ## Lint and formatting
 

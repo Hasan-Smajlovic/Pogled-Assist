@@ -40,7 +40,7 @@ REQUIRED_FILES = (
     "docs/design/hotbar.html",
     "docs/design/selection-progress.html",
     "docs/design/keyboard.html",
-    "docs/design/controller-keyboard.html",
+    "docs/design/quick-actions.html",
     "docs/design/installation.html",
     "docs/design/reference-notes.html",
     ".github/pull_request_template.md",

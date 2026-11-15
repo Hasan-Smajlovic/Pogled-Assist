@@ -3,6 +3,7 @@
 import logging
 
 from .keyboard_layouts import ARABIC_SCRIPT
+from .speech.selection_sound import SelectionSound
 from .speech.speech_library import saved_entry_texts
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ class HotbarSpeech:
         self._speech_library_store = library_store
         library = self._speech_library_store.load()
         self._speech.set_saved_texts(saved_entry_texts(self._speech_library_store, library))
+        # One player for Speech and Settings, loaded at startup rather than when they open.
+        self._selection_sound = SelectionSound(self)
 
     def _test_current_speech_settings(self) -> None:
         if self._speech.is_busy:

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QWidget
 from pogled_assist.interaction.mouse_controller import GazeSettings
 from pogled_assist.tracking.gaze_check import HISTORY_SECONDS, CheckSnapshot, FixationResult
 from pogled_assist.ui.gaze_check_eyes import EyeTrackingPanel
-from pogled_assist.ui.gaze_check_views import TRIAL_KEYS, TRIAL_WORD
+from pogled_assist.ui.gaze_check_views import TRIAL_KEYS, TRIAL_WORD, _display_positions
 from pogled_assist.ui.gaze_check_window import TRIAL_HINT_PX
 
 pytestmark = pytest.mark.e2e
@@ -157,8 +157,8 @@ def test_gaze_check_runs_five_targets_without_any_gaze_click(gaze_check, qtbot):
     # The word test follows the targets; the targets are already saved.
     assert window._phase == "trial"
     assert window._step.text().startswith("3 · Riječ")
-    assert [row.near for row in window._report.precision] == [True] * 5
-    assert window._report.precision_eyes is not None
+    assert [row.near for row in window._session.report.precision] == [True] * 5
+    assert window._session.report.precision_eyes is not None
     window._test_back_button.click()
     assert window._phase == "results"
     assert "5 od 5" in window._result_summary.text()
@@ -1177,9 +1177,53 @@ def test_tests_hide_the_live_panel_and_save_each_tests_interruptions(gaze_check,
             )
         )
     window._test_back_button.click()
-    eyes = window._report.trials[-1].eyes
+    eyes = window._session.report.trials[-1].eyes
     assert eyes.interruptions == 1
     assert eyes.longest_interruption_seconds == pytest.approx(0.5)
-    assert window._report.precision_eyes is not None
+    assert window._session.report.precision_eyes is not None
     assert "Riječ · lijevo" in window._eye_summary_label.text()
     assert "prekidi 1, najduži 0,5 s" in window._eye_summary_label.text()
+
+
+def test_eye_tracker_5_origins_show_measured_distance_and_side_without_up_down(gaze_check):
+    window, now, _screen = gaze_check
+    # Eye Tracker 5 sends only millimetre origins: 39 cm away, eyes 4 cm right of centre.
+    window.handle_snapshot(
+        CheckSnapshot(
+            True,
+            True,
+            gaze=(0.5, 0.5),
+            gaze_at=now[0],
+            position_supported=False,
+            left_origin=(6.0, 113.0, 392.0),
+            right_origin=(72.0, 114.0, 386.0),
+        )
+    )
+    window._tick()
+    assert "Gore-dolje nije dostupno" in window._position_notice.text()
+    assert window._position_label.text() == "✓ Lijevo-desno · 4 cm desno od sredine uređaja"
+    assert window._distance_label.text() == "! Udaljenost 39 cm · Tobii prati od 45 do 95 cm"
+    assert window._guidance.text() == "Polako odmaknite ekran od lica."
+    left, right = _display_positions(window._eyes_view.snapshot)
+    assert left[1] == right[1] == 0.5  # Up-down is not invented.
+    assert 0 < right[0] < left[0] < 0.5  # TBCS x runs from the user's right.
+    assert left[2] < 0 and right[2] < 0
+    window.grab()  # Paints the origin-only frame.
+
+    window.handle_snapshot(
+        CheckSnapshot(
+            True,
+            True,
+            gaze=(0.5, 0.5),
+            gaze_at=now[0],
+            observed_seconds=5,
+            available_fraction=0.98,
+            longest_loss_seconds=0.1,
+            left_origin=(-330.0, 0.0, 650.0),
+            right_origin=(-270.0, 0.0, 650.0),
+        )
+    )
+    window._tick()
+    assert window._position_label.text() == "! Lijevo-desno · 30 cm lijevo od sredine uređaja"
+    assert window._distance_label.text().startswith("✓ Udaljenost 65 cm")
+    assert window._guidance.text().startswith("Pomjerite ekran lijevo ili desno")

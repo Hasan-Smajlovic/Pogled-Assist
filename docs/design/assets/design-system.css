@@ -21,6 +21,14 @@
 .swatch-grid strong, .swatch-grid code { display: block; font-size: 16px; }
 .swatch-grid strong { font-weight: 600; }
 .swatch-grid code { margin-top: 4px; color: var(--muted); }
+.icon-review { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; margin: 24px 0; }
+.icon-review figure { margin: 0; }
+.icon-review figcaption { margin-top: 10px; color: var(--muted); font-size: 15px; }
+.icon-tile { padding: 20px; background: var(--canvas); border: 1px solid var(--divider); border-radius: 12px; }
+.icon-tile img { display: block; }
+.icon-strip { display: flex; align-items: center; gap: 24px; min-height: 168px; padding: 0 28px; border-radius: 12px; }
+.icon-strip.dark-taskbar { background: #202020; }
+.icon-strip.light-taskbar { background: #f3f3f3; }
 .component-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; }
 .component-comparison article { min-width: 0; padding: 24px; background: var(--panel); border-radius: 12px; }
 .component-comparison p { font-size: 16px; }

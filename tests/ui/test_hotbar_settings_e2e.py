@@ -28,9 +28,7 @@ def test_keyboard_script_is_global_and_persisted(hotbar_gaze, qtbot, monkeypatch
     hotbar._open_speech()
     assert hotbar._speech_window._speech_settings.keyboard_script == "arabic"
     hotbar._speech_window._input.setText("سَلَامٌ")
-    hotbar._show_controller_sidebar()
-    hotbar._controller_window._show_keyboard_tab()
-    hotbar._controller_window._script_button.click()
+    hotbar._keyboard_window._script_button.click()
     assert hotbar._speech_window._input.text() == "سَلَامٌ"
     assert hotbar._speech_window._speech_settings.keyboard_script == "latin"
     assert hotbar._keyboard_window._settings.keyboard_script == "latin"

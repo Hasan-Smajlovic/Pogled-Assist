@@ -17,10 +17,9 @@ from ..interaction.gaze_selection import (
     MIN_SELECTION_PAUSE_MS,
     GazeSelectionTimer,
 )
-from ..windows.windows_z_order import force_window_topmost
+from .overlay_window import OverlayStacking, overlay_window_flags
 
 logger = logging.getLogger(__name__)
-TOPMOST_REFRESH_INTERVAL_MS = 33
 
 
 class QuickActionZoomWindow(QWidget):
@@ -49,10 +48,10 @@ class QuickActionZoomWindow(QWidget):
         self._selection_radius_px = 48
         self._selection_emitted = False
         self._phase = 0.0
-        self._last_topmost_ms = 0.0
+        self._stacking = OverlayStacking(self)
 
         self.setWindowTitle("Precizno uvećanje")
-        self.setWindowFlags(_overlay_window_flags())
+        self.setWindowFlags(overlay_window_flags(click_through=False))
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -92,7 +91,7 @@ class QuickActionZoomWindow(QWidget):
         self._timer.start()
         self.show()
         self.raise_()
-        self._refresh_windows_topmost(force=True)
+        self._stacking.refresh(force=True)
         logger.info(
             "Quick action zoom opened: target=%s,%s source=%s,%s %sx%s display=%s,%s %sx%s.",
             target.x(),
@@ -115,7 +114,7 @@ class QuickActionZoomWindow(QWidget):
         self._candidate_local = None
         self._selection_timer.cancel(reason=reason)
         self._selection_emitted = False
-        self._last_topmost_ms = 0.0
+        self._stacking.reset()
         self.hide()
         if was_visible:
             logger.info("Quick action zoom closed.")
@@ -289,28 +288,8 @@ class QuickActionZoomWindow(QWidget):
 
     def _tick(self) -> None:
         self._phase += 0.24
-        self._refresh_windows_topmost_due()
+        self._stacking.refresh_if_due()
         self.update()
-
-    def _refresh_windows_topmost_due(self) -> None:
-        if not self.isVisible():
-            return
-
-        now_ms = time.monotonic() * 1000
-        if now_ms - self._last_topmost_ms >= TOPMOST_REFRESH_INTERVAL_MS:
-            self._refresh_windows_topmost(now_ms=now_ms)
-
-    def _refresh_windows_topmost(
-        self,
-        *,
-        force: bool = False,
-        now_ms: float | None = None,
-    ) -> None:
-        if not force and not self.isVisible():
-            return
-
-        force_window_topmost(self, show=True, aggressive=True)
-        self._last_topmost_ms = now_ms if now_ms is not None else time.monotonic() * 1000
 
 
 def _square_around(center: QPoint, size: int, bounds: QRect) -> QRect:
@@ -333,13 +312,3 @@ def _centered_square(bounds: QRect, preferred_size: int) -> QRect:
 
 def _distance(first: QPoint, second: QPoint) -> float:
     return math.hypot(first.x() - second.x(), first.y() - second.y())
-
-
-def _overlay_window_flags() -> Qt.WindowFlags:
-    flags = Qt.FramelessWindowHint | Qt.Window | Qt.WindowStaysOnTopHint
-    no_focus = getattr(Qt, "WindowDoesNotAcceptFocus", None)
-    if no_focus is None:
-        no_focus = getattr(Qt.WindowType, "WindowDoesNotAcceptFocus", None)
-    if no_focus is not None:
-        flags |= no_focus
-    return flags

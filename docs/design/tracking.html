@@ -29,14 +29,14 @@
       <div class="tracking-app speech-screen">
         <header class="topbar">
           <button class="warning" type="button" data-tracking-context="confirm">Obriši</button>
-          <button type="button">Kategorije</button>
+          <button class="view-key" type="button">Kategorije</button>
           <div class="message-box"><div class="tracking-message-heading"><label for="tracking-message">Vaša poruka</label><div id="tracking-background-feedback"></div></div><input id="tracking-message" value="TREBAM VODE" autocomplete="off" spellcheck="false"></div>
           <button class="primary" type="button">Izgovori</button>
-          <button type="button">Fraze</button>
+          <button class="view-key" type="button">Fraze</button>
         </header>
         <section class="predictions" aria-label="Ponuđene riječi">
           <h2 class="visually-hidden">Ponuđene riječi</h2>
-          <div class="prediction-controls"><div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button class="word" type="button">MOŽE</button></div><button id="undo-word" type="button" disabled>Poništi riječ</button></div>
+          <div class="prediction-controls"><div class="prediction-row"><button class="word" type="button">MOLIM</button><button class="word" type="button">SADA</button><button class="word" type="button">HVALA</button><button class="word" type="button">JOŠ</button><button class="word" type="button">MOŽE</button></div><button id="undo-word" class="edit-key" type="button" disabled>Poništi riječ</button></div>
         </section>
         <div class="workspace">
           <section class="main-panel">
@@ -51,9 +51,9 @@
             <button type="button" data-tracking-letter>Č</button><button type="button" data-tracking-letter>Ć</button><button class="back" type="button" data-tracking-context="message">Nazad na grupe</button>
           </div>
           </section>
-          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="sleep" type="button">Odmor<small>Odmori oči</small></button><button type="button">Izlaz<small>Izađi ili ugasi aplikaciju</small></button></aside>
+          <aside class="system-actions"><div class="speech-controls-heading"><h2 class="visually-hidden">Kontrole aplikacije</h2><div class="recording-slot"><span class="recording-badge" data-recording-status hidden></span></div></div><button class="danger" type="button">Alarm<small>Pozovi pomoć</small></button><button class="system-key" type="button">Odmor<small>Odmori oči</small></button><button class="system-key" type="button">Izlaz<small>Izađi ili ugasi aplikaciju</small></button></aside>
         </div>
-        <footer class="utility-row"><div class="utility-main"><button type="button">Razmak</button><button type="button">Obriši slovo</button><span class="utility-divider" aria-hidden="true"></span><button type="button">Brojevi i znakovi</button></div><button type="button">Arapski</button></footer>
+        <footer class="utility-row"><div class="utility-main"><button class="edit-key" type="button">Razmak</button><button class="edit-key" type="button">Obriši slovo</button><span class="utility-divider" aria-hidden="true"></span><button class="view-key" type="button">Brojevi i znakovi</button></div><button class="view-key" type="button">Arapski</button></footer>
       </div>
       <div class="tracking-modal-layer">
         <section class="tracking-modal" aria-labelledby="tracking-dialog-title">
@@ -73,6 +73,7 @@
   <p>Obavijest klizi odozgo u postojeće zaglavlje aktivnog prikaza. Tekst ostaje u jednom redu, odvojen srednjom tačkom, bez prečice za Provjeru pogleda. Nema praznog reda niti pomjeranja dugmadi. Polje poruke zadržava punu širinu; obavijest mu privremeno smanjuje visinu, koja se vraća nakon nestanka. Pokazatelji očiju i tekst skriveni su tokom urednog praćenja.</p>
   <p>Duži problem prikazuje upozorenje nakon približno 0,8 s; tri stvarna prekida upotrebljivog praćenja od najmanje 0,35 s unutar 10 s mogu prikazati Praćenje često prekida. Nakon povratka uslova izabranog režima i svježeg pogleda slijedi Praćenje se vraća, zatim poslije 500 ms zeleno Možete nastaviti na 2 s. Obavijest se povlači i blijedi za 180 ms. Novi prekid ažurira istu obavijest. Smanjene animacije isključuju klizanje, izbljeđivanje i animiranu promjenu visine.</p>
   <p>Obavijest ne zaustavlja unos niti potvrđuje preciznost. Izabrani režim određuje da li je pogled dopušten za odabir. Probni režim uz jedno oko i svjež pogled ne prikazuje odabir je zaustavljen niti upozorenje samo zbog drugog oka. Ako pogled nedostaje, čekanje ostaje stvarno i odabir ne napreduje. Pokazatelji očiju ne pretvaraju jedno praćeno oko u dva.</p>
+  <p>Zamjena priključenog Tobii uređaja koristi ista stanja prekida i povratka. Nakon gubitka isporuke aplikacija ponovo traži uređaj tek kada zatvori prethodnu vezu; novi uređaj počinje novi odabir bez starog napretka. Treptaj i redovni uzorci bez validnog oka ne pokreću pretragu. Naziv uređaja i dostupni podaci mogu se promijeniti, a sačuvani režim i vremena odabira ostaju isti.</p>
   <p>Slova odabrane grupe zamjenjuju grupe u prostoru tastature, bez modala. Obavijest ostaje u zaglavlju poruke, a snimanje uz Kontrole. Potvrda brisanja zadržava modal i red od 32 px za obavijest. Dolazak obavijesti ne pomjera tipke.</p>
   <p>Kratko čuvanje napretka ne čeka obavijest od 0,8 s: odmah zamrzava mirni svijetloplavi krug i dodaje oznaku pauze. Nema pulsiranja, središnje tačke ni druge trake napretka. Po isteku podesivog roka napredak se uklanja. <a href="selection-progress.html">Zaseban prikaz napretka</a> definiše isti izgled i pravila nastavka za sve HTML prikaze. Ručno izabrana stanja u ovom nacrtu zaustavljena su radi pregleda; ne predstavljaju mjerenje trajanja.</p>
   <p>Obavijesti o praćenju pogleda početno su uključene u Postavkama. Isključivanje skriva cijelu obavijest, uključujući potvrdu povratka. Početni meni i Provjera pogleda ostaju nezavisni; Odmor, Postavke i Provjera pogleda ne izazivaju obavijesti. Izbor u Opcijama pregleda i HTML Postavkama dijeli se samo unutar sesije preglednika, bez upisa u stvarne postavke.</p>
