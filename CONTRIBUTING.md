@@ -163,7 +163,7 @@ Pull requests targeting `development` or `master` run these checks:
 
 - `dependency-review`: known vulnerabilities introduced by dependency changes; moderate, high, and critical findings fail the job for runtime, development, and unknown dependency scopes. This job runs only on pull request events.
 - `code-quality`: the [Python static checks](docs/DEVELOPMENT.md#lint-and-formatting), including the exception policy and type-baseline comparison, actionlint, PowerShell parsing, and focused PSScriptAnalyzer rules.
-- `tests`: the hardware-independent pytest suite with the Qt offscreen backend and enforced coverage floor, in four processes grouped by test file.
+- `tests`: the hardware-independent pytest suite with the Qt offscreen backend. Tests outside `tests/ui/` run in four processes grouped by file, followed by UI tests in one process and the combined coverage floor.
 - `windows-package`: a clean Windows x64 PyInstaller build and packaged executable and isolated installer smoke tests.
 - `codeql (actions)` and `codeql (python)`: CodeQL analysis of the workflows and the Python source, from the separate `CodeQL` workflow. It also runs on pushes to `development` and `master` and once a week. It cannot upload results while GitHub's CodeQL default setup is enabled for the repository.
 

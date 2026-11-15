@@ -139,11 +139,25 @@ def test_release_publishes_only_the_package_verified_by_the_ci_jobs():
         assert verification not in commands
 
 
-def test_ci_runs_tests_in_four_processes_grouped_by_file():
+def test_ci_isolates_serial_ui_tests_and_enforces_combined_coverage():
     steps = _workflow("ci.yml")["jobs"]["tests"]["steps"]
-    command = next(step["run"] for step in steps if "pytest" in step.get("run", ""))
-    assert "-n 4 --dist=loadfile" in command
-    assert "--cov=pogled_assist" in command
+    runs = [step for step in steps if "pytest" in step.get("run", "")]
+    assert len(runs) == 2
+    parallel, ui = runs
+    # Excluding one directory from discovery and then running exactly that directory
+    # keeps every test, including future directories, without executing any twice.
+    assert "-n 4 --dist=loadfile --ignore=tests/ui" in parallel["run"]
+    assert "--cov-fail-under=0" in parallel["run"]
+    assert "--cov-report=" in parallel["run"]
+    assert "--cov-append" not in parallel["run"]
+    assert "-n 0 tests/ui" in ui["run"]
+    assert "--cov-append" in ui["run"]
+    assert "--cov-fail-under" not in ui["run"]  # Use the configured 60 percent floor.
+    assert "--cov-report=xml:coverage.xml" in ui["run"]
+    assert "POGLED_ASSIST_UI_GALLERY" in ui["env"]
+    for step in runs:
+        assert "--cov=pogled_assist" in step["run"]
+        assert not step.get("continue-on-error", False)
 
 
 def test_python_environment_is_restored_in_every_job_and_saved_only_from_development():

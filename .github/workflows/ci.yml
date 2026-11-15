@@ -124,17 +124,29 @@ jobs:
           path: ${{ runner.tool_cache }}/Python/3.10.*
           key: ${{ steps.python-environment.outputs.cache-primary-key }}
 
-      - name: Run automated tests without Tobii hardware
+      # Keep Qt window workflows out of xdist: concurrent coverage workers can leave
+      # prediction threads contending on the tracer and stall window cleanup.
+      - name: Run non-UI tests in four processes
+        shell: powershell
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          python -B -m pytest -p no:cacheprovider `
+            -n 4 --dist=loadfile --ignore=tests/ui `
+            -vv -o faulthandler_timeout=120 `
+            --durations=30 `
+            --cov=pogled_assist --cov-report= --cov-fail-under=0
+
+      - name: Run UI workflows and enforce combined coverage
         shell: powershell
         env:
           POGLED_ASSIST_UI_GALLERY: ${{ github.workspace }}/dist/ui-gallery
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -B -m pytest -p no:cacheprovider `
-            -n 4 --dist=loadfile `
+            -n 0 tests/ui `
             -vv -o faulthandler_timeout=120 `
             --durations=30 `
-            --cov=pogled_assist `
+            --cov=pogled_assist --cov-append `
             --cov-report=term-missing:skip-covered `
             --cov-report=xml:coverage.xml
 
