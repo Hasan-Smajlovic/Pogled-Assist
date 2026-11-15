@@ -61,7 +61,7 @@ Supporting scripts live in `scripts/checks/`, `scripts/release/`, `scripts/ui/` 
 | `check` | Lint, complete suite with coverage, then package/installer checks | Complete sequential verification |
 | `check -Parallel` | Lint, overlapping test groups and packaging, then installer tests and combined coverage | Same complete verification with overlapping stages |
 | PR CI | The [pull request jobs](../CONTRIBUTING.md#ci-and-required-checks) | The same section identifies the checks required before merge |
-| Release verification | Quality checks, full suite and packaging before publication | Software/package evidence; no physical Tobii or audible playback check |
+| Release verification | The same CI jobs on the merged `master` commit, before publication | Software/package evidence; no physical Tobii or audible playback check |
 
 `-Parallel` overlaps local stages; `-Workers` controls pytest processes within a test invocation. They are independent. A [conditional test](TESTING.md#conditional-tests) can still skip in a complete run; report its reason.
 
@@ -83,7 +83,7 @@ Fast selection compares the merge base of `origin/development` with committed, s
 
 Without coverage, tests default to two xdist processes with `--dist=loadfile`, keeping a module on one worker. A fast selection of fewer than four files uses one process with the default `-Workers 0`. `-Workers 1` disables xdist; `-Workers 2` explicitly enables it, including small selections.
 
-Coverage, sequential `check`, each parallel check group, PR CI and release verification default to one test process. Parallel coverage previously slowed Qt sidebar interactions; measure repeated runs on the same commit before increasing workers. CI prints verbose names, the 30 slowest tests and thread stacks when setup/call/teardown exceeds 120 seconds. The dump is diagnostic, not a timeout extension or cancellation.
+Coverage, sequential `check` and each parallel check group default to one test process; parallel coverage previously slowed Qt sidebar interactions on local machines. CI, including release verification, measures coverage in four processes grouped by file (`-n 4 --dist=loadfile`) on hosted Windows runners. Measure repeated runs on the same commit before changing either worker count. CI prints verbose names, the 30 slowest tests and thread stacks when setup/call/teardown exceeds 120 seconds. The dump is diagnostic, not a timeout extension or cancellation.
 
 `coverage` and `check` temporarily clear and then restore `PYTEST_ADDOPTS`, including on failure, so external options cannot omit tests or override coverage. Use `test` or `test-ui` with `-TestPaths` for focused/custom diagnosis. `coverage`, `check` and `check-fast` reject `-TestPaths`.
 
@@ -134,7 +134,7 @@ These files decide what the checks accept, so changes to them need [human review
 
 Use a full Git checkout with the comparison ref available. Local commands default to `origin/development`; `.\dev.ps1 lint -BaseRef <ref>` and `python -B -m scripts.checks.static_checks --base-ref <ref>` select another base. The comparison uses its merge base with `HEAD` and checks the current baseline, including uncommitted edits. Missing refs, malformed inventories and shallow history fail, and the message names the Git error; the check never fetches automatically.
 
-PR CI supplies the event's base SHA through `STATIC_CHECK_BASE_REF`; an empty value falls back to `origin/development`. Release verification supplies the pre-push commit. Both checking jobs fetch full history.
+CI supplies the base through `STATIC_CHECK_BASE_REF`: a pull request's base SHA, or the pre-push commit for a `development` push and for release verification, which reuses the same job. An empty value falls back to `origin/development`. The job fetches full history.
 
 The comparison base's baseline is the reference, unless a commit after that base changes the `REVIEWED_INVENTORY = ...` line in `scripts/checks/check_type_baseline.py`. The newest such commit declares the baseline it contains a reviewed inventory, and the check compares with that baseline instead. This covers the adoption, whose base has no baseline, and a release or `master` pull request whose base predates the declaration. A squash merge keeps the declaration and its baseline in one commit. An uncommitted change to the line covers the current baseline until it is committed. Without a declaration, a base without a baseline fails.
 

@@ -6,6 +6,11 @@ rules:
       - prepare-release.yml
       # Reads the remote release tag through the checkout remote and uploads no artifact.
       - release.yml
+  self-repository:
+    ignore:
+      # actionlint 1.7.12 rejects the `$/` call syntax (rhysd/actionlint#711). A `./` reusable
+      # workflow call already runs the caller's commit and does not read the checkout.
+      - release.yml
   dangerous-triggers:
     ignore:
       # Runs the trusted default-branch revision and never executes pull request code;

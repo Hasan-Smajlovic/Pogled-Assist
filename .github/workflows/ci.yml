@@ -5,14 +5,24 @@ on:
     branches:
       - development
       - master
+  # Only development pushes save the shared Python environment that pull requests restore.
+  push:
+    branches:
+      - development
   workflow_dispatch:
+  # Publish release reuses these jobs for the merged master commit.
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: Name of the verified Windows package artifact uploaded by windows-package.
+        value: ${{ jobs.windows-package.outputs.artifact_name }}
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dependency-review:
@@ -40,21 +50,23 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Restore the shared Python 3.10 environment
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.tool_cache }}/Python/3.10.*
+          key: ${{ runner.os }}-${{ runner.arch }}-python-3.10-environment-v1-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'requirements-build.txt') }}
+
       - name: Set up Python 3.10
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
 
-      - name: Install check dependencies
-        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt"
+      - name: Install check, test and build dependencies
+        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt -r requirements-build.txt"
 
       - name: Check Python source, types, imports and workflow security
         env:
-          STATIC_CHECK_BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/development' }}
+          STATIC_CHECK_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/development' }}
         run: python -B -m scripts.checks.static_checks
 
       - name: Cache pinned PowerShell and workflow tools
@@ -87,17 +99,30 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Restore the shared Python 3.10 environment
+        id: python-environment
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.tool_cache }}/Python/3.10.*
+          key: ${{ runner.os }}-${{ runner.arch }}-python-3.10-environment-v1-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'requirements-build.txt') }}
+
       - name: Set up Python 3.10
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
 
-      - name: Install test dependencies
-        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt"
+      - name: Install check, test and build dependencies
+        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt -r requirements-build.txt"
+
+      # Save before any repository code runs, so the cache holds only the pinned installs.
+      - name: Save the shared Python 3.10 environment from development
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/development' &&
+          steps.python-environment.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.tool_cache }}/Python/3.10.*
+          key: ${{ steps.python-environment.outputs.cache-primary-key }}
 
       - name: Run automated tests without Tobii hardware
         shell: powershell
@@ -106,6 +131,7 @@ jobs:
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -B -m pytest -p no:cacheprovider `
+            -n 4 --dist=loadfile `
             -vv -o faulthandler_timeout=120 `
             --durations=30 `
             --cov=pogled_assist `
@@ -134,23 +160,27 @@ jobs:
     name: windows-package
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      artifact_name: ${{ steps.build.outputs.artifact_name }}
     steps:
       - name: Check out the exact revision
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
+      - name: Restore the shared Python 3.10 environment
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.tool_cache }}/Python/3.10.*
+          key: ${{ runner.os }}-${{ runner.arch }}-python-3.10-environment-v1-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'requirements-build.txt') }}
+
       - name: Set up Python 3.10
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-build.txt
 
-      - name: Install pinned build dependencies
-        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-build.txt"
+      - name: Install check, test and build dependencies
+        run: "python -m pip install --no-compile --only-binary=:all: -r requirements-dev.txt -r requirements-build.txt"
 
       - name: Build and smoke-test the Windows package
         id: build
