@@ -56,11 +56,14 @@ Coverage merge tests collect each distinct input once and copy shards when only 
 | Windows and UI fakes | `tests/ui/_ui_fakes.py` |
 | Hotbar fixtures | `tests/ui/_hotbar_fixtures.py` |
 | Speech fixtures | `tests/ui/_speech_fixtures.py` |
+| UI dictionary preload | `tests/ui/conftest.py` |
 | Synthetic gallery services | `scripts/ui/capture_ui.py` (`Preview*` services) and `scripts/ui/capture_pointer_overlays.py` (`PreviewDesktop`) |
 
 `tests/ui/test_settings_pages.py` exercises standalone Settings pages against a plain parent and shared controls, including mouse and gaze signals carrying choice values. Window workflow tests retain validation, interruption and persistence checks.
 
 Import fixtures from helper modules, not other test modules, so changed-path selection can identify consumers. Qt cleanup closes top-level widgets and delivers deferred deletion before the next test. Wait for actual geometry, visibility, state or signals through the event loop; sleeps or layout requests alone can miss pending child visibility and polish.
+
+UI tests load the real bundled suggestion model once per test process before creating windows. A cold `lru_cache` can run the same load in several prediction threads; rapid window creation under coverage can then leave many model loads contending on the tracer. Preloading keeps the real dictionary and prediction behavior while avoiding repeated cold loads. Cold loading, failed loading and worker preloading remain covered by the suggestion tests outside `tests/ui/`.
 
 Service fixtures cancel requests and join speech, account and network workers before their Qt owners leave scope. `speech_workers` yields its tracked threads and restores the previous thread factory on exit, so a nested context joins its own workers and the enclosing fixture context tracks later ones. Cancellation tests use `wait_for_speech_workers` to require a started worker, wait for every tracked worker to exit and process queued Qt events before checking that late results were discarded. Unhandled worker-thread exceptions fail the suite. Provider regressions must exercise queued eye transitions, stale gaze after a GUI stall, and callbacks pending during reconnect/shutdown; sequential callbacks cannot prove their dispatch ordering.
 
